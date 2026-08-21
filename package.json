@@ -1,0 +1,48 @@
+{
+  "name": "food-shopping-os",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Forq — plan meals, buy exactly what you need and waste less food.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "preview": "next start",
+    "test": "vitest run --maxWorkers=1",
+    "test:e2e": "playwright test",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:check": "node scripts/check-database.mjs",
+    "verify": "npm test && npm run build"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.38.0",
+    "@vercel/blob": "^2.6.1",
+    "ably": "^2.26.0",
+    "lucide-react": "^1.25.0",
+    "next": "^15.5.22",
+    "next-auth": "^4.24.15",
+    "openai": "^7.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^4.4.3"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8",
+    "postcss": "8.5.24",
+    "sharp": "0.35.3",
+    "jsdom": {
+      "undici": "7.29.0"
+    },
+    "nanoid": "3.3.18"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@babel/parser": "^7.29.7",
+    "@playwright/test": "^1.62.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/react": "^16.3.2",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.0.0",
+    "vitest": "^4.1.10"
+  }
+}

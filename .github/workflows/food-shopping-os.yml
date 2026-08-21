@@ -1,0 +1,56 @@
+name: Food Shopping OS
+
+on:
+  push:
+    paths:
+      - "**"
+      - ".github/workflows/food-shopping-os.yml"
+  pull_request:
+    paths:
+      - "**"
+      - ".github/workflows/food-shopping-os.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Security audit (high-severity production deps block CI)
+        run: |
+          echo "Running production audit — high or critical vulnerabilities will block CI."
+          if npm audit --omit=dev --audit-level=high; then
+            echo "No high/critical production vulnerabilities."
+          else
+            code=$?
+            echo "::error::High-severity production vulnerability found (exit $code). Fix before merging."
+            echo "Tip: dev-only advisories do not block — production audit is scoped with --omit=dev."
+            exit $code
+          fi
+      - name: Advisory dev audit (informational)
+        run: npm audit --audit-level=moderate || true
+        continue-on-error: true
+      - run: npm test
+      - run: npm run build
+      - name: Enforce performance budget
+        run: node ../../scripts/check-performance-budgets.mjs --require-builds --only=.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: food-shopping-os-playwright-report
+          path: playwright-report/
+          retention-days: 14

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Forq — Plan. Shop. Cook. Honestly.</title>
+<meta name="description" content="Forq — meal planning, shopping and nutrition, local-first with honest pricing and no fake data.">
+<link rel="canonical" href="https://forq-site-henrygoldsmith07-9188s-projects.vercel.app/">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Forq — Plan. Shop. Cook. Honestly.">
+<meta property="og:description" content="Forq — one app for planning, shopping, cooking and nutrition, without the theatre.">
+<meta property="og:site_name" content="Le Studio">
+<meta property="og:url" content="https://forq-site-henrygoldsmith07-9188s-projects.vercel.app/">
+<meta property="og:image" content="https://forq-site-henrygoldsmith07-9188s-projects.vercel.app/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta property="og:image:alt" content="Forq app icon">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Forq — Plan. Shop. Cook. Honestly.">
+<meta name="twitter:description" content="Forq — one app for planning, shopping, cooking and nutrition, without the theatre.">
+<meta name="twitter:image" content="https://forq-site-henrygoldsmith07-9188s-projects.vercel.app/icon-512.png">
+<link rel="icon" href="./icon.svg">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+  :root { --ls-bg:#f4f4f6; --ls-surface:#fff; --ls-line:#dcdce1; --ls-ink:#131316; --ls-ink2:#4d4d55; --ls-ink3:#6a6a74; }
+  @media (prefers-color-scheme: dark) { :root { --ls-bg:#0b0b0d; --ls-surface:#17171a; --ls-line:#34343a; --ls-ink:#f4f4f5; --ls-ink2:#b2b2ba; --ls-ink3:#8f8f99; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--ls-bg); color:var(--ls-ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1020px; margin:0 auto; padding:0 22px; }
+  a:focus-visible, button:focus-visible { outline:2px solid var(--ls-ink); outline-offset:3px; }
+  .skip { position:absolute; left:-9999px; }
+  .skip:focus { position:fixed; left:12px; top:12px; z-index:100; padding:10px 14px; background:var(--ls-ink); color:var(--ls-bg); border-radius:10px; text-decoration:none; font-weight:700; font-size:14px; }
+  header { padding:18px 0; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  header img { width:34px; height:34px; border-radius:9px; }
+  header b { font-size:17px; letter-spacing:-.01em; }
+  header nav { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  header nav a { color:var(--ls-ink2); text-decoration:none; font-size:13px; font-weight:600; padding:8px 10px; }
+  header nav a:hover { color:var(--ls-ink); }
+  .hero { text-align:center; padding:48px 0 36px; }
+  .hero img { width:84px; height:84px; border-radius:22px; box-shadow:0 12px 40px rgba(0,0,0,.18); }
+  h1 { font-size:clamp(30px,6vw,52px); font-weight:800; letter-spacing:-.03em; line-height:1.1; margin:22px 0 12px; }
+  .hero p.sub { font-size:clamp(15px,2.4vw,19px); color:var(--ls-ink2); max-width:640px; margin:0 auto 26px; }
+  a.cta { display:inline-block; background:var(--ls-ink); color:var(--ls-bg); font-weight:700; text-decoration:none; padding:13px 26px; border-radius:14px; font-size:15px; transition:opacity .15s ease, transform .15s ease; }
+  a.cta:hover { opacity:.85; transform:translateY(-1px); }
+  a.ghost { display:inline-block; color:var(--ls-ink); text-decoration:none; font-weight:600; padding:13px 20px; font-size:15px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; }
+  .card { background:var(--ls-surface); border:1px solid var(--ls-line); border-radius:18px; padding:20px; }
+  .card h3 { font-size:15px; margin:8px 0 4px; display:flex; align-items:center; gap:8px; }
+  .card p { font-size:13px; color:var(--ls-ink2); }
+  .ic { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; padding:28px 0; }
+  .stat { background:var(--ls-surface); border:1px solid var(--ls-line); border-radius:16px; padding:18px 8px; text-align:center; }
+  .stat b { display:block; font-size:26px; letter-spacing:-.02em; }
+  .stat span { font-size:12px; color:var(--ls-ink3); }
+  .privacy, .faq { background:var(--ls-surface); border:1px solid var(--ls-line); border-radius:22px; padding:28px; margin:48px 0; }
+  .privacy { text-align:center; }
+  .privacy h2, .faq h2 { font-size:clamp(20px,3.5vw,26px); letter-spacing:-.02em; margin-bottom:8px; }
+  .privacy p { color:var(--ls-ink2); max-width:560px; margin:0 auto 18px; font-size:14px; }
+  .pill { display:inline-block; background:var(--ls-bg); border:1px solid var(--ls-line); border-radius:999px; padding:6px 14px; font-size:12px; font-weight:600; color:var(--ls-ink2); margin:0 4px 12px; }
+  details { border-top:1px solid var(--ls-line); padding:12px 0; }
+  details:first-of-type { border-top:0; }
+  summary { cursor:pointer; font-weight:700; font-size:14px; list-style:none; }
+  summary::-webkit-details-marker { display:none; }
+  details p { margin-top:8px; font-size:13px; color:var(--ls-ink2); }
+  footer { border-top:1px solid var(--ls-line); padding:26px 0 40px; text-align:center; color:var(--ls-ink3); font-size:12px; margin-top:24px; }
+  footer a { color:var(--ls-ink2); }
+  @media (prefers-reduced-motion: reduce) { a.cta { transition:none; } a.cta:hover { transform:none; } }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Forq",
+  "url": "https://forq-site-henrygoldsmith07-9188s-projects.vercel.app/",
+  "description": "Forq — meal planning, shopping and nutrition, local-first with honest pricing and no fake data.",
+  "image": "https://forq-site-henrygoldsmith07-9188s-projects.vercel.app/icon-512.png",
+  "applicationCategory": "LifestyleApplication",
+  "operatingSystem": "Web",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "GBP"
+  }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <header>
+    <a href="https://le-studio-site-henrygoldsmith07-9188s-projects.vercel.app/" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit"><img src="./icon-192.png" alt="" aria-hidden="true"><b>Forq</b></a>
+    <nav aria-label="Site">
+      <a href="https://le-studio-site-henrygoldsmith07-9188s-projects.vercel.app/">Family</a>
+      <a href="#features">Features</a>
+      <a href="#faq">FAQ</a>
+      <a class="cta" href="https://github.com/henrygoldsmith07-wq/Claude-Code/tree/main/apps/food-shopping-os">Open Forq</a>
+    </nav>
+  </header>
+  <section class="hero" id="main">
+    <img src="./icon-192.png" alt="" aria-hidden="true">
+    <p style="margin:14px 0 0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ls-ink3);font-weight:700">Le Studio family · Forq</p>
+    <h1>One app for food.<br>Without the theatre.</h1>
+    <p class="sub">Plan meals, shop once, cook and log — local-first with optional household sync. Meal plans export to .ics for any calendar. Only reference material ships; your history is what you log.</p>
+    <a class="cta" href="https://github.com/henrygoldsmith07-wq/Claude-Code/tree/main/apps/food-shopping-os">Open Forq</a>
+    <a class="ghost" href="https://le-studio-site-henrygoldsmith07-9188s-projects.vercel.app/">← Back to family</a>
+  </section>
+  <section class="stats" aria-label="Stats">
+    <div class="stat"><b>31</b><span>data modules</span></div>
+    <div class="stat"><b>200+</b><span>reference foods</span></div>
+    <div class="stat"><b>.ics</b><span>calendar export</span></div>
+    <div class="stat"><b>Local</b><span>first, sync optional</span></div>
+  </section>
+  <section class="grid" id="features" style="margin-top:8px">
+    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10"/><path d="M9 8l3-5 3 5"/><path d="M5 14h14v6H5z"/></svg>Starts empty</h3><p>No demo pantry or pretend history — every number comes from what you buy, cook and log.</p></div>
+    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Recipe + pantry</h3><p>Book, per-100g nutrients, UK reference intakes and a pantry that tolerates uncertainty.</p></div>
+    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V3M8 21V13M16 3v18M16 8h3"/></svg>Plan → Shop → Cook</h3><p>A single weekly flow; households share the list, not silent storage.</p></div>
+    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Export</h3><p>Meal plan → calendar (.ics), backups to JSON importable elsewhere.</p></div>
+    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v8l-7 4-7-4V7z"/><path d="M12 12v8"/></svg>Open formats</h3><p>.ics / JSON / CSV in and out; sync only if you sign in (Upstash Redis + Ably).</p></div>
+    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>What it won't do</h3><p>Live supermarket prices or DNA diet claims — capability register says so plainly.</p></div>
+  </section>
+  <section class="privacy" style="margin-top:28px">
+    <h2>Honest by design</h2>
+    <p>Local-first core, optional household sync and server AI only when you choose it. No ads, no sale of data. Receipt prices recorded, not hallucinated.</p>
+    <div><span class="pill">Next.js 15</span><span class="pill">Tailwind 4</span><span class="pill">Upstash Redis</span><span class="pill">Open Food Facts</span></div>
+    <a class="cta" href="https://github.com/henrygoldsmith07-wq/Claude-Code/tree/main/apps/food-shopping-os">Open Forq</a>
+  </section>
+  <section class="faq" id="faq">
+    <h2>FAQ</h2>
+    <details><summary>Do you track prices live?</summary><p>No — receipt prices are recorded, retailer hub links you to official shops for today's price/stock.</p></details>
+    <details><summary>Is there cloud?</summary><p>Optional: Auth.js + Upstash Redis household sync. Without env vars it stays 100% local.</p></details>
+    <details><summary>Can I barcode scan?</summary><p>Optional Open Food Facts lookup (signed-in, explicit action) for identity/allergens/nutrition.</p></details>
+  </section>
+  <footer><a href="https://le-studio-site-henrygoldsmith07-9188s-projects.vercel.app/">Le Studio family</a> · Forq · <a href="https://github.com/henrygoldsmith07-wq/Claude-Code/tree/main/apps/food-shopping-os">Open app</a> · <a href="https://github.com/henrygoldsmith07-wq/Claude-Code">Source</a></footer>
+</div>
+</body>
+</html>

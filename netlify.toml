@@ -1,0 +1,6 @@
+# Requires the site's base directory to be apps/food-shopping-os.
+# Netlify detects Next.js and installs its OpenNext runtime automatically.
+[build]
+  command = "npm run build"
+  publish = ".next"
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- ."
