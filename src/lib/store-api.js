@@ -106,11 +106,21 @@ export function useStoreApi({
         setState({ ...EMPTY_STATE, day: todayStamp() });
       },
       finishOnboarding: (profile) =>
-        set((s) => ({
-          ...profile,
-          onboarded: true,
-          measurements: seedMeasurements(profile.body, s.day, s.measurements),
-        })),
+        set((s) => {
+          // Setup's cycle switch makes the same promise as the one in Goals:
+          // turning it on adds the Health cycle page. That page is gated on the
+          // 'cycle' optional tool as well as trackCycle, and setTrackCycle
+          // already keeps the pair in lockstep -- but setup wrote the flag
+          // without the tool, so the page never appeared for that route.
+          const tools = new Set(profile.enabledTools ?? s.enabledTools ?? []);
+          if (profile.trackCycle) tools.add('cycle'); else tools.delete('cycle');
+          return {
+            ...profile,
+            onboarded: true,
+            enabledTools: [...tools],
+            measurements: seedMeasurements(profile.body, s.day, s.measurements),
+          };
+        }),
       dismissSetupStep: (id) =>
         set((s) => ({
           dismissedSetupSteps: s.dismissedSetupSteps.includes(id)

@@ -186,23 +186,36 @@ describe('reading a receipt', () => {
   });
   afterEach(cleanup);
 
-  const openReceipt = () => {
+  // Receipt capture is an optional tool and new users start with none enabled,
+  // so the Shop tab only offers "Read a receipt" once it has been switched on.
+  // Do that the way a user does: Guidance -> Tools -> Add tools.
+  const enableTool = async (label) => {
+    fireEvent.click(screen.getByRole('button', { name: 'Guidance — what matters now' }));
+    const guidance = dialogFor('Guidance');
+    fireEvent.click(within(guidance).getByText('Tools'));
+    fireEvent.click(within(guidance).getByText('Add tools'));
+    fireEvent.click(await within(guidance).findByLabelText(`Enable ${label}`));
+    fireEvent.click(within(guidance).getByLabelText('Close'));
+  };
+
+  const openReceipt = async () => {
+    await enableTool('Receipt capture');
     goTab('Shop');
     fireEvent.click(screen.getAllByText(/Read a receipt/)[0]);
     return dialogFor('Read a receipt');
   };
 
-  it('says plainly when native photo OCR is unavailable', () => {
+  it('says plainly when native photo OCR is unavailable', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     expect(within(sheet).getByText(/no native receipt OCR/)).toBeTruthy();
     expect(within(sheet).getByText(/parser and total check still work/)).toBeTruthy();
     expect(within(sheet).getByText('Scan receipt photo').closest('button').disabled).toBe(true);
   });
 
-  it('parses the example and checks itself against the printed total', () => {
+  it('parses the example and checks itself against the printed total', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
     expect(within(sheet).getByText(/5 items · Tesco/)).toBeTruthy();
@@ -210,9 +223,9 @@ describe('reading a receipt', () => {
     expect(within(sheet).getByText(/That matches, so the parse is sound/)).toBeTruthy();
   });
 
-  it('puts what it read into the pantry', () => {
+  it('puts what it read into the pantry', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
     fireEvent.click(within(sheet).getByText(/Add 5 to the pantry/));
@@ -220,9 +233,9 @@ describe('reading a receipt', () => {
     expect(screen.getAllByText(/BANANAS LOOSE/i).length).toBeGreaterThan(0);
   });
 
-  it('records the receipt in shop history as well as the pantry', () => {
+  it('records the receipt in shop history as well as the pantry', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
     fireEvent.click(within(sheet).getByText(/Add 5 to the pantry/));
@@ -235,9 +248,9 @@ describe('reading a receipt', () => {
     expect(screen.getAllByText(/£12.38/).length).toBeGreaterThan(0);
   });
 
-  it('deduplicates repeated receipt lines when repeating that shop', () => {
+  it('deduplicates repeated receipt lines when repeating that shop', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.change(within(sheet).getByLabelText('Receipt text'), {
       target: { value: 'TESCO\nZUCCHINI £1.00\nZUCCHINI £1.20\nTOTAL £2.20' },
     });
@@ -250,9 +263,9 @@ describe('reading a receipt', () => {
     expect(screen.getAllByLabelText('Tick ZUCCHINI')).toHaveLength(1);
   });
 
-  it('undoes the pantry and history receipt save as one action', () => {
+  it('undoes the pantry and history receipt save as one action', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
     fireEvent.click(within(sheet).getByText(/Add 5 to the pantry/));
@@ -267,9 +280,9 @@ describe('reading a receipt', () => {
     expect(within(dialogFor('Smart pantry')).getByText('Your pantry is empty')).toBeTruthy();
   });
 
-  it('lets you correct or remove recognised lines before keeping them', () => {
+  it('lets you correct or remove recognised lines before keeping them', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
 
@@ -289,9 +302,9 @@ describe('reading a receipt', () => {
     expect(within(sheet).getByText(/Items come to £10.71/)).toBeTruthy();
   });
 
-  it('does not send a blank corrected line to the pantry', () => {
+  it('does not send a blank corrected line to the pantry', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
     fireEvent.change(within(sheet).getByLabelText('Receipt item 1 name'), { target: { value: ' ' } });
@@ -300,9 +313,9 @@ describe('reading a receipt', () => {
     expect(within(sheet).getByText(/Add 5 to the pantry/).closest('button').disabled).toBe(true);
   });
 
-  it('does not save receipt lines with invalid quantities or prices', () => {
+  it('does not save receipt lines with invalid quantities or prices', async () => {
     onboard();
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
     fireEvent.change(within(sheet).getByLabelText('Receipt item 1 price'), { target: { value: 'not-a-price' } });
@@ -311,7 +324,7 @@ describe('reading a receipt', () => {
     expect(within(sheet).getByText(/Add 5 to the pantry/).closest('button').disabled).toBe(true);
   });
 
-  it('does not offer a receipt pantry write when pantry access is off', () => {
+  it('does not offer a receipt pantry write when pantry access is off', async () => {
     onboard();
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY));
     const member = {
@@ -322,7 +335,7 @@ describe('reading a receipt', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY, newValue: JSON.stringify(next) }));
 
-    const sheet = openReceipt();
+    const sheet = await openReceipt();
     fireEvent.click(within(sheet).getByText('Example'));
     fireEvent.click(within(sheet).getByText(/Read it/));
     expect(within(sheet).getByText(/Pantry editing is off/)).toBeTruthy();
