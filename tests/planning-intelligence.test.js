@@ -4,7 +4,7 @@ import { buildPlan, pantryCoverage } from '../src/lib/planner.js';
 import {
   cookingTimeLearning, householdPreferenceProfile, leftoverAwareness, mealPlanAdherence,
   perishabilityOf, perishabilitySummary, repeatFatigue, SKIP_REASONS, skipReasonLabel,
-  useSoonIngredients,
+  ingredientsToUseSoon,
 } from '../src/lib/planning-intelligence.js';
 
 const DAY = '2026-08-19';
@@ -18,7 +18,7 @@ describe('planning intelligence', () => {
       { id: 'left', ...({ name: 'Curry leftovers', cat: 'Leftovers', portions: 2, expiry: '2026-08-20' }) },
       { id: 'rice', name: 'Rice', cat: 'Baking & dry', purchaseDate: DAY },
     ];
-    expect(useSoonIngredients(pantry, { today: DAY }).map((row) => row.item.name)).toEqual(['Milk', 'Spinach']);
+    expect(ingredientsToUseSoon(pantry, { today: DAY }).map((row) => row.item.name)).toEqual(['Milk', 'Spinach']);
     expect(leftoverAwareness(pantry, { today: DAY })[0].daysLeft).toBe(1);
     expect(perishabilityOf(pantry[0], DAY).kind).toBe('soon');
     expect(perishabilitySummary(pantry, { today: DAY }).unknown).toBe(0);
