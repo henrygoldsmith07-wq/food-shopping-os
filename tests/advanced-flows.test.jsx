@@ -179,7 +179,11 @@ describe('the register of what it will not pretend to do', () => {
 });
 
 describe('reading a receipt', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    // The receipt reader is an optional tool; these flows enable it directly.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ schemaVersion: 4, onboarded: false, enabledTools: ['receipt'] }));
+  });
   afterEach(cleanup);
 
   const openReceipt = () => {

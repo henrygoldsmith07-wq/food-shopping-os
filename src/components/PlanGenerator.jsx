@@ -92,6 +92,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
         expiry: usePantry ? expiringNames : [],
         variety,
         wasteOptimisation: minimiseWaste,
+        multiObjective: true,
         wasteProfile: app.wasteProfile,
         dates: scope === 'A day'
           ? [app.day, app.day, app.day]

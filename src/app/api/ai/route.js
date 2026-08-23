@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../server/api.js';
 import { requireHousehold } from '../../../server/households.js';
 import { aiRequestSchema } from '../../../server/schemas.js';
+import { isOpenRouterConfigured, freeChat } from '../../../server/openrouter.js';
 import {
   releaseAiBudget, reserveAiBudget, settleAiBudget, tokenReservation,
 } from '../../../server/ai-budget.js';
@@ -17,10 +18,26 @@ export async function POST(request) {
   try {
     assertSameOrigin(request);
     const user = await requireUser();
-    await rateLimit(`ai:${user.id}`, 30, 3600000);
-    if (!process.env.OPENAI_API_KEY) throw new ApiError(503, 'AI is not configured.');
+    // Free-tier OpenRouter models are unmetered for the household: only a
+    // light abuse guard applies, and the monthly AI budget is not touched.
+    await rateLimit(`ai:${user.id}`, isOpenRouterConfigured() ? 200 : 30, 3600000);
+    if (!isOpenRouterConfigured() && !process.env.OPENAI_API_KEY) throw new ApiError(503, 'AI is not configured.');
     const { household } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
     const input = aiRequestSchema.parse(await request.json());
+
+    if (isOpenRouterConfigured()) {
+      try {
+        const { text } = await freeChat({
+          system,
+          user: JSON.stringify({ task: input.task, prompt: input.prompt, context: input.context || {} }),
+        });
+        return NextResponse.json({ output: text, provider: 'openrouter-free' });
+      } catch (error) {
+        // No free slot available right now — fall through to the paid relay.
+        if (error?.status !== 402 && error?.message !== 'no-free-model') throw error;
+      }
+    }
+
     reservation = await reserveAiBudget(household._id, tokenReservation(input, 1200, system.length));
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const response = await client.responses.create({

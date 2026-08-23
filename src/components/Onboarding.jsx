@@ -131,6 +131,8 @@ export default function Onboarding() {
       name: name.trim() || 'you',
       household,
       trackCycle,
+      // Opting in at setup grants the cycle tool, so Health shows the page.
+      ...(trackCycle ? { enabledTools: ['cycle'] } : {}),
       // Under 18 the consent answer is stored as its own record; over 18 there
       // is nothing extra to store and it stays null.
       youthConsent: youth && youthConsent ? youthConsentRecord(app.day) : null,

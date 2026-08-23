@@ -41,7 +41,12 @@ const addReminder = (sheet, { kind = 'Water', text = '', time = '09:00', repeat 
 const openProfile = () => fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
 
 describe('reminders start empty', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    // The full nine-preset shelf belongs to the everything mode; other modes
+    // see a filtered set (covered by product-modes tests).
+    localStorage.setItem('forq-state-v2', JSON.stringify({ schemaVersion: 4, onboarded: false, productMode: 'everything' }));
+  });
   afterEach(cleanup);
 
   it('invents no routine for you, and says so', () => {

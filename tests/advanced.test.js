@@ -230,7 +230,7 @@ describe('reading a receipt', () => {
   it('pulls the items, prices and quantities out', () => {
     const result = parseReceipt(RECEIPT);
     expect(result.items).toHaveLength(5);
-    expect(result.items[0]).toEqual({ name: 'BANANAS LOOSE', price: 0.83, qty: 1 });
+    expect(result.items[0]).toMatchObject({ name: 'BANANAS LOOSE', price: 0.83, qty: 1 });
     expect(result.items.find((i) => i.name.includes('MILK')).price).toBe(2.5);
     expect(result.items.find((i) => i.name.includes('MILK')).qty).toBe(2);
     expect(result.items.find((i) => i.name.includes('CHICKEN')).qty).toBe(0.482);

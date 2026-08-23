@@ -20,7 +20,7 @@ const PrimaryButton = ({ children, onClick, disabled }) => (
 );
 
 const StatusMessage = ({ children, className = '', style }) => (
-  <p role="status" className={className} style={style}>{children}</p>
+  <p className={className} style={style}>{children}</p>
 );
 
 /* ---------- Barcode ---------- */

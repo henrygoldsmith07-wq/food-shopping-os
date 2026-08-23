@@ -305,7 +305,7 @@ export default function PrivacyPanel({
         </div>
 
         {status && (
-          <p role="status" className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+          <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
             {status}
           </p>
         )}

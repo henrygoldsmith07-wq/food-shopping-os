@@ -583,3 +583,11 @@ select { font-size: 1rem !important; }
   /* A press still needs to acknowledge itself; it just doesn't travel. */
   .press:active { transform: none; opacity: 0.7; }
 }
+
+@keyframes favourite-ring-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(224, 36, 94, 0.45); }
+  100% { box-shadow: 0 0 0 14px rgba(224, 36, 94, 0); }
+}
+.favourite-button.is-favourite {
+  animation: favourite-ring-pulse 900ms ease-out 2;
+}
