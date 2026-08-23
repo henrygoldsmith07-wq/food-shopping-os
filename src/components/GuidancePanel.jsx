@@ -10,6 +10,7 @@ const AnalyticsPanel = lazy(() => import('./AnalyticsPanel.jsx'));
 const ReportsPanel = lazy(() => import('./ReportsPanel.jsx'));
 const SmartFeaturesPanel = lazy(() => import('./SmartFeaturesPanel.jsx'));
 const AdvancedPanel = lazy(() => import('./AdvancedPanel.jsx'));
+const AddToolsPanel = lazy(() => import('./AddToolsPanel.jsx'));
 const AiAssistant = lazy(() => import('./AiAssistant.jsx'));
 
 const Loading = () => (
@@ -118,11 +119,14 @@ export default function GuidancePanel({ initialView = 'next', onNavigate, onOpen
           <div className="px-5 pb-4 flex gap-2">
             <Chip active={toolMode === 'smart'} onClick={() => setToolMode('smart')}>Predictions & capture</Chip>
             <Chip active={toolMode === 'advanced'} onClick={() => setToolMode('advanced')}>Health & impact</Chip>
+            <Chip active={toolMode === 'add'} onClick={() => setToolMode('add')}>Add tools</Chip>
           </div>
           <Suspense fallback={<Loading />}>
-            {toolMode === 'smart'
-              ? <SmartFeaturesPanel onOpenAssistant={() => setView('ask')} onNavigate={onNavigate} />
-              : <AdvancedPanel />}
+            {toolMode === 'smart' && (
+              <SmartFeaturesPanel onOpenAssistant={() => setView('ask')} onNavigate={onNavigate} />
+            )}
+            {toolMode === 'advanced' && <AdvancedPanel />}
+            {toolMode === 'add' && <AddToolsPanel />}
           </Suspense>
         </>
       )}
