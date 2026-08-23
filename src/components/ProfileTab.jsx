@@ -461,7 +461,7 @@ export default function ProfileTab({ openGuidance }) {
             </button>
           </div>
           {dataStatus && (
-            <p role="status" className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+            <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
               {dataStatus}
             </p>
           )}

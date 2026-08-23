@@ -456,7 +456,7 @@ function SharingView() {
         >
           <span className="inline-flex items-center gap-2"><Download size={14} /> Import snapshot</span>
         </button>
-        {message && <p role="status" className="text-[0.75rem] font-semibold">{message}</p>}
+        {message && <p className="text-[0.75rem] font-semibold">{message}</p>}
       </Card>
     </>
   );

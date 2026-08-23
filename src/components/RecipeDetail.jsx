@@ -144,9 +144,9 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
             fav && 'is-favourite',
           )}
           style={{
-            background: fav ? 'var(--danger-soft)' : 'var(--card)',
+            background: fav ? 'var(--danger)' : 'var(--card)',
             borderColor: fav ? 'var(--danger)' : 'var(--line)',
-            color: fav ? 'var(--danger)' : 'var(--faint)',
+            color: fav ? '#ffffff' : 'var(--faint)',
           }}
         >
           <Heart

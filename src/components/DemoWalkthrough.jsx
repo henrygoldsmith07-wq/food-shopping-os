@@ -91,7 +91,7 @@ export default function DemoWalkthrough({ onNavigate }) {
               {current.blurb}
             </p>
             {note && (
-              <p role="status" className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--accent)' }}>
+              <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--accent)' }}>
                 {note}
               </p>
             )}

@@ -186,7 +186,7 @@ function PlaceRemindersCard() {
           Save here
         </button>
       </div>
-      {status && <p role="status" className="mt-2 text-[0.75rem] font-semibold">{status}</p>}
+      {status && <p className="mt-2 text-[0.75rem] font-semibold">{status}</p>}
       {app.placeReminders.length > 0 && (
         <div className="mt-3 space-y-2">
           {app.placeReminders.map((place) => (

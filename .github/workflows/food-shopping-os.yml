@@ -15,19 +15,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  quality:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm ci
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Static type checking
+        run: npm run typecheck
+
+      - name: Unit & integration tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
       - name: Security audit (high-severity production deps block CI)
         run: |
           echo "Running production audit — high or critical vulnerabilities will block CI."
@@ -39,15 +52,23 @@ jobs:
             echo "Tip: dev-only advisories do not block — production audit is scoped with --omit=dev."
             exit $code
           fi
+
       - name: Advisory dev audit (informational)
         run: npm audit --audit-level=moderate || true
         continue-on-error: true
-      - run: npm test
-      - run: npm run build
-      - name: Enforce performance budget
-        run: node ../../scripts/check-performance-budgets.mjs --require-builds --only=.
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+
+      - name: Performance budgets
+        run: node scripts/check-performance-budgets.mjs --require-builds --only=.
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright E2E
+        run: npx playwright test tests/e2e --grep-invert "accessibility"
+
+      - name: Accessibility tests
+        run: npx playwright test tests/e2e/a11y.spec.js
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

@@ -101,8 +101,14 @@ export const healthActions = (set) => ({
       };
     }),
   removeCycle: (id) => set((s) => ({ cycles: s.cycles.filter((c) => c.id !== id) })),
-  /** Turning it off hides the page; what you logged stays where it is. */
-  setTrackCycle: (on) => set({ trackCycle: Boolean(on) }),
+  /** Turning it off hides the page; what you logged stays where it is.
+   *  The cycle view is an optional tool, so opting in grants it either way. */
+  setTrackCycle: (on) => set((s) => {
+    const enable = Boolean(on);
+    const tools = new Set(s.enabledTools || []);
+    if (enable) tools.add('cycle'); else tools.delete('cycle');
+    return { trackCycle: enable, enabledTools: [...tools] };
+  }),
 
   /* ---------- Photos ---------- */
 

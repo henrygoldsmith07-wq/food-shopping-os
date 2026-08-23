@@ -5,7 +5,8 @@ import { seededPick } from './utils.js';
 import { tasteScore } from './taste.js';
 import { canonicalName, sameIngredient } from './aliases.js';
 import { isPantrySufficient } from './kitchen.js';
-import { chooseWasteMinimisingPlan, scoreWastePlan } from './waste-planner.js';
+import { chooseWasteMinimisingPlan, rankWastePlans, scoreWastePlan } from './waste-planner.js';
+import { chooseOptimalPlan } from './optimiser.js';
 
 export {
   chooseWasteMinimisingPlan, learnWasteProfile, rankWastePlans, scoreWastePlan,
@@ -158,13 +159,39 @@ const finishPlan = (meals, note, wasteOptions) => {
   return { meals, note, wasteScore: wastePlan.score, wastePlan };
 };
 
-const chooseCandidate = (candidates, wasteOptions, optimise) => {
+export const chooseCandidate = (candidates, wasteOptions, optimise, multiObjective = false) => {
   if (!candidates.length) return { meals: [], wastePlan: scoreWastePlan([], wasteOptions) };
   if (!optimise || candidates.length === 1) {
     return { meals: candidates[0], wastePlan: scoreWastePlan(candidates[0], wasteOptions) };
   }
-  const selected = chooseWasteMinimisingPlan(candidates, wasteOptions);
-  return selected || { meals: candidates[0], wastePlan: scoreWastePlan(candidates[0], wasteOptions) };
+  const ranked = rankWastePlans(candidates, wasteOptions);
+  // Legacy shape: the waste model spread at the top level, plus .meals.
+  const pick = (meals, candidateIndex = null) => ({
+    ...scoreWastePlan(meals, wasteOptions),
+    ...(candidateIndex != null ? { candidateIndex } : {}),
+    meals,
+  });
+  if (multiObjective && ranked.best) {
+    // Multi-objective mode: pantry/expiry coverage blends with the pack-waste
+    // model instead of waste alone deciding. Time and equipment have already
+    // been hard-filtered upstream; this weighs what remains.
+    const optimised = chooseOptimalPlan(candidates, {
+      pantryItems: wasteOptions.pantry,
+      packageSizes: wasteOptions.packageSizes || {},
+      today: wasteOptions.today,
+      wasteScores: Object.fromEntries(ranked.ranked.map((r) => [r.candidateIndex, r.score])),
+      maxTimeMins: wasteOptions.maxTimeMins ?? null,
+      equipmentOwned: wasteOptions.equipmentOwned ?? [],
+    });
+    if (optimised?.meals?.length) {
+      return {
+        ...pick(optimised.meals, optimised.candidateIndex),
+        optimiserScore: optimised.score,
+        optimiserReasons: optimised.reasons,
+      };
+    }
+  }
+  return ranked.best ? pick(ranked.best.meals, ranked.best.candidateIndex) : pick(candidates[0]);
 };
 
 export const scopeCount = (scope) =>
@@ -187,7 +214,7 @@ export function buildPlan(
     scope = 'A week', diets = [], goal, budget, maxTime, occasion = 'Everyday', people = 2,
     pantry = [], month = null, batch = false, days = null, recipes = RECIPES, taste = null,
     leftovers = [], equipment = null, expiry = [], variety = false, pantryItems = null,
-    availableOnly = false, wasteOptimisation = true, wasteHistory = [], wasteProfile = null,
+    availableOnly = false, wasteOptimisation = true, multiObjective = false, wasteHistory = [], wasteProfile = null,
     packageSizes = {}, dates = [], today = '', learnedAliases = {},
   },
   seed,
@@ -247,7 +274,7 @@ export function buildPlan(
     const dayCandidates = Array.from({ length: candidates }, (_, candidateIndex) => pools
       .map((pool, i) => seededPick(pool, 1, seed + i * 17 + candidateIndex * 7919)[0])
       .filter(Boolean));
-    const selected = chooseCandidate(dayCandidates, wasteOptions, wasteOptimisation);
+    const selected = chooseCandidate(dayCandidates, wasteOptions, wasteOptimisation, multiObjective);
     const picks = selected.meals;
     return finishPlan(
       picks,
@@ -292,7 +319,7 @@ export function buildPlan(
     const selectedFill = chooseCandidate(fillCandidates, {
       ...wasteOptions,
       dates: dates.slice(leftoverMeals.length),
-    }, wasteOptimisation);
+    }, wasteOptimisation, multiObjective);
     const meals = [...leftoverMeals, ...selectedFill.meals];
     return finishPlan(
       meals,
@@ -311,7 +338,7 @@ export function buildPlan(
       return Array.from({ length: count }, (_, i) => unique[Math.floor((i * unique.length) / count)]).filter(Boolean);
     });
     if (batchCandidates.some((candidate) => candidate.length)) {
-      const selected = chooseCandidate(batchCandidates, wasteOptions, wasteOptimisation);
+      const selected = chooseCandidate(batchCandidates, wasteOptions, wasteOptimisation, multiObjective);
       const meals = selected.meals;
       const distinct = new Set(meals.map((meal) => meal.id)).size;
       const each = Math.round(count / Math.max(1, distinct));
@@ -328,7 +355,7 @@ export function buildPlan(
   pool = narrow(pool, count);
 
   const rankedCandidates = candidatePlans(pool, count, seed, variety, candidates);
-  const selected = chooseCandidate(rankedCandidates, wasteOptions, wasteOptimisation);
+  const selected = chooseCandidate(rankedCandidates, wasteOptions, wasteOptimisation, multiObjective);
   const meals = selected.meals;
   const unique = seededPick(pool, Math.min(count, pool.length), seed);
 
