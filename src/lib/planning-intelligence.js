@@ -41,7 +41,10 @@ export const perishabilityOf = (item, today = dayStamp()) => ({
 });
 
 /** Non-leftover pantry rows that deserve a place in the next plan. */
-export const useSoonIngredients = (pantry = [], { today = dayStamp(), within = 3 } = {}) => pantry
+// Named as a noun phrase, not `useSoonIngredients`: it is a pure pantry
+// query, but the `use` prefix made eslint-plugin-react-hooks treat every
+// call as a hook call and reject deriveApp for not being a component.
+export const ingredientsToUseSoon = (pantry = [], { today = dayStamp(), within = 3 } = {}) => pantry
   .filter((item) => item?.cat !== 'Leftovers')
   .map((item) => perishabilityOf(item, today))
   .filter((row) => row.kind === 'past' || row.kind === 'soon' || (row.daysLeft !== null && row.daysLeft <= within))

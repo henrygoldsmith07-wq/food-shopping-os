@@ -186,20 +186,7 @@ describe('reading a receipt', () => {
   });
   afterEach(cleanup);
 
-  // Receipt capture is an optional tool and new users start with none enabled,
-  // so the Shop tab only offers "Read a receipt" once it has been switched on.
-  // Do that the way a user does: Guidance -> Tools -> Add tools.
-  const enableTool = async (label) => {
-    fireEvent.click(screen.getByRole('button', { name: 'Guidance — what matters now' }));
-    const guidance = dialogFor('Guidance');
-    fireEvent.click(within(guidance).getByText('Tools'));
-    fireEvent.click(within(guidance).getByText('Add tools'));
-    fireEvent.click(await within(guidance).findByLabelText(`Enable ${label}`));
-    fireEvent.click(within(guidance).getByLabelText('Close'));
-  };
-
   const openReceipt = async () => {
-    await enableTool('Receipt capture');
     goTab('Shop');
     fireEvent.click(screen.getAllByText(/Read a receipt/)[0]);
     return dialogFor('Read a receipt');

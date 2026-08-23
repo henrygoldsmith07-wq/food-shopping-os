@@ -38,8 +38,10 @@ const MODULE_OF = {
 };
 
 const reachable = (app, key) => {
-  const module = MODULE_OF[key];
-  return !module || !app.moduleOn || app.moduleOn(module);
+  // Not named `module`: webpack treats that identifier specially inside a
+  // module scope, and @next/next/no-assign-module-variable rejects it.
+  const moduleId = MODULE_OF[key];
+  return !moduleId || !app.moduleOn || app.moduleOn(moduleId);
 };
 
 const resource = (type, item, subtitle) => ({

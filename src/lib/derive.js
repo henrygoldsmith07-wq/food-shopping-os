@@ -49,7 +49,7 @@ import { DEFAULT_PERMISSIONS, permissionsForRole } from './household.js';
 import { buildTasteProfile } from './taste.js';
 import {
   cookingTimeLearning, householdPreferenceProfile, leftoverAwareness, mealPlanAdherence,
-  perishabilitySummary, repeatFatigue, useSoonIngredients,
+  ingredientsToUseSoon, perishabilitySummary, repeatFatigue,
 } from './planning-intelligence.js';
 import { learnWasteProfile } from './waste-planner.js';
 import { YOUTH_COPY, youthPolicy } from './youth.js';
@@ -106,7 +106,7 @@ export const deriveApp = (state) => {
   const recipeBook = [...RECIPES, ...state.myRecipes];
   const tasteProfile = buildTasteProfile(recipeBook, state.tasteRatings, state.favourites, state.cooked);
   const planningDates = weekDates(state.day);
-  const useSoon = useSoonIngredients(state.pantry, { today: state.day });
+  const useSoon = ingredientsToUseSoon(state.pantry, { today: state.day });
   const leftoversAware = leftoverAwareness(state.pantry, { today: state.day });
   const perishability = perishabilitySummary(state.pantry, { today: state.day });
   const planningAdherence = mealPlanAdherence(state.plan, planningDates, state.mealPlanEvents, state.cooked);
