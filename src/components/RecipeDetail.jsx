@@ -16,6 +16,7 @@ import {
 } from '../lib/recipe-tools.js';
 import { explainRecommendation } from '../lib/recommend.js';
 import { Card, Ring, Pill, FoodArt, Chip } from './ui.jsx';
+import { RecipeFolderPicker } from './RecipeFolders.jsx';
 import { Glyph } from './icons.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 import CookMode from './CookMode.jsx';
@@ -244,7 +245,9 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
         </Card>
 
         {app.householdAccess.recipes && (
-          <Card className="rise rise-1">
+          <Card className="rise rise-1 space-y-4">
+            <RecipeFolderPicker recipeId={original.id} />
+            <div className="border-t pt-3" style={{ borderColor: 'var(--line)' }}>
             <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Collections</p>
             {app.recipeCollections.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -286,6 +289,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
               >
                 <span className="inline-flex items-center gap-1.5"><FolderPlus size={14} /> Create collection</span>
               </button>
+            </div>
             </div>
           </Card>
         )}

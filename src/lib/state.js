@@ -140,6 +140,9 @@ export const EMPTY_STATE = {
   favourites: [], // recipe ids
   tasteRatings: {}, // recipe id -> nope | like | love
   recipeCollections: [], // {id,name,recipeIds[],createdAt}
+  // Folders are the other half of organising: a recipe is in at most one, and
+  // the assignment lives on the folder itself. See lib/recipe-folders.js.
+  recipeFolders: [], // {id,name,recipeIds[],createdAt}
   recipeRatings: {}, // recipe id -> personal 1–5 score
   cooked: [], // [{recipeId, date}]
   cookingTimeHistory: [], // {id,recipeId,date,estimatedMins,actualMins}
