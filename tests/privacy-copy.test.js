@@ -25,7 +25,10 @@ describe('the real data boundary', () => {
     expect(PRIVACY_COPY.recipeFetch).toMatch(/goes to Forq’s backend/);
     expect(PRIVACY_COPY.recipePhoto).toMatch(/read on your device first/);
     expect(PRIVACY_COPY.recipePhoto).toMatch(/never stored/);
+    expect(PRIVACY_COPY.kitchenInventory).toMatch(/read in this browser/);
+    expect(PRIVACY_COPY.kitchenInventory).toMatch(/neither is stored/);
     expect(JSON.stringify(PRIVACY_DISCLOSURE)).toMatch(/import a recipe from a link/);
+    expect(JSON.stringify(PRIVACY_DISCLOSURE)).toMatch(/tidy a kitchen list/);
     for (const copy of Object.values(PRIVACY_COPY)) expect(copy).toMatch(/OpenAI/);
   });
 

@@ -8,6 +8,7 @@ export const PRIVACY_COPY = {
   recipeImport: 'The URL and pasted recipe are parsed in this browser; this import does not upload them or send them to OpenAI. If you save the recipe after opting into household sync, the saved recipe syncs with that household.',
   recipeFetch: 'Fetching a link is not local: the address goes to Forq’s backend, which loads that page and, for a video, asks the platform for its public caption. Where the page publishes recipe data, that is read directly and no model sees it. Otherwise the page’s own text is sent to the free AI provider Forq is configured with — not to OpenAI — and nothing else about you goes with it. If you save the recipe after opting into household sync, the saved recipe syncs with that household.',
   recipePhoto: 'A recipe photo is read on your device first where the browser can do it, and only the recognised words are sent on. Where it cannot, the picture itself goes to the free AI provider Forq is configured with — not to OpenAI — and is used for that one request. The photo is never stored on Forq’s servers.',
+  kitchenInventory: 'What you type, say or paste about your kitchen is read in this browser. Asking Forq to tidy a list, or reading a shelf photo the browser could not recognise itself, sends that text or picture to the free AI provider Forq is configured with — not to OpenAI — for that one request, and neither is stored. Speech recognition is your browser’s own and its transcript stays here. Saved pantry rows join household sync if you have opted in.',
   recipeShare: 'This share code is generated locally: making or copying it does not upload the recipe or send it to OpenAI. A saved recipe can still be part of household sync if you have opted in.',
 };
 
@@ -42,6 +43,7 @@ export const PRIVACY_DISCLOSURE = [
     summary: 'Forq does not sell your data or send the whole household record to these services.',
     items: [
       'OpenAI receives your prompt and the relevant context only when you run a server-backed AI action.',
+      'When you ask Forq to tidy a kitchen list, or photograph a shelf this browser cannot read itself, that text or picture goes to the free AI provider Forq is configured with so it can be listed. It is not stored, and the confidence attached to each item is decided in this browser, not by the model.',
       'When you import a recipe from a link, Forq’s backend fetches that page, and asks TikTok, YouTube or Instagram for a public caption where the link is one of theirs. When the page publishes no recipe data of its own, its text — or a recipe photo the browser could not read itself — goes to the free AI provider Forq is configured with so it can be laid out. Neither is stored.',
       'Google, Apple or Microsoft receive sign-in requests. Google or Microsoft receive meal-event details when you add them to a calendar, and return event times when you ask Forq to find busy evenings.',
       'Ably receives opaque household, user, device and sync-version identifiers for live update signals when configured. Otherwise, the same short-lived signal is held in your Upstash Redis household store.',
