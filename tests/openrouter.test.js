@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { rankedFreeModels, freeChat } from '../src/server/openrouter.js';
+import { freeChat, freeVision, rankedFreeModels, rankedVisionModels } from '../src/server/openrouter.js';
 
 const catalog = {
   data: [
@@ -9,6 +9,7 @@ const catalog = {
     { id: 'nvidia/llama-nemotron-embed-vl-1b-v2:free' }, // non-chat
     { id: 'acme/flux-tts:free' },                        // non-chat
     { id: 'liquid/lfm2.5-2.6b:free' },
+    { id: 'mistral/pixtral-12b:free' },                  // can read an image
   ],
 };
 
@@ -59,5 +60,47 @@ describe('freeChat — failover walks down the intelligence ranking', () => {
   it('says plainly when no key or no free slot exists', async () => {
     vi.stubEnv('OPENROUTER_API_KEY', '');
     await expect(freeChat({ system: 's', user: 'u', fetchImpl: vi.fn() })).rejects.toThrow('no-free-model');
+  });
+});
+
+describe('freeVision — the models that can actually see', () => {
+  it('offers only multimodal models, and never an embedding endpoint', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonRes(catalog));
+    const models = await rankedVisionModels(fetchImpl);
+    expect(models).toEqual(['mistral/pixtral-12b:free']);
+    expect(models.some((m) => m.includes('embed'))).toBe(false);
+  });
+
+  it('sends the picture as an image part alongside the instruction', async () => {
+    let sent = null;
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (String(url).endsWith('/models')) return jsonRes(catalog);
+      sent = JSON.parse(init.body);
+      return jsonRes({ choices: [{ message: { content: '{"title":"Scones"}' } }] });
+    });
+    const out = await freeVision({
+      system: 's', user: 'read it', image: 'data:image/jpeg;base64,zz', fetchImpl,
+    });
+    expect(out.model).toBe('mistral/pixtral-12b:free');
+    expect(sent.messages[1].content).toEqual([
+      { type: 'text', text: 'read it' },
+      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,zz' } },
+    ]);
+  });
+
+  it('refuses anything that is not an image data URL', async () => {
+    await expect(freeVision({ system: 's', user: 'u', image: 'https://x.test/a.jpg', fetchImpl: vi.fn() }))
+      .rejects.toThrow('bad-image');
+  });
+
+  it('says so when nothing in the catalog can see, rather than asking a text model', async () => {
+    const textOnly = { data: [{ id: 'z-ai/glm-5.2:free' }] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonRes(textOnly));
+    // The catalog cache belongs to a provider, so a different base is a fresh
+    // catalog rather than the previous one's answer.
+    vi.stubEnv('OPENROUTER_BASE_URL', 'https://other.test/api/v1');
+    await expect(freeVision({
+      system: 's', user: 'u', image: 'data:image/png;base64,zz', fetchImpl,
+    })).rejects.toThrow('no-vision-model');
   });
 });

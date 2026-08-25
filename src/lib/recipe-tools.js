@@ -373,12 +373,18 @@ export const recipeFromImport = (result, { text = '', url = '', provenance = {} 
     importedAt,
     confidence,
     unread,
-    // Where the import came from, when it was published and who wrote it —
-    // read off the page's own schema.org data, never invented.
+    // Where the import came from, when it was published, who wrote it and how
+    // it was read — off the page's own data, a video caption or a photo. Never
+    // invented, and kept so the recipe can always say which of those it was.
     provenance: {
       author: provenance.author || null,
       datePublished: provenance.datePublished || null,
       yield: provenance.yield || null,
+      platform: provenance.platform || null,
+      via: provenance.via || null,
+      read: provenance.read || null,
+      model: provenance.model || null,
+      attribution: provenance.attribution || null,
     },
   };
 };

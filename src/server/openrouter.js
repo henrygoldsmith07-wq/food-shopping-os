@@ -5,6 +5,10 @@
  * capability (Ultra → Super/Lightning → size tiers), excludes non-chat
  * endpoints (embeddings, rerankers, TTS, safety classifiers) and fails over
  * down the ranking. Free/unmetered providers bypass the household AI budget.
+ *
+ * `freeVision` is the same failover over the subset of the catalog that can
+ * actually read an image. Where none can, it says so rather than sending the
+ * picture to a text model and returning whatever that hallucinates.
  */
 
 /** Capability order: position = preference. Tokens must all appear in the id. */
@@ -29,6 +33,9 @@ const NON_CHAT_TOKENS = ['embed', 'rerank', 'tts', 'safety', 'moderation', 'whis
 const CATALOG_TTL_MS = 10 * 60 * 1000;
 let cachedRanking = null;
 let cachedAt = 0;
+// The cache belongs to the provider it was built from: swap the key or the
+// base URL and last provider's catalog is not an answer about this one.
+let cachedFor = '';
 
 export const activeProvider = () => {
   if (process.env.NVIDIA_API_KEY) {
@@ -65,7 +72,8 @@ const matchScore = (id) => {
 export async function rankedFreeModels(fetchImpl = fetch) {
   const provider = activeProvider();
   if (!provider) return [];
-  if (cachedRanking && Date.now() - cachedAt < CATALOG_TTL_MS) return cachedRanking;
+  const key = `${provider.id}:${provider.base}`;
+  if (cachedRanking && cachedFor === key && Date.now() - cachedAt < CATALOG_TTL_MS) return cachedRanking;
   try {
     const res = await fetchImpl(`${provider.base}/models`, {
       headers: { authorization: `Bearer ${provider.key}` },
@@ -80,8 +88,10 @@ export async function rankedFreeModels(fetchImpl = fetch) {
       .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
       .map((r) => r.id);
     cachedAt = Date.now();
+    cachedFor = key;
   } catch {
     cachedRanking = [];
+    cachedFor = key;
   }
   return cachedRanking;
 }
@@ -127,4 +137,74 @@ export async function freeChat({ system, user, maxTokens = 1200, fetchImpl = fet
     }
   }
   throw lastError || new Error('no-free-model');
+}
+
+/** Ids that mark a model as able to read an image, not only text. */
+const VISION_TOKENS = ['vl', 'vision', 'llava', 'pixtral', 'multimodal'];
+
+const looksMultimodal = (id) => {
+  const lower = id.toLowerCase();
+  return VISION_TOKENS.some((token) => new RegExp(`(^|[^a-z])${token}([^a-z]|$)`).test(lower));
+};
+
+/** Free chat-capable models that can also read an image, strongest first. */
+export async function rankedVisionModels(fetchImpl = fetch) {
+  return (await rankedFreeModels(fetchImpl)).filter(looksMultimodal);
+}
+
+/**
+ * Read an image with a model, failing over down the vision ranking.
+ *
+ * `image` is a data URL, so nothing is uploaded anywhere but the provider. If
+ * the catalog has no model that can see, this throws `no-vision-model` — the
+ * caller then tells the user to type it in, which is the honest answer.
+ */
+export async function freeVision({
+  system, user, image, maxTokens = 1200, fetchImpl = fetch,
+} = {}) {
+  const provider = activeProvider();
+  if (!provider) throw new Error('no-free-model');
+  if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(String(image || ''))) {
+    throw new Error('bad-image');
+  }
+  const models = await rankedVisionModels(fetchImpl);
+  if (!models.length) throw new Error('no-vision-model');
+  let lastError = null;
+  for (const model of models.slice(0, 4)) {
+    try {
+      const res = await fetchImpl(`${provider.base}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${provider.key}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          max_tokens: maxTokens,
+          messages: [
+            { role: 'system', content: system },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: user },
+                { type: 'image_url', image_url: { url: image } },
+              ],
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        lastError = Object.assign(new Error(`provider ${res.status}`), { status: res.status });
+        if (res.status === 401) break;
+        continue;
+      }
+      const body = await res.json();
+      return { text: body?.choices?.[0]?.message?.content ?? '', model };
+    } catch (error) {
+      lastError = error;
+      if (error?.status === 401) break;
+    }
+  }
+  throw lastError || new Error('no-vision-model');
 }

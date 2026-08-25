@@ -245,7 +245,7 @@ export default function RecipesTab({ openRecipe }) {
           className="press rounded-2xl border py-2.5 px-1 text-[0.75rem] font-extrabold"
           style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
         >
-          <span className="inline-flex items-center gap-1"><Link2 size={13} /> Import from URL</span>
+          <span className="inline-flex items-center gap-1"><Link2 size={13} /> Link, photo or paste</span>
         </button>
         <button
           onClick={() => setSheet('generate')}

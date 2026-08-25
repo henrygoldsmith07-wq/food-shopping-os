@@ -49,25 +49,24 @@ describe('personal recipe library', () => {
     expect(screen.getByText('★ 4/5')).toBeDefined();
   });
 
-  it('imports copied recipe text with its URL and original video intact', () => {
+  it('imports copied recipe text and keeps the original video with it', () => {
     render(<App />);
     openRecipes();
-    fireEvent.click(screen.getByText('Import from URL'));
+    fireEvent.click(screen.getByText('Link, photo or paste'));
 
     const sheet = dialogFor('Import a recipe');
-    fireEvent.click(within(sheet).getByText('From a link'));
-    fireEvent.change(within(sheet).getByLabelText('Recipe URL'), {
-      target: { value: 'https://www.youtube.com/watch?v=recipe123' },
-    });
     fireEvent.change(within(sheet).getByLabelText('Recipe text'), {
       target: {
         value: 'Tomato pasta\nServes 2\n200g pasta\n100g tomatoes\nBoil the pasta until tender, then toss thoroughly with the tomato sauce.',
       },
     });
     fireEvent.click(within(sheet).getByText('Import recipe'));
-
     expect(within(sheet).getByText('Tomato pasta')).toBeDefined();
-    expect(within(sheet).getByText(/copied text · source link kept/i)).toBeDefined();
+
+    fireEvent.change(within(sheet).getByLabelText('Link to the original'), {
+      target: { value: 'https://www.youtube.com/watch?v=recipe123' },
+    });
+    expect(within(sheet).getByText(/Recognised as a video/)).toBeDefined();
     fireEvent.click(within(sheet).getByText('Save to My recipes'));
     fireEvent.click(within(sheet).getByLabelText('Close'));
 
