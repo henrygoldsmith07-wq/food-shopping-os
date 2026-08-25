@@ -45,7 +45,7 @@ const EXTRA_COLUMNS = [
 
 export const MICRO_COLUMNS = [...BASE_COLUMNS, ...EXTRA_COLUMNS];
 
-/* eslint-disable no-multi-spaces */
+/* Columns are padded to line up: the alignment is the readability. */
 const TABLE = {
   //                    sug  sat  trn chol   Na    K    Ca   Fe   Mg   Zn   A    B    C    D    E     K   H2O caf alc
   'porridge-oats':      [1,   1.4, 0,    0,    7,  350,  52,  4.3, 138, 3.6,   0,15.7,   0,   0,  0.9,   2,   8,  0, 0],
@@ -93,7 +93,6 @@ const TABLE = {
   granola:              [18,  3,   0.05, 0,    60, 336,  60,  3.3, 110, 2.4,   0, 8.8,   0,   0,  3.5,   2,   5,  0, 0],
   'ice-cream':          [21,  6.8, 0.3,  44,   80, 199, 128,  0.1,  14, 0.7, 118, 3.5, 0.6, 0.3,  0.3, 0.3,  61,  0, 0],
 };
-/* eslint-enable no-multi-spaces */
 
 const EXTRA = {
   //                       I     Se    n-3     B1     B2     B3     B5     B6     B7     B9   B12

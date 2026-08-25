@@ -132,7 +132,8 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
     }
     // fetch by product name (barcode path is used in BarcodeAdd, not list)
     try {
-      // eslint-disable-next-line no-await-in-loop -- rate-limit friendly sequential fetch
+      // Sequential on purpose: the community price API is rate limited, and a
+      // parallel burst across a whole list is what trips it.
       const body = await fetchObservedPrice({ query: name.slice(0, 80) }, { signal });
       const prices = Array.isArray(body.prices) ? body.prices : [];
       cache[k] = { prices, sourceLabel: body.sourceLabel || 'Open Prices (community observed)', checkedAt: body.checkedAt || new Date().toISOString() };
@@ -143,7 +144,6 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
         byKey[k] = { ...observedPriceLabel(cheapest), raw: prices, checkedAt: cache[k].checkedAt, cached: false };
       }
       // small gap to stay under rate limit when the user fetches a whole list
-      // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 180));
     } catch (error) {
       // 401 = not signed in; 429 = rate limited — surface once, don't spam per item
