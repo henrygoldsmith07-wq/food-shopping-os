@@ -3,6 +3,8 @@ const browser = () => (typeof window === 'undefined' ? {} : window);
 export const captureSupport = () => ({
   barcode: typeof browser().BarcodeDetector === 'function',
   receiptText: typeof browser().TextDetector === 'function',
+  /** The same recogniser, for anything printed: a recipe page, a label, a list. */
+  imageText: typeof browser().TextDetector === 'function',
   speech: typeof (browser().SpeechRecognition || browser().webkitSpeechRecognition) === 'function',
   geolocation: Boolean(browser().navigator?.geolocation),
 });
@@ -48,6 +50,33 @@ export const detectReceiptText = async (file, {
     const results = await detector.detect(bitmap);
     const text = (results || []).map((row) => String(row.rawValue || '').trim()).filter(Boolean).join('\n');
     if (!text) throw new Error('No receipt text was found. Try a flatter, brighter photo or paste the text.');
+    return text;
+  } finally {
+    bitmap?.close?.();
+  }
+};
+
+/**
+ * Read whatever text is printed in a picture, on the device.
+ *
+ * Same recogniser as the receipt reader, without the receipt-shaped wording:
+ * a recipe page in a book, a handwritten card, a screenshot of a caption. The
+ * text never leaves the browser here — what the caller does with it next is
+ * the caller's decision to explain.
+ */
+export const detectImageText = async (file, {
+  Detector = browser().TextDetector,
+  createBitmap = browser().createImageBitmap,
+} = {}) => {
+  if (typeof Detector !== 'function') {
+    throw new Error('This browser cannot read text from images.');
+  }
+  const detector = new Detector();
+  const bitmap = await bitmapFor(file, createBitmap);
+  try {
+    const results = await detector.detect(bitmap);
+    const text = (results || []).map((row) => String(row.rawValue || '').trim()).filter(Boolean).join('\n');
+    if (!text) throw new Error('No text was found in that picture.');
     return text;
   } finally {
     bitmap?.close?.();

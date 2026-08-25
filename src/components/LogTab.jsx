@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  Activity, Camera, Clock, Cookie, Droplet, Layers, Mic, Plus, ScanBarcode, ScanText, Search, Utensils,
+  Activity, Camera, Clock, Cookie, Droplet, Layers, Mic, Pipette, Plus, ScanBarcode, ScanText,
+  Search, Utensils,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { YOUTH_COPY } from '../lib/youth.js';
@@ -9,7 +10,8 @@ import {
   MEALS, alcoholUnits, byTime, entryNumbers, mealForTime, mealLabel, nutrientAlerts,
   nutrientRows, remaining, snackSummary, sumMacros, timingInsight,
 } from '../lib/nutrition.js';
-import { formatAmount } from '../data/nutrients.js';
+import { formatAmount, NUTRIENTS } from '../data/nutrients.js';
+import { dailyMicroReport } from '../lib/micronutrition.js';
 import { Card, Meter, Pill, Ring, Section, Sheet } from './ui.jsx';
 import WaterGlasses from './WaterGlasses.jsx';
 import PrimaryAction from './PrimaryAction.jsx';
@@ -19,6 +21,7 @@ import FoodDetail from './FoodDetail.jsx';
 import CopyMeal from './CopyMeal.jsx';
 import RecipeImport from './RecipeImport.jsx';
 import NutritionPanel from './NutritionPanel.jsx';
+import MicronutrientPanel from './MicronutrientPanel.jsx';
 import { BarcodeScanner, PhotoRecognise, VoiceLog } from './LogCapture.jsx';
 import LabelScan from './LabelScan.jsx';
 
@@ -33,6 +36,7 @@ const SHORTCUTS = [
 
 const SHEET_TITLES = {
   nutrition: 'Nutrition today',
+  micros: 'Vitamins & minerals',
   add: 'Add food',
   barcode: 'Scan a barcode',
   photo: 'Photo recognition',
@@ -94,6 +98,10 @@ export default function LogTab({ initialSheet = null, onIntentUsed }) {
   const alerts = nutrientAlerts(totals, app.targets);
   const micro = nutrientRows(totals, app.targets)
     .filter((r) => ['fibre', 'sugar', 'satFat', 'sodium'].includes(r.key));
+  // How many vitamins and minerals actually fell short today — measured ones
+  // only, so an unlogged nutrient is never counted as a gap.
+  const microReport = dailyMicroReport(entries, app.targets);
+  const microGaps = microReport.deficient.length + microReport.low.length;
 
   const open = (id, meal) => {
     setActiveMeal(meal || mealForTime());
@@ -195,7 +203,18 @@ export default function LogTab({ initialSheet = null, onIntentUsed }) {
             style={{ borderColor: 'var(--line)' }}
           >
             <span className="inline-flex items-center gap-1.5">
-              <Activity size={14} /> All 24 nutrients{alerts.over.length ? ` · ${alerts.over.length} over limit` : ''}
+              <Activity size={14} /> All {NUTRIENTS.length} nutrients{alerts.over.length ? ` · ${alerts.over.length} over limit` : ''}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSheet('micros')}
+            className="press mt-2 w-full rounded-2xl border py-2.5 text-[0.8125rem] font-extrabold"
+            style={{ borderColor: 'var(--line)' }}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Pipette size={14} /> Vitamins &amp; minerals
+              {microGaps ? ` · ${microGaps} short today` : ''}
             </span>
           </button>
           </details>
@@ -387,6 +406,7 @@ export default function LogTab({ initialSheet = null, onIntentUsed }) {
         {sheet === 'import' && <RecipeImport defaultMeal={activeMeal} onDone={closeAll} />}
         {sheet === 'copy' && <CopyMeal defaultMeal={activeMeal} initialMode={copyMode} onDone={closeAll} />}
         {sheet === 'nutrition' && <NutritionPanel />}
+        {sheet === 'micros' && <MicronutrientPanel />}
       </Sheet>
 
       {/* Portion + timing for a newly picked food */}

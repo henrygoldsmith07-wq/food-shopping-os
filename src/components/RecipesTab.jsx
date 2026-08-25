@@ -8,6 +8,7 @@ import { cx, gbp } from '../lib/utils.js';
 import { allRecipes, DISCOVER_FILTERS, filterRecipes } from '../data/recipes.js';
 import { DIET_PATTERNS } from '../data/goals.js';
 import { missingFrom, parseShareCode, searchRecipes } from '../lib/recipe-tools.js';
+import { ALL_RECIPES, recipesInFolder } from '../lib/recipe-folders.js';
 import { Section, Card, Chip, Pill, FoodArt, Sheet } from './ui.jsx';
 import PrimaryAction from './PrimaryAction.jsx';
 import RecipeGenerator from './RecipeGenerator.jsx';
@@ -15,6 +16,7 @@ import RecipeImport from './RecipeImport.jsx';
 import TasteGame from './TasteGame.jsx';
 
 import RecipeFilterSheet from './RecipeFilterSheet.jsx';
+import RecipeFolders from './RecipeFolders.jsx';
 
 const PAGE = 24;
 
@@ -102,6 +104,7 @@ export default function RecipesTab({ openRecipe }) {
   const [filters, setFilters] = useState({ diets: [], maxTime: null, include: [], exclude: [], maxMissing: null });
   const [collectionId, setCollectionId] = useState('');
   const [collectionName, setCollectionName] = useState('');
+  const [folderId, setFolderId] = useState(ALL_RECIPES);
 
   const pantryNames = app.pantry.map((p) => p.name);
   const active = filters.diets.length + filters.include.length + filters.exclude.length
@@ -114,13 +117,16 @@ export default function RecipesTab({ openRecipe }) {
   const pool = useMemo(() => {
     if (view === 'mine') return app.myRecipes;
     if (view === 'favourites') return allRecipes().filter((r) => app.favourites.includes(r.id));
+    // Folders file anything you have saved, book recipe or your own, so the
+    // shelf they filter is the whole library rather than just "Mine".
+    if (view === 'folders') return recipesInFolder(allRecipes(), app.recipeFolders, folderId);
     if (view === 'collections') {
       if (!selectedCollection) return [];
       const ids = new Set(selectedCollection.recipeIds);
       return allRecipes().filter((recipe) => ids.has(recipe.id));
     }
     return query.trim() ? allRecipes() : filterRecipes(filter);
-  }, [view, filter, query, app.myRecipes, app.favourites, selectedCollection]);
+  }, [view, filter, query, app.myRecipes, app.favourites, app.recipeFolders, folderId, selectedCollection]);
 
   // Central engine: allergens, religious rules, diet patterns and household
   // diets cut the pool before anything else runs. A blocked recipe is never a
@@ -142,7 +148,7 @@ export default function RecipesTab({ openRecipe }) {
   );
 
   const [shown, setShown] = useState(PAGE);
-  useEffect(() => setShown(PAGE), [query, filters, view, filter]);
+  useEffect(() => setShown(PAGE), [query, filters, view, filter, folderId]);
   const visible = recipes.slice(0, shown);
 
   const blockedLine = blocked > 0
@@ -153,6 +159,8 @@ export default function RecipesTab({ openRecipe }) {
     ? 'Nothing here yet — generate a dish from your pantry, import one from a link, or paste in a code someone sent you.'
     : view === 'favourites'
       ? 'No favourites yet. Tap the heart on any recipe and it lands here.'
+      : view === 'folders'
+        ? 'Nothing filed here yet. Open a recipe and put it in a folder.'
       : view === 'collections'
         ? selectedCollection
           ? 'This collection is empty. Add recipes from any recipe page.'
@@ -194,7 +202,7 @@ export default function RecipesTab({ openRecipe }) {
       </div>
 
       <div className="mt-4 px-5 flex gap-2 overflow-x-auto no-scrollbar rise rise-1">
-        {[['library', `Library (${allRecipes().length})`], ['mine', `Mine (${app.myRecipes.length})`], ['favourites', `Favourites (${app.favourites.length})`], ['collections', `Collections (${app.recipeCollections.length})`]]
+        {[['library', `Library (${allRecipes().length})`], ['mine', `Mine (${app.myRecipes.length})`], ['favourites', `Favourites (${app.favourites.length})`], ['folders', `Folders (${app.recipeFolders.length})`], ['collections', `Collections (${app.recipeCollections.length})`]]
           .map(([key, label]) => (
             <Chip key={key} active={view === key} onClick={() => setView(key)}>{label}</Chip>
           ))}
@@ -237,7 +245,7 @@ export default function RecipesTab({ openRecipe }) {
           className="press rounded-2xl border py-2.5 px-1 text-[0.75rem] font-extrabold"
           style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
         >
-          <span className="inline-flex items-center gap-1"><Link2 size={13} /> Import from URL</span>
+          <span className="inline-flex items-center gap-1"><Link2 size={13} /> Link, photo or paste</span>
         </button>
         <button
           onClick={() => setSheet('generate')}
@@ -264,6 +272,12 @@ export default function RecipesTab({ openRecipe }) {
         </div>
       )}
       </details>
+
+      {view === 'folders' && app.householdAccess.recipes && (
+        <Section className="mt-3 rise rise-1">
+          <RecipeFolders recipes={allRecipes()} selected={folderId} onSelect={setFolderId} />
+        </Section>
+      )}
 
       {view === 'collections' && app.householdAccess.recipes && (
         <Section className="mt-3 rise rise-1">

@@ -5,7 +5,9 @@ import {
 } from '../src/lib/nutrition.js';
 import { estimateRecipeMicros, makeCustomFood, searchFoods } from '../src/lib/foodlog.js';
 import { CATALOGUE, FOODS, RESTAURANT_FOODS } from '../src/data/foods.js';
-import { NUTRIENTS, NUTRIENT_KEYS, DEFAULT_TARGETS, formatAmount } from '../src/data/nutrients.js';
+import {
+  DEFAULT_TARGETS, formatAmount, MICRONUTRIENT_KEYS, nutrientBy, NUTRIENTS, NUTRIENT_KEYS, UPPER_LIMITS,
+} from '../src/data/nutrients.js';
 import { RECIPES } from '../src/data/recipes.js';
 import { microsFor } from '../src/data/micronutrients.js';
 
@@ -18,13 +20,46 @@ describe('nutrient catalogue', () => {
     expect(saltEquivalent()).toBe(0);
   });
 
-  it('tracks all 24 asked-for nutrients', () => {
-    expect(NUTRIENTS).toHaveLength(24);
+  it('tracks all 35 asked-for nutrients', () => {
+    expect(NUTRIENTS).toHaveLength(35);
     for (const key of ['kcal', 'protein', 'carbs', 'fat', 'fibre', 'sugar', 'satFat', 'transFat',
-      'cholesterol', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitB',
-      'vitC', 'vitD', 'vitE', 'vitK', 'water', 'caffeine', 'alcohol']) {
+      'cholesterol', 'omega3', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc',
+      'iodine', 'selenium', 'vitA', 'vitB', 'vitC', 'vitD', 'vitE', 'vitK', 'vitB1', 'vitB2',
+      'vitB3', 'vitB5', 'vitB6', 'vitB7', 'vitB9', 'vitB12', 'water', 'caffeine', 'alcohol']) {
       expect(NUTRIENT_KEYS, key).toContain(key);
     }
+  });
+
+  it('gives every B vitamin, iodine, selenium and omega-3 its own row and reference', () => {
+    for (const key of MICRONUTRIENT_KEYS) {
+      expect(DEFAULT_TARGETS[key], key).toBeGreaterThan(0);
+    }
+    // The old composite survives as a summary, not as a ninth B vitamin.
+    expect(MICRONUTRIENT_KEYS).not.toContain('vitB');
+    expect(nutrientBy.vitB.composite).toBe(true);
+    // Sodium is a limit, so it is not something to be short of.
+    expect(MICRONUTRIENT_KEYS).not.toContain('sodium');
+  });
+
+  it('carries an upper level only where an authority has published one', () => {
+    expect(UPPER_LIMITS.vitA).toBe(3000);
+    expect(UPPER_LIMITS.selenium).toBe(300);
+    expect(UPPER_LIMITS.vitB9).toBe(1000);
+    // No published UL for magnesium from food or for potassium — so none here.
+    expect(UPPER_LIMITS.magnesium).toBeUndefined();
+    expect(UPPER_LIMITS.potassium).toBeUndefined();
+  });
+
+  it('reads the deep micronutrients off the foods known for them', () => {
+    expect(byId('salmon-fillet').per100.omega3).toBeGreaterThan(2);
+    expect(byId('salmon-fillet').per100.vitB12).toBeGreaterThan(3);
+    expect(byId('spinach').per100.vitB9).toBeGreaterThan(150);
+    expect(byId('tuna-tinned').per100.selenium).toBeGreaterThan(50);
+    expect(byId('semi-skimmed-milk').per100.iodine).toBeGreaterThan(20);
+    expect(byId('almonds').per100.vitB2).toBeGreaterThan(1);
+    // Measured none is still a number, and an absent food is still null.
+    expect(byId('cola').per100.vitB12).toBe(0);
+    expect(microsFor('not-a-real-food').vitB9).toBeNull();
   });
 
   it('gives every core catalogue food measured numbers (or explicit null only when absent from DB)', () => {

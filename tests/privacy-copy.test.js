@@ -19,6 +19,16 @@ describe('the real data boundary', () => {
     expect(PRIVACY_COPY.reminders).toMatch(/server can queue reminder jobs/);
     expect(PRIVACY_COPY.recipeImport).toMatch(/does not upload them/);
     expect(PRIVACY_COPY.recipeShare).toMatch(/does not upload the recipe/);
+    // Fetching a link and reading a photo genuinely leave the device, and the
+    // copy for those paths has to say so rather than borrowing the paste line.
+    expect(PRIVACY_COPY.recipeFetch).toMatch(/is not local/);
+    expect(PRIVACY_COPY.recipeFetch).toMatch(/goes to Forq’s backend/);
+    expect(PRIVACY_COPY.recipePhoto).toMatch(/read on your device first/);
+    expect(PRIVACY_COPY.recipePhoto).toMatch(/never stored/);
+    expect(PRIVACY_COPY.kitchenInventory).toMatch(/read in this browser/);
+    expect(PRIVACY_COPY.kitchenInventory).toMatch(/neither is stored/);
+    expect(JSON.stringify(PRIVACY_DISCLOSURE)).toMatch(/import a recipe from a link/);
+    expect(JSON.stringify(PRIVACY_DISCLOSURE)).toMatch(/tidy a kitchen list/);
     for (const copy of Object.values(PRIVACY_COPY)) expect(copy).toMatch(/OpenAI/);
   });
 

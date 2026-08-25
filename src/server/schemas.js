@@ -30,6 +30,29 @@ export const aiRequestSchema = z.object({
   path: ['context'],
 });
 
+/**
+ * A recipe import request. Exactly one source: a link to fetch, text that was
+ * already read off a photo on the device, or the photo itself for a vision
+ * model when the browser had no text recogniser.
+ */
+export const recipeImportSchema = z.object({
+  url: z.string().trim().url().max(2000).optional(),
+  text: z.string().trim().min(20).max(20000).optional(),
+  image: z.string().trim().startsWith('data:image/').max(4_000_000).optional(),
+}).refine(
+  (value) => [value.url, value.text, value.image].filter(Boolean).length === 1,
+  { message: 'Send exactly one of url, text or image.' },
+);
+
+/** Free-form kitchen inventory to structure: typed, spoken, pasted or shot. */
+export const kitchenInventorySchema = z.object({
+  text: z.string().trim().min(2).max(8000).optional(),
+  image: z.string().trim().startsWith('data:image/').max(4_000_000).optional(),
+}).refine(
+  (value) => [value.text, value.image].filter(Boolean).length === 1,
+  { message: 'Send exactly one of text or image.' },
+);
+
 export const coachShareSchema = z.object({
   label: z.string().trim().min(1).max(80).default('Coach'),
   scopes: z.array(z.enum(['diary', 'nutrition', 'plan', 'health'])).min(1).max(4),

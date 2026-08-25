@@ -38,8 +38,8 @@ const MODULE_OF = {
 };
 
 const reachable = (app, key) => {
-  const module = MODULE_OF[key];
-  return !module || !app.moduleOn || app.moduleOn(module);
+  const owner = MODULE_OF[key];
+  return !owner || !app.moduleOn || app.moduleOn(owner);
 };
 
 const resource = (type, item, subtitle) => ({

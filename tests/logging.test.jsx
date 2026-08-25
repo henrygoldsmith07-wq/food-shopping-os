@@ -213,7 +213,7 @@ describe('nutrition panel', () => {
 
   it('lists every tracked nutrient, at zero on a fresh day', () => {
     openDiary();
-    fireEvent.click(screen.getByText(/All 24 nutrients/));
+    fireEvent.click(screen.getByText(/All \d+ nutrients/));
     const sheet = dialogFor('Nutrition today');
     for (const label of ['Calories', 'Fibre', 'Saturated fat', 'Cholesterol', 'Sodium',
       'Potassium', 'Calcium', 'Iron', 'Magnesium', 'Zinc', 'Vitamin A', 'Vitamin B complex',
@@ -229,7 +229,7 @@ describe('nutrition panel', () => {
   it('edits a daily target and re-reads the percentage against it', () => {
     openDiary();
     logFood('almonds');
-    fireEvent.click(screen.getByText(/All 24 nutrients/));
+    fireEvent.click(screen.getByText(/All \d+ nutrients/));
     const sheet = dialogFor('Nutrition today');
     fireEvent.click(within(sheet).getByText('Edit daily targets'));
 
