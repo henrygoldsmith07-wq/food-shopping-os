@@ -49,7 +49,9 @@ import { DEFAULT_PERMISSIONS, permissionsForRole } from './household.js';
 import { buildTasteProfile } from './taste.js';
 import {
   cookingTimeLearning, householdPreferenceProfile, leftoverAwareness, mealPlanAdherence,
-  perishabilitySummary, repeatFatigue, useSoonIngredients,
+  // Imported under a name that does not begin with "use": it is a pantry
+  // helper, and the React hook rules read the call site as a hook otherwise.
+  perishabilitySummary, repeatFatigue, useSoonIngredients as soonIngredients,
 } from './planning-intelligence.js';
 import { learnWasteProfile } from './waste-planner.js';
 import { YOUTH_COPY, youthPolicy } from './youth.js';
@@ -106,7 +108,7 @@ export const deriveApp = (state) => {
   const recipeBook = [...RECIPES, ...state.myRecipes];
   const tasteProfile = buildTasteProfile(recipeBook, state.tasteRatings, state.favourites, state.cooked);
   const planningDates = weekDates(state.day);
-  const useSoon = useSoonIngredients(state.pantry, { today: state.day });
+  const useSoon = soonIngredients(state.pantry, { today: state.day });
   const leftoversAware = leftoverAwareness(state.pantry, { today: state.day });
   const perishability = perishabilitySummary(state.pantry, { today: state.day });
   const planningAdherence = mealPlanAdherence(state.plan, planningDates, state.mealPlanEvents, state.cooked);
