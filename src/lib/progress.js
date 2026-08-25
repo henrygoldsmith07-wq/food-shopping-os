@@ -167,6 +167,11 @@ export const questMetrics = (state, today = dayStamp()) => {
   const plannedDinners = week.filter((d) => (state.plan || {})[d]?.dinner).length;
   const before = cooked.filter((c) => !inWeek(c.date)).map((c) => c.recipeId);
   const pantryNames = (state.pantry || []).map((p) => p.name.toLowerCase());
+  // Did anything happen in the kitchen this week at all? Cooking, shopping or
+  // keeping a diary all count; an untouched week counts as none of them.
+  const usedTheKitchenThisWeek = cookedThisWeek.length > 0
+    || (state.shops || []).some((shop) => inWeek(shop.date))
+    || loggedDaysThisWeek > 0;
 
   return {
     /* today */
@@ -185,7 +190,14 @@ export const questMetrics = (state, today = dayStamp()) => {
     underBudgetThisWeek: state.weeklyBudget > 0
       && spentInWeek(state.shops || [], today) > 0
       && spentInWeek(state.shops || [], today) <= state.weeklyBudget ? 1 : 0,
-    zeroWasteThisWeek: (state.waste || []).some((w) => inWeek(w.date)) ? 0 : 1,
+    // "Waste nothing" is about the pantry, so it needs a pantry to not have
+    // wasted from and a week that was actually lived in. A brand-new install
+    // binned nothing because it has nothing, and paying XP for that is paying
+    // for absence — the same trap the budget challenge already guards against
+    // by refusing a week with no recorded spend.
+    zeroWasteThisWeek: usedTheKitchenThisWeek
+      && pantryNames.length > 0
+      && !(state.waste || []).some((w) => inWeek(w.date)) ? 1 : 0,
     newDishesThisWeek: cookedThisWeek.filter((c) => !before.includes(c.recipeId)).length,
     seasonalMealsThisWeek: cookedRecipes.filter((r) => seasonScore(r, month) > 0).length,
     batchMealsThisWeek: cookedRecipes.filter((r) => (r.servings || 1) > 2).length,

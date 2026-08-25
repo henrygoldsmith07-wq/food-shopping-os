@@ -233,12 +233,19 @@ describe('rearranging the plan', () => {
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Teriyaki Salmon Bowls'));
     expect(screen.getByText(/2 meals planned/)).toBeDefined();
 
-    const curry = screen.getByText('Coconut Chickpea Curry').closest('[draggable]');
-    fireEvent.dragStart(curry);
-    fireEvent.drop(screen.getByText('Teriyaki Salmon Bowls'));
+    // The plan screen names a dish in more than one place, so both ends of the
+    // drag are taken from the week grid — the draggable cards — rather than
+    // from whichever mention happens to be first in the document.
+    const plannedCard = (name) => screen.getAllByText(name)
+      .map((node) => node.closest('[draggable]'))
+      .find(Boolean);
 
-    expect(screen.getByText('Coconut Chickpea Curry')).toBeDefined();
-    expect(screen.getByText('Teriyaki Salmon Bowls')).toBeDefined();
+    fireEvent.dragStart(plannedCard('Coconut Chickpea Curry'));
+    fireEvent.drop(plannedCard('Teriyaki Salmon Bowls'));
+
+    // Neither meal was lost in the swap.
+    expect(plannedCard('Coconut Chickpea Curry')).toBeDefined();
+    expect(plannedCard('Teriyaki Salmon Bowls')).toBeDefined();
     expect(screen.getByText(/2 meals planned/)).toBeDefined();
   });
 });
