@@ -220,7 +220,10 @@ describe('closed loop (plan → shop → cook → leftovers → next plan)', () 
     const pantry = list.map((row) => ({
       name: row.name, qty: row.qty, cat: row.cat || 'Store', location: 'Fridge', addedAt: DAY,
     }));
-    expect(pantryAvailability(pantry[0])).toBe('confirmed_sufficient');
+    // Read on the day of the shop. Pantry confidence decays with age, so
+    // leaving this to the real clock would make the assertion about how long
+    // ago the fixture was written rather than about the loop.
+    expect(pantryAvailability(pantry[0], DAY)).toBe('confirmed_sufficient');
     // …cooking spends it…
     const { pantry: afterCook } = consumePantryIngredients(pantry, byId(dinner).ingredients);
     // …and the loop is ready to turn again rather than stuck mid-week.

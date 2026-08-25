@@ -30,6 +30,10 @@ import RestockSection from './RestockSection.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { useShoppingSession } from '../lib/shopping-session.js';
 import ShoppingProgress from './ShoppingProgress.jsx'; import CloudSyncRow from './CloudSyncRow.jsx';
+import ShopSheets from './ShopSheets.jsx';
+import ShopBasket from './ShopBasket.jsx';
+import ShopPrices from './ShopPrices.jsx';
+import ShopHistory from './ShopHistory.jsx';
 import ShoppingExport from './ShoppingExport.jsx';
 
 /* ---------- Tab ---------- */
@@ -212,133 +216,17 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
 
       {view === 'list' && (
         <>
-          <Section className="rise rise-1">
-            <Card>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-                    {shoppingMode ? 'Running total' : 'Estimated basket'}
-                  </p>
-                  <p className="text-[1.5rem] font-extrabold">
-                    {/* Keyed on the value, so a changed total animates in
-                        instead of silently swapping under your eyes. */}
-                    <span key={shoppingMode ? checkedTotal : basket.projected} className="count-up inline-block">
-                      {gbp(shoppingMode ? checkedTotal : basket.projected, { always: true })}
-                    </span>
-                    {shoppingMode && (
-                      <span className="text-[0.8125rem] font-semibold ml-1.5" style={{ color: 'var(--muted)' }}>
-                        of {gbp(basket.projected, { always: true })}
-                      </span>
-                    )}
-                  </p>
-                  {basket.saved > 0 && (
-                    <p className="text-[0.75rem] font-bold" style={{ color: 'var(--good)' }}>
-                      {gbp(basket.total, { always: true })} less {gbp(basket.saved, { always: true })} of your offers
-                    </p>
-                  )}
-              {basket.unpriced > 0 && (
-                <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {basket.unpriced} item{basket.unpriced === 1 ? '' : 's'} with no price yet — the total is only what you’ve typed in.
-                </p>
-              )}
-              {onOpenPantry && app.pantry.length > 0 && (
-                <button
-                  type="button"
-                  onClick={onOpenPantry}
-                  className="press mt-3 inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[0.71875rem] font-extrabold"
-                  style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
-                >
-                  <Package size={13} /> Check pantry before buying <span className="font-semibold">· {app.pantry.length} items</span>
-                </button>
-              )}
-                </div>
-                {/* Starting a shop is the primary action at the bottom of the
-                    screen now; only the way out of it belongs up here. */}
-                {shoppingMode && (
-                  <button
-                    onClick={shoppingSession.stop}
-                    className="press rounded-2xl px-4 py-3 text-[0.8125rem] font-extrabold shrink-0"
-                    style={{ background: 'var(--card-2)', color: 'var(--ink)' }}
-                  >
-                    <span className="inline-flex items-center gap-1.5"><X size={14} /> Exit mode</span>
-                  </button>
-                )}
-              </div>
-
-              {app.weeklyBudget > 0 ? (
-                <div className="mt-3">
-                  <Meter
-                    value={basket.spent + (shoppingMode ? checkedTotal : basket.projected)}
-                    max={app.weeklyBudget}
-                    color={basket.over ? 'var(--warn)' : 'var(--accent)'}
-                  />
-                  <div className="mt-1.5 flex items-center justify-between text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    <span>{gbp(basket.spent, { always: true })} spent this week</span>
-                    <span className="inline-flex items-center gap-1" style={basket.over ? { color: 'var(--warn)', fontWeight: 700 } : {}}>
-                      {basket.over && <TriangleAlert size={12} />}
-                      {basket.over
-                        ? `${gbp(Math.abs(basket.left), { always: true })} over budget`
-                        : `${gbp(basket.left, { always: true })} headroom`}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  Set a weekly budget in your profile to see headroom here.
-                </p>
-              )}
-
-              {shoppingMode && (
-                <p className="mt-2 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold" style={{ color: isOnline ? 'var(--good)' : 'var(--warn)' }}>
-                  {isOnline ? <Check size={12} /> : <CloudOff size={12} />}
-                  {offlineMode
-                    ? 'Offline shopping mode · the list and aisle route stay available locally.'
-                    : isOnline ? 'Online · changes save locally and sync when available.' : 'Offline · changes save locally; sync resumes when you reconnect.'}
-                </p>
-              )}
-
-              {shoppingMode && <ShoppingProgress total={visibleList.length} checked={ticked} />}
-
-              {shoppingMode && (
-                <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip active={largeTouch} onClick={() => app.setShoppingPreferences({ largeTouch: !largeTouch })}>
-                      {largeTouch ? 'Large-touch UI on' : 'Large-touch UI'}
-                    </Chip>
-                    <Chip active={offlineMode} onClick={() => app.setShoppingPreferences({ offlineMode: !offlineMode })}>
-                      {offlineMode ? 'Offline mode on' : 'Offline mode'}
-                    </Chip>
-                  </div>
-                  <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {app.shoppingInsights?.shared
-                      ? <>
-                        {app.cloudStatus?.kind === 'live' ? 'Shared live list · household changes appear here.' : 'Shared list · changes save locally and sync when available.'}
-                        {app.shoppingInsights.lastChangedBy && <span> · Last change by {app.members.find((member) => member.id === app.shoppingInsights.lastChangedBy)?.name || app.shoppingInsights.lastChangedBy}</span>}
-                      </>
-                      : 'Private list · add household members to share it live.'}
-                  </p>
-                </div>
-              )}
-              {!shoppingMode && app.shoppingInsights?.shared && (
-                <p className="mt-3 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  Shared household list · changes sync when available.
-                  {app.shoppingInsights.lastChangedBy && <span> Last change by {app.members.find((member) => member.id === app.shoppingInsights.lastChangedBy)?.name || app.shoppingInsights.lastChangedBy}.</span>}
-                </p>
-              )}
-
-              {ticked > 0 && (
-                <button
-                  onClick={() => setSheet('finish')}
-                  className="press mt-3 w-full rounded-2xl border py-2.5 text-[0.8125rem] font-extrabold"
-                  style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <Receipt size={14} /> Finish shop · {ticked} item{ticked === 1 ? '' : 's'}
-                  </span>
-                </button>
-              )}
-            </Card>
-          </Section>
+          <ShopBasket
+            app={app}
+            basket={basket}
+            ticked={ticked}
+            visibleList={visibleList}
+            shoppingMode={shoppingMode}
+            shoppingSession={shoppingSession}
+            isOnline={isOnline}
+            setSheet={setSheet}
+            onOpenPantry={onOpenPantry}
+          />
 
           {/* Which shop you're walking round: its aisles, in your order */}
           {(stores.length > 0 || list.length > 0) && (
@@ -484,58 +372,20 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             </Section>
           )}
 
-          {visibleList.length > 0 && (
-            <Section className="rise rise-2">
-              <Card className="!p-3.5 space-y-2.5">
-                {(app.priceAnomalies.rises.length > 0 || app.priceAnomalies.bargains.length > 0) && (
-                  <div className="rounded-2xl border px-3 py-2.5" style={{ borderColor: app.priceAnomalies.rises.length ? 'var(--warn)' : 'var(--line)', background: 'var(--card-2)' }}>
-                    <p className="text-[0.6875rem] font-extrabold uppercase tracking-wide" style={{ color: app.priceAnomalies.rises.length ? 'var(--warn)' : 'var(--good)' }}>
-                      {app.priceAnomalies.rises.length > 0 && `${app.priceAnomalies.rises.length} price rise${app.priceAnomalies.rises.length === 1 ? '' : 's'} vs your receipts`}
-                      {app.priceAnomalies.rises.length > 0 && app.priceAnomalies.bargains.length > 0 ? ' · ' : ''}
-                      {app.priceAnomalies.bargains.length > 0 && `${app.priceAnomalies.bargains.length} bargain${app.priceAnomalies.bargains.length === 1 ? '' : 's'}`}
-                      <span className="font-semibold normal-case tracking-normal ml-1" style={{ color: 'var(--muted)' }}>· receipt-only · {app.priceAnomalies.config.risePct}/{app.priceAnomalies.config.bargainPct}%</span>
-                    </p>
-                    {(app.priceAnomaliesForList.length > 0) && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {app.priceAnomaliesForList.slice(0, 6).map(({ item, anomaly }) => (
-                          <span key={item.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[0.6875rem] font-bold" style={{ borderColor: anomaly.kind === 'rise' ? 'var(--danger)' : 'var(--good)', color: anomaly.kind === 'rise' ? 'var(--danger)' : 'var(--good)', background: 'var(--card)' }}>
-                            {anomaly.kind === 'rise' ? '↗' : '↘'} {item.name} {anomaly.pct > 0 ? `+${anomaly.pct}%` : `${anomaly.pct}%`}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <p className="mt-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>Budget → thresholds are 15% by default and tunable per item.</p>
-                  </div>
-                )}
-                {app.couponVault.active > 0 && app.couponsForList.length > 0 && (
-                  <div className="rounded-2xl border px-3 py-2.5 flex items-center gap-2" style={{ borderColor: 'var(--good)', background: 'var(--card)' }}>
-                    <Pill tone="good">{app.couponsForList.length} coupon{app.couponsForList.length === 1 ? '' : 's'} match this list</Pill>
-                    <span className="text-[0.6875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>{app.couponsForList.slice(0, 2).map((h) => h.coupon.label).join(' · ')}{app.couponsForList.length > 2 ? ` +${app.couponsForList.length - 2}` : ''}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-bold text-[0.875rem]">Real prices</p>
-                    <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                      Your receipts are primary. Community observations are dated context — never a live quote.
-                    </p>
-                  </div>
-                  <button type="button" onClick={checkObservedPrices} disabled={observedBusy || offlineMode || !isOnline} className="press shrink-0 rounded-2xl px-3.5 py-2 text-[0.78125rem] font-extrabold disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
-                    {offlineMode ? 'Offline mode' : observedBusy ? 'Checking…' : observedByKey ? 'Check again' : 'Check community prices'}
-                  </button>
-                </div>
-                {observedError && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{observedError}</p>}
-                {observedMeta && !observedError && (
-                  <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {Object.keys(observedByKey || {}).length} item{Object.keys(observedByKey || {}).length === 1 ? '' : 's'} with an observation{observedMeta.fromCache ? ` · ${observedMeta.fromCache} from 24h cache` : ''} · community observed, not live.
-                  </p>
-                )}
-                {observedByKey && (
-                  <button type="button" onClick={() => { clearObservedPriceCache(); setObservedByKey(null); setObservedMeta(null); setObservedError(''); }} className="press mt-2 rounded-full border px-3 py-1 text-[0.6875rem] font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>Clear cached observations</button>
-                )}
-              </Card>
-            </Section>
-          )}
+          <ShopPrices
+            app={app}
+            visibleList={visibleList}
+            checkObservedPrices={checkObservedPrices}
+            observedBusy={observedBusy}
+            observedByKey={observedByKey}
+            observedError={observedError}
+            observedMeta={observedMeta}
+            setObservedByKey={setObservedByKey}
+            setObservedMeta={setObservedMeta}
+            setObservedError={setObservedError}
+            offlineMode={offlineMode}
+            isOnline={isOnline}
+          />
 
           {visibleList.length === 0 ? (
             <Section className="rise rise-2">
@@ -591,123 +441,29 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
         </>
       )}
 
-      {view === 'history' && (
-        <Section className="rise rise-1" title="Shops you’ve recorded">
-          {app.shops.length === 0 ? (
-            <Card className="text-center py-10">
-              <Receipt size={30} className="mx-auto mb-2" style={{ color: 'var(--faint)' }} />
-              <p className="font-bold">No shops recorded</p>
-              <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Tick items off as you shop, then hit “Finish shop”. Spending, budget streaks,
-                price comparison and your route round each shop all come from these.
-              </p>
-            </Card>
-          ) : (
-            <div className="space-y-2.5">
-              {[...app.shops].reverse().map((s) => (
-                <Card key={s.id} className="flex items-center justify-between !p-3.5">
-                  <div className="min-w-0">
-                    <p className="font-bold text-[0.90625rem] truncate">{s.store}</p>
-                    <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                      {prettyDate(s.date)} · {s.items.length} item{s.items.length === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                  <p className="font-extrabold text-[1rem] shrink-0">{gbp(s.total, { always: true })}</p>
-                </Card>
-              ))}
-            </div>
-          )}
-        </Section>
-      )}
+      {view === 'history' && <ShopHistory shops={app.shops} />}
 
       {view === 'prices' && <PriceCompare />}
       {view === 'stores' && <StoreIntegrations />}
       {view === 'budget' && <BudgetPanel />}
 
-      <Sheet open={sheet === 'finish'} onClose={() => setSheet(null)} title="Finish shop">
-        <FinishShop
-          items={visibleList}
-          store={store}
-          onDone={() => {
-            recordProductEvent('shopping_completed', { count: ticked });
-            setSheet(null);
-            shoppingSession.stop();
-          }}
-        />
-      </Sheet>
-      <Sheet open={sheet === 'offers'} onClose={() => setSheet(null)} title="Offers you have">
-        <div className="px-5 pb-10 space-y-3">
-          <OffersPanel />
-          {honestOffers.filter((row) => !row.quality.honest && row.offer.kind === 'multibuy').length > 0 && (
-            <Card className="!p-3 space-y-2" style={{ background: 'var(--card-2)' }}>
-              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-                Deals that can't fire on this list
-              </p>
-              {honestOffers.filter((row) => !row.quality.honest && row.offer.kind === 'multibuy').map(({ offer, quality }) => (
-                <p key={offer.id} className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {offer.label}: {quality.note}
-                </p>
-              ))}
-            </Card>
-          )}
-        </div>
-      </Sheet>
-      <Sheet open={routeEditor} onClose={() => setRouteEditor(false)} title={`Route for ${store || 'this shop'}`}>
-        <div className="px-5 pb-10 space-y-2">
-          <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            Move aisles into the order you walk them. This replaces the learned route for {store}.
-          </p>
-          {routeOrder.map((aisle, index) => (
-            <Card key={aisle} className="!p-3 flex items-center justify-between gap-2">
-              <span className="text-[0.8125rem] font-extrabold truncate">
-                <span className="mr-2 text-[0.6875rem] font-bold" style={{ color: 'var(--faint)' }}>{index + 1}</span>
-                {aisle}
-              </span>
-              <span className="flex gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  disabled={index === 0}
-                  onClick={() => moveAisle(index, -1)}
-                  aria-label={`Move ${aisle} up`}
-                  className="press flex h-9 w-9 items-center justify-center rounded-full border disabled:opacity-30"
-                  style={{ borderColor: 'var(--line)' }}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  disabled={index === routeOrder.length - 1}
-                  onClick={() => moveAisle(index, 1)}
-                  aria-label={`Move ${aisle} down`}
-                  className="press flex h-9 w-9 items-center justify-center rounded-full border disabled:opacity-30"
-                  style={{ borderColor: 'var(--line)' }}
-                >
-                  ↓
-                </button>
-              </span>
-            </Card>
-          ))}
-          <button
-            type="button"
-            onClick={saveRoute}
-            className="press w-full rounded-2xl py-3 text-[0.875rem] font-extrabold"
-            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-          >
-            Save route for {store}
-          </button>
-        </div>
-      </Sheet>
-      <Sheet open={sheet === 'scan'} onClose={() => setSheet(null)} title="Scan onto the list">
-        <div className="px-5 pb-10">
-            <BarcodeAdd action="Add" onPick={(item) => app.addToList({ ...item, store })} />
-        </div>
-      </Sheet>
-      <Sheet open={sheet === 'receipt'} onClose={() => setSheet(null)} title="Read a receipt">
-        <ReceiptScan onDone={() => { setSheet(null); onOpenPantry?.(); }} />
-      </Sheet>
-      <Sheet open={sheet === 'export'} onClose={() => setSheet(null)} title="Your list as text">
-        <ShoppingExport text={asText()} />
-      </Sheet>
+      <ShopSheets
+        app={app}
+        sheet={sheet}
+        setSheet={setSheet}
+        store={store}
+        visibleList={visibleList}
+        ticked={ticked}
+        shoppingSession={shoppingSession}
+        honestOffers={honestOffers}
+        routeEditor={routeEditor}
+        setRouteEditor={setRouteEditor}
+        routeOrder={routeOrder}
+        moveAisle={moveAisle}
+        saveRoute={saveRoute}
+        asText={asText}
+        onOpenPantry={onOpenPantry}
+      />
 
       {/* Whichever step of a shop you're actually at. */}
       {view === 'list' && (

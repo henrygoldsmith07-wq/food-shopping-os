@@ -179,11 +179,9 @@ describe('the register of what it will not pretend to do', () => {
 });
 
 describe('reading a receipt', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    // The receipt reader is an optional tool; these flows enable it directly.
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ schemaVersion: 4, onboarded: false, enabledTools: ['receipt'] }));
-  });
+  // A new install has no optional tools on, which is the state these flows
+  // are about: the Shop tab offers no receipt reader until one is switched on.
+  beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
   // Receipt capture is an optional tool and new users start with none enabled,
@@ -194,7 +192,13 @@ describe('reading a receipt', () => {
     const guidance = dialogFor('Guidance');
     fireEvent.click(within(guidance).getByText('Tools'));
     fireEvent.click(within(guidance).getByText('Add tools'));
-    fireEvent.click(await within(guidance).findByLabelText(`Enable ${label}`));
+    // The panel is lazily loaded, and its toggle is labelled for the action it
+    // would perform — "Enable X" when off, "Disable X" when on. Match either
+    // and switch it on only if it is off, so the helper stays safe to call.
+    const toggle = await within(guidance).findByRole('switch', {
+      name: new RegExp(`(?:Enable|Disable) ${label}`),
+    });
+    if (toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
     fireEvent.click(within(guidance).getByLabelText('Close'));
   };
 

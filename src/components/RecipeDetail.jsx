@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  CalendarPlus, ChartColumn, Check, ChefHat, ChevronLeft, ExternalLink, Flame, Heart,
-  FolderPlus, Package, ShoppingCart, Slice, Star, Timer as TimerIcon, Trash2,
+  CalendarPlus, ChartColumn, Check, ChefHat, ChevronLeft, ExternalLink, Flame, Heart, FolderPlus, Slice, Star, Timer as TimerIcon, Trash2,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { gbp, cx } from '../lib/utils.js';
@@ -17,6 +16,7 @@ import {
 import { explainRecommendation } from '../lib/recommend.js';
 import { Card, Ring, Pill, FoodArt, Chip } from './ui.jsx';
 import { RecipeFolderPicker } from './RecipeFolders.jsx';
+import RecipeIngredients from './RecipeIngredients.jsx';
 import { Glyph } from './icons.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 import CookMode from './CookMode.jsx';
@@ -345,95 +345,22 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
           )}
         </Card>
 
-        {/* Ingredients: scaled to how many you're cooking for, checked against your pantry */}
-        <Card className="rise rise-2">
-          <ServingsControl
-            servings={servings}
-            base={original.servings || 1}
-            onChange={setServings}
-            costPerServing={recipe.costPerServing}
-          />
-          <div className="my-3 flex items-center justify-between">
-            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Ingredients</p>
-            <Pill tone={havePantry === recipe.ingredients.length ? 'good' : 'accent'}>
-              <Package size={12} /> You have {havePantry} of {recipe.ingredients.length}
-            </Pill>
-          </div>
-          <ul className="space-y-2">
-            {recipe.ingredients.map((ing) => (
-              <li key={ing.name} className="flex items-center justify-between text-[0.875rem]">
-                <span className={cx('font-semibold inline-flex items-center gap-2', has(ing) && 'opacity-60')}>
-                  {has(ing)
-                    ? <Check size={14} strokeWidth={3} style={{ color: 'var(--good)' }} />
-                    : <ShoppingCart size={14} style={{ color: 'var(--muted)' }} />}
-                  {ing.name}
-                </span>
-                <span className="font-bold text-[0.8125rem]" style={{ color: 'var(--muted)' }}>{ing.qty}</span>
-              </li>
-            ))}
-          </ul>
-          {missing.length > 0 && (
-            <button
-              onClick={addMissing}
-              disabled={!canShop}
-              className="press mt-3 w-full rounded-2xl py-2.5 text-[0.8125rem] font-extrabold border disabled:opacity-60"
-              style={!canShop
-                ? { borderColor: 'var(--line)', color: 'var(--muted)' }
-                : addedMissing
-                ? { borderColor: 'var(--good)', color: 'var(--good)' }
-                : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                {!canShop
-                  ? <>Shopping access required</>
-                  : addedMissing
-                  ? <><Check size={14} strokeWidth={3} /> Review shopping list</>
-                  : <>Add {missing.length} missing to shopping list</>}
-              </span>
-            </button>
-          )}
-          {missing.length > 0 && (
-            <div className="mt-3 space-y-1.5" aria-label="Pantry shortfall explanations">
-              {missing.map((ingredient) => {
-                const read = pantryRead(ingredient);
-                return (
-                  <p key={ingredient.name} className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {explainPantryShortfall({
-                      name: ingredient.name,
-                      needQty: ingredient.qty,
-                      availableQty: read.availableQty,
-                      shortfallQty: read.shortfallQty,
-                      sourceRecipes: [recipe.name],
-                    })}
-                  </p>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-
-        {dislikeSwaps.length > 0 && app.prefs?.dislikes?.length > 0 && (
-          <Card className="rise rise-2" style={{ borderColor: 'var(--warn)' }}>
-            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>
-              Someone in the house won't eat
-            </p>
-            <div className="mt-2 space-y-2">
-              {dislikeSwaps.map(({ ingredient, options }) => (
-                <div key={ingredient} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[0.8125rem] font-bold">{ingredient}</span>
-                  <button
-                    type="button"
-                    onClick={() => setVariant((v) => applySwap(v || original, ingredient, options[0]))}
-                    className="press rounded-full border px-3 py-1.5 text-[0.71875rem] font-extrabold"
-                    style={{ borderColor: 'var(--line)', color: 'var(--accent)' }}
-                  >
-                    Swap for {options[0].name}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
+        <RecipeIngredients
+          app={app}
+          recipe={recipe}
+          original={original}
+          servings={servings}
+          setServings={setServings}
+          missing={missing}
+          havePantry={havePantry}
+          has={has}
+          pantryRead={pantryRead}
+          addedMissingKey={addedMissingKey}
+          missingKey={missingKey}
+          addMissing={addMissing}
+          dislikeSwaps={dislikeSwaps}
+          onSwapDislike={(ingredient, option) => setVariant((v) => applySwap(v || original, ingredient, option))}
+        />
 
         <SwapPanel recipe={base} onSwap={swap} />
 

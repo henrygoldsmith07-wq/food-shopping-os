@@ -115,6 +115,9 @@ describe('what the quests are counted against', () => {
     plan: { [TODAY]: { dinner: 'chickpea-curry' }, '2026-07-29': { dinner: 'chickpea-curry', lunch: 'x' } },
     water: 8,
     waste: [],
+    // A kitchen someone is actually cooking out of has food in it, and
+    // "waste nothing" is a claim about that food.
+    pantry: [{ id: 'p1', name: 'Chickpeas', qty: '400 g' }],
   });
 
   it('counts today', () => {
@@ -142,6 +145,22 @@ describe('what the quests are counted against', () => {
     expect(m.loggedDays).toBe(2);
     expect(m.cuisines).toBe(2);
     expect(m.bestCookStreak).toBe(2);
+  });
+
+  it('will not call an empty kitchen a waste-free week', () => {
+    // Nothing binned because nothing was there is not an achievement.
+    expect(questMetrics(state({}), TODAY).zeroWasteThisWeek).toBe(0);
+
+    // A stocked pantry, but a week nobody cooked, shopped or logged in.
+    const untouched = state({ pantry: [{ id: 'p1', name: 'Chickpeas', qty: '400 g' }] });
+    expect(questMetrics(untouched, TODAY).zeroWasteThisWeek).toBe(0);
+
+    // Stocked, used and nothing binned — that is the achievement.
+    expect(questMetrics(busy, TODAY).zeroWasteThisWeek).toBe(1);
+
+    // Bin something and it goes away again.
+    const binned = { ...busy, waste: [{ id: 'w', date: TODAY, name: 'Spinach', cost: 1 }] };
+    expect(questMetrics(binned, TODAY).zeroWasteThisWeek).toBe(0);
   });
 
   it('will not call an unrecorded week under budget', () => {
