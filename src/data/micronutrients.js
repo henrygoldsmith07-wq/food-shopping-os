@@ -1,29 +1,49 @@
 /**
- * Micronutrient table, per 100 g (or 100 ml for drinks).
+ * Micronutrient tables, per 100 g (or 100 ml for drinks).
  *
  * Values are rounded reference figures for common UK products — enough to make
  * the tracking honest and the maths real, not a clinical database. Columns are
- * fixed and positional so a food is one readable line:
+ * fixed and positional so a food is one readable line. The base table carries:
  *
  *   sugar g · satFat g · transFat g · cholesterol mg · sodium mg · potassium mg
  *   calcium mg · iron mg · magnesium mg · zinc mg · vitA µg · vitB %RI
  *   vitC mg · vitD µg · vitE mg · vitK µg · water ml · caffeine mg · alcohol g
  *
- * `vitB` is the one composite: the B vitamins are tracked together as the
- * percentage of the daily B-complex reference intake that 100 g provides,
- * because tracking six separate B vitamins is more precision than this dataset
- * can honestly carry. A strong source (salmon, liver-ish territory) sits around
- * 20% per 100 g, a staple around 5%, so an ordinary day lands near 100%.
+ * and the deep table next to it carries iodine, selenium, omega-3 and the
+ * eight B vitamins individually, so a folate gap can be seen as a folate gap.
+ *
+ * `vitB` survives as a summary rather than a nutrient: the share of the daily
+ * B-complex reference that 100 g provides, kept because it reads at a glance
+ * where eight separate rows do not. Deficiency work uses the individual
+ * vitamins; `vitB` is marked composite and left out of it.
  *
  * Missing table rows return null for every column — "not in this database" —
  * never zero. Explicit 0 in a row still means measured none.
  */
 
-export const MICRO_COLUMNS = [
+const BASE_COLUMNS = [
   'sugar', 'satFat', 'transFat', 'cholesterol', 'sodium', 'potassium',
   'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitB',
   'vitC', 'vitD', 'vitE', 'vitK', 'water', 'caffeine', 'alcohol',
 ];
+
+/**
+ * The deep micronutrient columns, in their own table so each stays readable:
+ *
+ *   iodine µg · selenium µg · omega-3 g · B1 mg · B2 mg · B3 mg · B5 mg
+ *   B6 mg · B7 µg · B9 µg · B12 µg
+ *
+ * Same rules as the base table — a food absent here reads as null for these
+ * columns, and an explicit 0 means measured none. Omega-3 is total n-3 fatty
+ * acids (ALA plus EPA/DHA where the food has them), which is why oily fish and
+ * rapeseed-oil mayonnaise are the outliers.
+ */
+const EXTRA_COLUMNS = [
+  'iodine', 'selenium', 'omega3', 'vitB1', 'vitB2', 'vitB3', 'vitB5',
+  'vitB6', 'vitB7', 'vitB9', 'vitB12',
+];
+
+export const MICRO_COLUMNS = [...BASE_COLUMNS, ...EXTRA_COLUMNS];
 
 /* eslint-disable no-multi-spaces */
 const TABLE = {
@@ -75,14 +95,71 @@ const TABLE = {
 };
 /* eslint-enable no-multi-spaces */
 
+const EXTRA = {
+  //                       I     Se    n-3     B1     B2     B3     B5     B6     B7     B9   B12
+  'porridge-oats':     [   0,    28,  0.11,  0.76,  0.14,  0.96,  1.35,   0.1,    20,    56,    0],
+  'semi-skimmed-milk': [  30,     3,  0.01,  0.04,  0.18,  0.09,  0.36,  0.04,     2,     5, 0.45],
+  banana:              [   2,     1,  0.03,  0.03,  0.07,  0.67,  0.33,  0.37,   0.1,    20,    0],
+  'wholemeal-bread':   [   5,    25,  0.15,  0.39,  0.18,   4.4,  0.65,  0.21,     3,    42,    0],
+  'peanut-butter':     [   2,     6,  0.05,  0.11,  0.11,  13.1,   1.1,  0.44,    30,    87,    0],
+  'greek-yogurt':      [  27,    10,     0,  0.04,  0.28,   0.2,   0.5,  0.06,     2,     7, 0.75],
+  blueberries:         [   0,   0.1,  0.06,  0.04,  0.04,  0.42,  0.12,  0.05,   0.5,     6,    0],
+  egg:                 [  53,    30,   0.1,  0.07,  0.46,  0.08,  1.53,  0.17,    20,    47,  1.1],
+  'chicken-breast':    [   7,    24,  0.03,  0.07,  0.12,  13.7,     1,   0.6,     2,     4,  0.3],
+  'salmon-fillet':     [  14,    36,   2.5,  0.23,  0.38,   8.5,   1.6,   0.8,     5,    26,  3.2],
+  'white-rice':        [   0,   7.5,  0.01,  0.02,  0.01,   0.4,  0.39,  0.05,   0.5,     3,    0],
+  'brown-rice':        [   0,   9.8,  0.01,   0.1,  0.02,   1.5,  0.29,  0.15,     1,     4,    0],
+  pasta:               [   1,    26,  0.03,  0.14,  0.06,   1.2,  0.11,  0.05,   0.5,     7,    0],
+  'olive-oil':         [   0,     0,  0.76,     0,     0,     0,     0,     0,     0,     0,    0],
+  cheddar:             [  30,    14,  0.36,  0.03,  0.43,  0.06,  0.41,  0.07,   2.4,    27,  1.1],
+  'baked-beans':       [   3,   3.5,  0.11,  0.07,  0.05,   0.5,  0.16,  0.11,     2,    29,    0],
+  avocado:             [   1,   0.4,  0.11,  0.07,  0.13,  1.74,  1.39,  0.26,   3.6,    81,    0],
+  hummus:              [   1,   2.6,  0.11,  0.09,  0.05,  0.58,  0.23,  0.16,     2,    48,    0],
+  'tortilla-wrap':     [   3,    15,  0.06,  0.35,   0.2,   3.2,   0.3,  0.06,     1,    40,    0],
+  chickpeas:           [   1,   3.7,  0.03,  0.06,  0.03,  0.27,  0.28,  0.14,     2,    54,    0],
+  lentils:             [   1,   2.8,  0.04,  0.17,  0.07,  1.06,  0.64,  0.18,     2,   181,    0],
+  broccoli:            [   2,   2.5,  0.13,  0.07,  0.12,  0.64,  0.57,  0.18,   1.5,    63,    0],
+  spinach:             [  12,     1,  0.14,  0.08,  0.19,  0.72,  0.07,   0.2,   6.9,   194,    0],
+  'sweet-potato':      [   3,   0.6,  0.01,  0.08,  0.06,  0.56,   0.8,  0.21,   4.4,    11,    0],
+  potato:              [   3,   0.3,  0.01,  0.08,  0.03,  1.06,   0.3,   0.3,   0.4,    15,    0],
+  apple:               [   1,     0,  0.01,  0.02,  0.03,  0.09,  0.06,  0.04,   0.9,     3,    0],
+  orange:              [   1,   0.5,  0.01,  0.09,  0.04,  0.28,  0.25,  0.06,     1,    30,    0],
+  almonds:             [   2,   4.1,  0.01,  0.21,  1.14,   3.6,  0.47,  0.14,    45,    44,    0],
+  'dark-chocolate':    [   3,   6.8,  0.03,  0.03,  0.08,  1.05,  0.42,  0.04,     3,    12,  0.3],
+  'whey-protein':      [  20,    30,     0,   0.2,   1.2,     2,     3,   0.5,    15,    30,  1.5],
+  'protein-bar':       [  10,    15,  0.05,   0.3,   0.4,     5,   1.5,   0.4,    10,    40,    1],
+  cappuccino:          [  20,     2,     0,  0.03,  0.14,   0.2,   0.3,  0.03,   1.5,     4, 0.35],
+  'orange-juice':      [   1,   0.1,     0,  0.07,  0.02,  0.28,  0.19,  0.04,   0.5,    19,    0],
+  cola:                [   0,     0,     0,     0,     0,     0,     0,     0,     0,     0,    0],
+  lager:               [   1,   0.6,     0,  0.01,  0.03,   0.5,  0.04,  0.05,     1,     6, 0.02],
+  crisps:              [   2,     3,   0.2,  0.17,  0.06,   3.7,  0.65,   0.6,     1,    40,    0],
+  digestive:           [   4,    12,   0.1,  0.15,   0.1,   1.6,   0.3,  0.06,     2,    15,    0],
+  'tuna-tinned':       [  12,    60,  0.28,  0.02,  0.08,  12.4,  0.28,  0.32,     2,     4,  2.2],
+  tofu:                [   1,   9.9,  0.28,  0.08,  0.05,   0.2,  0.12,  0.05,     3,    19,    0],
+  butter:              [  38,     1,  0.32,  0.01,  0.03,  0.04,  0.11, 0.003,   0.4,     3, 0.17],
+  mayonnaise:          [   5,     3,   4.2,  0.01,  0.02,  0.02,  0.09,  0.02,     2,     5,  0.1],
+  halloumi:            [  35,    15,  0.25,  0.03,  0.35,   0.2,   0.4,  0.06,     2,    20,    1],
+  granola:             [   1,    12,   0.3,   0.4,   0.2,   1.8,   0.9,  0.15,    15,    40,    0],
+  'ice-cream':         [  25,   3.4,  0.03,  0.04,  0.24,  0.12,   0.6,  0.05,     2,     5,  0.4],
+};
+
+const nullRow = () => Object.fromEntries(MICRO_COLUMNS.map((k) => [k, null]));
+
+const readRow = (row, columns) => (row
+  ? Object.fromEntries(columns.map((k, i) => [k, row[i] ?? null]))
+  : Object.fromEntries(columns.map((k) => [k, null])));
+
 /**
  * Micronutrients for a generic food, as an object keyed by nutrient.
- * Unknown foods return null for every column — not zero.
+ * Unknown foods return null for every column — not zero. A food in the base
+ * table but not yet in the deep table keeps its base figures and reads null
+ * for the deep ones, rather than borrowing a neighbour's.
  */
 export const microsFor = (foodId) => {
-  const row = TABLE[foodId];
-  if (!row) return Object.fromEntries(MICRO_COLUMNS.map((k) => [k, null]));
-  return Object.fromEntries(MICRO_COLUMNS.map((k, i) => [k, row[i] ?? null]));
+  const base = TABLE[foodId];
+  const extra = EXTRA[foodId];
+  if (!base && !extra) return nullRow();
+  return { ...readRow(base, BASE_COLUMNS), ...readRow(extra, EXTRA_COLUMNS) };
 };
 
 /**
