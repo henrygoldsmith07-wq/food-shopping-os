@@ -21,6 +21,7 @@ import { moveBefore } from './utils.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
 import { offerActions } from './offer-actions.js';
+import { planActions } from './plan-actions.js';
 import { emojiFor, EMPTY_STATE, todayStamp, uid } from './state.js';
 import { parseBackup, serialiseBackup } from './store-persistence.js';
 import { vaultActions } from './vault-actions.js';
@@ -418,73 +419,8 @@ export function useStoreApi({
             lastPantryEvent: event,
           };
         }),
-      markMealPlanOutcome: ({ date, slot, status = 'skipped', reason = null, actualRecipeId = null } = {}) =>
-        set((s) => {
-          const plannedRecipeId = s.plan?.[date]?.[slot];
-          const allowed = ['cooked', 'skipped', 'substituted', 'unplanned', 'takeaway'];
-          if (!date || !slot || !plannedRecipeId || !allowed.includes(status)) return {};
-          // Validate reason against full list — including new leftovers-available, plan-too-complex, takeaway
-          const validReasons = ['no-time', 'missing-ingredients', 'ingredients-missing', 'changed-preference', 'leftovers-available', 'plan-too-complex', 'not-in-the-mood', 'plans-changed', 'ate-something-else', 'takeaway', 'cooked-a-different-meal', 'other'];
-          const cleanReason = validReasons.includes(reason) ? reason : (status === 'skipped' ? 'other' : null);
-          const event = {
-            id: uid('mpe'),
-            date,
-            slot,
-            plannedRecipeId,
-            actualRecipeId: actualRecipeId || (status === 'cooked' ? plannedRecipeId : status === 'substituted' ? actualRecipeId : null),
-            status: status === 'takeaway' ? 'skipped' : status,
-            reason: status === 'skipped' || status === 'takeaway' ? (cleanReason === 'takeaway' ? 'takeaway' : cleanReason) : (cleanReason === 'cooked-a-different-meal' ? 'cooked-a-different-meal' : null),
-            isTakeaway: status === 'takeaway',
-            leftoverUsed: reason === 'leftovers-available',
-            at: Date.now(),
-          };
-          const existing = (s.mealPlanEvents || []).filter((item) => !(item.date === date && item.slot === slot));
-          return { mealPlanEvents: [...existing, event].slice(-500) };
-        }),
-      recordTakeaway: ({ date = null, reason = 'takeaway', note = '' } = {}) =>
-        set((s) => {
-          const d = date || s.day;
-          const event = {
-            id: uid('mpe'),
-            date: d,
-            slot: 'unplanned',
-            plannedRecipeId: null,
-            actualRecipeId: null,
-            status: 'unplanned',
-            reason: reason || 'takeaway',
-            note: String(note || '').slice(0, 120),
-            at: Date.now(),
-          };
-          return { mealPlanEvents: [...(s.mealPlanEvents || []), event].slice(-500) };
-        }),
-      setPlanSlot: (date, slot, recipeId) =>
-        set((s) => {
-          const day = { ...(s.plan[date] || {}) };
-          if (recipeId) day[slot] = recipeId;
-          else delete day[slot];
-          const plan = { ...s.plan };
-          if (Object.keys(day).length) plan[date] = day;
-          else delete plan[date];
-          return { plan };
-        }),
-      clearPlanWeek: (dates) => set((s) => ({ plan: clearDates(s.plan, dates) })),
-      moveMealSlot: (from, to) => set((s) => ({ plan: moveMeal(s.plan, from, to) })),
-      applyPlanEntries: (entries) => set((s) => ({ plan: applyEntries(s.plan, entries) })),
+      ...planActions(set),
       ...householdActions(set, uid),
-      saveLeftovers: (recipe, portions) =>
-        set((s) => (householdPermission(s, 'pantry') && portions > 0
-          ? { pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, portions, s.day) }] }
-          : {})),
-      useLeftover: (id) =>
-        set((s) => (householdPermission(s, 'pantry') ? {
-          pantry: s.pantry
-            .map((p) => {
-              if (p.id !== id) return p;
-              const portions = (Number(p.portions) || 1) - 1;
-              return { ...p, portions, qty: `${portions} portion${portions === 1 ? '' : 's'}` };
-            })
-            .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0),
-        } : {})),
       ...healthActions(set),
       ...reminderActions(set),
       ...smartActions(set), ...pantryActions(set),
@@ -492,6 +428,12 @@ export function useStoreApi({
       ...advancedActions(set, uid),
       ...diaryActions(set),
     };
-  }, [storageIssue, cloudStatus]);
+    // Every other input is a ref or a useState setter, so their identities are
+    // stable for the component's life: naming them changes nothing at runtime
+    // and lets the hook rules check this list instead of being told to skip it.
+  }, [
+    storageIssue, cloudStatus, blockPersistence, latest, setState, setStorageIssue,
+    setVaultUnlocked, undoHistory, vaultKey, vaultSalt, vaultWrites,
+  ]);
   return api;
 }
