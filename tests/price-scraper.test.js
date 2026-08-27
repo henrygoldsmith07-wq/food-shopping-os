@@ -92,11 +92,48 @@ describe('structured extraction — the shop stating its own price', () => {
     expect(productsFromJsonLd(noPrice)).toEqual([]);
   });
 
+  it('reads the low price off an AggregateOffer rather than skipping the product', () => {
+    // Big retailers list a product once and price it as a range across pack
+    // sizes. Reading nothing there loses the shops that publish the most.
+    const aggregate = html('', jsonLd({
+      '@type': 'Product',
+      name: 'Heinz Baked Beans 415g',
+      offers: {
+        '@type': 'AggregateOffer', lowPrice: '1.40', highPrice: '1.75', priceCurrency: 'GBP',
+      },
+    }));
+    expect(productsFromJsonLd(aggregate)).toMatchObject([
+      { name: 'Heinz Baked Beans 415g', price: 1.4, currency: 'GBP', method: 'json-ld' },
+    ]);
+  });
+
+  it('unwraps a ListItem around a product, which is how a search page lists them', () => {
+    const listed = html('', jsonLd({
+      '@type': 'ItemList',
+      itemListElement: [{
+        '@type': 'ListItem',
+        position: 1,
+        item: { '@type': 'Product', name: 'Hovis Soft White 800g', offers: { price: '1.35', priceCurrency: 'GBP' } },
+      }],
+    }));
+    expect(productsFromJsonLd(listed)).toMatchObject([{ name: 'Hovis Soft White 800g', price: 1.35 }]);
+  });
+
   it('reads itemprop microdata as a second-best source', () => {
     const page2 = html('<div><span itemprop="name">Organic Milk 1L</span><meta itemprop="price" content="1.85"></div>');
     expect(productsFromMicrodata(page2)).toMatchObject([
       { name: 'Organic Milk 1L', price: 1.85, method: 'microdata', confidence: 'medium' },
     ]);
+  });
+
+  it('reads a microdata price written as text, not only as a content attribute', () => {
+    const inline = html('<li itemscope><span itemprop="name">Cathedral City 350g</span><span itemprop="price">£3.50</span></li>');
+    expect(productsFromMicrodata(inline)).toMatchObject([{ name: 'Cathedral City 350g', price: 3.5 }]);
+  });
+
+  it('reads a data-price attribute, the shape a shop uses when it ships no schema', () => {
+    const dataAttr = html('<div data-price="2.25"><span itemprop="name">Lurpak 250g</span></div>');
+    expect(productsFromMicrodata(dataAttr)).toMatchObject([{ name: 'Lurpak 250g', price: 2.25 }]);
   });
 });
 
@@ -128,13 +165,25 @@ describe('text extraction — a guess, labelled as one', () => {
   });
 
   it('keeps a price whose currency sits in a sibling element', () => {
-    // The deterministic pass cannot read "GBP 1.45", which is precisely why
-    // the model needs to be shown it.
     const trimmed = priceRelevantText('Semi Skimmed Milk\nGBP 1.45\nAbout us');
     expect(trimmed).toContain('GBP 1.45');
     expect(trimmed).toContain('Semi Skimmed Milk');
     expect(trimmed).not.toContain('About us');
-    expect(productsFromText('Semi Skimmed Milk\nGBP 1.45', { query: 'milk' })).toEqual([]);
+  });
+
+  it('reads a currency code, not only a symbol', () => {
+    // Plenty of pages render the symbol in its own element, so the flattened
+    // text reads "GBP 1.45". This used to need the model; it no longer does.
+    expect(productsFromText('Semi Skimmed Milk\nGBP 1.45', { query: 'milk' }))
+      .toMatchObject([{ price: 1.45, currency: 'GBP', method: 'text' }]);
+    expect(productsFromText('Semi Skimmed Milk\n1.45 GBP', { query: 'milk' }))
+      .toMatchObject([{ price: 1.45 }]);
+  });
+
+  it('still refuses a bare number with no currency marker at all', () => {
+    // "1.45" alone could be a weight, a rating or a page number. Guessing it
+    // is a price is exactly the kind of confident wrong answer to avoid.
+    expect(productsFromText('Semi Skimmed Milk\nUnit size 1.45', { query: 'milk' })).toEqual([]);
   });
 });
 
@@ -243,9 +292,10 @@ describe('scraping one retailer', () => {
 
 describe('the model is a fallback, and its answers are checked', () => {
   const retailer = { id: 'test', name: 'Test Shop', search: () => 'https://shop.test/search?q=milk' };
-  // No JSON-LD, no microdata, and no £ on the page: the deterministic passes
-  // have nothing, which is the only situation the model is asked about.
-  const opaquePage = html('<div data-p="145">Semi Skimmed Milk 2.27L</div><div data-p="145">GBP 1.45</div>');
+  // No JSON-LD, no microdata, and no currency marker anywhere: a bare number
+  // in a table cell. The deterministic passes correctly refuse it, which is
+  // the only situation the model is asked about.
+  const opaquePage = html('<table><tr><td>Semi Skimmed Milk 2.27L</td></tr><tr><td>Unit size</td><td>1.45</td></tr></table>');
 
   const modelFetch = (content) => vi.fn(async (url, init) => {
     const target = String(url);
