@@ -4,6 +4,7 @@ import { useApp } from '../lib/store.jsx';
 import { gbp } from '../lib/utils.js';
 import { priceHistory } from '../lib/kitchen.js';
 import { compareStores, savingsAvailable, shoppingNameKey } from '../lib/shopping.js';
+import { suitabilityContextFrom } from '../lib/food-suitability.js';
 import { fetchObservedForList, observedStaleness, clearObservedPriceCache } from '../lib/observed-prices.js';
 import { Card, Pill, Sparkline, Section } from './ui.jsx';
 import { Glyph } from './icons.jsx';
@@ -28,6 +29,21 @@ export default function PriceCompare() {
   const stores = useMemo(() => compareStores(app.shoppingList, app.shops), [app.shoppingList, app.shops]);
   const savings = useMemo(() => savingsAvailable(app.shoppingList, app.shops), [app.shoppingList, app.shops]);
   const best = stores.length ? [...stores].sort((a, b) => b.covered - a.covered || a.total - b.total)[0] : null;
+  // Household allergies are a hard line everywhere else in the app, so the
+  // price view inherits them rather than asking again.
+  const allergens = useMemo(() => suitabilityContextFrom(app).allergies || [], [app]);
+  // How often each product has actually been bought, from recorded shops —
+  // which is what "popular" can honestly mean for one household's own list.
+  const purchaseCounts = useMemo(() => {
+    const counts = {};
+    for (const shop of app.shops || []) {
+      for (const row of shop.items || []) {
+        const key = shoppingNameKey(row.name);
+        if (key) counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [app.shops]);
   const [observed, setObserved] = useState(null); // { byKey, checkedAt, fromCache, fetched, error } | null
   const [observedBusy, setObservedBusy] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
@@ -138,6 +154,8 @@ export default function PriceCompare() {
       <LivePriceCheck
         items={app.shoppingList}
         offlineMode={Boolean(app.shoppingPreferences?.offlineMode)}
+        allergens={allergens}
+        purchaseCounts={purchaseCounts}
       />
 
       <Section className="rise rise-1" title="Community observed prices">

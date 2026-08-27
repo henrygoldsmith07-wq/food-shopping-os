@@ -67,10 +67,90 @@ a normal and honest outcome. The retailer hub still keeps your recorded receipt
 prices and saved offers, and still links to the official retailer site so you
 can confirm today's basket, stock and delivery or collection options yourself.
 
-The route is signed-in only, rate-limited to 20 checks an hour, cached three
-hours on device, and covers at most six list items per run — each of which fans
-out across every configured shop. Shops are checked one at a time rather than in
-parallel, which keeps a price check from looking like a burst of traffic.
+**Every item on the list is checked**, not a sample of it: a comparison that
+silently covers six of your twenty items is worse than useless, because it looks
+complete. The list goes up in batches, and the route stops starting new items
+when it nears its time budget and names the rest in `remaining`, which the
+client sends on — so a long list finishes across several requests rather than
+being cut off by a serverless timeout. Progress is shown while it runs and the
+run can be stopped.
+
+A few shops are checked at once, but never the same shop twice at once: workers
+pull from a shared queue, so each retailer still receives strictly one request
+at a time with a gap after it. One request each at three different shops is
+three ordinary visitors; three at one shop is a burst.
+
+The route is signed-in only, rate-limited to 60 requests an hour (up to 12 items
+each), and cached three hours on device.
+
+### Branded products
+
+The catalogue carries popular UK branded groceries — Heinz Baked Beans,
+Cathedral City, Warburtons, Quorn, Cadbury and so on — as entries in their own
+right alongside the generics. Two reasons, both practical:
+
+- **Nutrition differs by brand.** Two tins of beans on the same shelf are not
+  the same food, and a health grade built from a generic average is a grade for
+  something nobody bought.
+- **A retailer search for a named product finds it.** "Baked beans" comes back
+  as a wall of results the scraper cannot confidently price; "Heinz Baked Beans"
+  comes back as a product. Where a generic list item has named products behind
+  it, the price panel offers them and can price one on the spot — without
+  rewriting your list, because deciding that "beans" means Heinz is your call.
+
+Every branded row states sugar, saturated fat and salt explicitly rather than
+inheriting a generic profile. Those three drive the health grade, and an
+unknown there used to be read as zero — which would quietly grade a chocolate
+bar better than a bag of lentils. The grade now declines to score at all when
+they are unknown.
+
+Figures are typical published per-100g label values. Manufacturers reformulate:
+**the pack in your hand is the authority.**
+
+### Tags, filtering and sorting
+
+Each priced item carries tags, drawn from four sources that are worth different
+amounts and kept apart rather than flattened into one confident list:
+
+| Source | Tags | Evidence |
+| --- | --- | --- |
+| Nutrition | high protein, source of protein, high/source of fibre, high sugar/salt/saturated fat, a health grade A–E | A confident match against the food catalogue, then the UK/EU labelling thresholds — "high protein" means the regulated 20% of energy, not "quite a lot". |
+| Diet | contains meat, contains fish, vegetarian, vegan (labelled), no animal ingredient named | The matched catalogue entry's own tags where there is one, the product name otherwise. A filter, never a certification. |
+| Processing | minimally processed, culinary ingredient, processed, ultra-processed | The product name, and labelled "(est.)" because a name is weak evidence. |
+| Value | good value somewhere, cheaper/dearer than usual, from £x/kg | This item's own prices across shops and over time. Never a judgement about a product from its price alone. |
+| Availability | newly listed at a shop | A shop pricing it now that was not in the previous check. |
+| You | bought before, you buy this often | Your own recorded shops. |
+
+The catalogue match is deliberately strict: `searchFoods` answers "milk" with
+"Milk chocolate", and a nutrition tag hung on the wrong food is worse than no
+tag, so a match only counts when every meaningful word of the catalogue name
+appears in what you typed. "Semi-skimmed milk" matches; bare "milk" gets no
+nutrition tags rather than the wrong ones.
+
+**Allergens only ever warn.** They are matched on a product name, which is good
+enough to raise "may contain" and nowhere near good enough to promise that
+something is free of anything — so the tag exists in that direction only, and
+appears only for allergens the household has actually declared. In the filter
+row they are phrased as "hide items that may contain".
+
+Filters combine with AND, so each tag you add narrows the list — selecting
+several and getting a *longer* list would be the opposite of filtering. Only
+tags something actually carries are offered, with counts, so no filter is a
+dead end. Sorting covers cheapest, best value per kg, healthiest, most bought,
+biggest gap between shops, and A–Z; anything unrankable (no readable pack size,
+no catalogue match) sorts last rather than being treated as zero.
+
+### Ranking and price history
+
+Each item shows its shops **ranked cheapest to dearest**, with the gap to the
+cheapest in pounds and percent — "Asda is 3p (3.4%) dearer" is a decision where
+two bare prices are only two facts. Tied shops share a rank.
+
+Every check is also kept on the device, one observation per item per shop per
+day, so asking repeatedly builds a **price history**: a timeline of the item's
+cheapest price, a small chart per shop, and which shop has been cheapest most
+often — which is a better guide than whoever happens to be cheapest today.
+History never leaves the device and is cleared with the cache.
 
 ### Why a plain fetch is not enough
 

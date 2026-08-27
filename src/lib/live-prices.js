@@ -128,6 +128,51 @@ export const bestPerRetailer = (result) => {
   return [...byRetailer.values()].sort((a, b) => a.price - b.price);
 };
 
+/**
+ * Rank the shops for one item, cheapest first.
+ *
+ * The gap is the point. "Tesco £1.45, Asda £1.50" is two facts; "Asda is 3p
+ * (3.4%) dearer" is the decision. Ties share a rank, because two shops at the
+ * same price are not first and second.
+ */
+export const rankShops = (perRetailer = []) => {
+  const rows = [...perRetailer]
+    .filter((row) => typeof row?.price === 'number')
+    .sort((a, b) => a.price - b.price);
+  if (!rows.length) return [];
+  const cheapest = rows[0].price;
+  const dearest = rows.at(-1).price;
+  let rank = 0;
+  let previous = null;
+  return rows.map((row, index) => {
+    if (previous === null || row.price !== previous) rank = index + 1;
+    previous = row.price;
+    return {
+      ...row,
+      rank,
+      isCheapest: row.price === cheapest,
+      isDearest: rows.length > 1 && row.price === dearest && row.price !== cheapest,
+      over: Math.round((row.price - cheapest) * 100) / 100,
+      overPct: cheapest > 0 ? Math.round(((row.price - cheapest) / cheapest) * 1000) / 10 : null,
+    };
+  });
+};
+
+/** What the whole ranked set is worth: the spread between best and worst. */
+export const rankingSpread = (ranked = []) => {
+  if (ranked.length < 2) return null;
+  const cheapest = ranked[0];
+  const dearest = ranked.at(-1);
+  return {
+    cheapest,
+    dearest,
+    saving: Math.round((dearest.price - cheapest.price) * 100) / 100,
+    pct: cheapest.price > 0
+      ? Math.round(((dearest.price - cheapest.price) / cheapest.price) * 1000) / 10
+      : null,
+  };
+};
+
 /** Shops that were asked but could not answer, with the reason they gave. */
 export const unansweredShops = (result) =>
   (result?.results || [])
@@ -140,26 +185,73 @@ export const unansweredShops = (result) =>
       url: entry.url || null,
     }));
 
+/** Check a batch of products in one request. Returns `checks` and `remaining`. */
+export const checkLivePriceBatch = async (items, { retailerIds = [], signal } = {}) => {
+  const response = await fetch('/api/integrations/scrape-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ items, retailerIds }),
+    signal,
+    cache: 'no-store',
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(body?.error || `Price check failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+};
+
+/** Shape one scrape result into the entry the UI and history both consume. */
+export const entryFromResult = (name, result) => ({
+  name,
+  best: result.best || null,
+  strategiesUsed: result.strategiesUsed || [],
+  perRetailer: bestPerRetailer(result),
+  unanswered: unansweredShops(result),
+  shopsChecked: result.shopsChecked || 0,
+  shopsAnswered: result.shopsAnswered || 0,
+  aiUsed: Boolean(result.aiUsed),
+  checkedAt: result.checkedAt || new Date().toISOString(),
+});
+
+/** How many items go up in one request. The route caps this at 12. */
+export const BATCH_SIZE = 4;
+
+const chunk = (list, size) => {
+  const out = [];
+  for (let index = 0; index < list.length; index += size) out.push(list.slice(index, index + size));
+  return out;
+};
+
 /**
- * Check several list items, cache-first.
+ * Check every item on the list, cache-first.
  *
- * Capped at six items per run. The route's own limit is eight, and each item
- * fans out across every shop — a whole week's list in one click would be a
- * hundred-odd page fetches, which is not a reasonable thing to do to a shop.
+ * The whole list is checked, not a sample of it: a comparison that silently
+ * covers six of your twenty items is worse than useless, because it looks
+ * complete. What keeps that affordable is the 3h cache and batching — only
+ * items without a fresh cached answer go to the network, and those go up
+ * several per request rather than one at a time.
+ *
+ * `onProgress` reports {done, total, name} as it goes, because checking a long
+ * list against every shop takes long enough that silence reads as a hang.
  */
 export const checkLivePricesForList = async (items = [], {
-  retailerIds = [], signal, limit = 6, force = false,
+  retailerIds = [], signal, force = false, onProgress, batchSize = BATCH_SIZE,
 } = {}) => {
-  const names = [...new Set(items.map((item) => item?.name).filter(Boolean))].slice(0, limit);
-  if (!names.length) return { byKey: {}, checkedAt: new Date().toISOString(), fromCache: 0, fetched: 0 };
+  const names = [...new Set(items.map((item) => item?.name).filter(Boolean))];
+  if (!names.length) {
+    return { byKey: {}, checkedAt: new Date().toISOString(), fromCache: 0, fetched: 0, total: 0 };
+  }
 
   const cache = loadCache();
   const byKey = {};
   let fromCache = 0;
   let fetched = 0;
+  const pending = [];
 
   for (const name of names) {
-    if (signal?.aborted) break;
     const key = shoppingNameKey(name);
     if (!key) continue;
     const cached = cache[key];
@@ -167,31 +259,60 @@ export const checkLivePricesForList = async (items = [], {
     if (fresh) {
       byKey[key] = { ...cached, cached: true };
       fromCache += 1;
-      continue;
-    }
-    try {
-      const result = await checkLivePrice(name, { retailerIds, signal });
-      const entry = {
-        name,
-        best: result.best || null,
-        strategiesUsed: result.strategiesUsed || [],
-        perRetailer: bestPerRetailer(result),
-        unanswered: unansweredShops(result),
-        shopsChecked: result.shopsChecked || 0,
-        shopsAnswered: result.shopsAnswered || 0,
-        aiUsed: Boolean(result.aiUsed),
-        checkedAt: result.checkedAt || new Date().toISOString(),
-      };
-      cache[key] = entry;
-      saveCache(cache);
-      byKey[key] = { ...entry, cached: false };
-      fetched += 1;
-    } catch (error) {
-      // A signed-out or rate-limited user is a whole-run problem; one shop
-      // failing on one item is not, so only the former stops the loop.
-      if (error.status === 401 || error.status === 429 || error.status === 503) throw error;
-      byKey[key] = { name, error: error.message || 'Price check failed', checkedAt: new Date().toISOString() };
+    } else {
+      pending.push(name);
     }
   }
-  return { byKey, checkedAt: new Date().toISOString(), fromCache, fetched };
+
+  const total = names.length;
+  onProgress?.({ done: fromCache, total, name: null });
+
+  let queue = [...pending];
+  let guard = 0;
+  while (queue.length && !signal?.aborted) {
+    // The server returns `remaining` when a batch outruns its time budget, so
+    // those items go back on the queue rather than being quietly dropped.
+    // The guard stops a server that always defers from looping forever.
+    guard += 1;
+    if (guard > names.length + 10) break;
+    const batches = chunk(queue, batchSize);
+    const deferred = [];
+    for (const batch of batches) {
+      if (signal?.aborted) break;
+      try {
+        const body = await checkLivePriceBatch(batch, { retailerIds, signal });
+        for (const result of body.checks || []) {
+          const name = result.query;
+          const key = shoppingNameKey(name);
+          if (!key) continue;
+          const entry = entryFromResult(name, result);
+          cache[key] = entry;
+          byKey[key] = { ...entry, cached: false };
+          fetched += 1;
+        }
+        saveCache(cache);
+        deferred.push(...(body.remaining || []));
+        onProgress?.({ done: fromCache + fetched, total, name: batch.at(-1) });
+      } catch (error) {
+        // Signed out, rate limited or switched off is a whole-run problem.
+        if (error.status === 401 || error.status === 429 || error.status === 503) throw error;
+        // One failed batch should not lose the rest of the list.
+        for (const name of batch) {
+          const key = shoppingNameKey(name);
+          if (key) byKey[key] = { name, error: error.message || 'Price check failed', checkedAt: new Date().toISOString() };
+        }
+        onProgress?.({ done: fromCache + fetched, total, name: batch.at(-1) });
+      }
+    }
+    queue = deferred;
+  }
+
+  return {
+    byKey,
+    checkedAt: new Date().toISOString(),
+    fromCache,
+    fetched,
+    total,
+    aborted: Boolean(signal?.aborted),
+  };
 };

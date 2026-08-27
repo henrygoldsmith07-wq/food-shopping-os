@@ -9,8 +9,11 @@ import {
 import { isOpenRouterConfigured } from '../../../../server/openrouter.js';
 import { availableStrategies, firecrawlConfigured } from '../../../../server/crawler.js';
 
-// Scraping eight retailers takes longer than a default serverless slice.
+// Scraping every retailer takes longer than a default serverless slice.
 export const maxDuration = 60;
+// Stop starting new items with this much of the budget gone, so the response
+// is returned rather than the function being killed with the work lost.
+const BATCH_BUDGET_MS = Number(process.env.SCRAPE_BATCH_BUDGET_MS || 40000);
 export const dynamic = 'force-dynamic';
 
 /** What the scraper can currently do, so the UI can explain itself before it runs. */
@@ -34,18 +37,24 @@ export async function GET() {
 }
 
 /**
- * Check prices for one product, or for a handful of list items.
+ * Check prices for one product, or for a batch of list items.
  *
- * The rate limit is deliberately tight. One call fans out to every configured
- * retailer, so 20/h is already up to 160 outbound page fetches — generous for
- * a shopping list and far short of anything a retailer would call abusive.
+ * The client sends a whole shopping list as consecutive batches, so the limit
+ * is per request rather than per list. 60 requests an hour at up to 12 items
+ * each covers any realistic list several times over, and still falls far short
+ * of anything a retailer would call abusive.
+ *
+ * Each item fans out across every configured shop, so a batch can outlive the
+ * function's own time budget. Rather than being killed mid-flight and losing
+ * the work, the loop stops at a deadline and returns what it has with
+ * `remaining` naming the items it did not reach — the client sends those on.
  */
 export async function POST(request) {
   try {
     assertSameOrigin(request);
     const user = await requireUser();
     if (!scraperEnabled()) throw new ApiError(503, 'Live price checking is switched off.');
-    await rateLimit(`scrape-prices:${user.id}`, 20, 3600000);
+    await rateLimit(`scrape-prices:${user.id}`, 60, 3600000);
 
     const body = await request.json().catch(() => {
       throw new ApiError(400, 'Expected a JSON body.');
@@ -53,13 +62,19 @@ export async function POST(request) {
 
     if (Array.isArray(body?.items)) {
       const input = scrapeListRequestSchema.parse(body);
+      const deadline = Date.now() + BATCH_BUDGET_MS;
       const checks = [];
+      const remaining = [];
       for (const item of input.items) {
-        // Sequential: each item already fans out across every shop, and a
-        // parallel burst is what gets an IP blocked.
+        // Sequential per item: one item already fans out across every shop,
+        // and stacking whole items on top of that is what gets an IP blocked.
+        if (Date.now() > deadline) {
+          remaining.push(item);
+          continue;
+        }
         checks.push(await scrapePrices(item, { retailerIds: input.retailerIds || [] }));
       }
-      return NextResponse.json({ checks, checkedAt: new Date().toISOString() });
+      return NextResponse.json({ checks, remaining, checkedAt: new Date().toISOString() });
     }
 
     const input = scrapeRequestSchema.parse(body);
