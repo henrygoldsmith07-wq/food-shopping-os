@@ -30,16 +30,18 @@ import {
   productsFromMicrodata, productsFromText,
 } from './scrape-parse.js';
 import { isMatch, matchScore, searchQueries } from './search-terms.js';
+import { brandedQueries } from './branded-queries.js';
 
 const MAX_ROWS_PER_RETAILER = 8;
 /**
  * How many rungs of the query ladder one shop is worth.
  *
- * Two, not all three. Each rung is a fresh fetch at every shop, and the third
- * rung exists for a case — a note written after a comma — that is worth trying
- * once locally but not worth doubling the traffic of a whole-list check for.
+ * Three: the two broadest rungs of what they typed, and — when both of those
+ * fail at a shop that is answering — one branded name from the app's own
+ * catalogue. Shops index brands, so "Heinz Baked Beans" hits a product page
+ * where "baked beans" competes with every own-brand tin and meal deal.
  */
-const MAX_QUERY_ATTEMPTS = 2;
+const MAX_QUERY_ATTEMPTS = 3;
 /** A pause before asking the same shop a second time. Sequential is not enough. */
 const RETRY_GAP_MS = 400;
 
@@ -295,7 +297,10 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
  */
 export const scrapeRetailer = async (retailer, query, options = {}) => {
   const wanted = String(query || '').trim();
-  const ladder = searchQueries(wanted).slice(0, MAX_QUERY_ATTEMPTS);
+  const ladder = [
+    ...searchQueries(wanted).slice(0, 2),
+    ...brandedQueries(wanted, { limit: 1 }),
+  ].slice(0, MAX_QUERY_ATTEMPTS);
   const tried = [];
   let last = null;
   let strategies = options.strategies || null;

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Globe, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { shoppingNameKey } from '../lib/shopping.js';
-import { checkAge, checkLivePricesForList, clearLivePriceCache } from '../lib/live-prices.js';
+import {
+  checkAge, checkLivePricesForList, clearLivePriceCache, coverageFor,
+} from '../lib/live-prices.js';
 import {
   clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
 } from '../lib/live-price-history.js';
@@ -122,6 +124,7 @@ export default function LivePriceCheck({
   const priced = entries.filter(([, entry]) => entry?.best);
   const usedAi = entries.some(([, entry]) => entry?.aiUsed);
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0;
+  const coverage = coverageFor(state?.byKey);
 
   // Tags are derived from the result, the item's own price history and the
   // household's declared allergies — never fetched, so this stays cheap enough
@@ -248,10 +251,26 @@ export default function LivePriceCheck({
           <>
             <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--muted)' }}>
               {priced.length} of {entries.length} item{entries.length === 1 ? '' : 's'} priced
+              {coverage.pct !== null ? ` · ${coverage.pct}%` : ''}
               {state.fromCache ? ` · ${state.fromCache} from the 3h cache` : ''}
               {state.aborted ? ' · stopped early' : ''}
               {' · '}{checkAge(state.checkedAt).label}
             </p>
+
+            {/* Where the misses went. A hit rate with no breakdown is a number
+                nobody can act on: shops that are down and shops that refuse to
+                be read are the same figure and different problems entirely. */}
+            {coverage.unpriced > 0 && (
+              <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--faint)' }}>
+                {coverage.unpriced} unpriced —{' '}
+                {coverage.reasons.map((row) => `${row.count} × ${row.label}`).join(' · ')}
+              </p>
+            )}
+            {coverage.broadened > 0 && (
+              <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--faint)' }}>
+                {coverage.broadened} found only after widening the search — worth checking against the shelf.
+              </p>
+            )}
 
             {entries.length === 0 ? (
               <Card className="text-center py-6">

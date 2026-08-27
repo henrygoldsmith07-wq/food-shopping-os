@@ -156,8 +156,12 @@ export const runStrategy = async (name, url, options = {}) => {
  * "this page had no prices in it", which is the real failure mode, rather than
  * stopping at the first response that happened to return HTTP 200.
  */
+/** Codes worth one more go: the shop faltered rather than refused. */
+const TRANSIENT = /^(?:timeout|unreachable|http-5\d\d)$/;
+
 export const crawlPage = async (url, {
   fetchImpl = fetch, signal, accept = () => true, strategies = null, onAttempt,
+  retryDelayMs = 600,
 } = {}) => {
   const order = strategies || availableStrategies();
   const attempts = [];
@@ -173,6 +177,25 @@ export const crawlPage = async (url, {
       const code = error?.code || (error?.name === 'TimeoutError' ? 'timeout' : 'unreachable');
       attempts.push({ strategy: name, ok: false, code });
       onAttempt?.({ strategy: name, ok: false, code });
+      // A timeout or a 5xx is the shop having a bad second, not the shop
+      // saying no. One retry after a pause converts a fair share of those
+      // into answers, and costs nothing when the shop is genuinely down.
+      // A refusal — 401, 403, 429 — is never retried: it is an answer.
+      if (TRANSIENT.test(code) && !signal?.aborted) {
+        await new Promise((resolve) => { setTimeout(resolve, retryDelayMs); });
+        try {
+          const page = await runStrategy(name, url, { fetchImpl, signal });
+          const accepted = accept(page);
+          attempts.push({ strategy: name, ok: true, accepted, retried: true });
+          onAttempt?.({ strategy: name, ok: true, accepted, retried: true });
+          if (accepted) return { ...page, attempts, ok: true };
+        } catch (retryError) {
+          const retryCode = retryError?.code
+            || (retryError?.name === 'TimeoutError' ? 'timeout' : 'unreachable');
+          attempts.push({ strategy: name, ok: false, code: retryCode, retried: true });
+          onAttempt?.({ strategy: name, ok: false, code: retryCode, retried: true });
+        }
+      }
       // A shop that blocks us blocks us; escalating to a renderer is the whole
       // point, so keep going rather than giving up on the first refusal.
     }

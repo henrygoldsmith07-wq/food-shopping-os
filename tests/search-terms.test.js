@@ -4,6 +4,8 @@ import {
 } from '../src/server/search-terms.js';
 import { clearRobotsCache } from '../src/server/robots.js';
 import { scrapeRetailer } from '../src/server/price-scraper.js';
+import { brandedQueries } from '../src/server/branded-queries.js';
+import { REASON_LABELS, coverageFor } from '../src/lib/live-prices.js';
 
 describe('turning a shopping list line into something a shop can find', () => {
   it('folds the punctuation a search box cannot use', () => {
@@ -193,7 +195,10 @@ describe('broadening the search when a shop finds nothing', () => {
     });
     expect(out.status).toBe('no-match');
     expect(out.rows).toEqual([]);
-    expect(out.queriesTried).toHaveLength(2);
+    // Both rungs of what was typed, then one branded name from the catalogue.
+    expect(out.queriesTried).toEqual([
+      '2 pints semi skimmed milk', 'semi skimmed milk', 'Cravendale Semi-Skimmed Milk',
+    ]);
   });
 });
 
@@ -222,11 +227,103 @@ describe('the cost of broadening', () => {
       fetchImpl, allowModel: false, retryGapMs: 0,
     });
     expect(out.status).toBe('no-match');
-    expect(out.queriesTried).toHaveLength(2);
+    expect(out.queriesTried).toHaveLength(3);
     const direct = fetchImpl.mock.calls
       .map(([url]) => String(url))
       .filter((url) => !url.endsWith('/robots.txt') && !url.startsWith('https://r.jina.ai/'));
     // One refused direct attempt for the first query, and none for the second.
     expect(direct).toHaveLength(1);
+  });
+});
+
+describe('asking for a product by a name the shop stocks', () => {
+  it('offers a branded name from the catalogue for a generic request', () => {
+    expect(brandedQueries('baked beans')).toEqual(['Heinz Baked Beans']);
+    expect(brandedQueries('tomato ketchup')).toEqual(['Heinz Tomato Ketchup']);
+  });
+
+  it('will not brand a single word, because one word cannot be told apart', () => {
+    // "milk" is inside "Cadbury Dairy Milk". A row from that search still
+    // scores as a match for the word "milk", so the relevance rule cannot
+    // catch it — the guard has to be here, before the search happens.
+    expect(brandedQueries('milk')).toEqual([]);
+    expect(brandedQueries('beans')).toEqual([]);
+    expect(brandedQueries('semi skimmed milk')).toEqual(['Cravendale Semi-Skimmed Milk']);
+  });
+
+  it('has nothing to add to a request that already names a brand', () => {
+    expect(brandedQueries('Heinz Baked Beans')).toEqual([]);
+  });
+
+  it('offers nothing for a food the catalogue does not have', () => {
+    expect(brandedQueries('samphire tips')).toEqual([]);
+    expect(brandedQueries('')).toEqual([]);
+  });
+
+  it('finds a branded product when the generic search came back empty', async () => {
+    const retailer = {
+      id: 'test',
+      name: 'Test Shop',
+      search: (query) => `https://shop.test/search?q=${encodeURIComponent(query)}`,
+    };
+    const product = (name, price) => `<html><body><script type="application/ld+json">${JSON.stringify({
+      '@type': 'Product', name, offers: { price, priceCurrency: 'GBP' },
+    })}</script></body></html>`;
+    clearRobotsCache();
+    const fetchImpl = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.endsWith('/robots.txt')) {
+        return new Response('User-agent: *\nAllow: /\n', { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      // The shop's own-brand search is drowned out; the branded one is not.
+      return target.toLowerCase().includes('heinz')
+        ? new Response(product('Heinz Baked Beans In Tomato Sauce 415g', '1.40'), { status: 200, headers: { 'content-type': 'text/html' } })
+        : new Response('<html><body>Meal deals and recipe cards</body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+    });
+    const out = await scrapeRetailer(retailer, 'baked beans', {
+      fetchImpl, allowModel: false, retryGapMs: 0,
+    });
+    expect(out.status).toBe('ok');
+    expect(out.rows[0].price).toBe(1.4);
+    expect(out.searched).toBe('Heinz Baked Beans');
+    expect(out.broadened).toBe(true);
+    // And the row still had to answer what was actually asked for.
+    expect(out.rows[0].relevance).toBe(1);
+  });
+});
+
+describe('reporting what the check actually achieved', () => {
+  it('counts the hit rate and names where every miss went', () => {
+    const out = coverageFor({
+      milk: { best: { price: 1.2 } },
+      beans: { best: { price: 1.4, broadened: true } },
+      kale: { unanswered: [{ status: 'declined' }, { status: 'declined' }, { status: 'no-match' }] },
+      tofu: { unanswered: [{ status: 'no-match' }] },
+    });
+    expect(out).toMatchObject({ total: 4, priced: 2, unpriced: 2, pct: 50, broadened: 1 });
+    expect(out.reasons).toEqual([
+      { reason: 'declined', count: 1, label: REASON_LABELS.declined },
+      { reason: 'no-match', count: 1, label: REASON_LABELS['no-match'] },
+    ]);
+  });
+
+  it('counts one stubborn item once, not once per shop that refused it', () => {
+    // Nine shops declining one item is one unpriced item. Counting shop
+    // visits would make a single awkward product read as a collapse.
+    const out = coverageFor({
+      kale: { unanswered: Array.from({ length: 9 }, () => ({ status: 'declined' })) },
+    });
+    expect(out.unpriced).toBe(1);
+    expect(out.reasons).toEqual([{ reason: 'declined', count: 1, label: REASON_LABELS.declined }]);
+  });
+
+  it('has no opinion about a check that has not happened', () => {
+    expect(coverageFor()).toMatchObject({ total: 0, priced: 0, pct: null, reasons: [] });
+  });
+
+  it('falls back to a reason rather than reporting a miss with none', () => {
+    expect(coverageFor({ kale: {} }).reasons).toEqual([
+      { reason: 'unreachable', count: 1, label: REASON_LABELS.unreachable },
+    ]);
   });
 });
