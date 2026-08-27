@@ -35,7 +35,7 @@ import PriceWatch from './PriceWatch.jsx';
  */
 export default function LivePriceCheck({
   items = [], offlineMode = false, isOnline = true, allergens = [], purchaseCounts = {},
-  alertConfig = {},
+  alertConfig = {}, onChecked,
 }) {
   const [state, setState] = useState(null);
   const [history, setHistory] = useState(() => loadLivePriceHistory());
@@ -72,6 +72,8 @@ export default function LivePriceCheck({
       // after checking by hand would immediately check the same list again.
       const rows = Object.values(result.byKey || {});
       setDaily(recordDailyCheck({ priced: rows.filter((row) => row?.best).length, total: rows.length }));
+      // Tell the resolver above that there is fresh evidence to fold in.
+      onChecked?.();
     } catch (caught) {
       setError(caught.status === 401
         ? 'Sign in to check live shop prices.'

@@ -80,6 +80,16 @@ const saveCache = (cache) => {
   }
 };
 
+/**
+ * The most recent live results still inside their 3h window.
+ *
+ * Exposed so the price resolver can read what the last check found without the
+ * scraper UI having to lift its state up. Anything older than the window has
+ * already aged out of here and is carried by the dated history store instead,
+ * which is the right split: this is "live", that is "an earlier check".
+ */
+export const loadLivePriceCache = () => loadCache();
+
 export const clearLivePriceCache = () => {
   try {
     localStorage.removeItem(STORAGE_KEY);

@@ -3,7 +3,7 @@ import {
   availableStrategies, crawlPage, directFetch, firecrawlConfigured, firecrawlFetch,
   jinaFetch, runStrategy,
 } from '../src/server/crawler.js';
-import { clearRobotsCache } from '../src/server/robots.js';
+import { clearRobotsCache, isScrapeAllowed } from '../src/server/robots.js';
 import { deterministicPass, scrapeRetailer } from '../src/server/price-scraper.js';
 
 const res = (body, { status = 200, type = 'text/html' } = {}) =>
@@ -49,6 +49,49 @@ describe('which strategies are available', () => {
   it('refuses a strategy name it does not implement', async () => {
     await expect(runStrategy('selenium', 'https://a.test', { fetchImpl: vi.fn() }))
       .rejects.toThrow(/No fetch strategy/);
+  });
+});
+
+describe('a robots.txt we are not allowed to read', () => {
+  it('treats 403 as a refusal, not as an absent robots.txt', async () => {
+    // The dangerous reading. "You may not have this file" is not "there is no
+    // file", and turning a refusal into permission to crawl everything is the
+    // one direction this check must never fail in.
+    const fetchImpl = vi.fn(async () => res('go away', { status: 403, type: 'text/plain' }));
+    await expect(isScrapeAllowed('https://a.test/search', { fetchImpl }))
+      .resolves.toMatchObject({ allowed: false, reason: 'robots-forbidden' });
+  });
+
+  it('treats 401 the same way', async () => {
+    const fetchImpl = vi.fn(async () => res('auth', { status: 401, type: 'text/plain' }));
+    await expect(isScrapeAllowed('https://b.test/search', { fetchImpl }))
+      .resolves.toMatchObject({ allowed: false, reason: 'robots-forbidden' });
+  });
+
+  it('still reads a plain 404 as no robots.txt, which permits crawling', async () => {
+    const fetchImpl = vi.fn(async () => res('nope', { status: 404, type: 'text/plain' }));
+    await expect(isScrapeAllowed('https://c.test/search', { fetchImpl }))
+      .resolves.toMatchObject({ allowed: true, reason: 'no-robots-file' });
+  });
+
+  it('keeps refusing on the cached second call', async () => {
+    // A refusal that only lasted until the cache warmed would be worse than
+    // no check at all, because it would look like it was working.
+    const fetchImpl = vi.fn(async () => res('go away', { status: 403, type: 'text/plain' }));
+    await isScrapeAllowed('https://d.test/search', { fetchImpl });
+    const second = await isScrapeAllowed('https://d.test/other', { fetchImpl });
+    expect(second).toMatchObject({ allowed: false, cached: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('never fetches the page when robots.txt forbade us', async () => {
+    const retailer = { id: 't', name: 'T', search: () => 'https://e.test/search?q=milk' };
+    const fetchImpl = vi.fn(async (url) => (String(url).endsWith('/robots.txt')
+      ? res('go away', { status: 403, type: 'text/plain' })
+      : res(PRICED)));
+    const out = await scrapeRetailer(retailer, 'milk', { fetchImpl, allowModel: false });
+    expect(out.status).toBe('declined');
+    expect(fetchImpl.mock.calls.every(([url]) => String(url).endsWith('/robots.txt'))).toBe(true);
   });
 });
 
