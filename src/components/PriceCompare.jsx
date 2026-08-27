@@ -8,13 +8,19 @@ import { fetchObservedForList, observedStaleness, clearObservedPriceCache } from
 import { Card, Pill, Sparkline, Section } from './ui.jsx';
 import { Glyph } from './icons.jsx';
 import PriceGraphs from './PriceGraphs.jsx';
+import LivePriceCheck from './LivePriceCheck.jsx';
 
 /**
- * Price comparison, built only from receipts you recorded.
+ * Price comparison, from three sources kept deliberately apart.
  *
- * There is no price feed behind this app, so a comparison is only as good as
- * what you've actually paid — and it says how much of your list each shop can
- * price rather than quietly totalling two items and calling it a winner.
+ * Your receipts come first: they are the only prices Forq knows you actually
+ * paid. Below them sit live prices read from the shops' own search pages when
+ * you ask, and dated community observations. Each is labelled with where it
+ * came from and how sure it is, because merging them would produce one
+ * confident number out of three uncertain ones.
+ *
+ * The receipt comparison still says how much of your list each shop can price,
+ * rather than quietly totalling two items and calling it a winner.
  */
 export default function PriceCompare() {
   const app = useApp();
@@ -128,6 +134,11 @@ export default function PriceCompare() {
           )}
         </Section>
       )}
+
+      <LivePriceCheck
+        items={app.shoppingList}
+        offlineMode={Boolean(app.shoppingPreferences?.offlineMode)}
+      />
 
       <Section className="rise rise-1" title="Community observed prices">
         <p className="text-[0.75rem] font-semibold mb-3" style={{ color: 'var(--muted)' }}>

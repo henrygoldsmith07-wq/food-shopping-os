@@ -55,10 +55,70 @@ defaults to 250,000 reserved-and-used tokens. Signed-in users can see the
 current month’s used, reserved and remaining allowance under Account & sync;
 prompts and responses are not included in that usage record.
 
-Forq does not provide live supermarket prices, offers or availability. The
-retailer hub keeps your recorded receipt prices and saved offers, then links to
-the official retailer site so you can check today's basket, stock and delivery
-or collection options yourself.
+Live shop prices come from `/api/integrations/scrape-prices`, which reads each
+retailer's public search page when you ask it to. It is not a retailer feed and
+not a quote: robots.txt is checked before every fetch, a shop that declines or
+blocks the request is reported as declining rather than dropped, and each price
+keeps the URL it was read from so you can check it. Prices published as
+schema.org data are taken verbatim; where a shop publishes none, the page text
+is read and the result is labelled as a lower-confidence reading. Many UK
+retailers only price after a store or postcode is chosen, so an empty result is
+a normal and honest outcome. The retailer hub still keeps your recorded receipt
+prices and saved offers, and still links to the official retailer site so you
+can confirm today's basket, stock and delivery or collection options yourself.
+
+The route is signed-in only, rate-limited to 20 checks an hour, cached three
+hours on device, and covers at most six list items per run — each of which fans
+out across every configured shop. Shops are checked one at a time rather than in
+parallel, which keeps a price check from looking like a burst of traffic.
+
+### Why a plain fetch is not enough
+
+Most UK grocery search pages render their products in the browser. The HTML
+that arrives from a plain fetch is an empty shell, and no amount of better
+parsing finds a price that was never in the document. So fetching escalates
+through a ladder, and a page is only "done" when it actually yields prices —
+HTTP 200 on a shell is a miss, not a hit:
+
+| Strategy | Needs | Returns | Notes |
+| --- | --- | --- | --- |
+| `direct` | nothing | raw HTML | Free and instant. Works on server-rendered shops. Always tried first. |
+| `firecrawl` | `FIRECRAWL_API_KEY` | rendered HTML + markdown | Headless render. Costs credits, so it is only reached when `direct` found nothing. Asks for `rawHtml`, so structured parsing still applies. |
+| `jina` | nothing | markdown | [r.jina.ai](https://r.jina.ai), keyless, renders JavaScript. Markdown only, so just the text pass can read it — hence last. |
+
+Escalation is what raises the hit rate: a shop that returns a shell to `direct`
+gets retried through a renderer before it is written off as having no prices.
+Each row records which strategy produced it, and the UI says "page rendered to
+load prices" where a renderer was needed.
+
+**robots.txt still governs everything.** A renderer is not a way around a shop
+that declined — the permission check runs before any strategy, and a refusal
+means no fetch by any route.
+
+### Environment variables
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `NVIDIA_API_KEY` | *bundled key* | Free NVIDIA NIM catalogue. Powers the AI assistant and the scraper's fallback extraction. A key is **shipped in the source**, so this works with no setup; set this to use your own, or to an empty string to turn NVIDIA off. |
+| `FIRECRAWL_API_KEY` | unset | Enables the Firecrawl render strategy. Without it the ladder is `direct → jina`. |
+| `FIRECRAWL_BASE_URL` | `https://api.firecrawl.dev/v2` | Pin an API version or point at a self-hosted Firecrawl. |
+| `FIRECRAWL_WAIT_MS` | `2500` | How long Firecrawl waits after load before capturing — raise it for slow shops. |
+| `JINA_API_KEY` | unset | Optional. Raises Jina Reader's rate limit; it works keylessly without one. |
+| `JINA_READER_ENABLED` | `true` | Set to `false` to drop the keyless renderer from the ladder. |
+| `PRICE_SCRAPER_STRATEGIES` | `direct,firecrawl,jina` | Explicit ladder order, comma-separated. |
+| `PRICE_SCRAPER_ENABLED` | `true` | Set to `false` to switch live price checking off entirely. |
+| `PRICE_SCRAPER_RETAILERS` | all | Comma-separated allowlist of retailer ids, e.g. `tesco,aldi`. |
+| `SCRAPER_TIMEOUT_MS` | `9000` | Per-page timeout for the direct fetch. |
+| `SCRAPER_RENDER_TIMEOUT_MS` | `25000` | Per-page timeout for a rendering strategy. |
+| `SCRAPER_USER_AGENT` | `ForqBot/1.0 …` | The identity sent to shops and matched against their robots.txt. Keep it honest and contactable. |
+
+**On the bundled NVIDIA key.** A working key is committed in
+`src/server/openrouter.js` so the app runs with no configuration. It is a free
+key with no billing attached. It is still a shared credential in a public
+repository: anyone can spend its rate limit, and rotating it needs a release.
+Set `NVIDIA_API_KEY` to your own if you are self-hosting or care about
+availability. Every other secret belongs in `.env.local` (gitignored) locally
+and in your hosting provider's environment settings for a deployment.
 
 Barcode lookups can optionally use the public Open Food Facts API through the
 authenticated `/api/integrations/products` route. It returns product identity,
@@ -72,8 +132,10 @@ Observed rows are fetched only after an explicit tap, cached 24h on device for a
 Both lookups run only after an explicit user action and require a signed-in
 backend household.
 
-The UK supermarkets do not expose one common public third-party price API, and
-Forq does not configure or query undocumented consumer endpoints. Scheduled reminders use the authenticated
+The UK supermarkets do not expose one common public third-party price API, so
+the live check reads the same public search pages a shopper would open, subject
+to robots.txt. Forq does not query undocumented private retailer endpoints and
+does not attempt to bypass a shop that blocks automated requests. Scheduled reminders use the authenticated
 `/api/jobs/reminders` endpoint and Vercel Cron. Trigger.dev can invoke the same
 endpoint once its current vulnerable SDK dependency chain is patched.
 
@@ -588,7 +650,27 @@ Forq keeps the source visible for every external result:
 - **Open Prices** — GBP price observations contributed by shoppers. A row can
   be old, incomplete or from another location, so it is useful for context and
   history rather than checkout decisions.
+- **Firecrawl / Jina Reader** — optional headless renderers used only when a
+  shop's search page needs JavaScript to show its prices. They fetch the same
+  public page the scraper would, and are never used to reach a page robots.txt
+  declined.
+- **Retailer search pages** — read live, on request, by the price scraper. Each
+  row names the shop, the URL it came from, and how the number was obtained:
+  the shop's own structured product data, its page markup, its page text, or an
+  AI reading of that text where the shop publishes nothing machine-readable.
+  The last of those is marked "read by AI" wherever it appears.
 
-Forq does not provide live supermarket prices or query undocumented retailer
-website endpoints. The official retailer links remain the authority for the
-current basket, stock, offers, delivery fees and slots.
+Forq does not query undocumented retailer website endpoints and does not work
+around shops that decline automated requests. The official retailer links remain
+the authority for the current basket, stock, offers, delivery fees and slots.
+
+### The AI extraction ladder
+
+Where a page has no structured price data, extraction falls to a language model
+through the free NVIDIA NIM catalogue (`NVIDIA_API_KEY`), with OpenRouter as a
+second provider. Models are tried strongest first — Nemotron 3 Ultra 550B,
+DeepSeek V4 Pro, GLM-5.2, Kimi K2.6, DeepSeek V4 Flash, MiniMax M3, Nemotron
+3.5 Lightning, Mistral Medium 3.5, GPT-OSS-120B, Poolside Laguna — and a
+rate-limited or withdrawn model costs one retry down the ladder rather than the
+lookup. Whatever the model returns is checked against the page text before it is
+shown: a price that does not appear on the page is discarded, not displayed.

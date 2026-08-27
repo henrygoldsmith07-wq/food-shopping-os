@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { freeChat, freeVision, rankedFreeModels, rankedVisionModels } from '../src/server/openrouter.js';
+import {
+  activeProvider, freeChat, freeVision, isOpenRouterConfigured, nvidiaKey,
+  rankedFreeModels, rankedVisionModels,
+} from '../src/server/openrouter.js';
 
 const catalog = {
   data: [
@@ -18,7 +21,34 @@ const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 beforeEach(() => {
+  // Env stubs persist until explicitly cleared, and a leaked NVIDIA_API_KEY
+  // silently changes which provider a later test exercises. Reset first.
+  vi.unstubAllEnvs();
   vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+});
+
+describe('the bundled NVIDIA key', () => {
+  it('makes the app work with no environment configuration at all', () => {
+    vi.stubEnv('NVIDIA_API_KEY', undefined);
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    expect(nvidiaKey()).toMatch(/^nvapi-/);
+    expect(isOpenRouterConfigured()).toBe(true);
+    expect(activeProvider()).toMatchObject({ id: 'nvidia' });
+  });
+
+  it('lets a deployment override it, so a self-host uses its own key', () => {
+    vi.stubEnv('NVIDIA_API_KEY', 'nvapi-someone-elses-key');
+    expect(nvidiaKey()).toBe('nvapi-someone-elses-key');
+    expect(activeProvider()).toMatchObject({ id: 'nvidia', key: 'nvapi-someone-elses-key' });
+  });
+
+  it('treats an explicitly empty value as "off" rather than falling back to it', () => {
+    vi.stubEnv('NVIDIA_API_KEY', '');
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    expect(nvidiaKey()).toBe('');
+    expect(activeProvider()).toBeNull();
+    expect(isOpenRouterConfigured()).toBe(false);
+  });
 });
 
 describe('rankedFreeModels — intelligence order with non-chat excluded', () => {
@@ -58,6 +88,9 @@ describe('freeChat — failover walks down the intelligence ranking', () => {
   });
 
   it('says plainly when no key or no free slot exists', async () => {
+    // The app ships a bundled NVIDIA key, so "no key" now means both
+    // providers explicitly emptied — an empty value is honoured as "off".
+    vi.stubEnv('NVIDIA_API_KEY', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');
     await expect(freeChat({ system: 's', user: 'u', fetchImpl: vi.fn() })).rejects.toThrow('no-free-model');
   });
@@ -97,8 +130,9 @@ describe('freeVision — the models that can actually see', () => {
     const textOnly = { data: [{ id: 'z-ai/glm-5.2:free' }] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonRes(textOnly));
     // The catalog cache belongs to a provider, so a different base is a fresh
-    // catalog rather than the previous one's answer.
-    vi.stubEnv('OPENROUTER_BASE_URL', 'https://other.test/api/v1');
+    // catalog rather than the previous one's answer. The bundled NVIDIA key
+    // makes NVIDIA the active provider here, so it is NVIDIA's base to move.
+    vi.stubEnv('NVIDIA_BASE_URL', 'https://other.test/api/v1');
     await expect(freeVision({
       system: 's', user: 'u', image: 'data:image/png;base64,zz', fetchImpl,
     })).rejects.toThrow('no-vision-model');
