@@ -21,6 +21,7 @@
 
 import { ALLERGENS, MATCH_CAVEAT } from '../data/preferences.js';
 import { BRANDED_FOODS } from '../data/branded-foods.js';
+import { CATALOGUE } from '../data/foods.js';
 import { searchFoods } from './foodlog.js';
 
 const tag = (id, label, group, tone = 'muted', detail = null) => ({ id, label, group, tone, detail });
@@ -36,6 +37,10 @@ const singular = (word) => {
 
 const words = (value) => String(value || '')
   .toLowerCase()
+  // Fold accents: nobody types "pâté" or "crème fraîche" into a shopping list,
+  // and an accent is not a reason to fail to recognise a food.
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
   .replace(/&/g, ' and ')
   .replace(/[^\p{L}\p{N}]+/gu, ' ')
   .trim()
@@ -44,6 +49,15 @@ const words = (value) => String(value || '')
   .map(singular);
 
 const norm = (value) => words(value).join(' ');
+
+/**
+ * The identifying part of a catalogue name.
+ *
+ * Everything after a comma and anything in brackets is a qualifier describing
+ * the same food — "Lentils, cooked", "Nescafé Gold Blend (made up)" — so it is
+ * not required to appear in what the shopper typed.
+ */
+const headOfName = (value) => String(value || '').replace(/\([^)]*\)/g, '').split(',')[0];
 
 /**
  * Find the catalogue food a shopping item actually is.
@@ -59,18 +73,25 @@ export const matchFood = (name, catalogue = undefined) => {
   // The catalogue search does not itself handle plurals — "Bananas" finds
   // nothing — so it is asked for both what was typed and its singular form.
   const singularised = [...words(name)].join(' ');
-  const candidates = [
+  let candidates = [
     ...(searchFoods(name, catalogue, 8) || []),
     ...(searchFoods(singularised, catalogue, 8) || []),
   ];
+  // The catalogue search matches raw text, so an accent defeats it: "pate"
+  // finds nothing even though "Pâté" is right there. When it comes back empty,
+  // scan once with the same accent-folded comparison used below.
+  if (!candidates.length) {
+    const pool = catalogue || CATALOGUE;
+    candidates = pool.filter((food) => {
+      const head = words(headOfName(food.name)).filter((word) => word.length > 2);
+      return head.length > 0 && head.every((word) => wanted.has(word));
+    }).slice(0, 8);
+  }
   const seen = new Set();
   for (const food of candidates) {
     if (seen.has(food.id)) continue;
     seen.add(food.id);
-    // A catalogue qualifier after a comma ("Lentils, cooked") describes the
-    // same food, so it is not required to appear in what the user typed.
-    const head = String(food.name).split(',')[0];
-    const foodWords = words(head).filter((word) => word.length > 2);
+    const foodWords = words(headOfName(food.name)).filter((word) => word.length > 2);
     if (!foodWords.length) continue;
     // Every meaningful word of the catalogue name must appear in what the user
     // typed. "Milk" does not match "Milk chocolate"; "semi skimmed milk" does

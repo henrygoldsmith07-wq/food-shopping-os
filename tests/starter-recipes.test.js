@@ -73,11 +73,24 @@ describe('what first-run setup offers', () => {
   });
 
   it('prefers recipes whose ingredients it actually has data for', () => {
-    const offered = recipes(starterOptions({}));
-    const average = offered.reduce((n, r) => n + ingredientConfidence(r), 0) / offered.length;
     const book = RECIPES.filter((r) => r.meal === 'dinner');
-    const bookAverage = book.reduce((n, r) => n + ingredientConfidence(r), 0) / book.length;
-    expect(average).toBeGreaterThan(bookAverage);
+    const worstInBook = Math.min(...book.map(ingredientConfidence));
+
+    // This used to compare averages. The food catalogue now recognises nearly
+    // every ingredient in the book, so both averages sit against the ceiling
+    // and an average can no longer tell a good pick from a bad one — the
+    // measure saturated, rather than the preference going away.
+    //
+    // What still distinguishes the picker is the bottom of its range: it never
+    // reaches for the recipes the app understands least, whatever the diet.
+    for (const diets of [[], ['vegan'], ['vegetarian'], ['pescatarian'], ['gluten-free']]) {
+      const offered = recipes(starterOptions({ diets }));
+      const worstOffered = Math.min(...offered.map(ingredientConfidence));
+      expect(worstOffered, `worst offered for ${JSON.stringify(diets)}`).toBeGreaterThan(worstInBook);
+      for (const recipe of offered) {
+        expect(ingredientConfidence(recipe), recipe.name).toBeGreaterThanOrEqual(0.85);
+      }
+    }
   });
 
   it('includes something cheap, something fast and something from the cupboard', () => {
