@@ -83,6 +83,39 @@ three ordinary visitors; three at one shop is a burst.
 The route is signed-in only, rate-limited to 60 requests an hour (up to 12 items
 each), and cached three hours on device.
 
+### Tags, filtering and sorting
+
+Each priced item carries tags, drawn from four sources that are worth different
+amounts and kept apart rather than flattened into one confident list:
+
+| Source | Tags | Evidence |
+| --- | --- | --- |
+| Nutrition | high protein, source of protein, high/source of fibre, high sugar/salt/saturated fat, a health grade A–E | A confident match against the food catalogue, then the UK/EU labelling thresholds — "high protein" means the regulated 20% of energy, not "quite a lot". |
+| Diet | contains meat, contains fish, vegetarian, vegan (labelled), no animal ingredient named | The product name. A filter, never a certification. |
+| Processing | minimally processed, culinary ingredient, processed, ultra-processed | The product name, and labelled "(est.)" because a name is weak evidence. |
+| Value | good value somewhere, cheaper/dearer than usual, from £x/kg | This item's own prices across shops and over time. Never a judgement about a product from its price alone. |
+| Availability | newly listed at a shop | A shop pricing it now that was not in the previous check. |
+| You | bought before, you buy this often | Your own recorded shops. |
+
+The catalogue match is deliberately strict: `searchFoods` answers "milk" with
+"Milk chocolate", and a nutrition tag hung on the wrong food is worse than no
+tag, so a match only counts when every meaningful word of the catalogue name
+appears in what you typed. "Semi-skimmed milk" matches; bare "milk" gets no
+nutrition tags rather than the wrong ones.
+
+**Allergens only ever warn.** They are matched on a product name, which is good
+enough to raise "may contain" and nowhere near good enough to promise that
+something is free of anything — so the tag exists in that direction only, and
+appears only for allergens the household has actually declared. In the filter
+row they are phrased as "hide items that may contain".
+
+Filters combine with AND, so each tag you add narrows the list — selecting
+several and getting a *longer* list would be the opposite of filtering. Only
+tags something actually carries are offered, with counts, so no filter is a
+dead end. Sorting covers cheapest, best value per kg, healthiest, most bought,
+biggest gap between shops, and A–Z; anything unrankable (no readable pack size,
+no catalogue match) sorts last rather than being treated as zero.
+
 ### Ranking and price history
 
 Each item shows its shops **ranked cheapest to dearest**, with the gap to the

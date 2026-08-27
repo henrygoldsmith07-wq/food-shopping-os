@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Globe, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { shoppingNameKey } from '../lib/shopping.js';
@@ -6,9 +6,13 @@ import { checkAge, checkLivePricesForList, clearLivePriceCache } from '../lib/li
 import {
   clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
 } from '../lib/live-price-history.js';
+import { tagsForItem } from '../lib/food-tags.js';
+import { applyTagView, isAllergenTag, popularTags } from '../lib/food-tag-filters.js';
 import { Card, Section } from './ui.jsx';
 import LiveShopRanking from './LiveShopRanking.jsx';
 import LivePriceHistory from './LivePriceHistory.jsx';
+import FoodTags from './FoodTags.jsx';
+import FoodTagFilters from './FoodTagFilters.jsx';
 
 /**
  * Live prices, read from the shops' own search pages when you ask.
@@ -23,12 +27,16 @@ import LivePriceHistory from './LivePriceHistory.jsx';
  * Every item on the list is checked, not a sample. Each check is also kept, so
  * asking repeatedly builds the price history charted under each item.
  */
-export default function LivePriceCheck({ items = [], offlineMode = false, isOnline = true }) {
+export default function LivePriceCheck({
+  items = [], offlineMode = false, isOnline = true, allergens = [], purchaseCounts = {},
+}) {
   const [state, setState] = useState(null);
   const [history, setHistory] = useState(() => loadLivePriceHistory());
   const [progress, setProgress] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [sort, setSort] = useState('price');
   const abortRef = useRef(null);
 
   const run = async (force = false) => {
@@ -70,6 +78,34 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
   const priced = entries.filter(([, entry]) => entry?.best);
   const usedAi = entries.some(([, entry]) => entry?.aiUsed);
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  // Tags are derived from the result, the item's own price history and the
+  // household's declared allergies — never fetched, so this stays cheap enough
+  // to recompute whenever the results change.
+  const tagged = useMemo(() => items
+    .filter((item) => state?.byKey?.[shoppingNameKey(item.name)])
+    .map((item) => {
+      const entry = state.byKey[shoppingNameKey(item.name)];
+      const derived = tagsForItem({
+        name: item.name,
+        perRetailer: entry.perRetailer || [],
+        history: historyFor(history, item.name),
+        allergens,
+        purchaseCount: purchaseCounts[shoppingNameKey(item.name)] || 0,
+      });
+      return { ...derived, item, entry, perRetailer: entry.perRetailer || [] };
+    }), [items, state, history, allergens, purchaseCounts]);
+
+  const offered = useMemo(() => popularTags(tagged), [tagged]);
+  const view = useMemo(() => applyTagView(tagged, {
+    selected: selected.filter((id) => !isAllergenTag(id)),
+    excludeAllergens: selected.filter(isAllergenTag),
+    sort,
+  }), [tagged, selected, sort]);
+
+  const toggleTag = (id) => setSelected((current) => (
+    current.includes(id) ? current.filter((tag) => tag !== id) : [...current, id]
+  ));
 
   return (
     <Section className="rise rise-1" title="Live shop prices">
@@ -171,8 +207,24 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
             </Card>
           ) : (
             <div className="space-y-2.5">
-              {items.filter((item) => state.byKey[shoppingNameKey(item.name)]).map((item) => {
-                const entry = state.byKey[shoppingNameKey(item.name)];
+              <FoodTagFilters
+                tags={offered}
+                selected={selected}
+                onToggle={toggleTag}
+                onClear={() => setSelected([])}
+                sort={sort}
+                onSort={setSort}
+                shown={view.shown}
+                total={view.total}
+              />
+              {view.items.length === 0 && (
+                <Card className="text-center py-6">
+                  <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                    No item matches every filter. Clear one to widen it — filters combine, so each extra tag narrows the list further.
+                  </p>
+                </Card>
+              )}
+              {view.items.map(({ item, entry, tags }) => {
                 const past = historyFor(history, item.name);
                 return (
                   <Card key={item.id || item.name} className="!p-3.5">
@@ -192,6 +244,8 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
                         </div>
                       )}
                     </div>
+
+                    <FoodTags tags={tags} />
 
                     <LiveShopRanking perRetailer={entry.perRetailer} />
 
