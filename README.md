@@ -83,6 +83,34 @@ three ordinary visitors; three at one shop is a burst.
 The route is signed-in only, rate-limited to 60 requests an hour (up to 12 items
 each), and cached three hours on device.
 
+### The food catalogue
+
+Around **510 foods**, roughly 395 generic and 115 branded, split across files by
+what they are: core staples, the expanded generic list, the store cupboard,
+the deli/dessert/freezer counter, and two branded waves.
+
+Every food can be graded. That is a deliberate invariant with a test behind it:
+the health grade refuses to score without sugar, saturated fat and salt, so a
+row missing them would silently lose its grade rather than fail loudly. Rows
+added after the original files state those three outright via
+`src/data/food-row.js` instead of hoping a micronutrient profile exists.
+
+Two integrity checks guard the figures, because hand-entered nutrition data
+fails by typo rather than by design:
+
+- **Energy against macros** — every row's stated kcal is checked against
+  `4×protein + 4×carb + 9×fat + 2×fibre`, the UK/EU calculation. Fibre at
+  2 kcal/g is not a detail: leave it out and every spice looks fabricated,
+  because a third of ground cinnamon is fibre. Alcohol (7 kcal/g) is not
+  modelled, so rows tagged `alcohol` are exempt.
+- **Sub-components against parents** — sugar never exceeds carbohydrate,
+  saturated fat never exceeds fat.
+
+Naming follows the catalogue's own convention: qualifiers go **after a comma**
+("Lentils, cooked", "Pesto, green"), because the matcher ignores anything after
+a comma or inside brackets. That is what lets a shopping list saying "pesto"
+find the entry while "milk" still refuses to match "Milk chocolate".
+
 ### Branded products
 
 The catalogue carries popular UK branded groceries — Heinz Baked Beans,
