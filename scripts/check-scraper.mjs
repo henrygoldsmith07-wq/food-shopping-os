@@ -19,7 +19,7 @@
  */
 
 import { RETAILERS } from '../src/data/retailers.js';
-import { isScrapeAllowed } from '../src/server/robots.js';
+import { isScrapeAllowed, looksIntercepted } from '../src/server/robots.js';
 import { USER_AGENT, availableStrategies, runStrategy } from '../src/server/crawler.js';
 import { deterministicPass } from '../src/server/price-scraper.js';
 import { isMatch, searchQueries } from '../src/server/search-terms.js';
@@ -45,7 +45,52 @@ console.log(`User agent: ${USER_AGENT}`);
 console.log(`Fetch strategies available: ${availableStrategies().join(' → ') || '(none)'}`);
 line('=');
 
-const tally = { declined: 0, blocked: 0, unreachable: 0, empty: 0, priced: 0 };
+const tally = { declined: 0, blocked: 0, unreachable: 0, empty: 0, priced: 0, network: 0 };
+
+/**
+ * Can this machine reach the open web at all?
+ *
+ * Without this the report is worse than useless. Every shop's robots.txt goes
+ * through the same connection, so a blocked network produces nine identical
+ * refusals and a headline of "Priced: 0" — which reads as "the scraper does
+ * not work" when it means "this machine cannot reach anything". A control
+ * host that is nobody's retailer settles which of the two is true before a
+ * single shop is judged.
+ */
+const reachable = async (url) => {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'user-agent': USER_AGENT },
+      signal: AbortSignal.timeout(10000),
+    });
+    const body = await response.text().then((text) => text.slice(0, 2000)).catch(() => '');
+    if (response.ok) return { ok: true };
+    return {
+      ok: false,
+      status: response.status,
+      intercepted: looksIntercepted(body, response),
+      note: body.replace(/\s+/g, ' ').trim().slice(0, 140),
+    };
+  } catch (error) {
+    return { ok: false, status: null, intercepted: false, note: error.message };
+  }
+};
+
+const control = await reachable('https://example.com/');
+if (!control.ok) {
+  console.log('NO OUTBOUND NETWORK FROM THIS MACHINE');
+  console.log(`  Control host example.com answered ${control.status ?? 'nothing'}: ${control.note}`);
+  console.log(control.intercepted
+    ? '  That is a proxy, firewall or egress policy answering — not the shops.'
+    : '  The request never completed.');
+  console.log('');
+  console.log('  Every shop below would report the same failure for the same reason,');
+  console.log('  so no hit rate is measured. Run this again from a machine with');
+  console.log('  ordinary internet access to get a real one.');
+  line('=');
+  process.exit(0);
+}
 
 for (const retailer of shops) {
   const url = retailer.search(query);
@@ -58,6 +103,11 @@ for (const retailer of shops) {
   } catch (error) {
     console.log(`robots check threw — ${error.message}`);
     tally.unreachable += 1;
+    continue;
+  }
+  if (permission.reason === 'network-blocked') {
+    console.log('BLOCKED BY THIS NETWORK (not by the shop)');
+    tally.network += 1;
     continue;
   }
   if (!permission.allowed) {
@@ -102,7 +152,17 @@ for (const retailer of shops) {
 }
 
 line('=');
-console.log(`Priced: ${tally.priced}  ·  Declined by robots: ${tally.declined}  ·  No price: ${tally.empty}  ·  Errors: ${tally.unreachable}`);
+const asked = tally.priced + tally.declined + tally.empty + tally.unreachable;
+console.log(`Priced: ${tally.priced}  ·  Declined by robots: ${tally.declined}  ·  No match: ${tally.empty}  ·  Errors: ${tally.unreachable}`
+  + (tally.network ? `  ·  Blocked by this network: ${tally.network}` : ''));
+if (asked > 0) {
+  // The hit rate counts shops that were actually asked. Counting shops this
+  // machine could not reach would make a broken connection look like a broken
+  // scraper, which is the specific lie this report exists to avoid.
+  console.log(`Hit rate: ${Math.round((tally.priced / asked) * 100)}% of the ${asked} shop(s) actually reached.`);
+} else {
+  console.log('Hit rate: not measured — no shop was reached from this machine.');
+}
 
 // 3. The AI ladder — are the model ids real?
 line();
