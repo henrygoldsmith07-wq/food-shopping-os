@@ -8,6 +8,9 @@ import {
 import {
   clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
 } from '../lib/live-price-history.js';
+import {
+  catalogueStats, clearProductCatalogue, loadProductCatalogue, productRows, recordProducts,
+} from '../lib/product-catalogue.js';
 import { liveMovements } from '../lib/live-price-alerts.js';
 import {
   dailyCheckDue, dailyCheckSettings, recordDailyCheck, setDailyCheckEnabled,
@@ -17,6 +20,7 @@ import { applyTagView, isAllergenTag, popularTags } from '../lib/food-tag-filter
 import { Card, Section } from './ui.jsx';
 import LiveShopRanking from './LiveShopRanking.jsx';
 import ShopLinks from './ShopLinks.jsx';
+import ProductShops from './ProductShops.jsx';
 import LivePriceHistory from './LivePriceHistory.jsx';
 import FoodTags from './FoodTags.jsx';
 import FoodTagFilters from './FoodTagFilters.jsx';
@@ -42,6 +46,7 @@ export default function LivePriceCheck({
 }) {
   const [state, setState] = useState(null);
   const [history, setHistory] = useState(() => loadLivePriceHistory());
+  const [catalogue, setCatalogue] = useState(() => loadProductCatalogue());
   const [progress, setProgress] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -71,6 +76,9 @@ export default function LivePriceCheck({
       // replacing today's answer with no memory of the last one.
       recordLivePrices(result.byKey);
       setHistory(loadLivePriceHistory());
+      // Every check also grows the cross-shop catalogue: what each shop calls
+      // this product, what size it sells, and what that works out at per unit.
+      setCatalogue(recordProducts(result.byKey));
       // A manual check counts as today's check. Otherwise opening the app
       // after checking by hand would immediately check the same list again.
       const rows = Object.values(result.byKey || {});
@@ -126,6 +134,7 @@ export default function LivePriceCheck({
   const usedAi = entries.some(([, entry]) => entry?.aiUsed);
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0;
   const coverage = coverageFor(state?.byKey);
+  const stats = catalogueStats(catalogue);
 
   // Tags are derived from the result, the item's own price history and the
   // household's declared allergies — never fetched, so this stays cheap enough
@@ -355,7 +364,9 @@ export default function LivePriceCheck({
                         </details>
                       )}
 
-                      <ShopLinks links={entry.shopLinks} name={item.name} />
+                      <ProductShops product={productRows(catalogue[shoppingNameKey(item.name)])} />
+
+                    <ShopLinks links={entry.shopLinks} name={item.name} />
 
                     <LivePriceHistory entry={past} />
                     </Card>
@@ -368,6 +379,15 @@ export default function LivePriceCheck({
               <p className="mt-2.5 inline-flex items-start gap-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--warn)' }}>
                 <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden="true" />
                 Some prices were read off the page by AI because the shop published no structured price data. Treat those as a hint and confirm at the shelf.
+              </p>
+            )}
+            {stats.products > 0 && (
+              <p className="mt-2.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Catalogue: {stats.products} product{stats.products === 1 ? '' : 's'} across{' '}
+                {stats.retailers} shop{stats.retailers === 1 ? '' : 's'} · {stats.rows} shop price
+                {stats.rows === 1 ? '' : 's'} recorded · {stats.comparable} sold at more than one
+                shop. It grows with every check, from shops that answered — nothing here is a
+                national price or an average.
               </p>
             )}
             <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
