@@ -106,7 +106,15 @@ const fetchRobots = async (origin, userAgent, fetchImpl) => {
     cache: 'no-store',
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  // 4xx means no robots.txt, which the spec reads as "everything permitted".
+  // 401 and 403 are the server saying "you may not have this", which is not
+  // the same as "there is nothing here". Reading them as an absent robots.txt
+  // would turn an explicit refusal into permission to crawl everything — the
+  // one direction this check must never fail in.
+  if (response.status === 401 || response.status === 403) {
+    return { body: '', status: 'forbidden' };
+  }
+  // Any other 4xx means no robots.txt, which the spec reads as "everything
+  // permitted".
   if (response.status >= 400 && response.status < 500) return { body: '', status: 'absent' };
   if (!response.ok) return { body: '', status: 'unreachable' };
   const body = (await response.text()).slice(0, MAX_ROBOTS_BYTES);
@@ -133,9 +141,10 @@ export const isScrapeAllowed = async (target, { userAgent = 'ForqBot', fetchImpl
   const key = `${url.origin}|${userAgent}`;
   const cached = cache.get(key);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    const denied = cached.status === 'unreachable' || cached.status === 'forbidden';
     return {
-      allowed: cached.status === 'unreachable' ? false : pathAllowed(cached.group, url.pathname + url.search),
-      reason: cached.status === 'unreachable' ? 'robots-unreachable' : 'robots',
+      allowed: denied ? false : pathAllowed(cached.group, url.pathname + url.search),
+      reason: denied ? `robots-${cached.status}` : 'robots',
       crawlDelay: cached.group?.crawlDelay ?? null,
       cached: true,
     };
@@ -150,6 +159,9 @@ export const isScrapeAllowed = async (target, { userAgent = 'ForqBot', fetchImpl
   cache.set(key, { group, status: result.status, fetchedAt: Date.now() });
   if (result.status === 'unreachable') {
     return { allowed: false, reason: 'robots-unreachable', crawlDelay: null, cached: false };
+  }
+  if (result.status === 'forbidden') {
+    return { allowed: false, reason: 'robots-forbidden', crawlDelay: null, cached: false };
   }
   return {
     allowed: pathAllowed(group, url.pathname + url.search),
