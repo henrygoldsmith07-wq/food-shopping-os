@@ -1,33 +1,54 @@
-import { useState } from 'react';
-import { Globe, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Globe, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { shoppingNameKey } from '../lib/shopping.js';
+import { checkAge, checkLivePricesForList, clearLivePriceCache } from '../lib/live-prices.js';
 import {
-  checkAge, checkLivePricesForList, clearLivePriceCache, methodLabel, methodTone, viaLabel,
-} from '../lib/live-prices.js';
-import { Card, Pill, Section } from './ui.jsx';
+  clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
+} from '../lib/live-price-history.js';
+import { Card, Section } from './ui.jsx';
+import LiveShopRanking from './LiveShopRanking.jsx';
+import LivePriceHistory from './LivePriceHistory.jsx';
 
 /**
  * Live prices, read from the shops' own search pages when you ask.
  *
- * This is the only place in Forq that fetches a price from a retailer, and it
- * is built to be doubted: every row says which shop it came from, how the
- * number was obtained, and links to the page it was read off. Shops that
- * refused or failed are listed too — a short table with three shops in it
- * means five shops said no, and hiding that would make the comparison look
- * more complete than it is.
+ * The only place in Forq that fetches a price from a retailer, and built to be
+ * doubted: every row says which shop it came from, how the number was
+ * obtained, and links to the page it was read off. Shops that refused or
+ * failed are listed too — a short table with three shops in it means five
+ * shops said no, and hiding that would make the comparison look more complete
+ * than it is.
+ *
+ * Every item on the list is checked, not a sample. Each check is also kept, so
+ * asking repeatedly builds the price history charted under each item.
  */
 export default function LivePriceCheck({ items = [], offlineMode = false, isOnline = true }) {
   const [state, setState] = useState(null);
+  const [history, setHistory] = useState(() => loadLivePriceHistory());
+  const [progress, setProgress] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const abortRef = useRef(null);
 
   const run = async (force = false) => {
     if (busy || !items.length || offlineMode || !isOnline) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setError('');
+    setProgress({ done: 0, total: items.length, name: null });
     try {
-      setState(await checkLivePricesForList(items, { force }));
+      const result = await checkLivePricesForList(items, {
+        force,
+        signal: controller.signal,
+        onProgress: setProgress,
+      });
+      setState(result);
+      // Keep the run, so checking again next week draws a line rather than
+      // replacing today's answer with no memory of the last one.
+      recordLivePrices(result.byKey);
+      setHistory(loadLivePriceHistory());
     } catch (caught) {
       setError(caught.status === 401
         ? 'Sign in to check live shop prices.'
@@ -37,20 +58,25 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
             ? 'Live price checking is switched off on this deployment.'
             : caught.message || 'Live price check failed.');
     } finally {
+      abortRef.current = null;
       setBusy(false);
+      setProgress(null);
     }
   };
 
+  const stop = () => abortRef.current?.abort();
+
   const entries = Object.entries(state?.byKey || {});
-  const withPrices = entries.filter(([, entry]) => entry?.best);
+  const priced = entries.filter(([, entry]) => entry?.best);
   const usedAi = entries.some(([, entry]) => entry?.aiUsed);
+  const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
     <Section className="rise rise-1" title="Live shop prices">
       <p className="text-[0.75rem] font-semibold mb-3" style={{ color: 'var(--muted)' }}>
         Read from each shop’s public search page at the moment you ask — not a
-        retailer feed, and not a quote. Shops that block automated requests or
-        price only after you pick a store will say so rather than go missing.
+        retailer feed, and not a quote. Every item on your list is checked, and
+        each check is kept so a price trend builds up over time.
       </p>
 
       <div className="flex flex-wrap gap-2 mb-3">
@@ -62,10 +88,20 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
           style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
           <span className="inline-flex items-center gap-1.5">
-            <Globe size={14} />
-            {offlineMode ? 'Offline mode' : !isOnline ? 'No connection' : busy ? 'Checking shops…' : state ? 'Check again' : 'Check shops for this list'}
+            <Globe size={14} aria-hidden="true" />
+            {offlineMode ? 'Offline mode' : !isOnline ? 'No connection' : busy ? 'Checking shops…' : state ? 'Check again' : `Check all ${items.length} item${items.length === 1 ? '' : 's'}`}
           </span>
         </button>
+        {busy && (
+          <button
+            type="button"
+            onClick={stop}
+            className="press rounded-2xl border px-3.5 py-2.5 text-[0.8125rem] font-bold"
+            style={{ borderColor: 'var(--line)' }}
+          >
+            <span className="inline-flex items-center gap-1.5"><X size={13} aria-hidden="true" /> Stop</span>
+          </button>
+        )}
         {state && !busy && (
           <button
             type="button"
@@ -73,44 +109,59 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
             className="press rounded-2xl border px-3.5 py-2.5 text-[0.8125rem] font-bold"
             style={{ borderColor: 'var(--line)' }}
           >
-            <span className="inline-flex items-center gap-1.5"><RefreshCw size={13} /> Ignore cache</span>
+            <span className="inline-flex items-center gap-1.5"><RefreshCw size={13} aria-hidden="true" /> Ignore cache</span>
           </button>
         )}
-        {state && (
+        {state && !busy && (
           <button
             type="button"
-            onClick={() => { clearLivePriceCache(); setState(null); setError(''); }}
+            onClick={() => {
+              clearLivePriceCache();
+              clearLivePriceHistory();
+              setState(null);
+              setHistory({});
+              setError('');
+            }}
             className="press rounded-2xl border px-3.5 py-2.5 text-[0.8125rem] font-bold"
             style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
           >
-            Clear cache
+            Clear cache & history
           </button>
         )}
       </div>
 
       {error && <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
 
+      {busy && progress && (
+        <div className="mb-3">
+          <div className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--line)' }}>
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${pct}%`, background: 'var(--accent)', transition: 'width 300ms ease' }}
+            />
+          </div>
+          <p role="status" className="mt-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+            Checked {progress.done} of {progress.total} — a few shops at a time, one request each, so none get hammered.
+          </p>
+        </div>
+      )}
+
       {!state && !busy && !error && (
         <Card className="text-center py-6">
           <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
             {items.length
-              ? 'Checks the first six items on your list across every shop Forq knows, one at a time. Results are cached for three hours.'
+              ? 'Checks every item on your list across every shop Forq knows. Results are cached for three hours, so checking again is cheap.'
               : 'Add items to your list first.'}
           </p>
         </Card>
       )}
 
-      {busy && (
-        <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-          Checking shops one at a time so none of them get hammered — this takes a moment.
-        </p>
-      )}
-
       {state && !busy && (
         <>
           <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--muted)' }}>
-            {withPrices.length} of {entries.length} item{entries.length === 1 ? '' : 's'} priced
+            {priced.length} of {entries.length} item{entries.length === 1 ? '' : 's'} priced
             {state.fromCache ? ` · ${state.fromCache} from the 3h cache` : ''}
+            {state.aborted ? ' · stopped early' : ''}
             {' · '}{checkAge(state.checkedAt).label}
           </p>
 
@@ -120,8 +171,9 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
             </Card>
           ) : (
             <div className="space-y-2.5">
-              {items.filter((item) => state.byKey[shoppingNameKey(item.name)]).slice(0, 6).map((item) => {
+              {items.filter((item) => state.byKey[shoppingNameKey(item.name)]).map((item) => {
                 const entry = state.byKey[shoppingNameKey(item.name)];
+                const past = historyFor(history, item.name);
                 return (
                   <Card key={item.id || item.name} className="!p-3.5">
                     <div className="flex items-start justify-between gap-3">
@@ -135,42 +187,13 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
                       </div>
                       {entry.best && (
                         <div className="text-right shrink-0">
-                          <p className="font-extrabold text-[1rem]">{gbp(entry.best.price, { always: true })}</p>
+                          <p className="font-extrabold text-[1rem] tabular-nums">{gbp(entry.best.price, { always: true })}</p>
                           <p className="text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>{entry.best.retailer}</p>
                         </div>
                       )}
                     </div>
 
-                    {entry.perRetailer?.length > 1 && (
-                      <div className="mt-2.5 divide-y" style={{ borderColor: 'var(--line)' }}>
-                        {entry.perRetailer.map((row) => (
-                          <div key={`${row.retailerId}-${row.name}`} className="flex items-center justify-between gap-3 py-1.5">
-                            <div className="min-w-0">
-                              <p className="text-[0.75rem] font-bold truncate">{row.retailer}</p>
-                              <p className="text-[0.6875rem] font-semibold truncate" style={{ color: 'var(--faint)' }}>
-                                {row.name}{row.packSize ? ` · ${row.packSize}` : ''}
-                                {viaLabel(row.via) ? ` · ${viaLabel(row.via)}` : ''}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Pill tone={methodTone(row.method)}>{methodLabel(row.method)}</Pill>
-                              <span className="text-[0.8125rem] font-extrabold">{gbp(row.price, { always: true })}</span>
-                              {row.url && (
-                                <a
-                                  href={row.url}
-                                  target="_blank"
-                                  rel="noreferrer noopener"
-                                  aria-label={`Open ${row.retailer} page for ${row.name}`}
-                                  style={{ color: 'var(--accent)' }}
-                                >
-                                  <ExternalLink size={13} />
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <LiveShopRanking perRetailer={entry.perRetailer} />
 
                     {entry.unanswered?.length > 0 && (
                       <details className="mt-2">
@@ -186,6 +209,8 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
                         </ul>
                       </details>
                     )}
+
+                    <LivePriceHistory entry={past} />
                   </Card>
                 );
               })}
@@ -194,12 +219,12 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
 
           {usedAi && (
             <p className="mt-2.5 inline-flex items-start gap-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--warn)' }}>
-              <AlertTriangle size={13} className="mt-px shrink-0" />
+              <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden="true" />
               Some prices were read off the page by AI because the shop published no structured price data. Treat those as a hint and confirm at the shelf.
             </p>
           )}
           <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-            Source: each shop’s own search page via <code className="font-mono">/api/integrations/scrape-prices</code> · robots.txt honoured · signed in, 20 checks/h · cached 3h on device.
+            Source: each shop’s own search page via <code className="font-mono">/api/integrations/scrape-prices</code> · robots.txt honoured · signed in, 60 requests/h · cached 3h · history kept on this device only.
           </p>
         </>
       )}

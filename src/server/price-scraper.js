@@ -257,15 +257,21 @@ export const cheapestAcross = (results = []) => {
 };
 
 /**
- * Check one product across shops, sequentially.
+ * Check one product across shops.
  *
- * Sequential on purpose: a parallel burst across eight retailers from one IP
- * is what turns a price check into something that looks like an attack, and
- * it is also what trips their rate limits.
+ * A few shops are checked at once, but never the same shop twice at once: the
+ * workers pull from a shared queue, so each retailer still receives strictly
+ * one request at a time with a gap after it. That is the part that matters —
+ * a burst at one shop is what trips its rate limit and looks like an attack,
+ * whereas one request each at three different shops is three ordinary
+ * visitors. Checking a whole shopping list one shop at a time would take
+ * minutes, which is its own kind of broken.
  */
+const SHOP_CONCURRENCY = Math.max(1, Number(process.env.PRICE_SCRAPER_CONCURRENCY || 3));
+
 export const scrapePrices = async (query, {
   retailerIds = [], fetchImpl = fetch, allowModel = true, signal, gapMs = 250,
-  strategies = null,
+  strategies = null, concurrency = SHOP_CONCURRENCY,
 } = {}) => {
   const trimmed = String(query || '').trim();
   const checkedAt = new Date().toISOString();
@@ -273,29 +279,39 @@ export const scrapePrices = async (query, {
     return { query: trimmed, results: [], cheapest: [], checkedAt, status: 'disabled' };
   }
   const shops = scrapeableRetailers(retailerIds);
-  const results = [];
-  for (const retailer of shops) {
-    if (signal?.aborted) break;
-    results.push(await scrapeRetailer(retailer, trimmed, {
-      fetchImpl, allowModel, signal, strategies,
-    }));
-    if (gapMs) await new Promise((resolve) => { setTimeout(resolve, gapMs); });
-  }
-  const cheapest = cheapestAcross(results);
+  // Indexed so results keep retailer order however the workers interleave.
+  const results = new Array(shops.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= shops.length || signal?.aborted) return;
+      results[index] = await scrapeRetailer(shops[index], trimmed, {
+        fetchImpl, allowModel, signal, strategies,
+      });
+      if (gapMs) await new Promise((resolve) => { setTimeout(resolve, gapMs); });
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
+  );
+  const settled = results.filter(Boolean);
+  const cheapest = cheapestAcross(settled);
   return {
     query: trimmed,
-    results,
+    results: settled,
     cheapest,
     best: cheapest[0] || null,
     checkedAt,
-    shopsChecked: results.length,
-    shopsAnswered: results.filter((result) => result.status === 'ok').length,
-    aiUsed: results.some((result) => result.rows.some((row) => row.method === 'ai-extracted')),
+    shopsChecked: settled.length,
+    shopsAnswered: settled.filter((result) => result.status === 'ok').length,
+    aiUsed: settled.some((result) => result.rows.some((row) => row.method === 'ai-extracted')),
     // Which fetch strategies were available, and which actually answered.
     // Worth surfacing: "eight shops, all answered by the renderer" and "eight
     // shops, all answered directly" are very different cost profiles.
     strategiesAvailable: strategies || availableStrategies(),
-    strategiesUsed: [...new Set(results.map((result) => result.via).filter(Boolean))],
+    strategiesUsed: [...new Set(settled.map((result) => result.via).filter(Boolean))],
     status: 'ok',
   };
 };

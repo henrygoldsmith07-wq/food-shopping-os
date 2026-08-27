@@ -128,7 +128,9 @@ export const scrapeRequestSchema = z.object({
 });
 
 export const scrapeListRequestSchema = z.object({
-  items: z.array(z.string().trim().min(2).max(120)).min(1).max(8),
+  // A whole shopping list is checked in batches. The cap is per request, not
+  // per list: the client sends as many batches as the list needs.
+  items: z.array(z.string().trim().min(2).max(120)).min(1).max(12),
   retailerIds: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
 });
 

@@ -67,10 +67,33 @@ a normal and honest outcome. The retailer hub still keeps your recorded receipt
 prices and saved offers, and still links to the official retailer site so you
 can confirm today's basket, stock and delivery or collection options yourself.
 
-The route is signed-in only, rate-limited to 20 checks an hour, cached three
-hours on device, and covers at most six list items per run — each of which fans
-out across every configured shop. Shops are checked one at a time rather than in
-parallel, which keeps a price check from looking like a burst of traffic.
+**Every item on the list is checked**, not a sample of it: a comparison that
+silently covers six of your twenty items is worse than useless, because it looks
+complete. The list goes up in batches, and the route stops starting new items
+when it nears its time budget and names the rest in `remaining`, which the
+client sends on — so a long list finishes across several requests rather than
+being cut off by a serverless timeout. Progress is shown while it runs and the
+run can be stopped.
+
+A few shops are checked at once, but never the same shop twice at once: workers
+pull from a shared queue, so each retailer still receives strictly one request
+at a time with a gap after it. One request each at three different shops is
+three ordinary visitors; three at one shop is a burst.
+
+The route is signed-in only, rate-limited to 60 requests an hour (up to 12 items
+each), and cached three hours on device.
+
+### Ranking and price history
+
+Each item shows its shops **ranked cheapest to dearest**, with the gap to the
+cheapest in pounds and percent — "Asda is 3p (3.4%) dearer" is a decision where
+two bare prices are only two facts. Tied shops share a rank.
+
+Every check is also kept on the device, one observation per item per shop per
+day, so asking repeatedly builds a **price history**: a timeline of the item's
+cheapest price, a small chart per shop, and which shop has been cheapest most
+often — which is a better guide than whoever happens to be cheapest today.
+History never leaves the device and is cleared with the cache.
 
 ### Why a plain fetch is not enough
 
