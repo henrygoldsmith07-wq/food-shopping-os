@@ -180,6 +180,40 @@ cheapest price, a small chart per shop, and which shop has been cheapest most
 often — which is a better guide than whoever happens to be cheapest today.
 History never leaves the device and is cleared with the cache.
 
+### A price for every item
+
+The live scraper cannot have a 100% hit rate, and that is not a parser bug to
+fix. Several shops forbid their search pages in robots.txt; several more return
+403 to anything that is not a browser; many UK grocers publish no price at all
+until a store is chosen. The ways round those are ignoring robots.txt and
+evading bot detection, and Forq does neither.
+
+So the scraper is not the only source. Four already exist, each right about
+something slightly different, and every item is resolved through all of them:
+
+| Source | What it is | Worth |
+| --- | --- | --- |
+| **Live from the shop** | read from a shop's page just now | most current, least certain it is the product you meant |
+| **You paid this** | your own receipt | certainly the right product, possibly months old |
+| **From an earlier check** | a previous live check, kept on this device | dated, and it was a search result |
+| **Community observed** | a dated Open Prices report | often another town |
+
+Each candidate is scored as **source weight × freshness**, where freshness
+halves roughly every three months rather than falling off a cliff. That is why
+a three-day-old receipt beats a 200-day-old community report, and why a
+two-day-old check beats a year-old receipt — a fixed ranking could not express
+either.
+
+Every row shows which source answered and how old it is, and the basket total
+says **what share of it is live**, so it never quietly borrows the authority of
+its freshest row. Where two sources disagree by more than half, that is flagged:
+it usually means a search matched a different product rather than the price
+moving.
+
+**Nothing is ever invented to fill a gap.** An item no source knows about says
+so. A made-up number would look exactly like a real one at a glance, which is
+the failure this design exists to prevent.
+
 ### Why a plain fetch is not enough
 
 Most UK grocery search pages render their products in the browser. The HTML

@@ -6,10 +6,14 @@ import { priceHistory } from '../lib/kitchen.js';
 import { compareStores, savingsAvailable, shoppingNameKey } from '../lib/shopping.js';
 import { suitabilityContextFrom } from '../lib/food-suitability.js';
 import { fetchObservedForList, observedStaleness, clearObservedPriceCache } from '../lib/observed-prices.js';
+import { loadLivePriceCache } from '../lib/live-prices.js';
+import { loadLivePriceHistory } from '../lib/live-price-history.js';
+import { receiptsByKey } from '../lib/price-resolver.js';
 import { Card, Pill, Sparkline, Section } from './ui.jsx';
 import { Glyph } from './icons.jsx';
 import PriceGraphs from './PriceGraphs.jsx';
 import LivePriceCheck from './LivePriceCheck.jsx';
+import ResolvedPrices from './ResolvedPrices.jsx';
 
 /**
  * Price comparison, from three sources kept deliberately apart.
@@ -45,14 +49,28 @@ export default function PriceCompare() {
     return counts;
   }, [app.shops]);
   const [observed, setObserved] = useState(null); // { byKey, checkedAt, fromCache, fetched, error } | null
+  // Bumped whenever a check finishes, so the resolver re-reads the on-device
+  // stores rather than holding a stale copy of them.
+  const [priceEpoch, setPriceEpoch] = useState(0);
   const [observedBusy, setObservedBusy] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
+  // Everything the app knows about prices, from the four places it knows it.
+  // Read fresh on each epoch: the live cache and the dated history both live
+  // on the device and are written by the checker below, so a completed check
+  // has to be able to pull them again.
+  const priceSources = useMemo(() => ({
+    scraped: loadLivePriceCache(),
+    history: loadLivePriceHistory(),
+    receipts: receiptsByKey(history),
+    observed: observed?.byKey || {},
+  }), [history, observed, priceEpoch]);
   const fetchObserved = async () => {
     if (!app.shoppingList.length || observedBusy || app.shoppingPreferences?.offlineMode) return;
     setObservedBusy(true);
     try {
       const result = await fetchObservedForList(app.shoppingList);
       setObserved(result);
+      setPriceEpoch((value) => value + 1);
     } catch (error) {
       setObserved({ byKey: {}, checkedAt: new Date().toISOString(), error: error.status === 401 ? 'Sign in to check community observations.' : error.status === 429 ? 'Too many checks — try again in a few minutes.' : (error.message || 'Community observations unavailable.') });
     } finally {
@@ -151,11 +169,14 @@ export default function PriceCompare() {
         </Section>
       )}
 
+      <ResolvedPrices items={app.shoppingList} sources={priceSources} />
+
       <LivePriceCheck
         items={app.shoppingList}
         offlineMode={Boolean(app.shoppingPreferences?.offlineMode)}
         allergens={allergens}
         purchaseCounts={purchaseCounts}
+        onChecked={() => setPriceEpoch((value) => value + 1)}
       />
 
       <Section className="rise rise-1" title="Community observed prices">

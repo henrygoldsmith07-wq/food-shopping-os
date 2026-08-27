@@ -30,6 +30,7 @@ import BrandedSuggestions from './BrandedSuggestions.jsx';
  */
 export default function LivePriceCheck({
   items = [], offlineMode = false, isOnline = true, allergens = [], purchaseCounts = {},
+  onChecked,
 }) {
   const [state, setState] = useState(null);
   const [history, setHistory] = useState(() => loadLivePriceHistory());
@@ -58,6 +59,8 @@ export default function LivePriceCheck({
       // replacing today's answer with no memory of the last one.
       recordLivePrices(result.byKey);
       setHistory(loadLivePriceHistory());
+      // Tell the resolver above that there is fresh evidence to fold in.
+      onChecked?.();
     } catch (caught) {
       setError(caught.status === 401
         ? 'Sign in to check live shop prices.'
