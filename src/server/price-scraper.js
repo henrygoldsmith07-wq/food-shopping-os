@@ -26,7 +26,7 @@ import { freeChat, isOpenRouterConfigured } from './openrouter.js';
 import { isScrapeAllowed } from './robots.js';
 import { USER_AGENT, availableStrategies, crawlPage } from './crawler.js';
 import {
-  condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
+  absoluteUrl, condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
   productsFromMicrodata, productsFromText,
 } from './scrape-parse.js';
 import { isMatch, matchScore, searchQueries } from './search-terms.js';
@@ -181,6 +181,7 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
   };
   const url = retailer.search(query);
   if (!url) return { ...base, status: 'no-search-url', note: 'This shop has no public product search.' };
+  base.url = url;
 
   const permission = await isScrapeAllowed(url, { userAgent: USER_AGENT, fetchImpl }).catch(() => null);
   if (!permission?.allowed) {
@@ -261,7 +262,14 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
       ...row,
       retailerId: retailer.id,
       retailer: retailer.name,
-      url: row.url || url,
+      // The product's own page where the shop gave one, resolved against the
+      // page it was found on. Falling back to the search URL keeps every row
+      // clickable — a link to the results is worth more than no link, and
+      // `isProductLink` says which of the two this is rather than letting
+      // them look alike.
+      url: absoluteUrl(row.url || row.href, url) || url,
+      isProductLink: Boolean(absoluteUrl(row.url || row.href, url)),
+      searchUrl: url,
       via: crawl.via,
       source: 'scraped',
       sourceLabel: `${retailer.name} search page`,

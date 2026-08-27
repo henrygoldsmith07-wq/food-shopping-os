@@ -204,6 +204,33 @@ const firstOffer = (node) => {
 };
 
 /**
+ * Turn whatever a page put in an href into a link that will actually open.
+ *
+ * Retailers write product links every way the spec allows — absolute,
+ * root-relative, protocol-relative, and relative to the search path. A link
+ * that 404s is worse than no link, because the person has already decided to
+ * trust it by the time it fails, so anything that will not resolve against
+ * the page it was found on is dropped rather than guessed at.
+ */
+export const absoluteUrl = (href, base) => {
+  const raw = String(href || '').trim();
+  if (!raw || /^(?:javascript|mailto|tel):/i.test(raw) || raw.startsWith('#')) return null;
+  try {
+    const resolved = new URL(raw, base || undefined);
+    return /^https?:$/.test(resolved.protocol) ? resolved.href : null;
+  } catch {
+    return null;
+  }
+};
+
+/** The href of the last anchor opened before this point in the markup. */
+const anchorNear = (before, after) => {
+  const preceding = [...String(before).matchAll(/<a\b[^>]*\bhref=["']([^"']+)["']/gi)].pop()?.[1];
+  if (preceding) return preceding;
+  return String(after).match(/<a\b[^>]*\bhref=["']([^"']+)["']/i)?.[1] || null;
+};
+
+/**
  * schema.org Products with a price. This is the retailer stating its own
  * price in a machine-readable format — the highest-confidence source we have.
  */
@@ -272,6 +299,10 @@ export const productsFromMicrodata = (html = '') => {
       name: cleanName.slice(0, 200),
       price,
       currency: normaliseCurrency(match[0]),
+      // The product's own page, when the card links to one. Kept raw here
+      // and resolved against the page URL by the caller, which is the only
+      // place that knows what this markup was fetched from.
+      href: anchorNear(before, after),
       url: null,
       brand: null,
       packSize: parsePackSize(cleanName),

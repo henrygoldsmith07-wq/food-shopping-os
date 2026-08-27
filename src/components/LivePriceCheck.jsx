@@ -16,6 +16,7 @@ import { brandedAlternatives, tagsForItem } from '../lib/food-tags.js';
 import { applyTagView, isAllergenTag, popularTags } from '../lib/food-tag-filters.js';
 import { Card, Section } from './ui.jsx';
 import LiveShopRanking from './LiveShopRanking.jsx';
+import ShopLinks from './ShopLinks.jsx';
 import LivePriceHistory from './LivePriceHistory.jsx';
 import FoodTags from './FoodTags.jsx';
 import FoodTagFilters from './FoodTagFilters.jsx';
@@ -333,14 +334,30 @@ export default function LivePriceCheck({
                           <ul className="mt-1.5 space-y-1">
                             {entry.unanswered.map((shop) => (
                               <li key={shop.retailerId} className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-                                <span className="font-bold">{shop.retailer}</span> — {shop.note || shop.status}
+                                {/* Still a link. The shop declined our reader,
+                                    not the person holding the phone. */}
+                                {shop.url ? (
+                                  <a
+                                    href={shop.url}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    className="font-bold"
+                                    style={{ color: 'var(--accent)' }}
+                                  >
+                                    {shop.retailer}
+                                    <span className="sr-only">{` — search ${shop.retailer} for ${item.name} yourself`}</span>
+                                  </a>
+                                ) : <span className="font-bold">{shop.retailer}</span>}
+                                {' — '}{shop.note || shop.status}
                               </li>
                             ))}
                           </ul>
                         </details>
                       )}
 
-                      <LivePriceHistory entry={past} />
+                      <ShopLinks links={entry.shopLinks} name={item.name} />
+
+                    <LivePriceHistory entry={past} />
                     </Card>
                   );
                 })}
