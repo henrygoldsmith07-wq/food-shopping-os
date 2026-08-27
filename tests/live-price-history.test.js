@@ -14,46 +14,96 @@ const row = (retailerId, retailer, price, extra = {}) => ({
 const entry = (rows) => ({ perRetailer: rows });
 
 describe('ranking the shops for one item', () => {
-  it('orders cheapest first and says how far above the cheapest each shop is', () => {
-    const ranked = rankShops([
+  // No pack sizes: nothing can be normalised, so the ticket is all there is.
+  it('falls back to the ticket price when no shop stated a pack size', () => {
+    const ranking = rankShops([
       row('asda', 'Asda', 1.5),
       row('tesco', 'Tesco', 1.45),
       row('ocado', 'Ocado', 1.9),
     ]);
-    expect(ranked.map((r) => [r.retailer, r.rank, r.over, r.overPct])).toEqual([
+    expect(ranking.basis).toBe('price');
+    expect(ranking.rows.map((r) => [r.retailer, r.rank, r.over, r.overPct])).toEqual([
       ['Tesco', 1, 0, 0],
       ['Asda', 2, 0.05, 3.4],
       ['Ocado', 3, 0.45, 31],
     ]);
-    expect(ranked[0].isCheapest).toBe(true);
-    expect(ranked.at(-1).isDearest).toBe(true);
+    expect(ranking.rows[0].isCheapest).toBe(true);
+    expect(ranking.rows.at(-1).isDearest).toBe(true);
+  });
+
+  it('ranks by what it costs per unit, which reverses the shelf edge', () => {
+    // 85p for 1.13L looks cheaper than £1.45 for 2.27L and is dearer a litre.
+    // This is the everyday case a price-only ranking gets backwards.
+    const ranking = rankShops([
+      row('aldi', 'Aldi', 0.85, { packSize: '1.13l' }),
+      row('tesco', 'Tesco', 1.45, { packSize: '2.27l' }),
+    ], { name: 'milk' });
+    expect(ranking.basis).toBe('unit');
+    expect(ranking.unitLabel).toBe('100ml');
+    expect(ranking.rows.map((r) => r.retailer)).toEqual(['Tesco', 'Aldi']);
+    expect(ranking.ticketMisleads).toBe(true);
+    expect(ranking.cheapestByTicket.retailer).toBe('Aldi');
+  });
+
+  it('measures the gap from the unrounded figures', () => {
+    // 6.39p and 7.52p per 100ml both round to a two-decimal price, and the
+    // gap between the rounded pair reads as 33% where the real one is 18%.
+    const ranking = rankShops([
+      row('aldi', 'Aldi', 0.85, { packSize: '1.13l' }),
+      row('tesco', 'Tesco', 1.45, { packSize: '2.27l' }),
+    ], { name: 'milk' });
+    expect(ranking.rows[1].overPct).toBe(17.8);
+    expect(rankingSpread(ranking)).toMatchObject({ pct: 17.8, saving: 0.02, unitLabel: '100ml' });
+  });
+
+  it('will not rank across scales, and says why', () => {
+    // Six eggs against 500g of eggs: both are eggs, neither is cheaper.
+    const ranking = rankShops([
+      row('tesco', 'Tesco', 1.6, { packSize: '6 pack' }),
+      row('lidl', 'Lidl', 1.4, { packSize: '500g' }),
+    ], { name: 'eggs' });
+    expect(ranking.basis).toBe('price');
+    expect(ranking.mixedScales).toBe(true);
+    expect(ranking.rows.map((r) => r.retailer)).toEqual(['Lidl', 'Tesco']);
+  });
+
+  it('will not rank per unit unless every shop can be compared', () => {
+    // Ranking eight shops per litre and appending a ninth on its ticket puts
+    // an incomparable row inside an ordered list.
+    const ranking = rankShops([
+      row('tesco', 'Tesco', 1.45, { packSize: '2.27l' }),
+      row('asda', 'Asda', 1.4),
+    ], { name: 'milk' });
+    expect(ranking.basis).toBe('price');
+    expect(ranking.mixedScales).toBe(false);
   });
 
   it('gives tied shops the same rank, because they are not first and second', () => {
-    const ranked = rankShops([
+    const ranking = rankShops([
       row('a', 'A', 2),
       row('b', 'B', 2),
       row('c', 'C', 3),
     ]);
-    expect(ranked.map((r) => r.rank)).toEqual([1, 1, 3]);
-    expect(ranked.filter((r) => r.isCheapest)).toHaveLength(2);
+    expect(ranking.rows.map((r) => r.rank)).toEqual([1, 1, 3]);
+    expect(ranking.rows.filter((r) => r.isCheapest)).toHaveLength(2);
   });
 
   it('does not mark a lone shop as dearest as well as cheapest', () => {
-    const ranked = rankShops([row('a', 'A', 2)]);
-    expect(ranked[0]).toMatchObject({ isCheapest: true, isDearest: false, over: 0 });
-    expect(rankingSpread(ranked)).toBeNull();
+    const ranking = rankShops([row('a', 'A', 2)]);
+    expect(ranking.rows[0]).toMatchObject({ isCheapest: true, isDearest: false, over: 0 });
+    expect(rankingSpread(ranking)).toBeNull();
   });
 
   it('reports the spread, which is what makes a ranking worth reading', () => {
     const spread = rankingSpread(rankShops([row('a', 'A', 1), row('b', 'B', 1.5)]));
-    expect(spread).toMatchObject({ saving: 0.5, pct: 50 });
+    expect(spread).toMatchObject({ saving: 0.5, pct: 50, basis: 'price' });
     expect(spread.cheapest.retailer).toBe('A');
   });
 
   it('ignores rows with no usable price rather than ranking them last', () => {
-    expect(rankShops([row('a', 'A', 1.2), { retailerId: 'b', retailer: 'B' }])).toHaveLength(1);
-    expect(rankShops([])).toEqual([]);
+    expect(rankShops([row('a', 'A', 1.2), { retailerId: 'b', retailer: 'B' }]).rows).toHaveLength(1);
+    expect(rankShops([]).rows).toEqual([]);
+    expect(rankShops([]).basis).toBe('none');
   });
 });
 

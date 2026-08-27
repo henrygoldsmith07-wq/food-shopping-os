@@ -3,6 +3,7 @@ import { CATALOGUE, FOODS } from '../src/data/foods.js';
 import { BRANDED_FOODS } from '../src/data/branded-foods.js';
 import { BRANDED_FOODS_EXTRA } from '../src/data/branded-foods-extra.js';
 import { STORE_CUPBOARD_FOODS } from '../src/data/store-cupboard-foods.js';
+import { GLOBAL_PANTRY_FOODS } from '../src/data/global-pantry-foods.js';
 import { DELI_DESSERT_FOODS } from '../src/data/deli-dessert-foods.js';
 import { healthScore, matchFood } from '../src/lib/food-tags.js';
 
@@ -166,5 +167,41 @@ describe('the expanded catalogue is reachable', () => {
   it('reaches the catalogue the rest of the app searches', () => {
     expect(CATALOGUE.length).toBeGreaterThanOrEqual(FOODS.length);
     expect(FOODS.length).toBeGreaterThan(500);
+  });
+});
+
+describe('the fourth wave of foods', () => {
+  const byId = new Map(FOODS.map((food) => [food.id, food]));
+
+  it('adds the tins and cupboard staples the catalogue could not recognise', () => {
+    // Tinned tuna is one of the most bought products in Britain and the app
+    // did not know what it was.
+    for (const id of [
+      'tuna-brine', 'tuna-oil', 'scallops', 'split-peas', 'soya-mince',
+      'semolina', 'shredded-suet', 'gochujang', 'rice-vinegar', 'plantain',
+    ]) {
+      expect(byId.has(id), id).toBe(true);
+    }
+  });
+
+  it('states the three figures a health grade needs on every new row', () => {
+    for (const food of GLOBAL_PANTRY_FOODS) {
+      for (const key of ['sugar', 'satFat', 'sodium']) {
+        expect(Number.isFinite(food.per100?.[key]), `${food.name} ${key}`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps bicarbonate of soda’s salt figure, which is not a typo', () => {
+    // Sodium bicarbonate really is 27g of sodium per 100g. It is also used a
+    // teaspoon at a time, which is why the portion carries as much weight as
+    // the per-100g row.
+    const bicarb = byId.get('bicarbonate-of-soda');
+    expect(bicarb.per100.sodium).toBeGreaterThan(20000);
+    expect(bicarb.servings[0].grams).toBeLessThanOrEqual(5);
+  });
+
+  it('measures buttermilk in millilitres, like the carton it comes in', () => {
+    expect(byId.get('buttermilk').unit).toBe('ml');
   });
 });

@@ -243,7 +243,10 @@ describe('sorting', () => {
   });
 
   it('sorts by the gap between shops, biggest first', () => {
-    expect(shopSpread(tagged[0])).toBe(2);
+    // A percentage, not money: pennies per 100ml and pennies per pack are not
+    // the same currency, and this list mixes items that are measured both
+    // ways. £1 against £3 is a 200% gap.
+    expect(shopSpread(tagged[0])).toBe(200);
     expect(shopSpread(tagged[1])).toBeNull();
     expect(names('saving')[0]).toBe('Lentils');
     // Items with only one shop cannot have a gap, so they sort last rather

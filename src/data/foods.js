@@ -11,6 +11,7 @@ import { microsFor, microsFromBlend, fibreFromBlend } from './micronutrients.js'
 import { EXPANDED_FOODS } from './expanded-foods.js';
 import { BRANDED_FOODS } from './branded-foods.js';
 import { BRANDED_FOODS_EXTRA } from './branded-foods-extra.js';
+import { GLOBAL_PANTRY_FOODS } from './global-pantry-foods.js';
 import { STORE_CUPBOARD_FOODS } from './store-cupboard-foods.js';
 import { DELI_DESSERT_FOODS } from './deli-dessert-foods.js';
 
@@ -266,6 +267,7 @@ export const FOODS = [
   ...DELI_DESSERT_FOODS,
   ...BRANDED_FOODS,
   ...BRANDED_FOODS_EXTRA,
+  ...GLOBAL_PANTRY_FOODS,
 ];
 
 /* ---------- Restaurant menus ----------

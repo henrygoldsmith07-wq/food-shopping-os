@@ -17,6 +17,8 @@
  *    matching is not reliable enough to be trusted in that direction.
  */
 
+import { rankShops, rankingSpread } from './live-prices.js';
+
 /** Tag ids that describe an allergen warning rather than a property. */
 export const isAllergenTag = (id) => String(id || '').startsWith('allergen:');
 
@@ -107,11 +109,19 @@ const missingLast = (a, b, pick, direction = 'asc') => {
   return direction === 'desc' ? right - left : left - right;
 };
 
-/** Spread between the cheapest and dearest shop for an item. */
+/**
+ * Spread between the best and worst shop for an item, per unit where the pack
+ * sizes allow it.
+ *
+ * "Biggest gap between shops" has to mean the same thing as the ranking it
+ * sends you to, or the sort puts an item at the top and the ranking underneath
+ * disagrees about which shop is dearest. The gap comes back as a percentage
+ * rather than as money, because pennies per 100ml and pennies per pack are not
+ * the same currency and sorting a list on a mixture of the two is meaningless.
+ */
 export const shopSpread = (item) => {
-  const prices = (item.perRetailer || []).map((row) => row.price).filter(Number.isFinite);
-  if (prices.length < 2) return null;
-  return Math.round((Math.max(...prices) - Math.min(...prices)) * 100) / 100;
+  const spread = rankingSpread(rankShops(item?.perRetailer || [], { name: item?.name }));
+  return spread?.pct ?? null;
 };
 
 export const sortItems = (tagged = [], sort = 'price') => {

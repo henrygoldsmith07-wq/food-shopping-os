@@ -14,6 +14,7 @@
  */
 
 import { shoppingNameKey } from './shopping.js';
+import { parseQuantity, unitPriceOf } from './measure.js';
 
 const STORAGE_KEY = 'forq.livePrices.v1';
 const TTL_MS = 3 * 60 * 60 * 1000;
@@ -139,47 +140,125 @@ export const bestPerRetailer = (result) => {
 };
 
 /**
- * Rank the shops for one item, cheapest first.
+ * Rank the shops for one item — by what it actually costs per unit.
  *
- * The gap is the point. "Tesco £1.45, Asda £1.50" is two facts; "Asda is 3p
- * (3.4%) dearer" is the decision. Ties share a rank, because two shops at the
- * same price are not first and second.
+ * Ticket price is the wrong comparison and it is wrong in a specific,
+ * everyday direction: the shop selling the small pack looks cheapest. A 1.13L
+ * bottle at 85p beats a 2.27L bottle at £1.45 on the shelf edge and loses by
+ * 15% a litre. Ranking on the ticket does not merely fail to help, it hands
+ * back the wrong answer with a number attached.
+ *
+ * So the ranking is per unit wherever the sizes allow it, and says which basis
+ * it used. Two cases fall back to the ticket, both flagged rather than
+ * silently papered over:
+ *
+ *  - **No sizes.** Some shops publish a price and no quantity. Nothing can be
+ *    normalised, so the ticket is all there is.
+ *  - **Mixed scales.** Six eggs against 500g of eggs. Both are eggs, neither
+ *    is cheaper, and a ranking that mixes per-item with per-100g is a number
+ *    that means nothing.
+ *
+ * The gap is still the point. "Tesco £1.45, Asda £1.50" is two facts; "Asda
+ * is 8% dearer a litre" is the decision. Ties share a rank, because two shops
+ * at the same value are not first and second.
  */
-export const rankShops = (perRetailer = []) => {
-  const rows = [...perRetailer]
-    .filter((row) => typeof row?.price === 'number')
-    .sort((a, b) => a.price - b.price);
-  if (!rows.length) return [];
-  const cheapest = rows[0].price;
-  const dearest = rows.at(-1).price;
+export const rankShops = (perRetailer = [], { name } = {}) => {
+  const rows = [...perRetailer].filter((row) => typeof row?.price === 'number' && row.price > 0);
+  if (!rows.length) {
+    return { rows: [], basis: 'none', unitLabel: null, mixedScales: false, ticketMisleads: false };
+  }
+
+  const withUnit = rows.map((row) => {
+    const size = row.packSize || row.amount;
+    const ingredient = name || row.name;
+    const parsed = parseQuantity(size, { ingredient });
+    return {
+      ...row,
+      unit: unitPriceOf(row.price, parsed || size, { ingredient }),
+      // The displayed figure is rounded to the penny, which is right for
+      // reading and wrong for arithmetic: 6.39p and 7.52p per 100ml both round
+      // to a two-decimal price, and the gap between the rounded pair reads as
+      // 33% where the real one is 18%. Ordering and percentages use this.
+      exact: parsed?.amount > 0 ? row.price / parsed.amount : null,
+    };
+  });
+  const priced = withUnit.filter((row) => row.unit && row.exact !== null);
+  const scales = new Set(priced.map((row) => `${row.unit.dim}:${row.unit.unit}`));
+  // Every shop must be comparable, not most of them: ranking eight shops per
+  // litre and appending a ninth on its ticket price puts an incomparable row
+  // in an ordered list, which is exactly the confusion this is meant to end.
+  const byUnit = priced.length === withUnit.length && scales.size === 1;
+  const basis = byUnit ? 'unit' : 'price';
+
+  const value = (row) => (byUnit ? row.exact : row.price);
+  const sorted = [...withUnit].sort((a, b) => value(a) - value(b) || a.price - b.price);
+  const best = value(sorted[0]);
+  const worst = value(sorted.at(-1));
+  // The cheapest row's displayed figure, so the money gap is quoted in the
+  // same units the reader sees rather than in raw per-millilitre fractions.
+  const bestShown = byUnit ? sorted[0].unit.value : sorted[0].price;
+
   let rank = 0;
   let previous = null;
-  return rows.map((row, index) => {
-    if (previous === null || row.price !== previous) rank = index + 1;
-    previous = row.price;
+  const ranked = sorted.map((row, index) => {
+    const current = value(row);
+    if (previous === null || current !== previous) rank = index + 1;
+    previous = current;
     return {
       ...row,
       rank,
-      isCheapest: row.price === cheapest,
-      isDearest: rows.length > 1 && row.price === dearest && row.price !== cheapest,
-      over: Math.round((row.price - cheapest) * 100) / 100,
-      overPct: cheapest > 0 ? Math.round(((row.price - cheapest) / cheapest) * 1000) / 10 : null,
+      basis,
+      isCheapest: current === best,
+      isDearest: sorted.length > 1 && current === worst && current !== best,
+      // The gap on the basis actually used, so the percentage and the order
+      // can never disagree.
+      // The money gap stays in the reader's units: per-litre pennies, not the
+      // raw per-millilitre fraction the ordering is computed from.
+      over: Math.round(((byUnit ? row.unit.value : row.price) - bestShown) * 100) / 100,
+      overPct: best > 0 ? Math.round(((current - best) / best) * 1000) / 10 : null,
     };
   });
+
+  const cheapestByTicket = [...withUnit].sort((a, b) => a.price - b.price)[0];
+  return {
+    rows: ranked,
+    basis,
+    unitLabel: byUnit ? sorted[0].unit.unit : null,
+    mixedScales: scales.size > 1,
+    // True when the shop with the cheaper ticket is not the better buy — the
+    // case a price-only comparison gets backwards, worth saying out loud.
+    ticketMisleads: Boolean(byUnit && cheapestByTicket && ranked[0]
+      && cheapestByTicket.retailerId !== ranked[0].retailerId),
+    cheapestByTicket: cheapestByTicket || null,
+  };
 };
 
-/** What the whole ranked set is worth: the spread between best and worst. */
-export const rankingSpread = (ranked = []) => {
-  if (ranked.length < 2) return null;
-  const cheapest = ranked[0];
-  const dearest = ranked.at(-1);
+/**
+ * What the whole ranked set is worth: the spread between best and worst.
+ *
+ * Reported on the basis the ranking used. A saving quoted per litre against an
+ * order computed per litre is one claim; quoting a ticket saving over a value
+ * ranking would be two, and the reader would have to work out which.
+ */
+export const rankingSpread = (ranking) => {
+  const rows = Array.isArray(ranking) ? ranking : ranking?.rows || [];
+  if (rows.length < 2) return null;
+  const basis = Array.isArray(ranking) ? 'price' : ranking.basis;
+  const best = rows[0];
+  const worst = rows.at(-1);
+  // Quoted in the reader's units — rounded pennies per 100ml — but measured
+  // from the unrounded figures, or a 6.39p-to-7.52p gap reads as 33%.
+  const shown = (row) => (basis === 'unit' ? row.unit.value : row.price);
+  const exact = (row) => (basis === 'unit' ? row.exact : row.price);
+  const low = exact(best);
+  const high = exact(worst);
   return {
-    cheapest,
-    dearest,
-    saving: Math.round((dearest.price - cheapest.price) * 100) / 100,
-    pct: cheapest.price > 0
-      ? Math.round(((dearest.price - cheapest.price) / cheapest.price) * 1000) / 10
-      : null,
+    basis,
+    unitLabel: basis === 'unit' ? best.unit.unit : null,
+    cheapest: best,
+    dearest: worst,
+    saving: Math.round((shown(worst) - shown(best)) * 100) / 100,
+    pct: low > 0 ? Math.round(((high - low) / low) * 1000) / 10 : null,
   };
 };
 

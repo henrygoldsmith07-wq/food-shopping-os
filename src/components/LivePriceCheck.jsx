@@ -3,7 +3,7 @@ import { Globe, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { shoppingNameKey } from '../lib/shopping.js';
 import {
-  checkAge, checkLivePricesForList, clearLivePriceCache, coverageFor,
+  checkAge, checkLivePricesForList, clearLivePriceCache, coverageFor, rankShops,
 } from '../lib/live-prices.js';
 import {
   clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
@@ -307,6 +307,8 @@ export default function LivePriceCheck({
                 )}
                 {view.items.map(({ item, entry, tags, suggestions }) => {
                   const past = historyFor(history, item.name);
+                  // Best buy, on the same basis the ranking below uses.
+                  const bestValue = rankShops(entry.perRetailer, { name: item.name }).rows[0] || null;
                   return (
                     <Card key={item.id || item.name} className="!p-3.5">
                       <div className="flex items-start justify-between gap-3">
