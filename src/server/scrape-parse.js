@@ -165,7 +165,9 @@ const flattenNodes = (nodes, depth = 0) => {
   for (const node of nodes) {
     if (!node || typeof node !== 'object') continue;
     out.push(node);
-    for (const key of ['@graph', 'itemListElement', 'mainEntity', 'item', 'hasVariant']) {
+    // A schema.org ItemList wraps each entry in a ListItem whose `item` holds
+    // the actual Product. Not following that finds the wrappers and no prices.
+    for (const key of ['@graph', 'itemListElement', 'mainEntity', 'item', 'hasVariant', 'isSimilarTo', 'itemOffered']) {
       const child = node[key];
       if (Array.isArray(child)) out.push(...flattenNodes(child, depth + 1));
       else if (child && typeof child === 'object') out.push(...flattenNodes([child], depth + 1));
@@ -174,10 +176,31 @@ const flattenNodes = (nodes, depth = 0) => {
   return out;
 };
 
+/**
+ * The offer carrying a price.
+ *
+ * An AggregateOffer has no `price` of its own — it has `lowPrice`, which for a
+ * shopping list is the number that matters. Walking past it because the key is
+ * spelled differently loses every retailer that publishes a range.
+ */
 const firstOffer = (node) => {
   const offers = node?.offers;
-  const list = Array.isArray(offers) ? offers : [offers];
-  return list.find((offer) => offer && typeof offer === 'object' && offer.price !== undefined) || null;
+  const list = (Array.isArray(offers) ? offers : [offers]).filter(
+    (offer) => offer && typeof offer === 'object',
+  );
+  const priced = list.find((offer) => offer.price !== undefined);
+  if (priced) return priced;
+  const aggregate = list.find((offer) => offer.lowPrice !== undefined);
+  if (aggregate) return aggregate;
+  // An AggregateOffer often nests the real offers one level down.
+  for (const offer of list) {
+    const nested = offer.offers;
+    const inner = (Array.isArray(nested) ? nested : [nested]).find(
+      (row) => row && typeof row === 'object' && row.price !== undefined,
+    );
+    if (inner) return inner;
+  }
+  return null;
 };
 
 /**
@@ -209,19 +232,39 @@ export const productsFromJsonLd = (html = '') => {
   return rows;
 };
 
-/** itemprop="price" microdata — the same claim, one layer less structured. */
+/**
+ * itemprop="price" microdata, plus the `data-price` attributes UK retailers
+ * use in place of it — the same claim, one layer less structured.
+ *
+ * Three shapes, because real markup uses all three: the price in a `content`
+ * attribute, the price as the element's own text, and the price on a
+ * `data-*` attribute with no microdata at all. Reading only the first finds
+ * a fraction of the pages that actually state a price.
+ */
 export const productsFromMicrodata = (html = '') => {
   const source = String(html);
   const rows = [];
-  const matches = [...source.matchAll(
-    /<[^>]*itemprop=["']price["'][^>]*?(?:content|value)=["']([^"']+)["'][^>]*>/gi,
-  )];
+  const matches = [
+    // itemprop="price" content="1.45"
+    ...source.matchAll(/<[^>]*itemprop=["']price["'][^>]*?(?:content|value)=["']([^"']+)["'][^>]*>/gi),
+    // <span itemprop="price">£1.45</span>
+    ...source.matchAll(/<[^>]*itemprop=["']price["'][^>]*>([^<]{1,40})</gi),
+    // data-price="1.45" / data-product-price="145"
+    ...source.matchAll(/<[^>]*\bdata-(?:product-)?price=["']([^"']{1,20})["'][^>]*>/gi),
+  ].sort((a, b) => a.index - b.index);
+  const seen = new Set();
   for (const match of matches) {
+    if (seen.has(match.index)) continue;
+    seen.add(match.index);
     const price = parseMoney(match[1]);
     if (price === null) continue;
     const before = source.slice(Math.max(0, match.index - 1200), match.index);
+    // A card that carries the price on its wrapper has the name inside it, so
+    // looking only backwards misses every shop that markets up that way.
+    const after = source.slice(match.index, match.index + 1200);
     const name = [...before.matchAll(/itemprop=["']name["'][^>]*>([^<]{2,200})</gi)].pop()?.[1]
       || [...before.matchAll(/<(?:h2|h3|a)\b[^>]*>([^<]{4,200})</gi)].pop()?.[1]
+      || after.match(/itemprop=["']name["'][^>]*>([^<]{2,200})</i)?.[1]
       || '';
     const cleanName = decodeEntities(name).replace(/\s+/g, ' ').trim();
     if (!cleanName) continue;
@@ -249,7 +292,11 @@ export const productsFromText = (text = '', { query = '' } = {}) => {
   const lines = String(text).split('\n').map((line) => line.trim()).filter(Boolean);
   const rows = [];
   lines.forEach((line, index) => {
-    const priceMatch = line.match(/[£$€]\s?\d+(?:\.\d{1,2})?|\b\d{1,3}p\b/);
+    // Also matches a currency code, because plenty of pages render the symbol
+    // in a separate element and the flattened text reads "GBP 1.45".
+    const priceMatch = line.match(
+      /[£$€]\s?\d+(?:\.\d{1,2})?|\bGBP\s?\d+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?\s?GBP\b|\b\d{1,3}p\b/i,
+    );
     if (!priceMatch) return;
     const price = parseMoney(priceMatch[0]);
     if (price === null || price === 0) return;
@@ -258,6 +305,7 @@ export const productsFromText = (text = '', { query = '' } = {}) => {
     // on the line above. Letters are what make a remainder a name.
     const inline = line
       .replace(/[£$€]\s?\d+(?:\.\d{1,2})?(?:\s*(?:\/|per\s+)\s*[\w.]+)?/gi, ' ')
+      .replace(/\bGBP\s?\d+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?\s?GBP\b/gi, ' ')
       .replace(/\b\d{1,3}p\b/gi, ' ')
       .replace(/[^\p{L}\p{N} .,'&%()-]/gu, ' ')
       .replace(/\s+/g, ' ')

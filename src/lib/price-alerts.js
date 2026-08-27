@@ -39,7 +39,14 @@ export const normalisePriceAlertConfig = (raw = {}) => {
   };
 };
 
-const thresholdFor = (name, kind, config) => {
+/**
+ * The rise or fall threshold in force for one item, as a fraction.
+ *
+ * Exported so live-scraped prices are judged against exactly the same
+ * thresholds — including the per-item overrides — as receipt prices. Two
+ * separate notions of "a big rise" in one app would be one too many.
+ */
+export const thresholdFor = (name, kind, config) => {
   const key = shoppingNameKey(name);
   const perItem = config?.overrides?.[key];
   if (kind === 'rise') return (perItem?.risePct ?? config?.risePct ?? DEFAULT_RISE_PCT) / 100;

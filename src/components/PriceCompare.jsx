@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Store, TrendingUp, Search, Info } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { gbp } from '../lib/utils.js';
@@ -25,6 +25,18 @@ import LivePriceCheck from './LivePriceCheck.jsx';
  */
 export default function PriceCompare() {
   const app = useApp();
+  // A daily check that fires into a dead connection just burns the rate
+  // limit, so the live panel needs to know whether there is one.
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine !== false);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
   const history = useMemo(() => priceHistory(app.shops), [app.shops]);
   const stores = useMemo(() => compareStores(app.shoppingList, app.shops), [app.shoppingList, app.shops]);
   const savings = useMemo(() => savingsAvailable(app.shoppingList, app.shops), [app.shoppingList, app.shops]);
@@ -154,8 +166,10 @@ export default function PriceCompare() {
       <LivePriceCheck
         items={app.shoppingList}
         offlineMode={Boolean(app.shoppingPreferences?.offlineMode)}
+        isOnline={online}
         allergens={allergens}
         purchaseCounts={purchaseCounts}
+        alertConfig={app.priceAlertConfig}
       />
 
       <Section className="rise rise-1" title="Community observed prices">
