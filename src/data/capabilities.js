@@ -51,7 +51,7 @@ export const CAPABILITIES = [
   cap('recipeImport', 'Recipe URL import', 'partial',
     'Parses copied recipe text or schema.org Recipe JSON-LD/page source locally and keeps its source or video URL. Browser cross-origin rules block reliable direct fetching, so it does not upload that text or send it to OpenAI.'),
   cap('retailers', 'UK retailer integration', 'partial',
-    'Tesco, Sainsbury’s, Asda, Aldi, Lidl, Morrisons, Waitrose, Ocado and Amazon Fresh each have official shop, offers and fulfilment links. Recorded receipt prices and saved vouchers stay local. Barcode enrichment can use Open Food Facts and community observations can use Open Prices; Forq does not provide live supermarket prices or claim stock availability.'),
+    'Tesco, Sainsbury’s, Asda, Aldi, Lidl, Morrisons, Waitrose, Ocado and Amazon Fresh each have official shop, offers and fulfilment links. Recorded receipt prices and saved vouchers stay local. Barcode enrichment can use Open Food Facts and community observations can use Open Prices. Live prices are read from each shop’s public search page when you ask, honouring robots.txt, labelled with how each number was obtained and linked back to the page it came from; a shop that declines or prices only after a store is chosen says so rather than going missing. Forq does not claim stock availability.'),
   cap('menu', 'Restaurant menu analysis', 'built',
     'The chains the app ships figures for, read against your targets rather than against a star rating.'),
   cap('fasting', 'Fasting tracker', 'built',

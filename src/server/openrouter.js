@@ -2,29 +2,49 @@
  * Free-tier AI providers: NVIDIA NIM first, OpenRouter second.
  *
  * Both expose OpenAI-compatible catalogs. Chat model selection is ranked by
- * capability (Ultra → Super/Lightning → size tiers), excludes non-chat
- * endpoints (embeddings, rerankers, TTS, safety classifiers) and fails over
- * down the ranking. Free/unmetered providers bypass the household AI budget.
+ * capability (Nemotron Ultra → DeepSeek V4 Pro → GLM → Kimi → … → Laguna),
+ * excludes non-chat endpoints (embeddings, rerankers, TTS, safety classifiers)
+ * and fails over down the ranking one model at a time, so a rate-limited or
+ * withdrawn model costs a retry rather than the feature. Free/unmetered
+ * providers bypass the household AI budget.
  *
  * `freeVision` is the same failover over the subset of the catalog that can
  * actually read an image. Where none can, it says so rather than sending the
  * picture to a text model and returning whatever that hallucinates.
  */
 
-/** Capability order: position = preference. Tokens must all appear in the id. */
+/**
+ * Capability order: position = preference. Every token must appear in the id.
+ *
+ * The named ten are the ladder we were asked for, strongest first. The tail
+ * below them is deliberately generic: NVIDIA rotates its free catalog, so when
+ * none of the ten are being served the ranking still has something to walk
+ * down rather than falling back to alphabetical order.
+ */
 const CHAT_MODEL_ORDER = [
-  { name: 'Nemotron Ultra', tokens: ['ultra'] },
-  { name: 'GLM', tokens: ['glm'] },
-  { name: 'Lightning', tokens: ['lightning'] },
+  { name: 'Nemotron 3 Ultra 550B', tokens: ['nemotron', 'ultra'] },
+  { name: 'DeepSeek V4 Pro', tokens: ['deepseek', 'v4', 'pro'] },
+  { name: 'GLM-5.2', tokens: ['glm', '5.2'] },
+  { name: 'Kimi K2.6', tokens: ['kimi', 'k2.6'] },
+  { name: 'DeepSeek V4 Flash', tokens: ['deepseek', 'v4', 'flash'] },
+  { name: 'MiniMax M3', tokens: ['minimax', 'm3'] },
+  { name: 'Nemotron 3.5 Lightning', tokens: ['nemotron', 'lightning'] },
+  { name: 'Mistral Medium 3.5', tokens: ['mistral', 'medium'] },
+  { name: 'GPT-OSS-120B', tokens: ['gpt-oss'] },
+  { name: 'Poolside Laguna', tokens: ['laguna'] },
+  // Generic tail — catalog drift, not a preference in its own right.
+  { name: 'DeepSeek (any)', tokens: ['deepseek'] },
+  { name: 'GLM (any)', tokens: ['glm'] },
+  { name: 'Kimi (any)', tokens: ['kimi'] },
+  { name: 'Lightning (any)', tokens: ['lightning'] },
   { name: 'Super (non-nano)', tokens: ['super'] },
   { name: 'Gemma large', tokens: ['gemma'] },
+  { name: '70B class', tokens: ['70b'] },
   { name: '30B MoE', tokens: ['30b'] },
-  { name: 'Llama 70B class', tokens: ['70b'] },
   { name: '12B VL', tokens: ['12b'] },
   { name: '9B', tokens: ['9b'] },
   { name: 'LFM', tokens: ['lfm'] },
   { name: 'Inkling', tokens: ['inkling'] },
-  { name: 'Laguna', tokens: ['laguna'] },
 ];
 
 /** Endpoint-only models that can never serve chat completions. */
@@ -58,6 +78,9 @@ export const activeProvider = () => {
 };
 
 export const isOpenRouterConfigured = () => Boolean(activeProvider());
+
+/** The ranked ladder, for diagnostics and the backend status panel. */
+export const modelLadder = () => CHAT_MODEL_ORDER.map((entry) => entry.name);
 
 const matchScore = (id) => {
   const lower = id.toLowerCase();
@@ -100,13 +123,15 @@ export async function rankedFreeModels(fetchImpl = fetch) {
  * Chat completion with failover down the intelligence ranking. A 401 stops
  * immediately — a bad key never fixes itself on the next model.
  */
-export async function freeChat({ system, user, maxTokens = 1200, fetchImpl = fetch } = {}) {
+export async function freeChat({
+  system, user, maxTokens = 1200, temperature = 0.4, maxAttempts = 6, fetchImpl = fetch,
+} = {}) {
   const provider = activeProvider();
   if (!provider) throw new Error('no-free-model');
   const models = await rankedFreeModels(fetchImpl);
   if (!models.length) throw new Error('no-free-model');
   let lastError = null;
-  for (const model of models.slice(0, 6)) {
+  for (const model of models.slice(0, Math.max(1, maxAttempts))) {
     try {
       const res = await fetchImpl(`${provider.base}/chat/completions`, {
         method: 'POST',
@@ -116,7 +141,7 @@ export async function freeChat({ system, user, maxTokens = 1200, fetchImpl = fet
         },
         body: JSON.stringify({
           model,
-          temperature: 0.4,
+          temperature,
           max_tokens: maxTokens,
           messages: [
             { role: 'system', content: system },

@@ -122,6 +122,41 @@ export const observedPriceSchema = z.object({
   checkedAt: z.iso.datetime(),
 });
 
+export const scrapeRequestSchema = z.object({
+  query: z.string().trim().min(2).max(120),
+  retailerIds: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+});
+
+export const scrapeListRequestSchema = z.object({
+  items: z.array(z.string().trim().min(2).max(120)).min(1).max(8),
+  retailerIds: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+});
+
+export const scrapedPriceSchema = z.object({
+  name: z.string().max(200),
+  price: z.number().nonnegative().max(10000),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  packSize: z.string().max(40).nullable().optional(),
+  unitPrice: z.union([
+    z.string().max(40),
+    z.object({ value: z.number(), unit: z.string().max(20) }),
+  ]).nullable().optional(),
+  offer: z.string().max(120).nullable().optional(),
+  brand: z.string().max(200).nullable().optional(),
+  inStock: z.boolean().nullable().optional(),
+  url: z.url().nullable().optional(),
+  retailerId: z.string().max(40),
+  retailer: z.string().max(120),
+  // How the number was obtained, so the UI can say so rather than implying
+  // every scraped price is equally trustworthy.
+  method: z.enum(['json-ld', 'microdata', 'text', 'ai-extracted']),
+  confidence: z.enum(['high', 'medium', 'low']),
+  relevance: z.number().min(0).max(1).optional(),
+  source: z.literal('scraped'),
+  sourceLabel: z.string().max(200),
+  checkedAt: z.iso.datetime(),
+});
+
 const analyticsPropertyKey = z.string().refine((key) => [
   'screen', 'source', 'intent', 'scope', 'result', 'count', 'mealCount',
   'hasPantry', 'seasonal', 'leftoverFirst',
