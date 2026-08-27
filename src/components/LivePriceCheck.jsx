@@ -6,13 +6,14 @@ import { checkAge, checkLivePricesForList, clearLivePriceCache } from '../lib/li
 import {
   clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
 } from '../lib/live-price-history.js';
-import { tagsForItem } from '../lib/food-tags.js';
+import { brandedAlternatives, tagsForItem } from '../lib/food-tags.js';
 import { applyTagView, isAllergenTag, popularTags } from '../lib/food-tag-filters.js';
 import { Card, Section } from './ui.jsx';
 import LiveShopRanking from './LiveShopRanking.jsx';
 import LivePriceHistory from './LivePriceHistory.jsx';
 import FoodTags from './FoodTags.jsx';
 import FoodTagFilters from './FoodTagFilters.jsx';
+import BrandedSuggestions from './BrandedSuggestions.jsx';
 
 /**
  * Live prices, read from the shops' own search pages when you ask.
@@ -93,7 +94,14 @@ export default function LivePriceCheck({
         allergens,
         purchaseCount: purchaseCounts[shoppingNameKey(item.name)] || 0,
       });
-      return { ...derived, item, entry, perRetailer: entry.perRetailer || [] };
+      return {
+        ...derived,
+        item,
+        entry,
+        perRetailer: entry.perRetailer || [],
+        // Only worth offering where the shops could not price what was asked.
+        suggestions: entry.best ? [] : brandedAlternatives(item.name),
+      };
     }), [items, state, history, allergens, purchaseCounts]);
 
   const offered = useMemo(() => popularTags(tagged), [tagged]);
@@ -224,7 +232,7 @@ export default function LivePriceCheck({
                   </p>
                 </Card>
               )}
-              {view.items.map(({ item, entry, tags }) => {
+              {view.items.map(({ item, entry, tags, suggestions }) => {
                 const past = historyFor(history, item.name);
                 return (
                   <Card key={item.id || item.name} className="!p-3.5">
@@ -246,6 +254,11 @@ export default function LivePriceCheck({
                     </div>
 
                     <FoodTags tags={tags} />
+
+                    <BrandedSuggestions
+                      suggestions={suggestions}
+                      disabled={offlineMode || !isOnline}
+                    />
 
                     <LiveShopRanking perRetailer={entry.perRetailer} />
 

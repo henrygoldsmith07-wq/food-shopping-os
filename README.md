@@ -83,6 +83,30 @@ three ordinary visitors; three at one shop is a burst.
 The route is signed-in only, rate-limited to 60 requests an hour (up to 12 items
 each), and cached three hours on device.
 
+### Branded products
+
+The catalogue carries popular UK branded groceries — Heinz Baked Beans,
+Cathedral City, Warburtons, Quorn, Cadbury and so on — as entries in their own
+right alongside the generics. Two reasons, both practical:
+
+- **Nutrition differs by brand.** Two tins of beans on the same shelf are not
+  the same food, and a health grade built from a generic average is a grade for
+  something nobody bought.
+- **A retailer search for a named product finds it.** "Baked beans" comes back
+  as a wall of results the scraper cannot confidently price; "Heinz Baked Beans"
+  comes back as a product. Where a generic list item has named products behind
+  it, the price panel offers them and can price one on the spot — without
+  rewriting your list, because deciding that "beans" means Heinz is your call.
+
+Every branded row states sugar, saturated fat and salt explicitly rather than
+inheriting a generic profile. Those three drive the health grade, and an
+unknown there used to be read as zero — which would quietly grade a chocolate
+bar better than a bag of lentils. The grade now declines to score at all when
+they are unknown.
+
+Figures are typical published per-100g label values. Manufacturers reformulate:
+**the pack in your hand is the authority.**
+
 ### Tags, filtering and sorting
 
 Each priced item carries tags, drawn from four sources that are worth different
@@ -91,7 +115,7 @@ amounts and kept apart rather than flattened into one confident list:
 | Source | Tags | Evidence |
 | --- | --- | --- |
 | Nutrition | high protein, source of protein, high/source of fibre, high sugar/salt/saturated fat, a health grade A–E | A confident match against the food catalogue, then the UK/EU labelling thresholds — "high protein" means the regulated 20% of energy, not "quite a lot". |
-| Diet | contains meat, contains fish, vegetarian, vegan (labelled), no animal ingredient named | The product name. A filter, never a certification. |
+| Diet | contains meat, contains fish, vegetarian, vegan (labelled), no animal ingredient named | The matched catalogue entry's own tags where there is one, the product name otherwise. A filter, never a certification. |
 | Processing | minimally processed, culinary ingredient, processed, ultra-processed | The product name, and labelled "(est.)" because a name is weak evidence. |
 | Value | good value somewhere, cheaper/dearer than usual, from £x/kg | This item's own prices across shops and over time. Never a judgement about a product from its price alone. |
 | Availability | newly listed at a shop | A shop pricing it now that was not in the previous check. |

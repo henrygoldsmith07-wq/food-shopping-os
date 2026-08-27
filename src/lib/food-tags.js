@@ -20,6 +20,7 @@
  */
 
 import { ALLERGENS, MATCH_CAVEAT } from '../data/preferences.js';
+import { BRANDED_FOODS } from '../data/branded-foods.js';
 import { searchFoods } from './foodlog.js';
 
 const tag = (id, label, group, tone = 'muted', detail = null) => ({ id, label, group, tone, detail });
@@ -133,6 +134,11 @@ export const nutritionTags = (per100 = {}) => {
 export const healthScore = (per100 = {}) => {
   const kcal = Number(per100.kcal);
   if (!Number.isFinite(kcal)) return null;
+  // Sugar, saturated fat and salt are what push a grade down. Treating an
+  // unknown as zero would quietly grade a food we know nothing about better
+  // than one we do — so an unknown there means no grade, not a good one.
+  const known = (value) => value !== null && value !== undefined && Number.isFinite(Number(value));
+  if (!known(per100.sugar) || !known(per100.satFat) || !known(per100.sodium)) return null;
   const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
   let points = 0;
   // Limit
@@ -160,28 +166,54 @@ const MEAT = /\b(beef|pork|lamb|chicken|turkey|duck|bacon|ham|sausages?|mince|st
 const FISH = /\b(fish|salmon|tuna|cod|haddock|prawns?|shrimps?|anchov(y|ies)|sardines?|mackerel|crab|lobster|squid|mussels?|oysters?|scallops?)\b/i;
 const ANIMAL_NON_MEAT = /\b(milk|cheese|butter|cream|yogh?urt|egg|eggs|honey|ghee|whey|casein|custard|mayonnaise)\b/i;
 const PLANT_MARKER = /\b(vegan|plant based|plant-based|dairy free|dairy-free)\b/i;
+/**
+ * Products that say they are meat-free.
+ *
+ * This has to be checked before the meat words, because the meat words are
+ * exactly what a meat substitute is named after: "Quorn Meat Free Mince"
+ * matches "mince", and reading that as "contains meat" gets the answer
+ * precisely backwards for the person most likely to be filtering on it.
+ */
+const MEAT_FREE_MARKER = /\b(meat.free|meat.substitute|vegetarian|veggie|vegan)\b/i;
 
 /**
- * Diet tags read the product name. The app already draws a hard line between
- * an allergy and a preference; this is firmly the preference side, and it says
- * "by name" everywhere so it is never mistaken for a certification.
+ * Diet tags read the product name, and the catalogue entry behind it where
+ * there is one.
+ *
+ * The catalogue's own tags are much better evidence than the name: "Cathedral
+ * City Mature Cheddar" does not contain the word "cheese", and Nutella's name
+ * says nothing about the milk powder in it. Where a food was matched, its
+ * curated tags decide; the name is the fallback for everything else.
+ *
+ * The app already draws a hard line between an allergy and a preference; this
+ * is firmly the preference side, and it says "by name" wherever that is all it
+ * had, so it is never mistaken for a certification.
  */
-export const dietTags = (name) => {
+export const dietTags = (name, food = null) => {
   const text = String(name || '');
   const out = [];
-  if (PLANT_MARKER.test(text)) {
-    out.push(tag('vegan', 'Vegan (labelled)', 'diet', 'good', 'The product name says so.'));
+  const foodTags = new Set(food?.tags || []);
+  if (foodTags.has('vegan') || PLANT_MARKER.test(text)) {
+    out.push(tag('vegan', 'Vegan (labelled)', 'diet', 'good', 'The product states it.'));
     return out;
   }
-  const meat = MEAT.test(text);
-  const fish = FISH.test(text);
-  const animal = ANIMAL_NON_MEAT.test(text);
+  const meatFree = foodTags.has('meat-free') || MEAT_FREE_MARKER.test(text);
+  const meat = !meatFree && (foodTags.has('meat') || MEAT.test(text));
+  const fish = !meatFree && (foodTags.has('fish') || FISH.test(text));
+  const animal = ['dairy', 'cheese', 'egg', 'honey'].some((id) => foodTags.has(id))
+    || ANIMAL_NON_MEAT.test(text);
   if (meat) out.push(tag('contains-meat', 'Contains meat', 'diet', 'muted', MATCH_CAVEAT));
   if (fish) out.push(tag('contains-fish', 'Contains fish', 'diet', 'muted', MATCH_CAVEAT));
-  if (!meat && !fish && animal) {
-    out.push(tag('vegetarian', 'Vegetarian (by name)', 'diet', 'good', MATCH_CAVEAT));
+  if (!meat && !fish && (animal || meatFree)) {
+    out.push(tag(
+      'vegetarian',
+      meatFree ? 'Vegetarian' : 'Vegetarian (by name)',
+      'diet',
+      'good',
+      meatFree ? 'The product states it is meat-free.' : MATCH_CAVEAT,
+    ));
   }
-  if (!meat && !fish && !animal) {
+  if (!meat && !fish && !animal && !meatFree) {
     // No animal ingredient is *named*. That is not the same as vegan, and the
     // label says only what was actually checked.
     out.push(tag('no-animal-named', 'No animal ingredient named', 'diet', 'good', MATCH_CAVEAT));
@@ -194,16 +226,28 @@ const PROCESSED = /\b(bacon|ham|sausages?|salami|chorizo|tinned|canned|cured|smo
 const CULINARY = /\b(oil|butter|sugar|flour|salt|vinegar|syrup|honey)\b/i;
 
 /**
- * A NOVA-shaped estimate from the product name. Named "estimated" in the label
- * because a name is genuinely weak evidence — "tomato soup" says nothing about
- * whether it was made from tomatoes or from tomato concentrate and starch.
+ * A NOVA-shaped estimate, from the catalogue entry where there is one and the
+ * product name otherwise.
+ *
+ * "Estimated" stays in the label because a name is genuinely weak evidence —
+ * "tomato soup" says nothing about whether it was made from tomatoes or from
+ * concentrate and starch. A branded packaged grocery, though, is by definition
+ * a manufactured product, so it never reads as minimally processed however
+ * innocent its name looks.
  */
-export const processingTag = (name) => {
+export const processingTag = (name, food = null) => {
   const text = String(name || '');
-  if (ULTRA.test(text)) return tag('ultra-processed', 'Ultra-processed (est.)', 'processing', 'warn', 'Estimated from the product name.');
-  if (PROCESSED.test(text)) return tag('processed', 'Processed (est.)', 'processing', 'muted', 'Estimated from the product name.');
-  if (CULINARY.test(text)) return tag('culinary-ingredient', 'Culinary ingredient', 'processing', 'muted', 'Estimated from the product name.');
-  return tag('minimally-processed', 'Minimally processed (est.)', 'processing', 'good', 'Estimated from the product name.');
+  const foodTags = new Set(food?.tags || []);
+  const branded = food?.source === 'branded';
+  const why = branded ? 'A packaged branded product.' : 'Estimated from the product name.';
+  if (ULTRA.test(text) || (branded && (foodTags.has('treat') || foodTags.has('confectionery')))) {
+    return tag('ultra-processed', 'Ultra-processed (est.)', 'processing', 'warn', why);
+  }
+  if (PROCESSED.test(text)) return tag('processed', 'Processed (est.)', 'processing', 'muted', why);
+  if (CULINARY.test(text)) return tag('culinary-ingredient', 'Culinary ingredient', 'processing', 'muted', why);
+  // A branded pack is manufactured even where the name gives nothing away.
+  if (branded) return tag('processed', 'Processed (est.)', 'processing', 'muted', why);
+  return tag('minimally-processed', 'Minimally processed (est.)', 'processing', 'good', why);
 };
 
 /**
@@ -314,6 +358,34 @@ export const popularityTags = (name, purchaseCount = 0) => {
 };
 
 /**
+ * Branded products that could be what a generic list item means.
+ *
+ * "Baked beans" is a bad thing to ask a retailer for: the search page comes
+ * back as a wall of results the scraper cannot confidently price, which is one
+ * of the commonest reasons an item ends up with no price at all. "Heinz Baked
+ * Beans" comes back as a product. So where a generic item has named products
+ * behind it, they are offered as a swap.
+ *
+ * Matching is the other way round from `matchFood`: there, the catalogue name
+ * had to be covered by what the user typed; here the user's generic words have
+ * to be covered by the branded name, so "beans" reaches "Heinz Baked Beans"
+ * without "Heinz" reaching everything.
+ */
+export const brandedAlternatives = (name, { limit = 4, catalogue = BRANDED_FOODS } = {}) => {
+  const typed = words(name).filter((word) => word.length > 2);
+  if (!typed.length) return [];
+  return catalogue
+    .filter((food) => {
+      const brandWords = new Set(words(food.name));
+      // Already a specific product? Then there is nothing to swap it for.
+      if (typed.every((word) => brandWords.has(word)) && brandWords.size <= typed.length) return false;
+      return typed.every((word) => brandWords.has(word));
+    })
+    .slice(0, limit)
+    .map((food) => ({ id: food.id, name: food.name, brand: food.brand, emoji: food.emoji }));
+};
+
+/**
  * Everything known about one item, as one flat tag list plus the pieces the
  * sort functions need.
  */
@@ -325,8 +397,8 @@ export const tagsForItem = ({
   const health = per100 ? healthScore(per100) : null;
   const tags = [
     ...(per100 ? nutritionTags(per100) : []),
-    ...dietTags(name),
-    processingTag(name),
+    ...dietTags(name, food),
+    processingTag(name, food),
     ...allergenTags(name, allergens),
     ...valueTags(perRetailer, history),
     ...availabilityTags(perRetailer, history),

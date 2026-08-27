@@ -9,6 +9,7 @@
 
 import { microsFor, microsFromBlend, fibreFromBlend } from './micronutrients.js';
 import { EXPANDED_FOODS } from './expanded-foods.js';
+import { BRANDED_FOODS } from './branded-foods.js';
 
 const n = ([kcal, protein, carbs, fat, fibre = 0]) => ({ kcal, protein, carbs, fat, fibre });
 const s = (pairs) => pairs.map(([label, grams]) => ({ label, grams }));
@@ -252,7 +253,10 @@ const CORE_FOODS = [
     { tags: ['fruit', 'snack', 'high-fibre'], micronutrientId: 'blueberries' }),
 ];
 
-export const FOODS = [...CORE_FOODS, ...EXPANDED_FOODS];
+// Branded rows sit after the generics on purpose: a search for "baked beans"
+// should still land on the generic entry, while "Heinz baked beans" finds the
+// specific one. Order is the tie-breaker that keeps both working.
+export const FOODS = [...CORE_FOODS, ...EXPANDED_FOODS, ...BRANDED_FOODS];
 
 /* ---------- Restaurant menus ----------
    Menu items are stored the way a menu quotes them — calories, macros, portion
