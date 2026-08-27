@@ -57,12 +57,36 @@ let cachedAt = 0;
 // base URL and last provider's catalog is not an answer about this one.
 let cachedFor = '';
 
+/**
+ * Shipped NVIDIA key, used when the environment sets none.
+ *
+ * Embedded at the repo owner's explicit instruction: the key is free, carries
+ * no billing, and shipping it means the app works with no setup. Anyone
+ * self-hosting should still set NVIDIA_API_KEY, which always wins over this —
+ * a key in a public repo is one anybody can spend the rate limit on, and it
+ * cannot be rotated without a release.
+ */
+const BUNDLED_NVIDIA_KEY = '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';
+
+/**
+ * The NVIDIA key in force: environment first, bundled key as the fallback.
+ *
+ * Setting NVIDIA_API_KEY to an empty string is honoured as "no NVIDIA" rather
+ * than falling back to the bundled key, so a deployment can turn the shipped
+ * credential off without editing source.
+ */
+export const nvidiaKey = () => {
+  const configured = process.env.NVIDIA_API_KEY;
+  return configured === undefined || configured === null ? BUNDLED_NVIDIA_KEY : configured;
+};
+
 export const activeProvider = () => {
-  if (process.env.NVIDIA_API_KEY) {
+  const nvidia = nvidiaKey();
+  if (nvidia) {
     return {
       id: 'nvidia',
       base: (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, ''),
-      key: process.env.NVIDIA_API_KEY,
+      key: nvidia,
       suffix: null,
     };
   }

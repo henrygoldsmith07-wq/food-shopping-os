@@ -3,7 +3,7 @@ import { Globe, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { shoppingNameKey } from '../lib/shopping.js';
 import {
-  checkAge, checkLivePricesForList, clearLivePriceCache, methodLabel, methodTone,
+  checkAge, checkLivePricesForList, clearLivePriceCache, methodLabel, methodTone, viaLabel,
 } from '../lib/live-prices.js';
 import { Card, Pill, Section } from './ui.jsx';
 
@@ -149,6 +149,7 @@ export default function LivePriceCheck({ items = [], offlineMode = false, isOnli
                               <p className="text-[0.75rem] font-bold truncate">{row.retailer}</p>
                               <p className="text-[0.6875rem] font-semibold truncate" style={{ color: 'var(--faint)' }}>
                                 {row.name}{row.packSize ? ` · ${row.packSize}` : ''}
+                                {viaLabel(row.via) ? ` · ${viaLabel(row.via)}` : ''}
                               </p>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">

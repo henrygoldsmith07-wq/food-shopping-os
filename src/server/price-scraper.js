@@ -7,6 +7,10 @@
  *
  *   - robots.txt is checked before every fetch, and a refusal is reported as a
  *     refusal rather than silently dropped.
+ *   - Fetching escalates. Most UK grocery search pages render their products
+ *     in the browser, so a plain fetch returns a shell with no prices in it.
+ *     When a page yields nothing, the next fetch strategy up the ladder (a
+ *     headless renderer) is tried before the shop is written off as empty.
  *   - Deterministic parsing runs first. The language model is only asked when
  *     the page yields no structured data, and anything it returns is marked
  *     `ai-extracted` with lower confidence.
@@ -20,15 +24,12 @@
 import { RETAILERS, retailerById } from '../data/retailers.js';
 import { freeChat, isOpenRouterConfigured } from './openrouter.js';
 import { isScrapeAllowed } from './robots.js';
+import { USER_AGENT, availableStrategies, crawlPage } from './crawler.js';
 import {
   condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
   productsFromMicrodata, productsFromText, relevanceScore,
 } from './scrape-parse.js';
 
-const USER_AGENT = process.env.SCRAPER_USER_AGENT
-  || 'ForqBot/1.0 (+https://github.com/henrygoldsmith07-wq/food-shopping-os; price comparison for personal shopping lists)';
-const PAGE_TIMEOUT_MS = Number(process.env.SCRAPER_TIMEOUT_MS || 9000);
-const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_ROWS_PER_RETAILER = 8;
 const MIN_RELEVANCE = 0.34;
 
@@ -44,49 +45,6 @@ export const scrapeableRetailers = (ids = []) => {
   if (!ids.length) return pool;
   const wanted = new Set(ids.map((id) => retailerById(id)?.id).filter(Boolean));
   return pool.filter((entry) => wanted.has(entry.id));
-};
-
-/**
- * Fetch a page as a browser would, with hard caps.
- *
- * The byte cap matters: a retailer search page can be several megabytes of
- * inlined state, and reading all of it into a serverless function to find one
- * price is how a function runs out of memory.
- */
-const fetchPage = async (url, { fetchImpl = fetch, signal } = {}) => {
-  const response = await fetchImpl(url, {
-    headers: {
-      'user-agent': USER_AGENT,
-      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'accept-language': 'en-GB,en;q=0.9',
-    },
-    redirect: 'follow',
-    cache: 'no-store',
-    signal: signal || AbortSignal.timeout(PAGE_TIMEOUT_MS),
-  });
-  if (response.status === 429) {
-    const error = new Error('rate-limited');
-    error.code = 'rate-limited';
-    throw error;
-  }
-  if (response.status === 403 || response.status === 401) {
-    const error = new Error('blocked');
-    error.code = 'blocked';
-    throw error;
-  }
-  if (!response.ok) {
-    const error = new Error(`http-${response.status}`);
-    error.code = `http-${response.status}`;
-    throw error;
-  }
-  const type = response.headers?.get?.('content-type') || '';
-  if (type && !/html|xml|text\/plain|json/i.test(type)) {
-    const error = new Error('not-html');
-    error.code = 'not-html';
-    throw error;
-  }
-  const body = await response.text();
-  return body.length > MAX_PAGE_BYTES ? body.slice(0, MAX_PAGE_BYTES) : body;
 };
 
 const SYSTEM_PROMPT = `You read the text of a UK supermarket search results page and report the product prices printed on it.
@@ -174,9 +132,26 @@ export const verifyAgainstPage = (rows, pageText) => {
   });
 };
 
+/**
+ * Read one fetched page with the deterministic passes.
+ *
+ * A renderer that returns markdown has no JSON-LD or microdata to find, so
+ * only the text pass applies there; a page that returns HTML gets all three.
+ * The page text is kept alongside the rows because the model fallback and its
+ * verification both need the text this page actually contained.
+ */
+export const deterministicPass = (page, query) => {
+  const text = page.html ? condenseHtml(page.html) : String(page.markdown || '');
+  const structured = page.html
+    ? mergeCandidates([productsFromJsonLd(page.html), productsFromMicrodata(page.html)])
+    : [];
+  if (structured.length) return { rows: structured, text };
+  return { rows: mergeCandidates([productsFromText(text, { query })]), text };
+};
+
 /** Check one retailer for one product. Never throws — failure is a status. */
 export const scrapeRetailer = async (retailer, query, {
-  fetchImpl = fetch, allowModel = true, signal,
+  fetchImpl = fetch, allowModel = true, signal, strategies = null,
 } = {}) => {
   const base = {
     retailerId: retailer.id,
@@ -200,14 +175,26 @@ export const scrapeRetailer = async (retailer, query, {
     };
   }
 
-  let html;
-  try {
-    html = await fetchPage(url, { fetchImpl, signal });
-  } catch (error) {
-    const code = error?.code || (error?.name === 'TimeoutError' ? 'timeout' : 'unreachable');
+  // Escalate through the fetch ladder until a page actually contains prices.
+  // "Accepted" means parsed rows, not HTTP 200: a rendered shell returns 200
+  // and is exactly the case the next strategy up exists to handle.
+  let parsed = { rows: [], text: '' };
+  const crawl = await crawlPage(url, {
+    fetchImpl,
+    signal,
+    strategies,
+    accept: (page) => {
+      parsed = deterministicPass(page, query);
+      return parsed.rows.length > 0;
+    },
+  });
+
+  if (!crawl.attempts.length || crawl.attempts.every((attempt) => !attempt.ok)) {
+    const code = crawl.attempts.find((attempt) => attempt.code)?.code || 'unreachable';
     return {
       ...base,
       url,
+      attempts: crawl.attempts,
       status: code === 'rate-limited' ? 'rate-limited' : code === 'blocked' ? 'blocked' : 'unreachable',
       note: code === 'rate-limited'
         ? 'This shop rate-limited the request. Try again in a few minutes.'
@@ -217,15 +204,13 @@ export const scrapeRetailer = async (retailer, query, {
     };
   }
 
-  const structured = mergeCandidates([productsFromJsonLd(html), productsFromMicrodata(html)]);
-  const pageText = condenseHtml(html);
-  let rows = structured;
+  let rows = parsed.rows;
+  const pageText = parsed.text;
   let model = null;
 
-  if (!rows.length) rows = mergeCandidates([productsFromText(pageText, { query })]);
-
-  // Only now, with both deterministic passes empty, is the model worth asking.
-  if (!rows.length && allowModel && isOpenRouterConfigured()) {
+  // Only now, with every strategy's deterministic passes empty, is the model
+  // worth asking — and only about the last page we actually managed to read.
+  if (!rows.length && allowModel && isOpenRouterConfigured() && pageText.trim()) {
     try {
       const extracted = await extractWithModel(priceRelevantText(pageText), query, { fetchImpl });
       model = extracted.model;
@@ -245,6 +230,7 @@ export const scrapeRetailer = async (retailer, query, {
       retailerId: retailer.id,
       retailer: retailer.name,
       url: row.url || url,
+      via: crawl.via,
       source: 'scraped',
       sourceLabel: `${retailer.name} search page`,
       checkedAt: base.checkedAt,
@@ -255,6 +241,8 @@ export const scrapeRetailer = async (retailer, query, {
     url,
     rows: relevant,
     model,
+    via: crawl.via,
+    attempts: crawl.attempts,
     status: relevant.length ? 'ok' : 'no-match',
     note: relevant.length
       ? null
@@ -277,6 +265,7 @@ export const cheapestAcross = (results = []) => {
  */
 export const scrapePrices = async (query, {
   retailerIds = [], fetchImpl = fetch, allowModel = true, signal, gapMs = 250,
+  strategies = null,
 } = {}) => {
   const trimmed = String(query || '').trim();
   const checkedAt = new Date().toISOString();
@@ -287,7 +276,9 @@ export const scrapePrices = async (query, {
   const results = [];
   for (const retailer of shops) {
     if (signal?.aborted) break;
-    results.push(await scrapeRetailer(retailer, trimmed, { fetchImpl, allowModel, signal }));
+    results.push(await scrapeRetailer(retailer, trimmed, {
+      fetchImpl, allowModel, signal, strategies,
+    }));
     if (gapMs) await new Promise((resolve) => { setTimeout(resolve, gapMs); });
   }
   const cheapest = cheapestAcross(results);
@@ -300,6 +291,11 @@ export const scrapePrices = async (query, {
     shopsChecked: results.length,
     shopsAnswered: results.filter((result) => result.status === 'ok').length,
     aiUsed: results.some((result) => result.rows.some((row) => row.method === 'ai-extracted')),
+    // Which fetch strategies were available, and which actually answered.
+    // Worth surfacing: "eight shops, all answered by the renderer" and "eight
+    // shops, all answered directly" are very different cost profiles.
+    strategiesAvailable: strategies || availableStrategies(),
+    strategiesUsed: [...new Set(results.map((result) => result.via).filter(Boolean))],
     status: 'ok',
   };
 };

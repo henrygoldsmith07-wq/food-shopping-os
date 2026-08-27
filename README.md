@@ -72,16 +72,53 @@ hours on device, and covers at most six list items per run — each of which fan
 out across every configured shop. Shops are checked one at a time rather than in
 parallel, which keeps a price check from looking like a burst of traffic.
 
+### Why a plain fetch is not enough
+
+Most UK grocery search pages render their products in the browser. The HTML
+that arrives from a plain fetch is an empty shell, and no amount of better
+parsing finds a price that was never in the document. So fetching escalates
+through a ladder, and a page is only "done" when it actually yields prices —
+HTTP 200 on a shell is a miss, not a hit:
+
+| Strategy | Needs | Returns | Notes |
+| --- | --- | --- | --- |
+| `direct` | nothing | raw HTML | Free and instant. Works on server-rendered shops. Always tried first. |
+| `firecrawl` | `FIRECRAWL_API_KEY` | rendered HTML + markdown | Headless render. Costs credits, so it is only reached when `direct` found nothing. Asks for `rawHtml`, so structured parsing still applies. |
+| `jina` | nothing | markdown | [r.jina.ai](https://r.jina.ai), keyless, renders JavaScript. Markdown only, so just the text pass can read it — hence last. |
+
+Escalation is what raises the hit rate: a shop that returns a shell to `direct`
+gets retried through a renderer before it is written off as having no prices.
+Each row records which strategy produced it, and the UI says "page rendered to
+load prices" where a renderer was needed.
+
+**robots.txt still governs everything.** A renderer is not a way around a shop
+that declined — the permission check runs before any strategy, and a refusal
+means no fetch by any route.
+
+### Environment variables
+
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `NVIDIA_API_KEY` | unset | Free NVIDIA NIM catalogue. Powers the AI assistant and the scraper's fallback extraction. Without it the scraper still works, using structured data only. |
+| `NVIDIA_API_KEY` | *bundled key* | Free NVIDIA NIM catalogue. Powers the AI assistant and the scraper's fallback extraction. A key is **shipped in the source**, so this works with no setup; set this to use your own, or to an empty string to turn NVIDIA off. |
+| `FIRECRAWL_API_KEY` | unset | Enables the Firecrawl render strategy. Without it the ladder is `direct → jina`. |
+| `FIRECRAWL_BASE_URL` | `https://api.firecrawl.dev/v2` | Pin an API version or point at a self-hosted Firecrawl. |
+| `FIRECRAWL_WAIT_MS` | `2500` | How long Firecrawl waits after load before capturing — raise it for slow shops. |
+| `JINA_API_KEY` | unset | Optional. Raises Jina Reader's rate limit; it works keylessly without one. |
+| `JINA_READER_ENABLED` | `true` | Set to `false` to drop the keyless renderer from the ladder. |
+| `PRICE_SCRAPER_STRATEGIES` | `direct,firecrawl,jina` | Explicit ladder order, comma-separated. |
 | `PRICE_SCRAPER_ENABLED` | `true` | Set to `false` to switch live price checking off entirely. |
 | `PRICE_SCRAPER_RETAILERS` | all | Comma-separated allowlist of retailer ids, e.g. `tesco,aldi`. |
-| `SCRAPER_TIMEOUT_MS` | `9000` | Per-page fetch timeout. |
+| `SCRAPER_TIMEOUT_MS` | `9000` | Per-page timeout for the direct fetch. |
+| `SCRAPER_RENDER_TIMEOUT_MS` | `25000` | Per-page timeout for a rendering strategy. |
 | `SCRAPER_USER_AGENT` | `ForqBot/1.0 …` | The identity sent to shops and matched against their robots.txt. Keep it honest and contactable. |
 
-Secrets belong in `.env.local` (gitignored) for local work and in your hosting
-provider's environment settings for a deployment — not in the repository.
+**On the bundled NVIDIA key.** A working key is committed in
+`src/server/openrouter.js` so the app runs with no configuration. It is a free
+key with no billing attached. It is still a shared credential in a public
+repository: anyone can spend its rate limit, and rotating it needs a release.
+Set `NVIDIA_API_KEY` to your own if you are self-hosting or care about
+availability. Every other secret belongs in `.env.local` (gitignored) locally
+and in your hosting provider's environment settings for a deployment.
 
 Barcode lookups can optionally use the public Open Food Facts API through the
 authenticated `/api/integrations/products` route. It returns product identity,
@@ -613,6 +650,10 @@ Forq keeps the source visible for every external result:
 - **Open Prices** — GBP price observations contributed by shoppers. A row can
   be old, incomplete or from another location, so it is useful for context and
   history rather than checkout decisions.
+- **Firecrawl / Jina Reader** — optional headless renderers used only when a
+  shop's search page needs JavaScript to show its prices. They fetch the same
+  public page the scraper would, and are never used to reach a page robots.txt
+  declined.
 - **Retailer search pages** — read live, on request, by the price scraper. Each
   row names the shop, the URL it came from, and how the number was obtained:
   the shop's own structured product data, its page markup, its page text, or an

@@ -7,6 +7,7 @@ import {
   scrapePrices, scrapeableRetailers, scraperEnabled,
 } from '../../../../server/price-scraper.js';
 import { isOpenRouterConfigured } from '../../../../server/openrouter.js';
+import { availableStrategies, firecrawlConfigured } from '../../../../server/crawler.js';
 
 // Scraping eight retailers takes longer than a default serverless slice.
 export const maxDuration = 60;
@@ -19,6 +20,10 @@ export async function GET() {
     return NextResponse.json({
       enabled: scraperEnabled(),
       aiFallback: isOpenRouterConfigured(),
+      // The fetch ladder in force. A deployment without a renderer will miss
+      // the client-rendered shops, and the UI should be able to say so.
+      strategies: availableStrategies(),
+      renderer: firecrawlConfigured() ? 'firecrawl' : 'jina',
       retailers: scrapeableRetailers().map((entry) => ({
         id: entry.id, name: entry.name, fulfilment: entry.fulfilment,
       })),

@@ -27,6 +27,16 @@ export const methodLabel = (method) => ({
   'ai-extracted': 'read by AI — check before relying on it',
 }[method] || 'read from the shop’s page');
 
+/**
+ * How the page was fetched. Only worth showing when it was not a plain fetch:
+ * "we had to render this shop's JavaScript to see it" is useful context for a
+ * price that a direct fetch would have missed entirely.
+ */
+export const viaLabel = (via) => ({
+  firecrawl: 'page rendered to load prices',
+  jina: 'page rendered to load prices',
+}[via] || null);
+
 export const methodTone = (method) => ({
   'json-ld': 'good',
   microdata: 'good',
@@ -164,6 +174,7 @@ export const checkLivePricesForList = async (items = [], {
       const entry = {
         name,
         best: result.best || null,
+        strategiesUsed: result.strategiesUsed || [],
         perRetailer: bestPerRetailer(result),
         unanswered: unansweredShops(result),
         shopsChecked: result.shopsChecked || 0,
