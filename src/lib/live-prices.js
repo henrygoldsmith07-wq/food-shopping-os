@@ -192,8 +192,35 @@ export const unansweredShops = (result) =>
       retailerId: entry.retailerId,
       status: entry.status,
       note: entry.note,
+      // A shop that refused us has not refused the person holding the phone.
+      // Every shop keeps a working link to its own search for this item, so
+      // "we could not read this" never means "you cannot look".
       url: entry.url || null,
     }));
+
+/**
+ * Every shop, for one item, with somewhere to go — priced or not.
+ *
+ * The scraper's job is to save the trip; when it cannot, the next best thing
+ * is the trip made short. A shop whose robots.txt refuses our reader has no
+ * objection to a person opening the same page, and that page is one tap away
+ * if the app keeps the link rather than only the apology.
+ */
+export const shopLinksFor = (result) => (result?.results || []).map((entry) => {
+  const priced = (entry.rows || [])[0] || null;
+  return {
+    retailer: entry.retailer,
+    retailerId: entry.retailerId,
+    status: entry.status,
+    price: priced?.price ?? null,
+    // The product's own page when the shop published one, its search results
+    // otherwise. Labelled, because "the product" and "a list of maybes" are
+    // different promises.
+    url: priced?.url || entry.url || null,
+    isProductLink: Boolean(priced?.isProductLink),
+    productName: priced?.name || null,
+  };
+}).filter((row) => row.url);
 
 /** Check a batch of products in one request. Returns `checks` and `remaining`. */
 export const checkLivePriceBatch = async (items, { retailerIds = [], signal } = {}) => {
@@ -220,11 +247,72 @@ export const entryFromResult = (name, result) => ({
   strategiesUsed: result.strategiesUsed || [],
   perRetailer: bestPerRetailer(result),
   unanswered: unansweredShops(result),
+  shopLinks: shopLinksFor(result),
   shopsChecked: result.shopsChecked || 0,
   shopsAnswered: result.shopsAnswered || 0,
   aiUsed: Boolean(result.aiUsed),
   checkedAt: result.checkedAt || new Date().toISOString(),
 });
+
+/**
+ * What the check actually achieved, and where the rest went.
+ *
+ * "47 of 52 priced" is the number people mean by a success rate, and it is
+ * worth nothing on its own: five unpriced items because five shops are down
+ * is a different problem from five unpriced items because the shops all
+ * refuse to be read. So the misses are counted by the reason the shop gave,
+ * which is the only version of this number anyone can act on.
+ *
+ * Reasons are counted per item, not per shop-visit: an item that nine shops
+ * declined is one unpriced item whose dominant reason is "declined", not nine
+ * failures. Counting visits would make a single stubborn item look like a
+ * collapse.
+ */
+export const REASON_LABELS = {
+  declined: 'shop’s robots.txt said no',
+  blocked: 'shop blocked an automated request',
+  'rate-limited': 'shop asked us to slow down',
+  unreachable: 'shop could not be reached',
+  'no-match': 'shop had no matching product',
+  'no-search-url': 'shop has no public search',
+  aborted: 'check was stopped early',
+};
+
+export const coverageFor = (byKey = {}) => {
+  const entries = Object.values(byKey || {});
+  const reasons = {};
+  let priced = 0;
+  let broadened = 0;
+  for (const entry of entries) {
+    if (entry?.best) {
+      priced += 1;
+      if (entry.best.broadened) broadened += 1;
+      continue;
+    }
+    // The most common thing the shops said about this item is the reason it
+    // has no price. A tie is broken by the order shops were asked, which is
+    // stable, so the same run always reports the same reason.
+    const tally = {};
+    for (const shop of entry?.unanswered || []) {
+      const status = shop?.status || 'unreachable';
+      tally[status] = (tally[status] || 0) + 1;
+    }
+    const [top] = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+    const reason = top?.[0] || 'unreachable';
+    reasons[reason] = (reasons[reason] || 0) + 1;
+  }
+  const total = entries.length;
+  return {
+    total,
+    priced,
+    unpriced: total - priced,
+    broadened,
+    pct: total ? Math.round((priced / total) * 100) : null,
+    reasons: Object.entries(reasons)
+      .map(([reason, count]) => ({ reason, count, label: REASON_LABELS[reason] || reason }))
+      .sort((a, b) => b.count - a.count),
+  };
+};
 
 /** How many items go up in one request. The route caps this at 12. */
 export const BATCH_SIZE = 4;

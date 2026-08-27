@@ -26,12 +26,24 @@ import { freeChat, isOpenRouterConfigured } from './openrouter.js';
 import { isScrapeAllowed } from './robots.js';
 import { USER_AGENT, availableStrategies, crawlPage } from './crawler.js';
 import {
-  condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
-  productsFromMicrodata, productsFromText, relevanceScore,
+  absoluteUrl, condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
+  productsFromMicrodata, productsFromText,
 } from './scrape-parse.js';
+import { isMatch, matchScore, searchQueries } from './search-terms.js';
+import { brandedQueries } from './branded-queries.js';
 
 const MAX_ROWS_PER_RETAILER = 8;
-const MIN_RELEVANCE = 0.34;
+/**
+ * How many rungs of the query ladder one shop is worth.
+ *
+ * Three: the two broadest rungs of what they typed, and — when both of those
+ * fail at a shop that is answering — one branded name from the app's own
+ * catalogue. Shops index brands, so "Heinz Baked Beans" hits a product page
+ * where "baked beans" competes with every own-brand tin and meal deal.
+ */
+const MAX_QUERY_ATTEMPTS = 3;
+/** A pause before asking the same shop a second time. Sequential is not enough. */
+const RETRY_GAP_MS = 400;
 
 export const scraperEnabled = () => process.env.PRICE_SCRAPER_ENABLED !== 'false';
 
@@ -149,19 +161,27 @@ export const deterministicPass = (page, query) => {
   return { rows: mergeCandidates([productsFromText(text, { query })]), text };
 };
 
-/** Check one retailer for one product. Never throws — failure is a status. */
-export const scrapeRetailer = async (retailer, query, {
+/**
+ * One shop, one query. Never throws — failure is a status.
+ *
+ * `wanted` is what the person actually wrote; `query` is the rung of the
+ * search ladder currently being tried. They differ deliberately: the search
+ * may be broadened, but what counts as an answer may not.
+ */
+const scrapeRetailerOnce = async (retailer, query, wanted, {
   fetchImpl = fetch, allowModel = true, signal, strategies = null,
 } = {}) => {
   const base = {
     retailerId: retailer.id,
     retailer: retailer.name,
     query,
+    wanted,
     rows: [],
     checkedAt: new Date().toISOString(),
   };
   const url = retailer.search(query);
   if (!url) return { ...base, status: 'no-search-url', note: 'This shop has no public product search.' };
+  base.url = url;
 
   const permission = await isScrapeAllowed(url, { userAgent: USER_AGENT, fetchImpl }).catch(() => null);
   if (!permission?.allowed) {
@@ -183,9 +203,13 @@ export const scrapeRetailer = async (retailer, query, {
     fetchImpl,
     signal,
     strategies,
+    // A page is only "answered" when it holds a product the person asked
+    // for. Requiring merely *some* parsed row stopped the ladder at the
+    // first shell that happened to carry a recommendations rail, and never
+    // escalated to the renderer that would have produced the real grid.
     accept: (page) => {
       parsed = deterministicPass(page, query);
-      return parsed.rows.length > 0;
+      return parsed.rows.some((row) => isMatch(row.name, wanted));
     },
   });
 
@@ -208,28 +232,44 @@ export const scrapeRetailer = async (retailer, query, {
   const pageText = parsed.text;
   let model = null;
 
-  // Only now, with every strategy's deterministic passes empty, is the model
-  // worth asking — and only about the last page we actually managed to read.
-  if (!rows.length && allowModel && isOpenRouterConfigured() && pageText.trim()) {
+  // Only now, with no strategy having produced a row that answers the
+  // question, is the model worth asking — and only about the last page we
+  // actually managed to read. The test is "nothing relevant", not "nothing at
+  // all": a page whose parsers found twenty products from the recommendations
+  // rail and none of the one searched for is exactly the page a reader helps
+  // with, and testing for an empty list skipped every one of them.
+  const nothingRelevant = !rows.some((row) => isMatch(row.name, wanted));
+  if (nothingRelevant && allowModel && isOpenRouterConfigured() && pageText.trim()) {
     try {
-      const extracted = await extractWithModel(priceRelevantText(pageText), query, { fetchImpl });
+      const extracted = await extractWithModel(priceRelevantText(pageText), wanted, { fetchImpl });
       model = extracted.model;
-      rows = mergeCandidates([verifyAgainstPage(extracted.rows, pageText)]);
+      const verified = mergeCandidates([verifyAgainstPage(extracted.rows, pageText)]);
+      // Keep whatever the parsers found as well. The model is a second reader
+      // of the same page, not a replacement for the shop's own structured
+      // data, and the relevance filter below decides between them.
+      rows = verified.length ? mergeCandidates([rows, verified]) : rows;
     } catch {
       // The ladder is exhausted or unconfigured; the deterministic answer stands.
     }
   }
 
   const relevant = rows
-    .map((row) => ({ ...row, relevance: relevanceScore(row.name, query) }))
-    .filter((row) => row.relevance >= MIN_RELEVANCE)
+    .filter((row) => isMatch(row.name, wanted))
+    .map((row) => ({ ...row, relevance: matchScore(row.name, wanted) }))
     .sort((a, b) => b.relevance - a.relevance || a.price - b.price)
     .slice(0, MAX_ROWS_PER_RETAILER)
     .map((row) => ({
       ...row,
       retailerId: retailer.id,
       retailer: retailer.name,
-      url: row.url || url,
+      // The product's own page where the shop gave one, resolved against the
+      // page it was found on. Falling back to the search URL keeps every row
+      // clickable — a link to the results is worth more than no link, and
+      // `isProductLink` says which of the two this is rather than letting
+      // them look alike.
+      url: absoluteUrl(row.url || row.href, url) || url,
+      isProductLink: Boolean(absoluteUrl(row.url || row.href, url)),
+      searchUrl: url,
       via: crawl.via,
       source: 'scraped',
       sourceLabel: `${retailer.name} search page`,
@@ -247,6 +287,70 @@ export const scrapeRetailer = async (retailer, query, {
     note: relevant.length
       ? null
       : 'The shop’s search page loaded but showed no matching price. Many UK retailers price only after a store or postcode is chosen.',
+  };
+};
+
+/**
+ * Check one retailer, broadening the search if the shop found nothing.
+ *
+ * The retry is deliberately narrow. It happens only on `no-match` — the shop
+ * answered, the page parsed, and nothing on it was the product. Every other
+ * outcome is left alone: a `declined` shop has said no and asking a second
+ * time is not a different question; a `blocked` or `rate-limited` shop is
+ * telling us to send less traffic, not more; and an `ok` shop is finished.
+ *
+ * Which rung answered is reported, because "found under a broader search" is
+ * a weaker claim than "found as asked" and the row's relevance score should
+ * not be the only place that shows.
+ */
+export const scrapeRetailer = async (retailer, query, options = {}) => {
+  const wanted = String(query || '').trim();
+  const ladder = [
+    ...searchQueries(wanted).slice(0, 2),
+    ...brandedQueries(wanted, { limit: 1 }),
+  ].slice(0, MAX_QUERY_ATTEMPTS);
+  const tried = [];
+  let last = null;
+  let strategies = options.strategies || null;
+  for (const rung of ladder.length ? ladder : [wanted]) {
+    if (options.signal?.aborted) break;
+    if (tried.length) {
+      await new Promise((resolve) => { setTimeout(resolve, options.retryGapMs ?? RETRY_GAP_MS); });
+    }
+    tried.push(rung);
+    last = await scrapeRetailerOnce(retailer, rung, wanted, { ...options, strategies });
+    if (last.status !== 'no-match') break;
+    // The broader query only needs the strategies that actually answered.
+    // If a plain fetch was refused and only the renderer returned a page,
+    // asking the shop again through the refused route is a wasted request —
+    // and the query ladder must not double the traffic of a whole-list check.
+    const answered = (last.attempts || []).filter((attempt) => attempt.ok).map((attempt) => attempt.strategy);
+    if (!answered.length) break;
+    strategies = answered;
+  }
+  if (!last) {
+    return {
+      retailerId: retailer.id,
+      retailer: retailer.name,
+      query: wanted,
+      wanted,
+      rows: [],
+      checkedAt: new Date().toISOString(),
+      status: 'aborted',
+      note: 'The check was stopped before this shop was asked.',
+    };
+  }
+  const broadened = last.query !== wanted && last.status === 'ok';
+  return {
+    ...last,
+    query: wanted,
+    searched: last.query,
+    broadened,
+    queriesTried: tried,
+    // Stamped on the rows too, not only the result. The rows are what the app
+    // flattens and ranks, and a price found under a widened search is a
+    // weaker claim that has to survive being separated from its shop.
+    rows: (last.rows || []).map((row) => ({ ...row, searched: last.query, broadened })),
   };
 };
 

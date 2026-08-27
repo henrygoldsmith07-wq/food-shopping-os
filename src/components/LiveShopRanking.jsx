@@ -12,7 +12,9 @@ import { Pill } from './ui.jsx';
  * difference does not draw as a bar twice the length of another.
  *
  * Every row keeps how its number was obtained, because a ranking built partly
- * from AI-read prices should not present itself as evenly reliable.
+ * from AI-read prices should not present itself as evenly reliable. A row
+ * found only after the search was widened says so for the same reason: it
+ * answers a broader question than the one that was asked.
  */
 export default function LiveShopRanking({ perRetailer = [] }) {
   const ranked = rankShops(perRetailer);
@@ -76,6 +78,11 @@ export default function LiveShopRanking({ perRetailer = [] }) {
               </span>
               {row.isCheapest && <Pill tone="good">cheapest</Pill>}
               <Pill tone={methodTone(row.method)}>{methodLabel(row.method)}</Pill>
+              {row.broadened && (
+                <span title={`Searched for "${row.searched}"`}>
+                  <Pill tone="warn">wider search</Pill>
+                </span>
+              )}
               {row.url && (
                 <a
                   href={row.url}

@@ -22,6 +22,7 @@ import { RETAILERS } from '../src/data/retailers.js';
 import { isScrapeAllowed } from '../src/server/robots.js';
 import { USER_AGENT, availableStrategies, runStrategy } from '../src/server/crawler.js';
 import { deterministicPass } from '../src/server/price-scraper.js';
+import { isMatch, searchQueries } from '../src/server/search-terms.js';
 import { activeProvider, rankedFreeModels } from '../src/server/openrouter.js';
 
 const arg = (name, fallback) => {
@@ -36,7 +37,10 @@ const shops = only ? RETAILERS.filter((r) => r.id === only) : RETAILERS;
 const pad = (value, width) => String(value).padEnd(width);
 const line = (char = '-') => console.log(char.repeat(78));
 
+const ladder = searchQueries(query).slice(0, 2);
+
 console.log(`\nScraper reality check — searching for "${query}"`);
+console.log(`Query ladder: ${ladder.map((rung) => `"${rung}"`).join(' → ')}`);
 console.log(`User agent: ${USER_AGENT}`);
 console.log(`Fetch strategies available: ${availableStrategies().join(' → ') || '(none)'}`);
 line('=');
@@ -62,28 +66,37 @@ for (const retailer of shops) {
     continue;
   }
 
-  // 2. Walk the ladder, reporting each rung rather than only the outcome.
+  // 2. Walk both ladders — query, then fetch strategy — exactly as the app
+  //    does, and count only rows that actually answer the search. Counting
+  //    every parsed row was the flattering version of this report: a page of
+  //    recommendations reads as "12 rows" and prices nothing.
   let priced = false;
-  for (const strategy of availableStrategies()) {
-    try {
-      const page = await runStrategy(strategy, url);
-      const parsed = deterministicPass(page, query);
-      const size = (page.html || page.markdown || '').length;
-      if (parsed.rows.length) {
-        const cheapest = [...parsed.rows].sort((a, b) => a.price - b.price)[0];
-        console.log(`OK via ${strategy} — ${parsed.rows.length} row(s), cheapest £${cheapest.price.toFixed(2)} "${cheapest.name.slice(0, 40)}" [${cheapest.method}]`);
-        priced = true;
-        break;
+  for (const rung of ladder) {
+    const rungUrl = retailer.search(rung);
+    for (const strategy of availableStrategies()) {
+      try {
+        const page = await runStrategy(strategy, rungUrl);
+        const parsed = deterministicPass(page, rung);
+        const relevant = parsed.rows.filter((row) => isMatch(row.name, query));
+        const size = (page.html || page.markdown || '').length;
+        if (relevant.length) {
+          const cheapest = [...relevant].sort((a, b) => a.price - b.price)[0];
+          const widened = rung === ladder[0] ? '' : ` (widened to "${rung}")`;
+          console.log(`OK via ${strategy}${widened} — ${relevant.length} match(es), cheapest £${cheapest.price.toFixed(2)} "${cheapest.name.slice(0, 40)}" [${cheapest.method}]`);
+          priced = true;
+          break;
+        }
+        process.stdout.write(`${strategy}: ${Math.round(size / 1024)}KB, ${parsed.rows.length} row(s), 0 matching; `);
+      } catch (error) {
+        process.stdout.write(`${strategy}: ${error.code || error.message}; `);
       }
-      process.stdout.write(`${strategy}: fetched ${Math.round(size / 1024)}KB but no prices; `);
-    } catch (error) {
-      process.stdout.write(`${strategy}: ${error.code || error.message}; `);
     }
+    if (priced) break;
   }
   if (priced) {
     tally.priced += 1;
   } else {
-    console.log('no price');
+    console.log('no match');
     tally.empty += 1;
   }
 }

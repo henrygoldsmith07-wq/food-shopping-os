@@ -279,3 +279,57 @@ describe('the scraper end to end, over the ladder', () => {
     expect(fetchImpl.mock.calls.every(([url]) => String(url).endsWith('/robots.txt'))).toBe(true);
   });
 });
+
+describe('a shop having a bad second is not a shop saying no', () => {
+  const ok = () => new Response('<html><body>£1.45 Milk</body></html>', {
+    status: 200, headers: { 'content-type': 'text/html' },
+  });
+
+  it('tries once more after a 5xx, and takes the answer', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      return calls === 1 ? new Response('busy', { status: 503 }) : ok();
+    });
+    const out = await crawlPage('https://shop.test/search?q=milk', {
+      fetchImpl, strategies: ['direct'], retryDelayMs: 0,
+    });
+    expect(out.ok).toBe(true);
+    expect(calls).toBe(2);
+    expect(out.attempts.at(-1)).toMatchObject({ strategy: 'direct', ok: true, retried: true });
+  });
+
+  it('tries once more after a timeout', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw Object.assign(new Error('slow'), { name: 'TimeoutError' });
+      return ok();
+    });
+    const out = await crawlPage('https://shop.test/search?q=milk', {
+      fetchImpl, strategies: ['direct'], retryDelayMs: 0,
+    });
+    expect(out.ok).toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it('never retries a refusal — 403 and 429 are answers, not stumbles', async () => {
+    for (const status of [401, 403, 429]) {
+      const fetchImpl = vi.fn(async () => new Response('no', { status }));
+      const out = await crawlPage('https://shop.test/search?q=milk', {
+        fetchImpl, strategies: ['direct'], retryDelayMs: 0,
+      });
+      expect(out.ok, String(status)).toBe(false);
+      expect(fetchImpl, String(status)).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('gives up after the second failure rather than hammering', async () => {
+    const fetchImpl = vi.fn(async () => new Response('busy', { status: 503 }));
+    const out = await crawlPage('https://shop.test/search?q=milk', {
+      fetchImpl, strategies: ['direct'], retryDelayMs: 0,
+    });
+    expect(out.ok).toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+});

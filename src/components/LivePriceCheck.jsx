@@ -2,10 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Globe, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { shoppingNameKey } from '../lib/shopping.js';
-import { checkAge, checkLivePricesForList, clearLivePriceCache } from '../lib/live-prices.js';
+import {
+  checkAge, checkLivePricesForList, clearLivePriceCache, coverageFor,
+} from '../lib/live-prices.js';
 import {
   clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
 } from '../lib/live-price-history.js';
+import {
+  catalogueStats, clearProductCatalogue, loadProductCatalogue, productRows, recordProducts,
+} from '../lib/product-catalogue.js';
 import { liveMovements } from '../lib/live-price-alerts.js';
 import {
   dailyCheckDue, dailyCheckSettings, recordDailyCheck, setDailyCheckEnabled,
@@ -14,6 +19,8 @@ import { brandedAlternatives, tagsForItem } from '../lib/food-tags.js';
 import { applyTagView, isAllergenTag, popularTags } from '../lib/food-tag-filters.js';
 import { Card, Section } from './ui.jsx';
 import LiveShopRanking from './LiveShopRanking.jsx';
+import ShopLinks from './ShopLinks.jsx';
+import ProductShops from './ProductShops.jsx';
 import LivePriceHistory from './LivePriceHistory.jsx';
 import FoodTags from './FoodTags.jsx';
 import FoodTagFilters from './FoodTagFilters.jsx';
@@ -39,6 +46,7 @@ export default function LivePriceCheck({
 }) {
   const [state, setState] = useState(null);
   const [history, setHistory] = useState(() => loadLivePriceHistory());
+  const [catalogue, setCatalogue] = useState(() => loadProductCatalogue());
   const [progress, setProgress] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -68,6 +76,9 @@ export default function LivePriceCheck({
       // replacing today's answer with no memory of the last one.
       recordLivePrices(result.byKey);
       setHistory(loadLivePriceHistory());
+      // Every check also grows the cross-shop catalogue: what each shop calls
+      // this product, what size it sells, and what that works out at per unit.
+      setCatalogue(recordProducts(result.byKey));
       // A manual check counts as today's check. Otherwise opening the app
       // after checking by hand would immediately check the same list again.
       const rows = Object.values(result.byKey || {});
@@ -122,6 +133,8 @@ export default function LivePriceCheck({
   const priced = entries.filter(([, entry]) => entry?.best);
   const usedAi = entries.some(([, entry]) => entry?.aiUsed);
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0;
+  const coverage = coverageFor(state?.byKey);
+  const stats = catalogueStats(catalogue);
 
   // Tags are derived from the result, the item's own price history and the
   // household's declared allergies — never fetched, so this stays cheap enough
@@ -248,10 +261,26 @@ export default function LivePriceCheck({
           <>
             <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--muted)' }}>
               {priced.length} of {entries.length} item{entries.length === 1 ? '' : 's'} priced
+              {coverage.pct !== null ? ` · ${coverage.pct}%` : ''}
               {state.fromCache ? ` · ${state.fromCache} from the 3h cache` : ''}
               {state.aborted ? ' · stopped early' : ''}
               {' · '}{checkAge(state.checkedAt).label}
             </p>
+
+            {/* Where the misses went. A hit rate with no breakdown is a number
+                nobody can act on: shops that are down and shops that refuse to
+                be read are the same figure and different problems entirely. */}
+            {coverage.unpriced > 0 && (
+              <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--faint)' }}>
+                {coverage.unpriced} unpriced —{' '}
+                {coverage.reasons.map((row) => `${row.count} × ${row.label}`).join(' · ')}
+              </p>
+            )}
+            {coverage.broadened > 0 && (
+              <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--faint)' }}>
+                {coverage.broadened} found only after widening the search — worth checking against the shelf.
+              </p>
+            )}
 
             {entries.length === 0 ? (
               <Card className="text-center py-6">
@@ -314,14 +343,32 @@ export default function LivePriceCheck({
                           <ul className="mt-1.5 space-y-1">
                             {entry.unanswered.map((shop) => (
                               <li key={shop.retailerId} className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-                                <span className="font-bold">{shop.retailer}</span> — {shop.note || shop.status}
+                                {/* Still a link. The shop declined our reader,
+                                    not the person holding the phone. */}
+                                {shop.url ? (
+                                  <a
+                                    href={shop.url}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    className="font-bold"
+                                    style={{ color: 'var(--accent)' }}
+                                  >
+                                    {shop.retailer}
+                                    <span className="sr-only">{` — search ${shop.retailer} for ${item.name} yourself`}</span>
+                                  </a>
+                                ) : <span className="font-bold">{shop.retailer}</span>}
+                                {' — '}{shop.note || shop.status}
                               </li>
                             ))}
                           </ul>
                         </details>
                       )}
 
-                      <LivePriceHistory entry={past} />
+                      <ProductShops product={productRows(catalogue[shoppingNameKey(item.name)])} />
+
+                    <ShopLinks links={entry.shopLinks} name={item.name} />
+
+                    <LivePriceHistory entry={past} />
                     </Card>
                   );
                 })}
@@ -332,6 +379,15 @@ export default function LivePriceCheck({
               <p className="mt-2.5 inline-flex items-start gap-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--warn)' }}>
                 <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden="true" />
                 Some prices were read off the page by AI because the shop published no structured price data. Treat those as a hint and confirm at the shelf.
+              </p>
+            )}
+            {stats.products > 0 && (
+              <p className="mt-2.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Catalogue: {stats.products} product{stats.products === 1 ? '' : 's'} across{' '}
+                {stats.retailers} shop{stats.retailers === 1 ? '' : 's'} · {stats.rows} shop price
+                {stats.rows === 1 ? '' : 's'} recorded · {stats.comparable} sold at more than one
+                shop. It grows with every check, from shops that answered — nothing here is a
+                national price or an average.
               </p>
             )}
             <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
