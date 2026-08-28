@@ -64,9 +64,25 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
             {item.qty && <span className="font-semibold text-[0.75rem]" style={{ color: 'var(--muted)' }}> · {item.qty}</span>}
           </p>
           {item.priority === 'high' && <p className="text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>Need it</p>}
+          {item.confidenceEvidence && (
+            <p className="text-[0.6875rem] font-bold" style={{ color: item.confidenceEvidence.tone === 'warn' ? 'var(--warn)' : 'var(--muted)' }}>
+              {item.confidenceEvidence.label}{item.confidenceEvidence.sourceLabel ? ` · ${item.confidenceEvidence.sourceLabel}` : ''}
+            </p>
+          )}
+          {item.wasteNote && (
+            <p className="text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--warn)' }}>{item.wasteNote}</p>
+          )}
           {item.note && <p className="text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>{item.note}</p>}
           {item.fromRecipe && (
             <p className="text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>for {item.fromRecipe}</p>
+          )}
+          {item.shoppingExplanation?.reasons?.length > 0 && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-[0.6875rem] font-bold" style={{ color: 'var(--accent)' }}>Why am I buying this?</summary>
+              <div className="mt-1 space-y-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                {item.shoppingExplanation.reasons.map((reason) => <p key={reason}>· {reason}</p>)}
+              </div>
+            </details>
           )}
           {item.store && (
             <p className="text-[0.71875rem] font-bold truncate" style={{ color: 'var(--accent)' }}>at {item.store}</p>

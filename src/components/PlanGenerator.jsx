@@ -9,6 +9,7 @@ import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
 import { itemsFromRecipes } from '../data/stores.js';
 import { monthOf, peakNow } from '../data/seasons.js';
 import { expiringSoon } from '../lib/kitchen.js';
+import { wasteAwareList } from '../lib/loop-learning.js';
 import { explainRecommendation } from '../lib/recommend.js';
 import { Card, Chip, Pill, Stepper, FoodArt } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
@@ -144,7 +145,12 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       goTab?.('shop');
       return;
     }
-    app.addToList(itemsFromRecipes([...new Set(generated)], pantryNames));
+    // Same learning pass as the plan screen's send-to-list: ingredients this
+    // household keeps binning go on the list lighter, with the reason shown.
+    app.addToList(wasteAwareList(
+      itemsFromRecipes([...new Set(generated)], pantryNames),
+      { waste: app.waste, today: app.day, learnedAliases: app.aliasMemory || {} },
+    ));
     setAddedToList(true);
   };
 
@@ -229,6 +235,11 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           {app.tasteProfile.rated > 0 && (
             <p className="mt-1 text-[0.75rem] font-bold" style={{ color: 'var(--accent)' }}>
               Taste Match favours {app.tasteProfile.topCuisines.slice(0, 2).join(' and ') || 'the flavours you liked'}.
+            </p>
+          )}
+          {app.preferenceSummary?.cookingNote && (
+            <p className="mt-1 text-[0.75rem] font-bold" style={{ color: 'var(--accent)' }}>
+              {app.preferenceSummary.cookingNote}
             </p>
           )}
           {app.householdPreferences?.learnedFromCooking > 0 && (

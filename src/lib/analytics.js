@@ -3,6 +3,7 @@ import { dayTotals } from './nutrition.js';
 import { periodFootprint, shopFootprint } from './footprint.js';
 import { shoppingNameKey } from './shopping.js';
 import { SLOT_KEYS } from './mealplan.js';
+import { householdWasteMetrics } from './waste-metrics.js';
 
 const round = (value, places = 0) => {
   const scale = 10 ** places;
@@ -126,6 +127,8 @@ export const pantryDashboard = (state, today = state.day) => {
   };
 };
 
+export { householdWasteMetrics } from './waste-metrics.js';
+
 export const wasteAnalytics = (state, today = state.day) => {
   const waste = state.waste || [];
   const month = today.slice(0, 7);
@@ -138,7 +141,9 @@ export const wasteAnalytics = (state, today = state.day) => {
     .sort((a, b) => b.cost - a.cost || b.count - a.count || a.name.localeCompare(b.name));
   const monthlySpend = shopping.spent.month;
 
+  const metrics = householdWasteMetrics(state, today);
   return {
+    metrics,
     month: {
       count: monthRows.length,
       cost: round(sum(monthRows, (row) => row.cost), 2),

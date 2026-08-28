@@ -23,6 +23,8 @@ import RecommendationExplanation from './RecommendationExplanation.jsx';
 import OutcomeDashboard from './OutcomeDashboard.jsx';
 import HomeNumbers from './HomeNumbers.jsx';
 import HomeFoodLoop from './HomeFoodLoop.jsx';
+import LoopCheck from './LoopCheck.jsx';
+import AutopilotCard from './AutopilotCard.jsx';
 
 /** Capture routes that open straight into the diary's matching sheet. */
 const LOG_SHORTCUTS = [
@@ -363,7 +365,11 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
 
   return (
     <div className="pb-6 space-y-6">
+      <AutopilotCard onOpenPantry={openPantry} goTab={goTab} />
+
       <HomeFoodLoop app={app} foodLoop={foodLoop} expiring={expiring} low={low} goTab={goTab} openPantry={openPantry} />
+
+      <LoopCheck goTab={goTab} />
 
       {pantryHero && (
         <section className="px-5 rise rise-1" aria-label="Tonight's pantry pick">

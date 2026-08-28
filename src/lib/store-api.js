@@ -8,6 +8,7 @@ import { targetActions } from './target-actions.js';
 import { applyEntries, clearDates, LEFTOVER_CAT, leftoverEntry, moveMeal } from './mealplan.js';
 import { consumePantryIngredients } from './kitchen.js';
 import { canonicalName, learnAlias } from './aliases.js';
+import { inferPantryStock } from './pantry-intelligence.js';
 import { consolidatePantry as consolidate, inferConsumption, normalisePantryItem, reconcilePurchase } from './pantry-intelligence.js';
 import { pantryActions } from './pantry-actions.js';
 import { healthActions, seedMeasurements } from './health-actions.js';
@@ -22,6 +23,8 @@ import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
 import { offerActions } from './offer-actions.js';
 import { planActions } from './plan-actions.js';
+import { pantryFlowActions } from './pantry-flow-actions.js';
+import { withAutoListSync } from './week-loop.js';
 import { emojiFor, EMPTY_STATE, todayStamp, uid } from './state.js';
 import { parseBackup, serialiseBackup } from './store-persistence.js';
 import { vaultActions } from './vault-actions.js';
@@ -29,14 +32,19 @@ import { receiptActions, shoppingActions } from './shopping-actions.js';
 import { normalisePriceAlertConfig } from './price-alerts.js';
 import { COUPON_KINDS, LOYALTY_PROGRAMMES, normaliseCoupon } from './coupons.js';
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
+import { compareBaskets } from './basket-optimizer.js';
+import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
 export function useStoreApi({
   blockPersistence, cloudStatus, latest, setState, setStorageIssue, storageIssue,
   undoHistory, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
 }) {
-  const api = useMemo(() => {
-    const set = (patch) => setState((s) => {
+  const api = useMemo(() => {      const set = (patch) => setState((s) => {
       let changes = typeof patch === 'function' ? patch(s) : patch;
       if (!changes || !Object.keys(changes).length) return s;
+      // Plan edits, pantry spent by cooking, binned ingredients and portion
+      // corrections re-derive the shopping list in the same write — the
+      // transitions between loop stages happen by themselves.
+      changes = withAutoListSync(s, changes);
       const shoppingKeys = ['shoppingList', 'shops', 'favouriteShopping', 'shoppingPreferences', 'aisleMemory', 'storeRoutes', 'offers'];
       if (Object.keys(changes).some((key) => shoppingKeys.includes(key)) && !changes.shoppingMeta) {
         changes = {
@@ -150,6 +158,9 @@ export function useStoreApi({
             purchaseDate: item.purchaseDate || s.day,
             lastConfirmedAt: item.lastConfirmedAt || s.day,
             confidenceUpdatedAt: item.confidenceUpdatedAt || s.day,
+            purchaseSource: item.purchaseSource || item.source || 'manual',
+            expectedConsumptionRate: item.expectedConsumptionRate || null,
+            plannedMealAllocations: item.plannedMealAllocations || [],
             cost: Number(item.cost) || 0,
           }, { learnedAliases: s.aliasMemory || {} });
           const result = consolidate([...s.pantry, added], { learnedAliases: s.aliasMemory || {}, today: s.day });
@@ -159,7 +170,35 @@ export function useStoreApi({
           };
         }),
       updatePantryItem: (id, patch) =>
-        set((s) => (householdPermission(s, 'pantry') ? { pantry: s.pantry.map((p) => (p.id === id ? { ...p, ...patch } : p)) } : {})),
+        set((s) => (householdPermission(s, 'pantry') ? {
+          pantry: s.pantry.map((p) => (p.id === id ? {
+            ...p,
+            ...patch,
+            ...(Object.prototype.hasOwnProperty.call(patch || {}, 'qty') ? {
+              amountConfidence: patch.qty ? (patch.amountConfidence || 'approximate') : 'unknown',
+              lastConfirmedAt: s.day,
+              confidenceUpdatedAt: s.day,
+            } : {}),
+          } : p)),
+        } : {})),
+      confirmPantryItem: (id, patch = {}) =>
+        set((s) => (householdPermission(s, 'pantry') ? {
+          pantry: s.pantry.map((p) => (p.id === id ? {
+            ...p,
+            ...patch,
+            confidence: 'definite',
+            amountConfidence: patch.qty ? (patch.amountConfidence || 'exact') : p.amountConfidence,
+            lastConfirmedAt: s.day,
+            confidenceUpdatedAt: s.day,
+          } : p)),
+        } : {})),
+      refreshPantryEstimates: () =>
+        set((s) => {
+          if (!householdPermission(s, 'pantry')) return {};
+          const events = [...(s.pantryEvents || []), ...(s.cooked || []).map((entry) => ({ ...entry, type: 'recipe_consumption' }))];
+          const inferred = s.pantry.map((item) => inferPantryStock(item, { events, today: s.day }).item);
+          return { pantry: inferred, pantryEstimatesAt: s.day };
+        }),
       removePantryItem: (id) => set((s) => (householdPermission(s, 'pantry') ? { pantry: s.pantry.filter((p) => p.id !== id) } : {})),
       importPantry: (items) =>
         set((s) => {
@@ -211,7 +250,14 @@ export function useStoreApi({
                   : aisleFor(i.name, s.aisleMemory),
               };
             });
-          return fresh.length ? { shoppingList: [...s.shoppingList, ...fresh] } : {};
+          const learned = wasteLearningProfile({
+            purchases: s.shops,
+            waste: s.waste,
+            today: s.day,
+            learnedAliases: s.aliasMemory || {},
+          });
+          const learnedFresh = applyWasteLearning(fresh, learned);
+          return learnedFresh.length ? { shoppingList: [...s.shoppingList, ...learnedFresh] } : {};
         }),
       repeatLastShop: () =>
         set((s) => {
@@ -278,12 +324,25 @@ export function useStoreApi({
           if (!bought.length) return {};
           const shopStore = store || 'Unnamed shop';
           const { saved } = applyOffers(bought, s.offers, { store: shopStore, today: s.day });
+          const purchaseDate = s.day;
+          const reconciled = toPantry && householdPermission(s, 'pantry')
+            ? reconcilePurchase(s.pantry, bought.map((item) => ({
+              ...item, store: shopStore, location, price: Number(item.price) || 0,
+            })), {
+              learnedAliases: s.aliasMemory || {},
+              date: purchaseDate,
+              today: s.day,
+              location,
+              idFactory: () => uid('p'),
+            })
+            : null;
           const shop = {
             id: uid('h'),
             date: s.day,
             store: shopStore,
             total: Math.round((Number(total) || 0) * 100) / 100,
             saved,
+            pantryReconciled: Boolean(reconciled),
             items: bought.map(({ name, price, qty, emoji }) => ({
               name,
               price: Number(price) || 0,
@@ -293,19 +352,7 @@ export function useStoreApi({
               emoji,
             })),
           };
-          const purchaseDate = s.day;
           const route = routeFromTicks(bought);
-          const reconciled = toPantry && householdPermission(s, 'pantry')
-            ? reconcilePurchase(s.pantry, bought.map((item) => ({
-              ...item, store: shop.store, location, price: Number(item.price) || 0,
-            })), {
-              learnedAliases: s.aliasMemory || {},
-              date: purchaseDate,
-              today: s.day,
-              location,
-              idFactory: () => uid('p'),
-            })
-            : null;
           const pantryEvent = reconciled
             ? {
               id: uid('pe'), type: 'purchase_reconciliation', date: s.day,
@@ -327,6 +374,13 @@ export function useStoreApi({
           };
         }),
       ...offerActions(set, latest),
+      compareBaskets: (items, offersByStore, options) => compareBaskets(items, offersByStore, options),
+      wasteLearningProfile: () => wasteLearningProfile({
+        purchases: latest.current.shops || [],
+        waste: latest.current.waste || [],
+        today: latest.current.day,
+        learnedAliases: latest.current.aliasMemory || {},
+      }),
       binPantryItem: (id, { qty, value, reason } = {}) =>
         set((s) => {
           const item = householdPermission(s, 'pantry') ? s.pantry.find((p) => p.id === id) : null;
@@ -355,9 +409,10 @@ export function useStoreApi({
               cost: Math.round(wasteValue * 100) / 100,
               qty: qty || item.qty || '',
               cat: item.cat || 'Other',
-              reason: reason || 'discarded',
+              reason: reason || 'expired',
               lifecycleState: 'discarded',
               date: s.day,
+              quantity: Number(qty) || undefined,
             }],
             pantryEvents: [...(s.pantryEvents || []), lifecycleEvent].slice(-100),
             lastPantryEvent: lifecycleEvent,
@@ -420,6 +475,7 @@ export function useStoreApi({
           };
         }),
       ...planActions(set),
+      ...pantryFlowActions(set),
       ...householdActions(set, uid),
       ...healthActions(set),
       ...reminderActions(set),

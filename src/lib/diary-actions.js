@@ -16,6 +16,7 @@ import { recipeFood } from './foodlog.js';
 import { consumePantryIngredients } from './kitchen.js';
 import { inferConsumption } from './pantry-intelligence.js';
 import { leftoverEntry } from './mealplan.js';
+import { createLeftover } from './leftover-planning.js';
 import { householdPermission } from './household.js';
 import { uid } from './state.js';
 
@@ -133,6 +134,9 @@ export const diaryActions = (set) => {
           pantry: householdPermission(s, 'pantry') && leftovers > 0
             ? [...consumed.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, leftovers, s.day) }]
             : consumed.pantry,
+          leftovers: householdPermission(s, 'pantry') && leftovers > 0
+            ? [...(s.leftovers || []).filter((item) => item.id !== `leftover-${recipe.id}-${s.day}`), createLeftover({ recipe, cookedPortions: leftovers + Math.max(1, Math.round(s.portions || 1)), eatenPortions: Math.max(0, Math.round(s.portions || 1)), date: s.day })].slice(-200)
+            : s.leftovers || [],
           pantryEvents: [...(s.pantryEvents || []), pantryEvent].slice(-100),
           lastPantryEvent: pantryEvent,
         };

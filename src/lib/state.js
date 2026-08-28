@@ -128,17 +128,23 @@ export const EMPTY_STATE = {
   priceAlertConfig: { risePct: 15, bargainPct: 15, overrides: {} }, // receipt-only rise/bargain thresholds, 15% default, per-item tunable
   waste: [], // what you threw away, and what it cost
   /* kitchen */
-  pantry: [], // {id,name,emoji,cat,location,qty,cost,store,expiry,low,confidence,amountConfidence}
+  pantry: [], // {id,name,emoji,cat,location,qty,unit,quantityMin,quantityMax,opened,purchaseDate,expiry,low,confidence,amountConfidence,purchaseSource,cost,expectedConsumptionRate,plannedMealAllocations}
   pantryConflicts: [], // quantity/source conflicts awaiting a household decision
   pantryEvents: [], // purchase, confirmation and recipe-consumption evidence
+  leftovers: [], // first-class cooked portions with storage and planned reuse lifecycle
   lastPantryEvent: null,
-  autoUsePantry: false,
+  // Cooking consumes the pantry it used by default — the closed loop depends
+  // on it (consume → leftovers → next plan). A household can still turn it
+  // off in the pantry; loopHealth then says so on Home rather than drifting
+  // silently.
+  autoUsePantry: true,
   plan: {}, // { 'YYYY-MM-DD': {breakfast,lunch,dinner} }
   mealPlanEvents: [], // {id,date,slot,plannedRecipeId,actualRecipeId,status,reason,at}
   calendarBusy: [], // [{date,source,importedAt}] imported from a connected calendar
   myRecipes: [], // dishes you generated, imported or were sent
   favourites: [], // recipe ids
   tasteRatings: {}, // recipe id -> nope | like | love
+  preferenceEvents: [], // eating/cooking outcomes used for multidimensional household learning
   recipeCollections: [], // {id,name,recipeIds[],createdAt}
   // Folders are the other half of organising: a recipe is in at most one, and
   // the assignment lives on the folder itself. See lib/recipe-folders.js.

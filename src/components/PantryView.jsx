@@ -8,6 +8,7 @@ import { cx, gbp, expiryStatus } from '../lib/utils.js';
 import {
   daysUntil, expiringSoon, freshnessOf, pantryAnalytics, pantryAvailability, pantryConfidenceLevel,
   pantryTruthLabel, pantryTruthTone, pantryUseLabel, pantryUncertaintyLabel, pantryValue,
+  quantityRangeLabel,
 } from '../lib/kitchen.js';
 import { expiryBuckets } from '../lib/shopping.js';
 import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_LOCATION, LOCATIONS } from '../data/pantry.js';
@@ -361,7 +362,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-[0.875rem] truncate">{p.name}</p>
                     <p className="text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
-                      {[p.qty, p.location, p.store].filter(Boolean).join(' · ') || p.cat}
+                      {[quantityRangeLabel(p), p.opened ? 'Opened' : 'Unopened', p.location, p.store].filter(Boolean).join(' · ') || p.cat}
                     </p>
                     {fresh.kind !== 'unknown' && (
                       <p className="text-[0.65625rem] font-semibold" style={{ color: 'var(--muted)' }}>{fresh.label}</p>
