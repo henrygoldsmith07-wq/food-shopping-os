@@ -61,6 +61,8 @@ import { planOutcome } from './plan-outcome.js';
 import { outcomeDashboard } from './outcome-dashboard.js';
 import { optimiseShopping } from './shopping-optimisation.js';
 import { weeklyFoodLoop } from './food-loop.js';
+import { loopHealth } from './loop-learning.js';
+import { learnHouseholdPreferences, preferenceSummary } from './household-preferences.js';
 
 export const deriveApp = (state) => {
   const activeMember = state.members.find((member) => member.id === state.activeMemberId) || null;
@@ -120,6 +122,15 @@ export const deriveApp = (state) => {
     ratings: state.tasteRatings,
     favourites: state.favourites,
     members: state.members,
+  });
+  const learnedHouseholdPreferences = learnHouseholdPreferences({
+    recipes: recipeBook,
+    cooked: state.cooked,
+    ratings: state.tasteRatings,
+    cookingTimeHistory: state.cookingTimeHistory,
+    feedback: state.preferenceEvents,
+    waste: state.waste,
+    today: state.day,
   });
   const wasteProfile = learnWasteProfile(state.waste, { learnedAliases: state.aliasMemory });
   const honestSavings = savingsSnapshot(state, state.day, 30);
@@ -183,6 +194,8 @@ export const deriveApp = (state) => {
     repeatFatigue: repeatFatigueSignal,
     cookingTimeLearning: cookingTime,
     householdPreferences,
+    learnedHouseholdPreferences,
+    preferenceSummary: preferenceSummary(learnedHouseholdPreferences),
     wasteProfile,
     body_: bodySummary(state, state.day),
     vitalsSummary: vitalSummary(state.vitals),
@@ -282,6 +295,7 @@ export const deriveApp = (state) => {
     honestSavings,
     wasteOutcome: wasteOutcome30,
     closedLoop,
+    loopHealth: loopHealth(state, state.day),
     planOutcome: planOutcome30,
     dashboard,
     shoppingOptimisation: (mode = 'balanced') => optimiseShopping(state.shoppingList, {

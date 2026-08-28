@@ -11,6 +11,8 @@ import { aisleFor, groupForStore, shoppingNameKey } from './shopping.js';
 import { canonicalName, sameIngredient } from './aliases.js';
 import { priceHistory } from './kitchen.js';
 import { compareUnitPrices, unitPriceOf } from './measure.js';
+import { rankSubstitutions as rankIntelligentSubstitutions } from './intelligent-substitutions.js';
+import { priceExpectationFor } from './price-expectations.js';
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 const round1 = (value) => Math.round(Number(value || 0) * 10) / 10;
@@ -176,7 +178,9 @@ export const substitutionCandidates = (item = {}, {
 };
 
 export const substitutionPlan = (item = {}, options = {}) => {
-  const candidates = substitutionCandidates(item, options);
+  const candidates = options.recipe
+    ? rankIntelligentSubstitutions(options.recipe, item, substitutionCandidates(item, options), options)
+    : substitutionCandidates(item, options);
   return {
     item: item.name,
     candidates,
@@ -215,6 +219,7 @@ export const compareShoppingPrices = (item = {}, shops = []) => {
 
 export const shoppingInsightFor = (item = {}, { shops = [], pantry = [], list = [], diets = [], allergies = [], intolerances = [], today = '', learnedAliases = {}, store = '', routes = {}, memory = {} } = {}) => ({
   price: priceConfidenceFor(item),
+  priceExpectation: priceExpectationFor(item, shops),
   priceChange: priceChangeFor(item.name, shops),
   duplicate: duplicatePurchaseCheck(item, { list, shops, today, excludeId: item.id, learnedAliases }),
   substitutions: substitutionPlan(item, { diets, allergies, intolerances, pantry, shops, learnedAliases }),

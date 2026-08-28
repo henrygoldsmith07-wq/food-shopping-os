@@ -10,9 +10,10 @@ import { MEAL_SLOTS } from '../data/plan.js';
 import { weekDates } from '../lib/kitchen.js';
 import {
   batchGroups, coveredByLeftovers, monthDates, monthGrid, monthLabel, planStats,
-  mealPlanIcs, shiftMonth, shiftWeek, shoppingForPlan, weekOffset,
+  mealPlanIcs, shiftMonth, shiftWeek, weekOffset,
 } from '../lib/mealplan.js';
 import { prepChecklist, prepProgress } from '../lib/prep-checklist.js';
+import { shoppingListForPlan } from '../lib/loop-learning.js';
 import { downloadFile } from '../lib/notify.js';
 import { filterByDiet } from '../lib/goals.js';
 import { monthOf, seasonalHits } from '../data/seasons.js';
@@ -155,7 +156,14 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
       goTab?.('shop');
       return;
     }
-    app.addToList(shoppingForPlan(app.plan, dates, { pantry: app.pantry }));
+    // Pantry-aware and waste-aware: only what's genuinely missing, and an
+    // ingredient this household keeps binning arrives one unit lighter.
+    app.addToList(shoppingListForPlan(app.plan, dates, {
+      pantry: app.pantry,
+      waste: app.waste,
+      today: app.day,
+      learnedAliases: app.aliasMemory || {},
+    }));
     setAddedToList(true);
   };
 

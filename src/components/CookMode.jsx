@@ -5,6 +5,7 @@ import {
 import { useApp } from '../lib/store.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { safeExternalUrl } from '../lib/recipe-tools.js';
+import { defaultLeftoverPortions } from '../lib/loop-learning.js';
 import { Card, Meter, Stepper } from './ui.jsx';
 
 /**
@@ -51,8 +52,10 @@ export default function CookMode({ recipe, onExit, onClose }) {
   const [timers, setTimers] = useState({}); // step index -> {left, running}
   const [auto, setAuto] = useState(false);
   const [dwell, setDwell] = useState(DWELL_SECONDS);
-  const [spare, setSpare] = useState(Math.max(0, (recipe.servings || 1) - 1));
-  const [saved, setSaved] = useState(false);
+  const [spare, setSpare] = useState(() => defaultLeftoverPortions(
+    recipe,
+    Math.max(1, Math.round(app.portions || app.household || 1)),
+  ));
   const [wakeState, setWakeState] = useState('checking');
   const [startedAt] = useState(() => Date.now());
 
@@ -104,8 +107,14 @@ export default function CookMode({ recipe, onExit, onClose }) {
   }, [finished]);
 
   const finish = () => {
-    app.completeRecipe(recipe, { actualMins: Math.max(1, Math.round((Date.now() - startedAt) / 60000)) });
-    recordProductEvent('recipe_cooked');
+    // One write: log the meal, spend the pantry it used, mark the planned
+    // slot cooked and save what's left over — the step the loop used to
+    // silently drop between cooking and the next plan.
+    app.completeRecipe(recipe, {
+      leftovers: spare,
+      actualMins: Math.max(1, Math.round((Date.now() - startedAt) / 60000)),
+    });
+    recordProductEvent('recipe_cooked', { leftovers: spare });
     setAuto(false);
     setFinished(true);
   };
@@ -204,20 +213,20 @@ export default function CookMode({ recipe, onExit, onClose }) {
             <Card className="mt-6 w-full !p-3 text-left">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[0.8125rem] font-bold inline-flex items-center gap-1.5">
-                  <Snowflake size={14} style={{ color: 'var(--muted)' }} /> Portions left over
+                  <Snowflake size={14} style={{ color: 'var(--muted)' }} /> Portions saved for later
                 </p>
-                <Stepper value={spare} onChange={setSpare} min={0} max={recipe.servings - 1} />
+                <Stepper
+                  value={spare}
+                  onChange={(value) => { setSpare(value); app.setLeftoverPortions(recipe, value); }}
+                  min={0}
+                  max={recipe.servings - 1}
+                />
               </div>
-              <button
-                onClick={() => { app.saveLeftovers(recipe, spare); setSaved(true); }}
-                disabled={saved || spare === 0}
-                className="press mt-2.5 w-full rounded-2xl border py-2.5 text-[0.8125rem] font-extrabold disabled:opacity-50"
-                style={saved ? { borderColor: 'var(--good)', color: 'var(--good)' } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
-              >
-                {saved
-                  ? `${spare} portion${spare === 1 ? '' : 's'} in the fridge`
-                  : `Save ${spare} portion${spare === 1 ? '' : 's'} for later`}
-              </button>
+              <p className="mt-2 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                {spare > 0
+                  ? `${spare} portion${spare === 1 ? '' : 's'} of ${recipe.name} in the fridge — the next plan uses them before buying again.`
+                  : 'Nothing saved for later — adjust if some is left.'}
+              </p>
             </Card>
           )}
 

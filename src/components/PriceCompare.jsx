@@ -162,6 +162,7 @@ export default function PriceCompare() {
                         <Pill tone={tone}>{insight.price?.label || 'No price'}</Pill>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                        {insight.priceExpectation?.observations >= 3 && <span>{insight.priceExpectation.label} · {insight.priceExpectation.decision}</span>}
                         {change?.status === 'tracked' && change.pct !== null
                           ? <span style={{ color: change.direction === 'up' ? 'var(--danger)' : change.direction === 'down' ? 'var(--good)' : 'var(--muted)' }}>{change.direction === 'up' ? '↑' : change.direction === 'down' ? '↓' : '·'} {Math.abs(change.pct)}% since the previous receipt</span>
                           : <span>{change?.observations === 1 ? 'One receipt — one more gives a price change.' : 'No recorded price change yet.'}</span>}

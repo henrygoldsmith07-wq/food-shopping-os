@@ -90,6 +90,65 @@ export const pantryConfidenceLevel = (item, today = '') => {
 
 export const confidenceAfterDecay = (item, today = '') => pantryConfidenceLevel(item, today).level;
 
+/** Return the honest quantity envelope for a pantry row. */
+export const pantryQuantityRange = (item = {}) => {
+  const raw = clean(item.qty);
+  const parsed = parsedQuantity(item);
+  const explicitMin = Number(item.quantityMin);
+  const explicitMax = Number(item.quantityMax);
+  if (Number.isFinite(explicitMin) && Number.isFinite(explicitMax)) {
+    return { min: Math.min(explicitMin, explicitMax), max: Math.max(explicitMin, explicitMax), unit: item.unit || parsed?.unit || null, source: 'estimated' };
+  }
+  if (!parsed) return { min: null, max: null, unit: item.unit || null, source: 'unknown', label: raw ? `${raw} (amount unreadable)` : 'Amount unknown' };
+  const amount = Number(parsed.amount);
+  const unit = item.unit || parsed.unit || parsed.count?.unit || null;
+  if (item.amountConfidence === 'approximate' || item.confidence === 'probable') {
+    const spread = Math.max(1, amount * 0.25);
+    return { min: Math.max(0, Math.round((amount - spread) * 10) / 10), max: Math.round((amount + spread) * 10) / 10, unit, source: 'estimated' };
+  }
+  return { min: amount, max: amount, unit, source: 'recorded' };
+};
+
+export const inferConsumptionRate = (events = [], name, { lookbackDays = 42, today = '' } = {}) => {
+  const key = canonicalName(name) || clean(name).toLowerCase();
+  const uses = (Array.isArray(events) ? events : []).filter((event) => {
+    const eventKey = canonicalName(event?.name || event?.ingredientName) || clean(event?.name || event?.ingredientName).toLowerCase();
+    if (eventKey !== key || !event?.date) return false;
+    const age = dayDistance(event.date, today);
+    return age === null || age <= lookbackDays;
+  });
+  if (uses.length < 2) return null;
+  const dates = [...new Set(uses.map((event) => event.date))].sort();
+  const span = Math.max(1, dayDistance(dates[0], dates.at(-1)) || 1);
+  return { uses: uses.length, cadenceDays: Math.round((span / Math.max(1, dates.length - 1)) * 10) / 10, confidence: uses.length >= 5 ? 'probable' : 'approximate' };
+};
+
+export const inferPantryStock = (item, { events = [], today = '', lookbackDays = 42 } = {}) => {
+  const rate = inferConsumptionRate(events, item?.name, { today, lookbackDays });
+  if (!rate) return { item, rate: null, changed: false };
+  const range = pantryQuantityRange(item);
+  if (range.min === null || range.max === null || !range.unit) return { item, rate, changed: false };
+  const elapsed = item?.lastConfirmedAt ? dayDistance(item.lastConfirmedAt, today) || 0 : 0;
+  if (elapsed < 1) return { item: { ...item, expectedConsumptionRate: rate }, rate, changed: true };
+  const expected = Math.max(0, rate.uses / Math.max(1, elapsed));
+  const min = Math.max(0, Math.round((range.min - expected) * 10) / 10);
+  const max = Math.max(min, Math.round((range.max - expected) * 10) / 10);
+  return {
+    item: { ...item, quantityMin: min, quantityMax: max, amountConfidence: 'approximate', expectedConsumptionRate: rate, confidence: item.confidence === 'definite' ? 'probable' : item.confidence },
+    rate,
+    changed: min !== range.min || max !== range.max,
+  };
+};
+
+export const quantityRangeLabel = (item) => {
+  const range = pantryQuantityRange(item);
+  if (range.min === null) return range.label || 'Amount unknown';
+  const format = (value) => Number.isInteger(value) ? String(value) : String(value).replace(/\\.0$/, '');
+  return range.min === range.max
+    ? `${format(range.min)}${range.unit ? ` ${range.unit}` : ''}`
+    : `${format(range.min)}–${format(range.max)}${range.unit ? ` ${range.unit}` : ''} estimated`;
+};
+
 const parsedQuantity = (item, learnedAliases = {}) => parseQuantity(item?.qty, {
   ingredient: canonicalName(item?.name, learnedAliases),
 });
@@ -108,6 +167,13 @@ export const normalisePantryItem = (item = {}, { learnedAliases = {} } = {}) => 
     normalisedQty: parsed ? formatQuantity(parsed) : qty,
     amountConfidence: amountConfidence(item, parsed),
     confidence: rawConfidence(item),
+    unit: item.unit || parsed?.unit || parsed?.count?.unit || null,
+    quantityMin: item.quantityMin ?? null,
+    quantityMax: item.quantityMax ?? null,
+    opened: item.opened ?? Boolean(item.openedDate),
+    purchaseSource: item.purchaseSource || item.source || null,
+    expectedConsumptionRate: item.expectedConsumptionRate || null,
+    plannedMealAllocations: item.plannedMealAllocations || [],
   };
 };
 

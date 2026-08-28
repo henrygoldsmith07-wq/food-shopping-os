@@ -21,6 +21,7 @@ import { Card, Chip, Stepper, Toggle } from './ui.jsx';
 import StarterPicker from './StarterPicker.jsx';
 import { NumberField } from './FoodDetail.jsx';
 import { TargetPreview } from './TargetSafety.jsx';
+import { QUICK_START_DEFAULTS, firstSessionPlan } from '../lib/onboarding-quick-start.js';
 
 const num = (value) => Math.max(0, Number(value) || 0) || null;
 
@@ -139,7 +140,13 @@ export default function Onboarding() {
       entryGoal,
       starterRecipeIds: picked,
       plan: starterPlan,
-      shoppingList: itemsFromRecipes(starterRecipes),
+      ...firstSessionPlan({
+        day: app.day,
+        recipes: starterRecipes,
+        pickedRecipeIds: picked,
+        household,
+        budget,
+      }),
       weeklyBudget: Math.max(0, Number(budget) || 0),
       targets: targetsFor(state),
     });
@@ -167,8 +174,8 @@ export default function Onboarding() {
         </h1>
         <p className="mt-1.5 text-[0.875rem] font-semibold" style={{ color: 'var(--muted)' }}>
           {step === 0 && 'Choose what you want help with first. Nothing is filled in for you, and you can change direction at any time.'}
-          {step === 1 && 'Two useful details make portions and spending more accurate. Both are optional.'}
-          {step === 2 && 'Pick up to three recipes and Forq will turn them into meals and one shopping list.'}
+          {step === 1 && 'A few high-signal details make your first plan and shop useful. Everything else can be learned as you go.'}
+          {step === 2 && 'Pick up to three meals and Forq will turn them into a first plan and one shopping list.'}
         </p>
       </div>
 

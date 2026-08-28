@@ -78,4 +78,35 @@ export const planActions = (set) => ({
         })
         .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0),
     } : {})),
+  /**
+   * Reconcile today's saved portions for one dish to exactly `portions` —
+   * the correction path for cooking's automatic leftover save. Zero removes
+   * the rows entirely; more than saved adds a row, so the fridge always ends
+   * up matching what the household says is there.
+   */
+  setLeftoverPortions: (recipe, portions) =>
+    set((s) => {
+      if (!householdPermission(s, 'pantry') || !recipe?.id) return {};
+      const n = Math.max(0, Math.round(Number(portions) || 0));
+      const mine = (p) => p.cat === LEFTOVER_CAT && p.recipeId === recipe.id && p.addedAt === s.day;
+      const rows = s.pantry.filter(mine);
+      if (!rows.length && n === 0) return {};
+      if (!rows.length) {
+        return { pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, n, s.day) }] };
+      }
+      if (n === 0) return { pantry: s.pantry.filter((p) => !mine(p)) };
+      let remaining = n;
+      const pantry = s.pantry.flatMap((p) => {
+        if (!mine(p)) return [p];
+        const take = Math.min(remaining, Math.max(1, Math.round(Number(p.portions) || 1)));
+        remaining -= take;
+        return take > 0
+          ? [{ ...p, portions: take, qty: `${take} portion${take === 1 ? '' : 's'}` }]
+          : [];
+      });
+      if (remaining > 0) {
+        pantry.push({ id: uid('p'), low: false, ...leftoverEntry(recipe, remaining, s.day) });
+      }
+      return { pantry };
+    }),
 });
