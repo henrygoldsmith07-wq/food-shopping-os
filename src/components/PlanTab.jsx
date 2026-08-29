@@ -196,7 +196,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             <Chip active={view === 'week'} onClick={() => { setView('week'); setOffset(0); clearRangeStatus(); }}>Week</Chip>
             <Chip active={view === 'month'} onClick={() => { setView('month'); setOffset(0); clearRangeStatus(); }}>Month</Chip>
           </div>
-          <div className="flex items-center gap-1">
+          {/* Arrows keep their tap target; the date label gives way rather than pushing the page sideways. */}
+          <div className="flex min-w-0 items-center gap-1">
             <button
               onClick={() => { setOffset((o) => o - 1); clearRangeStatus(); }}
               aria-label={view === 'week' ? 'Previous week' : 'Previous month'}
@@ -207,7 +208,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             </button>
             <button
               onClick={() => { setOffset(0); clearRangeStatus(); }}
-              className="tap press shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[0.78125rem] font-extrabold"
+              className="tap press min-w-0 rounded-full px-3 py-1.5 text-[0.78125rem] font-extrabold"
               style={{ background: offset ? 'var(--card-2)' : 'transparent', color: offset ? 'var(--ink)' : 'var(--faint)' }}
             >
               {offset ? 'Today' : rangeLabel}

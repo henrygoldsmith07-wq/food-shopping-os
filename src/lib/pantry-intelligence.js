@@ -94,9 +94,15 @@ export const confidenceAfterDecay = (item, today = '') => pantryConfidenceLevel(
 export const pantryQuantityRange = (item = {}) => {
   const raw = clean(item.qty);
   const parsed = parsedQuantity(item);
+  // `Number(null)` is 0 and `Number.isFinite(0)` is true, so reading these
+  // straight through the coercion made every item without an explicit range
+  // look like it had one of exactly zero. `normalisePantryItem` sets both to
+  // null for an ordinary item, so this fired on nearly all of them: an item
+  // entered as "280 g" was stored correctly and displayed as "0 g".
+  const stated = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
   const explicitMin = Number(item.quantityMin);
   const explicitMax = Number(item.quantityMax);
-  if (Number.isFinite(explicitMin) && Number.isFinite(explicitMax)) {
+  if (stated(item.quantityMin) && stated(item.quantityMax)) {
     return { min: Math.min(explicitMin, explicitMax), max: Math.max(explicitMin, explicitMax), unit: item.unit || parsed?.unit || null, source: 'estimated' };
   }
   if (!parsed) return { min: null, max: null, unit: item.unit || null, source: 'unknown', label: raw ? `${raw} (amount unreadable)` : 'Amount unknown' };
@@ -144,9 +150,31 @@ export const quantityRangeLabel = (item) => {
   const range = pantryQuantityRange(item);
   if (range.min === null) return range.label || 'Amount unknown';
   const format = (value) => Number.isInteger(value) ? String(value) : String(value).replace(/\\.0$/, '');
+
+  // Say it in the units it was bought in. The parser converts "2 tins" to
+  // 800 g so the arithmetic downstream has one scale to work in, and it keeps
+  // the count alongside — but showing someone "800 g of beans" when they put
+  // two tins away rewrites what they told us, and "1 tin left" is the more
+  // useful sentence when the thing comes in tins. The range itself stays in
+  // mass, because the consumption maths depends on it.
+  const parsed = parsedQuantity(item);
+  const count = parsed?.count;
+  if (count && range.min === range.max && Number.isFinite(count.amount) && count.unit) {
+    const plural = count.amount === 1 ? count.unit : `${count.unit}s`;
+    return `${format(count.amount)} ${plural}`;
+  }
+
+  // Countable things pluralise; grams and millilitres do not. "3 egg" reads
+  // like a typo, and "280 gs" would read like a worse one.
+  const label = (amount) => {
+    if (!range.unit) return format(amount);
+    const plural = parsed?.dim === 'count' && amount !== 1 ? `${range.unit}s` : range.unit;
+    return `${format(amount)} ${plural}`;
+  };
+
   return range.min === range.max
-    ? `${format(range.min)}${range.unit ? ` ${range.unit}` : ''}`
-    : `${format(range.min)}–${format(range.max)}${range.unit ? ` ${range.unit}` : ''} estimated`;
+    ? label(range.min)
+    : `${format(range.min)}–${label(range.max)} estimated`;
 };
 
 const parsedQuantity = (item, learnedAliases = {}) => parseQuantity(item?.qty, {

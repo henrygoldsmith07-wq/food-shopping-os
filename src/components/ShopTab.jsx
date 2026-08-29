@@ -257,7 +257,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                   className="press mt-1.5 rounded-full border px-3 py-1.5 text-[0.71875rem] font-extrabold"
                   style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
                 >
-                  <span className="inline-flex items-center gap-1.5"><MapPin size={12} /> Edit this store's route</span>
+                  <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><MapPin size={12} /> Edit this store's route</span>
                 </button>
               )}
               {store && (
@@ -269,13 +269,15 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
           )}
 
           <Section className="rise rise-2">
-            <div className="grid grid-cols-4 gap-2.5 mb-3">
+            {/* Four across at normal text; the tracks are sized in rem, so large
+                text drops them to two rather than spilling the labels sideways. */}
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2.5 mb-3">
               <button
                 onClick={() => setAdding((v) => !v)}
                 className="press col-span-2 rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
                 style={adding ? { borderColor: 'var(--line)' } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
               >
-                <span className="inline-flex items-center gap-1.5">
+                <span className="inline-flex flex-wrap items-center justify-center gap-1.5">
                   {adding ? <><X size={13} /> Close</> : <><Plus size={14} /> Add an item</>}
                 </span>
               </button>
@@ -284,21 +286,21 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 className="press rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
                 style={{ borderColor: 'var(--line)' }}
               >
-                <span className="inline-flex items-center gap-1.5"><ScanLine size={14} /> Scan</span>
+                <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><ScanLine size={14} /> Scan</span>
               </button>
               <button
                 onClick={() => setSheet('offers')}
                 className="press rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
                 style={{ borderColor: app.offers.length ? 'var(--accent)' : 'var(--line)', color: app.offers.length ? 'var(--accent)' : 'var(--ink)' }}
               >
-                <span className="inline-flex items-center gap-1.5"><Tag size={14} /> Offers{app.offers.length ? ` (${app.offers.length})` : ''}</span>
+                <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><Tag size={14} /> Offers{app.offers.length ? ` (${app.offers.length})` : ''}</span>
               </button>
               <button
                 onClick={voiceAdd}
                 className="press rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
                 style={{ borderColor: 'var(--line)' }}
               >
-                <span className="inline-flex items-center gap-1.5"><Mic size={14} /> Voice</span>
+                <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><Mic size={14} /> Voice</span>
               </button>
               {/* Receipt capture is an optional tool — manual shop entry always works. */}
               {app.hasTool('receipt') && (
@@ -307,7 +309,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 className="press col-span-2 rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
                 style={{ borderColor: 'var(--line)' }}
               >
-                <span className="inline-flex items-center gap-1.5"><Receipt size={14} /> Read a receipt</span>
+                <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><Receipt size={14} /> Read a receipt</span>
               </button>
               )}
             </div>
@@ -322,7 +324,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 className="press w-full rounded-2xl border py-2.5 text-[0.8125rem] font-extrabold"
                 style={{ borderColor: repeatedLastShop ? 'var(--good)' : 'var(--line)', color: repeatedLastShop ? 'var(--good)' : 'var(--ink)' }}
               >
-                <span className="inline-flex items-center gap-1.5">
+                <span className="inline-flex flex-wrap items-center justify-center gap-1.5">
                   {repeatedLastShop ? <><Check size={14} /> Review shopping list</> : <><RotateCcw size={14} /> Repeat your last shop</>}
                 </span>
               </button>
@@ -341,7 +343,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                   <Chip
                     key={staple.name}
                     onClick={() => app.addToList({ name: staple.name, emoji: staple.emoji, qty: '', store })}>
-                    <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-flex flex-wrap items-center justify-center gap-1.5">
                       {staple.emoji} {staple.name}
                       <span className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
                         {staple.since} days · every ~{staple.cadence}
@@ -433,7 +435,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 className="press mt-3 w-full rounded-2xl border py-2.5 text-[0.8125rem] font-extrabold"
                 style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
               >
-                <span className="inline-flex items-center gap-1.5"><Copy size={14} /> Copy the list as text</span>
+                <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><Copy size={14} /> Copy the list as text</span>
               </button>
 
             </Section>
