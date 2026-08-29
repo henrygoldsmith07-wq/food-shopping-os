@@ -339,8 +339,22 @@ export default function LivePriceCheck({
                         </div>
                         {entry.best && (
                           <div className="text-right shrink-0">
-                            <p className="font-extrabold text-[1rem] tabular-nums">{gbp(entry.best.price, { always: true })}</p>
-                            <p className="text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>{entry.best.retailer}</p>
+                            {/* The headline follows the ranking below it. It used
+                                to show the cheapest ticket while the ranking
+                                underneath named a different shop as best value,
+                                so one card gave two answers to one question. */}
+                            <p className="font-extrabold text-[1rem] tabular-nums">
+                              {gbp(bestValue?.price ?? entry.best.price, { always: true })}
+                            </p>
+                            <p className="text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>
+                              {bestValue?.retailer || entry.best.retailer}
+                            </p>
+                            {bestValue?.unit && (
+                              <p className="text-[0.6875rem] font-semibold tabular-nums" style={{ color: 'var(--faint)' }}>
+                                {gbp(bestValue.unit.value, { always: true })}
+                                {bestValue.unit.dim === 'count' ? ` ${bestValue.unit.unit}` : ` / ${bestValue.unit.unit}`}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -352,7 +366,7 @@ export default function LivePriceCheck({
                         disabled={offlineMode || !isOnline}
                       />
 
-                      <LiveShopRanking perRetailer={entry.perRetailer} />
+                      <LiveShopRanking perRetailer={entry.perRetailer} name={item.name} />
 
                       {entry.unanswered?.length > 0 && (
                         <details className="mt-2">
