@@ -202,7 +202,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
           320px phone on one line, so this scrolls rather than pushing the
           whole page sideways. */}
       <div className="hero-gradient pt-1 pb-3">
-        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar px-5 rise rise-1">
+        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar scroll-x-fade px-5 rise rise-1">
           {[['list', 'List', ShoppingCart], ['history', 'Shops', Receipt], ['prices', 'Prices', TrendingUp], ['stores', 'Stores', Building2], ['budget', 'Budget', Banknote]].map(([k, label, Icon]) => (
             <Chip key={k} active={view === k} onClick={() => {
               setView(k);
@@ -237,7 +237,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 </p>
                 {known && <Pill tone="good">your route, learned</Pill>}
               </div>
-              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+              <div className="flex gap-2 overflow-x-auto no-scrollbar scroll-x-fade">
                 <Chip active={!shoppingSession.store} onClick={() => shoppingSession.selectStore('')}>All shops</Chip>
                 {storeChoices.map((s) => (
                   <Chip key={s} active={shoppingSession.store === s} onClick={() => shoppingSession.selectStore(s)}>{s}</Chip>
@@ -360,7 +360,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
 
           {app.favouriteShopping.length > 0 && (
             <Section className="rise rise-2" title="Favourites">
-              <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
+              <div className="flex gap-2 overflow-x-auto no-scrollbar scroll-x-fade -mx-5 px-5">
                 {app.favouriteShopping.map((item) => (
                   <Chip key={shoppingNameKey(item.name)} onClick={() => app.addToList({ ...item, store: store || item.store })}>
                     <span className="inline-flex items-center gap-1.5">

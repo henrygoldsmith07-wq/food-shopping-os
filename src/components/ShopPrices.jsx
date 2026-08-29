@@ -45,14 +45,19 @@ export default function ShopPrices({
             <span className="text-[0.6875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>{app.couponsForList.slice(0, 2).map((h) => h.coupon.label).join(' · ')}{app.couponsForList.length > 2 ? ` +${app.couponsForList.length - 2}` : ''}</span>
           </div>
         )}
-        <div className="flex items-center justify-between gap-3">
+        {/* Stacked on a phone, side by side once there is room. Sitting a
+            "Check community prices" button beside this sentence on a 390px
+            screen left the text about 110px wide and set it one word per
+            line. A button that refuses to shrink has to be given its own row
+            rather than allowed to squeeze the paragraph explaining it. */}
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="min-w-0">
             <p className="font-bold text-[0.875rem]">Real prices</p>
             <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
               Your receipts are primary. Community observations are dated context — never a live quote.
             </p>
           </div>
-          <button type="button" onClick={checkObservedPrices} disabled={observedBusy || offlineMode || !isOnline} className="press shrink-0 rounded-2xl px-3.5 py-2 text-[0.78125rem] font-extrabold disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+          <button type="button" onClick={checkObservedPrices} disabled={observedBusy || offlineMode || !isOnline} className="press w-full shrink-0 rounded-2xl px-3.5 py-2.5 text-[0.78125rem] font-extrabold disabled:opacity-50 sm:w-auto sm:py-2" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
             {offlineMode ? 'Offline mode' : observedBusy ? 'Checking…' : observedByKey ? 'Check again' : 'Check community prices'}
           </button>
         </div>

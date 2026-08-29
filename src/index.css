@@ -385,6 +385,31 @@ select { font-size: 1rem !important; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
+/*
+ * A row that scrolls sideways, and looks like it does.
+ *
+ * Hiding the scrollbar is right on a phone and leaves a problem: a chip row
+ * wider than the screen gets sliced off mid-word at the viewport edge, which
+ * reads as a rendering fault rather than as "there is more this way". The
+ * Shop tab clipped "Stores" and "Sainsbury's" exactly that way.
+ *
+ * The fade is painted over a trailing gutter the row always carries, so a row
+ * that fits fades nothing but empty space, and a row that overflows fades the
+ * content running under the edge. No measurement, no JavaScript, and it
+ * degrades to a plain scroll where mask-image is unsupported.
+ */
+.scroll-x-fade {
+  padding-right: 1.5rem;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent 100%);
+}
+
+/* A fade is decoration; someone who has asked for fewer effects still needs
+   to see the edge, and a hard edge is the honest fallback. */
+@media (prefers-reduced-motion: reduce) {
+  .scroll-x-fade { -webkit-mask-image: none; mask-image: none; }
+}
+
 .press { transition: transform 120ms ease, opacity 120ms ease; }
 .press:active { transform: scale(0.97); }
 @media (hover: hover) {
