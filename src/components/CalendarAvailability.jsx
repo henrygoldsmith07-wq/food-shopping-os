@@ -68,12 +68,15 @@ export default function CalendarAvailability({ dates }) {
       <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
         Import busy evenings from Chrono (.ics) or a connected calendar. The meal generator leaves those nights empty.
       </p>
-      <div className="grid grid-cols-[1fr_auto] gap-2">
+      {/* Wraps rather than overflows: at 200% text the provider name and the
+          button each need most of a phone's width, and a page that scrolls
+          sideways takes the fixed tab bar with it. */}
+      <div className="flex flex-wrap items-stretch gap-2">
         <select
           value={provider}
           onChange={(event) => setProvider(event.target.value)}
           aria-label="Calendar provider"
-          className="rounded-2xl border px-3 py-2.5 text-[0.8125rem] font-bold"
+          className="min-w-0 flex-1 basis-48 rounded-2xl border px-3 py-2.5 text-[0.8125rem] font-bold"
           style={{ borderColor: 'var(--line)', background: 'var(--card)', color: 'var(--ink)' }}
         >
           <option value="google">Google Calendar</option>
@@ -83,7 +86,7 @@ export default function CalendarAvailability({ dates }) {
           type="button"
           onClick={importAvailability}
           disabled={reading}
-          className="press rounded-2xl border px-3 py-2.5 text-[0.8125rem] font-extrabold disabled:opacity-50"
+          className="press min-w-0 grow rounded-2xl border px-3 py-2.5 text-[0.8125rem] font-extrabold disabled:opacity-50"
           style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
         >
           <span className="inline-flex items-center gap-1.5">
