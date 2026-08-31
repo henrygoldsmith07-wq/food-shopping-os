@@ -11,9 +11,14 @@ import { microsFor, microsFromBlend, fibreFromBlend } from './micronutrients.js'
 import { EXPANDED_FOODS } from './expanded-foods.js';
 import { BRANDED_FOODS } from './branded-foods.js';
 import { BRANDED_FOODS_EXTRA } from './branded-foods-extra.js';
+import { BRANDED_FOODS_MORE } from './branded-foods-more.js';
+import { BRANDED_FOODS_EVEN_MORE } from './branded-foods-even-more.js';
+import { BRANDED_FOODS_LATEST } from './branded-foods-latest.js';
+import { BRANDED_FOODS_NEXT } from './branded-foods-next.js';
 import { GLOBAL_PANTRY_FOODS } from './global-pantry-foods.js';
 import { STORE_CUPBOARD_FOODS } from './store-cupboard-foods.js';
 import { DELI_DESSERT_FOODS } from './deli-dessert-foods.js';
+import { MASTER_FOOD_EXPANSION } from './master-food-expansion.js';
 
 const n = ([kcal, protein, carbs, fat, fibre = 0]) => ({ kcal, protein, carbs, fat, fibre });
 const s = (pairs) => pairs.map(([label, grams]) => ({ label, grams }));
@@ -260,6 +265,10 @@ const CORE_FOODS = [
 // Branded rows sit after the generics on purpose: a search for "baked beans"
 // should still land on the generic entry, while "Heinz baked beans" finds the
 // specific one. Order is the tie-breaker that keeps both working.
+// Multiple branded waves can re-declare the same product. Keep the first
+// occurrence: generics and earlier branded definitions win, ids stay unique,
+// and later waves only ever contribute genuinely new products.
+const seenFoodIds = new Set();
 export const FOODS = [
   ...CORE_FOODS,
   ...EXPANDED_FOODS,
@@ -267,8 +276,17 @@ export const FOODS = [
   ...DELI_DESSERT_FOODS,
   ...BRANDED_FOODS,
   ...BRANDED_FOODS_EXTRA,
+  ...BRANDED_FOODS_MORE,
+  ...BRANDED_FOODS_EVEN_MORE,
+  ...BRANDED_FOODS_NEXT,
+  ...BRANDED_FOODS_LATEST,
   ...GLOBAL_PANTRY_FOODS,
-];
+  ...MASTER_FOOD_EXPANSION,
+].filter((food) => {
+  if (seenFoodIds.has(food.id)) return false;
+  seenFoodIds.add(food.id);
+  return true;
+});
 
 /* ---------- Restaurant menus ----------
    Menu items are stored the way a menu quotes them — calories, macros, portion

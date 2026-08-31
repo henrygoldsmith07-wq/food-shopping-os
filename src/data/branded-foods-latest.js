@@ -1,0 +1,36 @@
+import { brandedRow } from './food-row.js';
+
+const ROWS = [
+  [['heinz-spaghetti-hoops', 'Heinz Spaghetti Hoops', '🥫', [86, 3.2, 13.5, 1.8, 2.8, 5.2, 0.5, 0.7], 210, ['tinned', 'meal']], 'Heinz'],
+  [['heinz-baked-beans-no-added-sugar', 'Heinz No Added Sugar Beanz', '🥫', [73, 4.7, 10.8, 0.3, 4.5, 1.2, 0.1, 0.6], 210, ['tinned', 'high-fibre']], 'Heinz'],
+  [['princes-tuna-spring-water', 'Princes Tuna in Spring Water', '🐟', [109, 25, 0, 0.8, 0, 0, 0.2, 0.8], 112, ['tinned', 'fish', 'high-protein']], 'Princes'],
+  [['john-west-salmon', 'John West Pink Salmon', '🐟', [142, 21, 0, 6.5, 0, 0, 1.5, 0.8], 105, ['tinned', 'fish', 'high-protein']], 'John West'],
+  [['dolmio-bolognese', 'Dolmio Original Bolognese Sauce', '🍅', [66, 1.4, 8.7, 2.5, 1.5, 5.4, 0.4, 0.75], 125, ['sauce', 'italian']], 'Dolmio'],
+  [['barilla-pesto', 'Barilla Genovese Pesto', '🌿', [455, 4.5, 5.5, 46, 1.5, 2.5, 8.5, 1.9], 30, ['sauce', 'italian']], 'Barilla'],
+  [['knorr-chicken-stock-pot', 'Knorr Chicken Stock Pot', '🍲', [78, 5, 7, 3, 0, 1, 1, 12], 28, ['stock', 'store-cupboard']], 'Knorr'],
+  [['paxo-sage-onion-stuffing', 'Paxo Sage & Onion Stuffing', '🌿', [352, 9, 66, 5, 5, 4, 1, 2], 50, ['store-cupboard', 'vegetarian']], 'Paxo'],
+  [['kelloggs-crunchy-nut', 'Kellogg’s Crunchy Nut Corn Flakes', '🥣', [406, 7.5, 79, 8, 3, 35, 1.5, 0.65], 30, ['breakfast', 'cereal']], 'Kellogg’s'],
+  [['jordans-super-fruit', 'Jordans Super Fruity Granola', '🥣', [448, 8.5, 63, 18, 7, 22, 3, 0.35], 45, ['breakfast', 'cereal', 'high-fibre']], 'Jordans'],
+  [['muller-corner-strawberry', 'Müller Corner Strawberry Yogurt', '🥣', [112, 4, 15, 3.5, 0, 14, 2.2, 0.15], 136, ['dairy', 'dessert']], 'Müller'],
+  [['ambrosia-rice-pudding', 'Ambrosia Creamy Rice Pudding', '🍚', [115, 3.1, 18, 3.3, 0, 12, 2.1, 0.15], 120, ['dessert', 'dairy']], 'Ambrosia'],
+  [['warburtons-crumpets', 'Warburtons Crumpets', '🍞', [198, 7.2, 37, 1.2, 2.5, 2.5, 0.3, 1], 55, ['bread', 'breakfast']], 'Warburtons'],
+  [['hovis-best-of-both', 'Hovis Best of Both Bread', '🍞', [247, 9.2, 43, 3.5, 4.5, 3.5, 0.7, 0.95], 40, ['bread']], 'Hovis'],
+  [['cadbury-dairy-milk', 'Cadbury Dairy Milk', '🍫', [534, 7.3, 56, 30, 2.1, 56, 18, 0.24], 45, ['snack', 'treat', 'dairy']], 'Cadbury'],
+  [['nature-valley-oats-honey', 'Nature Valley Oats & Honey Crunchy Bar', '🍯', [445, 8, 67, 15, 6, 29, 3, 0.7], 21, ['snack', 'breakfast']], 'Nature Valley'],
+  [['walkers-prawn-cocktail', 'Walkers Prawn Cocktail Crisps', '🥔', [532, 6.5, 53, 33, 4, 3, 2.8, 1.5], 25, ['snack']], 'Walkers'],
+  [['doritos-chilli-heatwave', 'Doritos Chilli Heatwave', '🌶️', [498, 6.5, 58, 25, 4, 2.5, 2.2, 1.4], 30, ['snack']], 'Doritos'],
+  [['pringles-original', 'Pringles Original', '🥔', [532, 4.5, 52, 34, 3, 2, 3, 1.4], 30, ['snack']], 'Pringles'],
+  [['coca-cola-zero', 'Coca-Cola Zero Sugar', '🥤', [1, 0, 0, 0, 0, 0, 0, 0.02], 330, ['drink', 'sugar-free'], null, 'ml'], 'Coca-Cola'],
+  [['schweppes-tonic', 'Schweppes Indian Tonic Water', '🥤', [34, 0, 8.4, 0, 0, 8.4, 0, 0.02], 200, ['drink'], null, 'ml'], 'Schweppes'],
+  [['volvic-sparkling', 'Volvic Sparkling Water', '💧', [0, 0, 0, 0, 0, 0, 0, 0], 500, ['drink'], null, 'ml'], 'Volvic'],
+  [['innocent-strawberry-banana', 'Innocent Strawberry & Banana Smoothie', '🍓', [62, 1, 13, 0.2, 1.2, 11, 0.1, 0.01], 250, ['drink', 'fruit'], null, 'ml'], 'Innocent'],
+  [['mccain-oven-chips', 'McCain Straight Cut Oven Chips', '🍟', [153, 2.5, 25, 4.5, 3, 0.5, 0.7, 0.3], 150, ['frozen', 'potato']], 'McCain'],
+  [['birds-eye-mixed-vegetables', 'Birds Eye Mixed Vegetables', '🥕', [50, 3, 7, 0.5, 3.5, 3, 0.1, 0.1], 80, ['frozen', 'veg']], 'Birds Eye'],
+  [['findus-fish-fingers', 'Findus 10 Fish Fingers', '🐟', [202, 12, 20, 8, 1.2, 1, 1.6, 0.9], 150, ['frozen', 'fish']], 'Findus'],
+  [['goodfellows-pepperoni', 'Goodfella’s Pepperoni Pizza', '🍕', [245, 11, 28, 9, 2, 3, 4, 1.2], 170, ['frozen', 'meal']], 'Goodfella’s'],
+  [['quorn-mince', 'Quorn Vegetarian Mince', '🌱', [102, 15, 2, 3, 5, 0.5, 0.8, 0.8], 100, ['vegetarian', 'high-protein']], 'Quorn'],
+  [['beyond-meat-burger', 'Beyond Meat Plant-Based Burger', '🌱', [230, 17, 5, 15, 2, 0.5, 5, 1.2], 113, ['vegan', 'high-protein']], 'Beyond Meat'],
+  [['alpro-protein-yogurt', 'Alpro High Protein Soya Yogurt', '🥣', [57, 5.3, 2.5, 2.2, 0.5, 2.2, 0.4, 0.1], 200, ['vegan', 'dairy-free', 'high-protein']], 'Alpro'],
+];
+
+export const BRANDED_FOODS_LATEST = ROWS.map(([row, brand]) => brandedRow(row, brand));
