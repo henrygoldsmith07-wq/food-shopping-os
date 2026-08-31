@@ -104,7 +104,7 @@ export const hardFilter = (recipes, {
     if (!recipeAllowed(r, diets)) return false;
     if ((goal === 'muscle' || goal === 'recomp') && r.protein < 20) return false;
     if (goal === 'lose' && r.kcal > 520) return false;
-    if (r.costPerServing > budget) return false;
+    if (!Number.isFinite(Number(r.costPerServing)) || r.costPerServing > budget) return false;
     if (maxTime && r.time > maxTime) return false;
     if (equipment && !equipmentOk(r, equipment)) return false;
     if (availableOnly && pantryCoverage(r, pantry).missing.length) return false;
@@ -252,7 +252,9 @@ export function buildPlan(
     }
     return [...out].sort((a, b) => {
       const seasonal = month ? seasonScore(b, month) - seasonScore(a, month) : 0;
-      const cost = (Number(a.costPerServing) || 0) - (Number(b.costPerServing) || 0);
+      const costA = Number.isFinite(Number(a.costPerServing)) ? Number(a.costPerServing) : Number.POSITIVE_INFINITY;
+      const costB = Number.isFinite(Number(b.costPerServing)) ? Number(b.costPerServing) : Number.POSITIVE_INFINITY;
+      const cost = costA - costB;
       return seasonal * 4 + cost;
     });
   };
