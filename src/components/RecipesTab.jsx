@@ -8,6 +8,7 @@ import { cx, gbp } from '../lib/utils.js';
 import { allRecipes, DISCOVER_FILTERS, filterRecipes } from '../data/recipes.js';
 import { DIET_PATTERNS } from '../data/goals.js';
 import { missingFrom, parseShareCode, searchRecipes } from '../lib/recipe-tools.js';
+import { searchAndSortRecipes } from '../lib/recipe-search.js';
 import { ALL_RECIPES, recipesInFolder } from '../lib/recipe-folders.js';
 import { Section, Card, Chip, Pill, FoodArt, Sheet } from './ui.jsx';
 import PrimaryAction from './PrimaryAction.jsx';
@@ -99,6 +100,7 @@ export default function RecipesTab({ openRecipe }) {
   const app = useApp();
   const [filter, setFilter] = useState('Dinner');
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('relevance');
   const [view, setView] = useState('library'); // library · mine · favourites
   const [sheet, setSheet] = useState(null); // filters · generate · shared · taste
   const [filters, setFilters] = useState({ diets: [], maxTime: null, include: [], exclude: [], maxMissing: null });
@@ -138,13 +140,13 @@ export default function RecipesTab({ openRecipe }) {
   const blocked = pool.length - safePool.length;
 
   const recipes = useMemo(
-    () => searchRecipes(safePool, {
+    () => searchAndSortRecipes(searchRecipes(safePool, {
       query,
       have: pantryNames,
       suitabilityCtx: app.suitabilityCtx,
       ...filters,
-    }),
-    [safePool, query, filters, app.pantry, app.suitabilityCtx],
+    }), { query, sort }),
+    [safePool, query, filters, app.pantry, app.suitabilityCtx, sort],
   );
 
   const [shown, setShown] = useState(PAGE);
@@ -346,7 +348,24 @@ export default function RecipesTab({ openRecipe }) {
       )}
 
       <Section className="mt-4 rise rise-2">
-        <p className="mb-3 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+            {recipes.length} recipe{recipes.length === 1 ? '' : 's'}
+            {filters.maxMissing === 0 && ' you can cook right now'}
+            {filters.maxTime && ` in ${filters.maxTime} minutes or less`}
+            {filters.diets.length > 0 && ` · ${filters.diets.join(', ')}`}
+            {blockedLine && <span style={{ color: 'var(--faint)' }}> · {blockedLine}</span>}
+          </p>
+          <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort recipes" className="rounded-xl border px-2 py-2 text-[0.71875rem] font-bold" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}>
+            <option value="relevance">Sort: relevant</option>
+            <option value="time">Fastest</option>
+            <option value="protein">Most protein</option>
+            <option value="calories">Fewest calories</option>
+            <option value="health">Health score</option>
+            <option value="cost">Lowest cost</option>
+          </select>
+        </div>
+        <p className="hidden">
           {recipes.length} recipe{recipes.length === 1 ? '' : 's'}
           {filters.maxMissing === 0 && ' you can cook right now'}
           {filters.maxTime && ` in ${filters.maxTime} minutes or less`}
