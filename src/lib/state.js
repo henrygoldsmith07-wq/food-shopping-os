@@ -128,6 +128,7 @@ export const EMPTY_STATE = {
   predictionSnapshots: [], // prospective predictions resolved against later household outcomes
   autopilotOutcomes: [], // whether recommended actions were completed
   adventureCompleted: {}, // claimed weekly kitchen adventure missions
+  planSimulations: [], // saved multi-objective planning scenarios
   priceAlerts: [], // item price targets checked against recorded shops
   priceAlertConfig: { risePct: 15, bargainPct: 15, overrides: {} }, // receipt-only rise/bargain thresholds, 15% default, per-item tunable
   waste: [], // what you threw away, and what it cost

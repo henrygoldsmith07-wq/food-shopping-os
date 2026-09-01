@@ -12,6 +12,11 @@
 const round1 = (n) => Math.round(n * 10) / 10;
 const clamp = (n) => Math.max(0, Math.min(100, n));
 const key = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const finitePositive = (value) => Number.isFinite(Number(value)) && Number(value) > 0;
+const normaliseWeightMap = (weights = {}) => Object.fromEntries(
+  Object.entries(weights).map(([name, value]) => [name, finitePositive(value) ? Number(value) : 0]),
+);
+const ingredientKey = (name) => key(name).replace(/^(fresh|frozen|dried|cooked|organic| tinned|canned) /, '').trim();
 
 /** Light quantity reader: number + dimension (mass/volume/count). */
 export const readQty = (qty) => {
@@ -32,8 +37,7 @@ export const readQty = (qty) => {
 /** Share of the candidate's ingredient need already sitting in the pantry. */
 export const pantryCoverage = (meals = [], pantryItems = []) => {
   const stock = new Map();
-  for (const p of pantryItems || []) {
-    const k = key(p?.name);
+  for (const p of pantryItems || []) {      const k = ingredientKey(p?.name);
     if (!k) continue;
     const q = readQty(p.qty);
     const cur = stock.get(k);
@@ -43,7 +47,7 @@ export const pantryCoverage = (meals = [], pantryItems = []) => {
   let covered = 0;
   for (const meal of meals) {
     for (const ing of meal?.ingredients || []) {
-      const k = key(ing?.name);
+      const k = ingredientKey(ing?.name);
       if (!k) continue;
       const q = readQty(ing.qty);
       need += q.amount;
@@ -68,8 +72,7 @@ export const expiryCoverage = (meals = [], pantryItems = [], { today, horizonDay
 
 const budgetFitOf = (meals, priceTable) => {
   if (!priceTable) return null;
-  const cost = meals.reduce((sum, meal) => sum + (meal?.ingredients || []).reduce((s, ing) => {
-    const price = priceTable[key(ing?.name)];
+  const cost = meals.reduce((sum, meal) => sum + (meal?.ingredients || []).reduce((s, ing) => {      const price = priceTable[ingredientKey(ing?.name)] ?? priceTable[key(ing?.name)];
     return price == null ? s : s + price * readQty(ing.qty).amount;
   }, 0), 0);
   return { cost: round1(cost), fit: null }; // fit filled against budget by caller
@@ -83,6 +86,7 @@ const DEFAULT_WEIGHTS = {
   timeFit: 0.1,
   equipmentFit: 0.08,
   packFit: 0.0,
+  variety: 0.0,
 };
 
 /**
@@ -96,7 +100,7 @@ export const rankPlans = (candidates = [], context = {}) => {
     equipmentOwned = [], packageSizes = {}, wasteScores = {},
     weights = {}, priceTable = null,
   } = context;
-  const W = { ...DEFAULT_WEIGHTS, ...weights };
+  const W = { ...DEFAULT_WEIGHTS, ...normaliseWeightMap(weights) };
 
   const ranked = (candidates || []).map((meals, candidateIndex) => {
     const metrics = {};
@@ -107,6 +111,12 @@ export const rankPlans = (candidates = [], context = {}) => {
     metrics.wasteScore = typeof wasteScores[candidateIndex] === 'number'
       ? clamp(wasteScores[candidateIndex])
       : null;
+
+    // Penalise duplicate meals when variety is requested; this is a soft
+    // objective so pantry and hard constraints still win when necessary.
+    const ids = meals.map((meal) => meal?.id || meal?.name || meal?.title).filter(Boolean).map(key);
+    const uniqueIds = new Set(ids);
+    metrics.variety = ids.length ? (uniqueIds.size / ids.length) * 100 : null;
 
     metrics.expiryCoverage = expiryCoverage(meals, pantryItems, { today });
 
@@ -162,6 +172,7 @@ export const rankPlans = (candidates = [], context = {}) => {
       : 0;
 
     if (metrics.pantryCoverage != null) reasons.push(`${Math.round(metrics.pantryCoverage * 100)}% already in your pantry.`);
+    if (metrics.variety != null && metrics.variety < 100) reasons.push(`${Math.round(metrics.variety)}% meal variety; repeated dishes keep the plan simpler.`);
     if (metrics.expiryCoverage != null) reasons.push(`Uses ${Math.round(metrics.expiryCoverage * 100)}% of stock expiring within 7 days.`);
     if (infeasible) reasons.push('Needs equipment you do not own.');
 
