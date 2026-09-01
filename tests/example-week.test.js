@@ -32,9 +32,12 @@ describe('example week demonstration data', () => {
     expect(stats.meals).toBe(7);
     expect(demo.pantry.length).toBeGreaterThan(0);
     expect(demo.shoppingList).toEqual([]);
-    // No diary/cooking history that would fake streaks or analytics
-    expect(demo.cooked).toEqual([]);
+    // Diary stays empty; the one cooked entry references a real catalogue recipe
     expect(demo.log).toEqual({});
+    demo.cooked.forEach((entry) => {
+      expect(entry.recipeId).toBeTruthy();
+      expect(entry.date <= demo.day).toBe(true);
+    });
   });
 
   it('ships a clearly-labelled receipt history for the sandbox', () => {

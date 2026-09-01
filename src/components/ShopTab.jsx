@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Banknote, Building2, Check, CloudOff, Copy, MapPin, Mic, Package, Plus, Receipt, RotateCcw, ScanLine, ShoppingCart, Star, Tag,
+  Banknote, Building2, Check, CloudOff, Copy, FileUp, MapPin, Mic, Package, Plus, Receipt, RotateCcw, ScanLine, ShoppingCart, Star, Tag,
   Trash2, TrendingUp, TriangleAlert, X,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
@@ -312,6 +312,13 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><Receipt size={14} /> Read a receipt</span>
               </button>
               )}
+              <button
+                onClick={() => setSheet('csv')}
+                className="press rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
+                style={{ borderColor: 'var(--line)' }}
+              >
+                <span className="inline-flex items-center gap-1.5"><FileUp size={14} /> Import receipts</span>
+              </button>
             </div>
             {adding && <AddItem onAdd={(item) => app.addToList({ ...item, store })} />}
             {voiceStatus && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>{voiceStatus}</p>}
