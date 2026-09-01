@@ -275,6 +275,7 @@ function HomeView() {
  */
 export default function PreferencesPanel() {
   const [view, setView] = useState('safety');
+  const app = useApp();
   return (
     <div className="px-5 pb-10 space-y-4">
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -289,6 +290,18 @@ export default function PreferencesPanel() {
       {view === 'taste' && <TasteView />}
       {view === 'units' && <UnitsView />}
       {view === 'home' && <HomeView />}
+      <Card className="space-y-3">
+        <div className="flex items-center justify-between"><p className="font-bold text-[0.875rem]">Kitchen profile</p><Pill tone="muted">{app.awayKitchenProfile?.name || 'Home'}</Pill></div>
+        <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Tell Forq what appliances are available. Recipe planning will avoid dishes that need equipment you do not have.</p>
+        <div className="flex flex-wrap gap-2">
+          {['hob', 'oven', 'microwave', 'air-fryer', 'slow-cooker', 'blender', 'rice-cooker', 'toaster', 'grill', 'pressure-cooker'].map((id) => <Chip key={id} active={(app.awayKitchenProfile?.equipment || app.equipment || []).includes(id)} onClick={() => { const current = app.awayKitchenProfile?.equipment || app.equipment || []; const equipment = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]; app.set({ equipment, awayKitchenProfile: { ...(app.awayKitchenProfile || {}), name: app.awayKitchenProfile?.name || 'Home', equipment } }); }}>{id.replace('-', ' ')}</Chip>)}
+        </div>
+        <div className="flex gap-2">
+          <input value={app.awayKitchenProfile?.name || ''} onChange={(event) => app.set({ awayKitchenProfile: { ...(app.awayKitchenProfile || {}), name: event.target.value } })} placeholder="Profile name, e.g. hotel room" aria-label="Kitchen profile name" className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-[0.75rem] font-semibold" style={{ background: 'var(--card-2)', borderColor: 'var(--line)', color: 'var(--ink)' }} />
+          <button onClick={() => app.set({ activeKitchenProfile: app.awayKitchenProfile })} className="press rounded-xl px-3 py-2 text-[0.75rem] font-extrabold" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>Use away kit</button>
+        </div>
+        {app.activeKitchenProfile?.name && <p className="text-[0.71875rem] font-bold" style={{ color: 'var(--accent)' }}>Planning for: {app.activeKitchenProfile.name}</p>}
+      </Card>
     </div>
   );
 }

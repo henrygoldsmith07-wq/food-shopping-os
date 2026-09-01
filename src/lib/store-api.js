@@ -140,6 +140,7 @@ export function useStoreApi({
       setAccent: (accent) => set({ accent }),
       addWater: (d) => set((s) => ({ water: Math.max(0, Math.min(8, s.water + d)) })),
       addWaterMl: (ml) => set((s) => ({ waterExtraMl: Math.max(0, s.waterExtraMl + ml) })),
+      claimAdventureMission: (id) => set((s) => ({ adventureCompleted: { ...(s.adventureCompleted || {}), [id]: true }, xp: (s.xp || 0) + 50 })),
       ...targetActions(set),
       ...recipeActions(set),
       addPantryItem: (item = {}) =>

@@ -127,6 +127,7 @@ export const EMPTY_STATE = {
   predictionCorrections: [], // user-corrected predictions: household truth + inference error signals
   predictionSnapshots: [], // prospective predictions resolved against later household outcomes
   autopilotOutcomes: [], // whether recommended actions were completed
+  adventureCompleted: {}, // claimed weekly kitchen adventure missions
   priceAlerts: [], // item price targets checked against recorded shops
   priceAlertConfig: { risePct: 15, bargainPct: 15, overrides: {} }, // receipt-only rise/bargain thresholds, 15% default, per-item tunable
   waste: [], // what you threw away, and what it cost
@@ -181,6 +182,8 @@ export const EMPTY_STATE = {
   religious: [], // hard: rules you keep
   cuisines: [], // the ones you'd rather cook
   equipment: [], // owned appliances: air-fryer, slow-cooker — recipes needing kit you don't own are skipped
+  awayKitchenProfile: { name: '', equipment: [] },
+  activeKitchenProfile: null,
   skill: 'confident',
   timeBudget: 'normal',
   units: {}, // only what you changed; the rest follow DEFAULT_UNITS

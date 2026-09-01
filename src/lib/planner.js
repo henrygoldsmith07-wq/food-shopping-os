@@ -15,9 +15,11 @@ export {
 /* ---------- Equipment ---------- */
 
 /** Appliance tags a dish needs beyond a normal hob/oven kitchen. */
-export const EQUIPMENT_TAGS = ['air-fryer', 'slow-cooker'];
+export const EQUIPMENT_TAGS = ['air-fryer', 'slow-cooker', 'microwave', 'blender', 'rice-cooker', 'pressure-cooker', 'grill', 'oven', 'hob'];
 
 export const equipmentTags = (recipe) => (recipe?.tags || []).filter((tag) => EQUIPMENT_TAGS.includes(tag));
+
+export const activeEquipment = (state = {}) => state.activeKitchenProfile?.equipment || state.equipment || [];
 
 /**
  * A dish is cookable when it needs no special kit, or every appliance it names
