@@ -14,6 +14,9 @@ import { BRANDED_FOODS_EXTRA } from './branded-foods-extra.js';
 import { GLOBAL_PANTRY_FOODS } from './global-pantry-foods.js';
 import { STORE_CUPBOARD_FOODS } from './store-cupboard-foods.js';
 import { DELI_DESSERT_FOODS } from './deli-dessert-foods.js';
+import { CATALOGUE_EXPANSION, BRANDED_CATALOGUE_EXPANSION } from './catalogue-expansion.js';
+import { CATALOGUE_300_PLUS, BRANDED_CATALOGUE_300_PLUS } from './catalogue-300.js';
+import { CATALOGUE_600_PLUS } from './catalogue-600.js';
 
 const n = ([kcal, protein, carbs, fat, fibre = 0]) => ({ kcal, protein, carbs, fat, fibre });
 const s = (pairs) => pairs.map(([label, grams]) => ({ label, grams }));
@@ -268,6 +271,11 @@ export const FOODS = [
   ...BRANDED_FOODS,
   ...BRANDED_FOODS_EXTRA,
   ...GLOBAL_PANTRY_FOODS,
+  ...CATALOGUE_EXPANSION,
+  ...BRANDED_CATALOGUE_EXPANSION,
+  ...CATALOGUE_300_PLUS,
+  ...BRANDED_CATALOGUE_300_PLUS,
+  ...CATALOGUE_600_PLUS,
 ];
 
 /* ---------- Restaurant menus ----------

@@ -81,7 +81,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
   const confidenceChecks = useMemo(
     () => app.pantry
       .map((item) => ({ item, confidence: pantryConfidenceLevel(item, app.day) }))
-      .filter(({ confidence }) => confidence.requiresConfirmation),
+      .filter(({ confidence }) => confidence.requiresConfirmation && confidence.recommendationImpact),
     [app.pantry, app.day],
   );
   const conflicts = (app.pantryConflicts || []).filter((conflict) => conflict.status !== 'resolved');
@@ -341,7 +341,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                 { label: 'Add to shopping list', onClick: () => app.addToList({ name: p.name, emoji: p.emoji, qty: p.qty }) },
                 { label: 'Remove', tone: 'danger', onClick: () => app.removePantryItem(p.id) },
               ];
-              if (confidence.requiresConfirmation) {
+              if (confidence.requiresConfirmation && confidence.recommendationImpact) {
                 menuActions.unshift({ label: 'Confirm stock', onClick: () => app.confirmPantryItem(p.id) });
               }
               if (p.location === 'Freezer') {
@@ -377,7 +377,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
                     <button onClick={() => app.usePantryItem(p.id)} aria-label={`${useLabel} ${p.name}`} title={useLabel} className="press p-1" style={{ color: 'var(--muted)' }}><Minus size={15} /></button>
-                    {confidence.requiresConfirmation && (
+                    {confidence.requiresConfirmation && confidence.recommendationImpact && (
                       <button
                         onClick={() => app.confirmPantryItem(p.id)}
                         aria-label={`Confirm ${p.name}`}

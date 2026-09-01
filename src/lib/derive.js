@@ -63,6 +63,7 @@ import { optimiseShopping } from './shopping-optimisation.js';
 import { weeklyFoodLoop } from './food-loop.js';
 import { loopHealth } from './loop-learning.js';
 import { learnHouseholdPreferences, preferenceSummary } from './household-preferences.js';
+import { predictionCalibration, predictionLearningProfile } from './prediction-feedback.js';
 
 export const deriveApp = (state) => {
   const activeMember = state.members.find((member) => member.id === state.activeMemberId) || null;
@@ -133,6 +134,8 @@ export const deriveApp = (state) => {
     today: state.day,
   });
   const wasteProfile = learnWasteProfile(state.waste, { learnedAliases: state.aliasMemory });
+  const predictionLearning = predictionLearningProfile(state.predictionCorrections || []);
+  const predictionCalibrationReport = predictionCalibration(state.predictionSnapshots || []);
   const honestSavings = savingsSnapshot(state, state.day, 30);
   const wasteOutcome30 = wasteOutcome(state.pantry, state.waste, state.pantryEvents);
   const closedLoop = weeklyFoodLoop(state, state.day).closedLoop;
@@ -197,6 +200,8 @@ export const deriveApp = (state) => {
     learnedHouseholdPreferences,
     preferenceSummary: preferenceSummary(learnedHouseholdPreferences),
     wasteProfile,
+    predictionLearning,
+    predictionCalibration: predictionCalibrationReport,
     body_: bodySummary(state, state.day),
     vitalsSummary: vitalSummary(state.vitals),
     sleepSummary: sleepSummary(state.sleep, { today: state.day }),

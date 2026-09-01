@@ -76,6 +76,7 @@ export const pantryConfidenceLevel = (item, today = '') => {
     observedAt,
     decayed,
     requiresConfirmation,
+    recommendationImpact: level !== 'definite' || amount === 'unknown' || item?.low,
     reason: decayed
       ? `Last confirmed ${ageDays} days ago; confidence has faded.`
       : amount === 'unknown'

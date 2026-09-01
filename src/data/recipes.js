@@ -15,7 +15,7 @@ import { generateRecipes } from './recipe-gen.js';
 const SIGNATURE = [
   {
     id: 'chicken-traybake', name: 'Lemon Chicken Traybake', emoji: '🍗',
-    cuisine: 'British', tags: ['high-protein', 'one-pot', 'family', 'budget'],
+    cuisine: 'British', tags: ['high-protein', 'one-pot', 'family', 'budget', 'meal-prep', 'reheatable'],
     time: 45, prep: 10, difficulty: 'Easy', costPerServing: 1.85, servings: 4,
     kcal: 520, protein: 42, carbs: 38, fat: 21, fibre: 6,
     healthScore: 82, envScore: 68, proteinScore: 92,
@@ -61,7 +61,7 @@ const SIGNATURE = [
   },
   {
     id: 'salmon-teriyaki', name: 'Teriyaki Salmon Bowls', emoji: '🍣',
-    cuisine: 'Japanese', tags: ['high-protein', 'quick', 'healthy', 'date-night'],
+    cuisine: 'Japanese', tags: ['high-protein', 'quick', 'healthy', 'date-night', 'meal-prep', 'reheatable'],
     time: 20, prep: 8, difficulty: 'Medium', costPerServing: 3.4, servings: 2,
     kcal: 560, protein: 38, carbs: 52, fat: 22, fibre: 5,
     healthScore: 90, envScore: 61, proteinScore: 88,
@@ -126,7 +126,7 @@ const SIGNATURE = [
   },
   {
     id: 'airfryer-fajitas', name: 'Air Fryer Chicken Fajitas', emoji: '🌮',
-    cuisine: 'Mexican', tags: ['air-fryer', 'quick', 'family', 'high-protein'],
+    cuisine: 'Mexican', tags: ['air-fryer', 'quick', 'family', 'high-protein', 'meal-prep', 'reheatable'],
     time: 18, prep: 8, difficulty: 'Easy', costPerServing: 2.1, servings: 4,
     kcal: 480, protein: 36, carbs: 44, fat: 16, fibre: 7,
     healthScore: 78, envScore: 70, proteinScore: 84,
@@ -148,7 +148,7 @@ const SIGNATURE = [
   },
   {
     id: 'mushroom-risotto', name: 'Garlic Mushroom Risotto', emoji: '🍄',
-    cuisine: 'Italian', tags: ['vegetarian', 'comfort', 'date-night', 'one-pot'],
+    cuisine: 'Italian', tags: ['vegetarian', 'comfort', 'date-night', 'one-pot', 'reheatable'],
     time: 35, prep: 10, difficulty: 'Medium', costPerServing: 1.6, servings: 3,
     kcal: 510, protein: 13, carbs: 68, fat: 18, fibre: 4,
     healthScore: 72, envScore: 85, proteinScore: 40,
@@ -192,7 +192,7 @@ const SIGNATURE = [
   },
   {
     id: 'halloumi-grain', name: 'Halloumi Grain Bowl', emoji: '🥗',
-    cuisine: 'Mediterranean', tags: ['vegetarian', 'healthy', 'quick', 'lunch'],
+    cuisine: 'Mediterranean', tags: ['vegetarian', 'healthy', 'quick', 'lunch', 'meal-prep'],
     time: 15, prep: 5, difficulty: 'Easy', costPerServing: 2.0, servings: 2,
     kcal: 470, protein: 21, carbs: 45, fat: 24, fibre: 9,
     healthScore: 84, envScore: 76, proteinScore: 62,
@@ -212,7 +212,7 @@ const SIGNATURE = [
   },
   {
     id: 'tofu-stirfry', name: 'Crispy Tofu Stir-fry', emoji: '🥡',
-    cuisine: 'Chinese', tags: ['vegan', 'quick', 'healthy', 'high-protein'],
+    cuisine: 'Chinese', tags: ['vegan', 'quick', 'healthy', 'high-protein', 'meal-prep', 'reheatable'],
     time: 20, prep: 10, difficulty: 'Medium', costPerServing: 1.5, servings: 2,
     kcal: 410, protein: 24, carbs: 42, fat: 15, fibre: 8,
     healthScore: 87, envScore: 92, proteinScore: 70,
@@ -232,7 +232,7 @@ const SIGNATURE = [
   },
   {
     id: 'shakshuka', name: 'One-Pan Shakshuka', emoji: '🍳',
-    cuisine: 'Mediterranean', tags: ['vegetarian', 'breakfast', 'budget', 'one-pot', 'quick'],
+    cuisine: 'Mediterranean', tags: ['vegetarian', 'breakfast', 'budget', 'one-pot', 'quick', 'reheatable'],
     time: 22, prep: 5, difficulty: 'Easy', costPerServing: 1.2, servings: 2,
     kcal: 360, protein: 18, carbs: 24, fat: 20, fibre: 6,
     healthScore: 85, envScore: 88, proteinScore: 64,
@@ -253,7 +253,7 @@ const SIGNATURE = [
   },
   {
     id: 'katsu-curry', name: 'Crispy Katsu Curry', emoji: '🍱',
-    cuisine: 'Japanese', tags: ['family', 'comfort', 'trending'],
+    cuisine: 'Japanese', tags: ['family', 'comfort', 'trending', 'meal-prep', 'reheatable'],
     time: 40, prep: 15, difficulty: 'Medium', costPerServing: 2.4, servings: 4,
     kcal: 640, protein: 33, carbs: 72, fat: 24, fibre: 5,
     healthScore: 65, envScore: 66, proteinScore: 74,
@@ -274,7 +274,7 @@ const SIGNATURE = [
   },
   {
     id: 'protein-pancakes', name: 'Banana Protein Pancakes', emoji: '🥞',
-    cuisine: 'American', tags: ['breakfast', 'high-protein', 'quick', 'healthy'],
+    cuisine: 'American', tags: ['breakfast', 'high-protein', 'quick', 'healthy', 'meal-prep'],
     time: 15, prep: 5, difficulty: 'Easy', costPerServing: 1.0, servings: 2,
     kcal: 390, protein: 28, carbs: 46, fat: 10, fibre: 4,
     healthScore: 80, envScore: 86, proteinScore: 78,
@@ -323,7 +323,7 @@ export const forMeal = (meal) => (meal ? allRecipes().filter((r) => r.meal === m
 
 export const DISCOVER_FILTERS = [
   'Breakfast', 'Lunch', 'Dinner', 'Quick', 'Budget', 'High protein', 'Healthy',
-  'Light', 'One pot', 'Batch cook', 'Vegan', 'Vegetarian', 'Comfort food',
+  'Light', 'One pot', 'Batch cook', 'Freezable', 'Reheatable', 'Vegan', 'Vegetarian', 'Comfort food',
   'Italian', 'Indian', 'Mexican', 'Japanese', 'Mediterranean', 'British', 'Chinese',
 ];
 
@@ -333,6 +333,9 @@ const FILTER_MAP = {
   Dinner: (r) => r.meal === 'dinner',
   Light: (r) => r.kcal <= 450,
   'Batch cook': (r) => r.tags.includes('batch') || r.tags.includes('freezer'),
+  'Freezable': (r) => r.tags.includes('freezer'),
+  'Reheatable': (r) => r.tags.includes('reheatable'),
+  'Meal prep': (r) => r.tags.includes('meal-prep'),
   Healthy: (r) => r.healthScore >= 84,
   Budget: (r) => r.costPerServing <= 1.5,
   Quick: (r) => r.time <= 25,

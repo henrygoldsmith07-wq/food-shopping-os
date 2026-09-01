@@ -11,6 +11,7 @@ import { captureSupport } from '../lib/smart-capture.js';
 import { suggestedReminders } from '../lib/reminder-suggest.js';
 import { gbp, prettyDate } from '../lib/utils.js';
 import { Card, Pill, Toggle } from './ui.jsx';
+import PredictionCorrection from './PredictionCorrection.jsx';
 
 const Capability = ({ Icon, title, status, children }) => (
   <Card className="!p-3">
@@ -69,6 +70,13 @@ function PredictionsCard({ trip, stock, budget }) {
             <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
               {trip.reason} {trip.confidence} pattern.
             </p>
+            <PredictionCorrection
+              predictionType="next_trip"
+              predictionKey={trip.date}
+              predicted={trip.intervalDays}
+              context={{ confidence: trip.confidence }}
+              label="Was this shopping interval right?"
+            />
           </>
         ) : <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Three dated shopping trips are needed before Forq predicts another.</p>}
       </Card>
@@ -83,6 +91,13 @@ function PredictionsCard({ trip, stock, budget }) {
                   <Pill tone={item.overdueDays ? 'warn' : 'muted'}>{item.overdueDays ? `${item.overdueDays}d overdue` : `due ${item.dueDate.slice(8)}`}</Pill>
                 </div>
                 <p className="mt-0.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>{item.reason}</p>
+                <PredictionCorrection
+                  predictionType="low_stock"
+                  predictionKey={item.name}
+                  predicted={item.markedLow ? 0 : 1}
+                  context={{ dueDate: item.dueDate, intervalDays: item.intervalDays }}
+                  label={`Forq: probably ${item.name}. Correct it`}
+                />
               </div>
             ))}
           </div>

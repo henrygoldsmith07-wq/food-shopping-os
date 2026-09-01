@@ -33,7 +33,9 @@ export const planActions = (set) => ({
         at: Date.now(),
       };
       const existing = (s.mealPlanEvents || []).filter((item) => !(item.date === date && item.slot === slot));
-      return { mealPlanEvents: [...existing, event].slice(-500) };
+      return { mealPlanEvents: [...existing, event].slice(-500), plan: event.status === 'skipped'
+        ? { ...s.plan, [date]: { ...(s.plan[date] || {}), [slot]: plannedRecipeId } }
+        : s.plan };
     }),
   recordTakeaway: ({ date = null, reason = 'takeaway', note = '' } = {}) =>
     set((s) => {

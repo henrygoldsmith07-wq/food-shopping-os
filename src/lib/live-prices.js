@@ -15,6 +15,9 @@
 
 import { shoppingNameKey } from './shopping.js';
 import { parseQuantity, unitPriceOf } from './measure.js';
+import {
+  classifyProductMatch, comparableForRanking, majorityReference, matchDifferenceLabel,
+} from './product-matching.js';
 
 const STORAGE_KEY = 'forq.livePrices.v1';
 const TTL_MS = 3 * 60 * 60 * 1000;
@@ -165,7 +168,7 @@ export const bestPerRetailer = (result) => {
 export const rankShops = (perRetailer = [], { name } = {}) => {
   const rows = [...perRetailer].filter((row) => typeof row?.price === 'number' && row.price > 0);
   if (!rows.length) {
-    return { rows: [], basis: 'none', unitLabel: null, mixedScales: false, ticketMisleads: false };
+    return { rows: [], basis: 'none', unitLabel: null, mixedScales: false, ticketMisleads: false, likeForLike: false, notSameProduct: [] };
   }
 
   const withUnit = rows.map((row) => {
@@ -182,16 +185,31 @@ export const rankShops = (perRetailer = [], { name } = {}) => {
       exact: parsed?.amount > 0 ? row.price / parsed.amount : null,
     };
   });
-  const priced = withUnit.filter((row) => row.unit && row.exact !== null);
+
+  // What each shop's cheapest row actually is, next to the others. The top
+  // hit for "beans" at one shop is not automatically the same tin another
+  // shop returned, and ranking a lookalike as the product is the comparison
+  // this check exists to stop.    const ref = majorityReference(withUnit);
+  const labelled = withUnit.map((row, index) => ({
+    ...row,
+    match: index === ref
+      ? { classification: 'exact', equivalent: true, reasons: [] }
+      : classifyProductMatch(withUnit[ref], row),
+  }));
+  const comparable = labelled.filter((row) => comparableForRanking(row.match));
+  const likeForLike = comparable.length >= 2;
+  const scope = likeForLike ? comparable : labelled;
+
+  const priced = scope.filter((row) => row.unit && row.exact !== null);
   const scales = new Set(priced.map((row) => `${row.unit.dim}:${row.unit.unit}`));
   // Every shop must be comparable, not most of them: ranking eight shops per
   // litre and appending a ninth on its ticket price puts an incomparable row
   // in an ordered list, which is exactly the confusion this is meant to end.
-  const byUnit = priced.length === withUnit.length && scales.size === 1;
+  const byUnit = priced.length === scope.length && scales.size === 1;
   const basis = byUnit ? 'unit' : 'price';
 
   const value = (row) => (byUnit ? row.exact : row.price);
-  const sorted = [...withUnit].sort((a, b) => value(a) - value(b) || a.price - b.price);
+  const sorted = [...scope].sort((a, b) => value(a) - value(b) || a.price - b.price);
   const best = value(sorted[0]);
   const worst = value(sorted.at(-1));
   // The cheapest row's displayed figure, so the money gap is quoted in the
@@ -200,7 +218,7 @@ export const rankShops = (perRetailer = [], { name } = {}) => {
 
   let rank = 0;
   let previous = null;
-  const ranked = sorted.map((row, index) => {
+  const rankedScope = sorted.map((row, index) => {
     const current = value(row);
     if (previous === null || current !== previous) rank = index + 1;
     previous = current;
@@ -219,12 +237,31 @@ export const rankShops = (perRetailer = [], { name } = {}) => {
     };
   });
 
-  const cheapestByTicket = [...withUnit].sort((a, b) => a.price - b.price)[0];
+  // Rows that are not the product the like-for-like set is about: still
+  // listed, after it, never merged into its ranking or its value claims.
+  const rest = (likeForLike
+    ? labelled.filter((row) => !comparableForRanking(row.match)).sort((a, b) => a.price - b.price)
+    : []).map((row, index) => ({
+      ...row,
+      rank: rankedScope.length + index + 1,
+      basis,
+      isCheapest: false,
+      isDearest: false,
+      over: null,
+      overPct: null,
+    }));
+  const ranked = [...rankedScope, ...rest];
+
+  const cheapestByTicket = [...scope].sort((a, b) => a.price - b.price)[0];
   return {
     rows: ranked,
     basis,
     unitLabel: byUnit ? sorted[0].unit.unit : null,
     mixedScales: scales.size > 1,
+    likeForLike,
+    notSameProduct: ranked
+      .filter((row) => row.match && !comparableForRanking(row.match))
+      .map((row) => ({ retailer: row.retailer, label: matchDifferenceLabel(row.match) })),
     // True when the shop with the cheaper ticket is not the better buy — the
     // case a price-only comparison gets backwards, worth saying out loud.
     ticketMisleads: Boolean(byUnit && cheapestByTicket && ranked[0]
@@ -241,7 +278,12 @@ export const rankShops = (perRetailer = [], { name } = {}) => {
  * ranking would be two, and the reader would have to work out which.
  */
 export const rankingSpread = (ranking) => {
-  const rows = Array.isArray(ranking) ? ranking : ranking?.rows || [];
+  const allRows = Array.isArray(ranking) ? ranking : ranking?.rows || [];
+  // The spread is a like-for-like claim, so when the ranking separated a
+  // different product out, the spread stops at the like-for-like pair.
+  const rows = !Array.isArray(ranking) && ranking?.likeForLike
+    ? allRows.filter((row) => !row.match || row.match.equivalent !== false)
+    : allRows;
   if (rows.length < 2) return null;
   const basis = Array.isArray(ranking) ? 'price' : ranking.basis;
   const best = rows[0];

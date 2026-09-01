@@ -11,7 +11,7 @@ import { sameIngredient } from '../lib/aliases.js';
 import { explainPantryShortfall, shortfallQuantity } from '../lib/pantry-intelligence.js';
 import { mergeQtys } from '../lib/pantry.js';
 import {
-  applySwap, dislikeSwapsFor, makeItFit, nutritionConfidence, safeExternalUrl, scaleRecipe,
+  applySwap, dislikeSwapsFor, makeItFit, makeItFitGoal, nutritionConfidence, safeExternalUrl, scaleRecipe,
 } from '../lib/recipe-tools.js';
 import { explainRecommendation } from '../lib/recommend.js';
 import { Card, Ring, Pill, FoodArt, Chip } from './ui.jsx';
@@ -90,8 +90,13 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
     });
   }, [recipe, app.pantry, app.day, when.date, app.calendarBusy, app.tasteProfile]);
 
-  const swap = ({ diet, ingredient, option }) => {
-    setVariant((v) => (diet ? makeItFit(v || original, diet) : applySwap(v || original, ingredient, option)));
+  const swap = ({ diet, goal, ingredient, option }) => {
+    setVariant((v) => {
+      const base = v || original;
+      if (diet) return makeItFit(base, diet);
+      if (goal) return makeItFitGoal(base, goal);
+      return applySwap(base, ingredient, option);
+    });
     setSaved(false);
   };
 
@@ -141,7 +146,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
           aria-label={fav ? 'Unfavourite' : 'Favourite'}
           aria-pressed={fav}
           className={cx(
-            'press favourite-button absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full border',
+            'press favourite-button absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-full border',
             fav && 'is-favourite',
           )}
           style={{

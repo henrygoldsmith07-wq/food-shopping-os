@@ -408,7 +408,7 @@ export default function RecipesTab({ openRecipe }) {
                       aria-label={fav ? 'Unfavourite' : 'Favourite'}
                       aria-pressed={fav}
                       className={cx(
-                        'tap press favourite-button absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border',
+                        'tap press favourite-button absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border',
                         fav && 'is-favourite',
                       )}
                       style={{

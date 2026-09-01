@@ -12,7 +12,9 @@ import { canonicalName, sameIngredient } from './aliases.js';
 import {
   formatQuantity, parseQuantity, scaleQuantity, subtractQuantities, sufficientFor,
 } from './measure.js';
-import { pantryConfidenceLevel as pantryEvidenceConfidence } from './pantry-intelligence.js';
+import { pantryConfidenceLevel as pantryEvidenceConfidence, quantityRangeLabel } from './pantry-intelligence.js';
+
+export { quantityRangeLabel };
 
 import { addDays, DAY_MS, dayStamp, daysUntil, weekDates, weekStart } from './kitchen-dates.js';
 

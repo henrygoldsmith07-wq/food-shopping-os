@@ -18,7 +18,7 @@ export default function PantryChecks({ app, confidenceChecks, conflicts }) {
         <Section title={`Check pantry confidence · ${confidenceChecks.length}`} className="!px-0">
           <Card className="space-y-3">
             <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              Older or uncertain stock is not silently treated as confirmed. Confirm anything you still have.
+              Confirm stock only where it could change a recipe or shopping recommendation.
             </p>
             {confidenceChecks.length > 1 && (
               <button

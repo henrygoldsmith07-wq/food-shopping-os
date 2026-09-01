@@ -31,6 +31,9 @@
 
 import { shoppingNameKey } from './shopping.js';
 import { compareUnitPrices, unitPriceOf } from './measure.js';
+import {
+  classifyProductMatch, comparableForRanking, majorityReference, matchDifferenceLabel,
+} from './product-matching.js';
 
 const STORAGE_KEY = 'forq.productCatalogue.v1';
 /** Products kept. Beyond this the least recently seen fall off. */
@@ -144,6 +147,7 @@ export const productRows = (entry) => {
     retailerId,
     retailer: shop.retailer,
     productName: shop.productName,
+    name: shop.productName,
     amount: shop.amount,
     price: shop.price,
     qty: shop.amount,
@@ -154,24 +158,57 @@ export const productRows = (entry) => {
   }));
   const comparison = compareUnitPrices(rows, { ingredient: entry?.name });
   const byPrice = [...rows].sort((a, b) => a.price - b.price);
+
+  // Whether these shops are selling the same thing. "Same item" is a claim,
+  // not an assumption: each shop's cheapest hit for the search can be its own
+  // brand or variant, and a lookalike ranked as the product is exactly the
+  // miscomparison the table exists to prevent. Pack-size differences stay in
+  // — that is what per-amount is for — while brand and variant differences
+  // keep their rows but lose the value claims.
+  const ref = majorityReference(rows);
+  const annotated = rows.map((row, index) => ({
+    ...row,
+    match: index === ref
+      ? { classification: 'exact', equivalent: true, reasons: [] }
+      : classifyProductMatch(rows[ref], row),
+  }));
+  const comparable = annotated.filter((row) => comparableForRanking(row.match));
+  // Pack-size differences are intentional input to per-amount comparison;
+  // product matching only excludes actual variants/brands/descriptions.
+  const likeForLike = comparable.length >= 2
+    ? compareUnitPrices(comparable, { ingredient: entry?.name })
+    : null;
+  const likeByPrice = likeForLike ? [...comparable].sort((a, b) => a.price - b.price) : [];
+  const valueRows = likeForLike && !likeForLike.mixedScales ? likeForLike.ranked : [];
+
   return {
     name: entry?.name || null,
     shops: rows.length,
     // Cheapest by ticket price and cheapest per unit are different questions,
     // and the gap between the two answers is the whole reason to keep sizes.
     cheapest: byPrice[0] || null,
-    bestValue: comparison.mixedScales ? null : comparison.best || null,
+    // Best value is claimed only within the like-for-like set.
+    bestValue: likeForLike && !likeForLike.mixedScales
+      ? likeForLike.best || null
+      : (comparison && !comparison.mixedScales ? comparison.best || null : null),
     ranked: comparison.mixedScales ? byPrice : comparison.ranked,
     mixedScales: comparison.mixedScales,
+    sameProduct: rows.length > 1 && comparable.length === rows.length,
+    notSameProduct: annotated
+      .filter((row) => !comparableForRanking(row.match))
+      .map((row) => ({
+        retailerId: row.retailerId,
+        retailer: row.retailer,
+        label: matchDifferenceLabel(row.match),
+      })),
     // True when the cheapest ticket is not the best value — the case a
     // price-only comparison gets exactly backwards.
     ticketMisleads: Boolean(
-      !comparison.mixedScales
-      && comparison.best
-      && byPrice[0]
-      && comparison.best.retailerId !== byPrice[0].retailerId,
+      valueRows.length > 1
+      && likeByPrice[0]
+      && valueRows[0].retailerId !== likeByPrice[0].retailerId,
     ),
-    margin: comparison.mixedScales ? null : comparison.margin,
+    margin: valueRows.length > 1 ? Math.round(((valueRows.at(-1).unit.value - valueRows[0].unit.value) / valueRows.at(-1).unit.value) * 100) : null,
     unpriceable: comparison.incomparable.length,
     lastSeen: entry?.lastSeen || null,
   };

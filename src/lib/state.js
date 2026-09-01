@@ -124,6 +124,9 @@ export const EMPTY_STATE = {
   offers: [], // vouchers and deals you told it about
   coupons: [], // coupon/rewards vault — manual + photo-OCR draft (no feed, never invented)
   aliasMemory: {}, // scan/pantry corrections: 'tomatos' → 'tomatoes' — makes entity resolution learn
+  predictionCorrections: [], // user-corrected predictions: household truth + inference error signals
+  predictionSnapshots: [], // prospective predictions resolved against later household outcomes
+  autopilotOutcomes: [], // whether recommended actions were completed
   priceAlerts: [], // item price targets checked against recorded shops
   priceAlertConfig: { risePct: 15, bargainPct: 15, overrides: {} }, // receipt-only rise/bargain thresholds, 15% default, per-item tunable
   waste: [], // what you threw away, and what it cost

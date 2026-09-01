@@ -32,6 +32,7 @@ export default function AutopilotCard({ onOpenPantry, goTab }) {
             </div>
             <h2 className="mt-1 text-[1rem] font-extrabold tracking-tight">{primary.title}</h2>
             <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>{primary.reason}</p>
+            {primary.score > 0 && <p className="mt-1 text-[0.6875rem] font-bold" style={{ color: 'var(--faint)' }}>Ranked for likely impact and ease of completion.</p>}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Pill tone={primary.priority === 'high' ? 'warn' : 'muted'}>{primary.evidence}</Pill>
               {primary.confidenceEvidence && (

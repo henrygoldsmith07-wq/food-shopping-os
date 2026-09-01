@@ -3,6 +3,7 @@ import { planEntries } from './mealplan.js';
 import { rankLeftovers } from './food-suitability.js';
 import { compareStores } from './shopping.js';
 import { evidenceConfidence } from './confidence.js';
+import { predictionSnapshot } from './prediction-feedback.js';
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const evidence = (parts) => parts.filter(Boolean).join(' · ');
@@ -10,7 +11,18 @@ const evidence = (parts) => parts.filter(Boolean).join(' · ');
 const action = (candidate) => ({
   ...candidate,
   score: Math.round(candidate.score * 100) / 100,
+  probability: Math.max(0, Math.min(1, candidate.score / 2)),
 });
+
+const learnedSuccess = (app, id) => {
+  const outcomes = (app.autopilotOutcomes || []).filter((outcome) => outcome.actionId === id);
+  return outcomes.length ? outcomes.filter((outcome) => outcome.completed).length / outcomes.length : 0.5;
+};
+
+const decisionScore = (app, id, { waste = 0, money = 0, convenience = 0 } = {}) => {
+  const success = learnedSuccess(app, id);
+  return waste * 0.4 + money * 0.25 + convenience * 0.15 + success * 0.2;
+};
 
 /**
  * Rank the one or two food actions that make the household's next decision
@@ -44,7 +56,9 @@ export const rankAutopilotActions = (app = {}) => {
       actionLabel: 'Open pantry',
       action: { kind: 'pantry' },
       confidenceEvidence: evidenceConfidence({ confidence: 'high', source: 'pantry' }),
-      score: 1.15 + clamp(expiring.length / 5),
+      score: decisionScore(app, 'use-expiring', {
+        waste: 1 + clamp(expiring.length / 5), convenience: 1,
+      }),
     }));
   }
 
@@ -64,7 +78,9 @@ export const rankAutopilotActions = (app = {}) => {
         actionLabel: 'Open today’s plan',
         action: { kind: 'tab', target: 'plan' },
         confidenceEvidence: evidenceConfidence({ confidence: hits ? 'high' : 'medium', source: 'planned-meals', inferred: !hits }),
-        score: 0.92 + (hits * 0.22),
+        score: decisionScore(app, 'cook-planned', {
+          waste: hits ? 1 : 0.35, convenience: 0.9,
+        }),
       }));
     }
   }
@@ -81,7 +97,7 @@ export const rankAutopilotActions = (app = {}) => {
       actionLabel: 'Open plan',
       action: { kind: 'tab', target: 'plan' },
       confidenceEvidence: evidenceConfidence({ confidence: 'medium', source: 'pantry', inferred: true }),
-      score: 1.08,
+      score: decisionScore(app, 'reuse-leftover', { waste: 1, money: 0.8, convenience: 0.9 }),
     }));
   }
 
@@ -98,7 +114,7 @@ export const rankAutopilotActions = (app = {}) => {
         actionLabel: 'Open shopping list',
         action: { kind: 'tab', target: 'shop' },
         confidenceEvidence: evidenceConfidence({ confidence: 'medium', source: 'pantry', inferred: true }),
-        score: 0.72 + clamp(missing.length / 8),
+        score: decisionScore(app, 'restock-low', { waste: 0.2, convenience: 0.75 }),
       }));
     }
   }
@@ -117,7 +133,9 @@ export const rankAutopilotActions = (app = {}) => {
         actionLabel: 'Compare shops',
         action: { kind: 'tab', target: 'shop' },
         confidenceEvidence: evidenceConfidence({ confidence: 'medium', source: 'receipt', inferred: true }),
-        score: 0.65 + clamp(Number(cheapest.saving) / 10),
+        score: decisionScore(app, 'save-on-shop', {
+          money: clamp(Number(cheapest.saving) / 10), convenience: 0.35,
+        }),
       }));
     }
   }

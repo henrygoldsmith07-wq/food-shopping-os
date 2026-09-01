@@ -168,13 +168,34 @@ export const applySwap = (recipe, ingredientName, option) => {
 export const swapsForDiet = (recipe, diet) =>
   (recipe.ingredients || [])
     .map((i) => {
-      const option = substitutesFor(i.name).find((o) => o.for.includes(diet));
+      const option = substitutesFor(i.name).find((o) => (o.for || []).includes(diet));
       return option ? { ingredient: i.name, option } : null;
     })
     .filter(Boolean);
 
 export const makeItFit = (recipe, diet) =>
   swapsForDiet(recipe, diet).reduce((acc, { ingredient, option }) => applySwap(acc, ingredient, option), recipe);
+
+/* ---------- Adapt mode: goal-driven swaps ---------- */
+
+export const ADAPT_GOALS = [
+  ['more-protein', 'More protein'],
+  ['fewer-calories', 'Fewer calories'],
+  ['more-fibre', 'More fibre'],
+];
+
+/** Every ingredient in the dish with a swap that serves this goal. */
+export const swapsForGoal = (recipe, goal) =>
+  (recipe.ingredients || [])
+    .map((i) => {
+      const option = substitutesFor(i.name).find((o) => (o.goal || []).includes(goal));
+      return option ? { ingredient: i.name, option } : null;
+    })
+    .filter(Boolean);
+
+/** Apply every goal-serving swap at once — the "adapt this dish" button. */
+export const makeItFitGoal = (recipe, goal) =>
+  swapsForGoal(recipe, goal).reduce((acc, { ingredient, option }) => applySwap(acc, ingredient, option), recipe);
 
 /**
  * After a swap (or import), re-check the dish against the user's full safety

@@ -251,7 +251,8 @@ export const LIST_SYNC_TRIGGERS = ['plan', 'pantry', 'waste', 'aliasMemory', 'po
 export const withAutoListSync = (state, changes) => {
   const keys = Object.keys(changes || {});
   if (!keys.length || !keys.some((key) => LIST_SYNC_TRIGGERS.includes(key))) return changes;
-  const follow = reconcileListWithPlan({ ...state, ...changes });
+  const nextState = { ...state, ...changes };
+  const follow = reconcileListWithPlan(nextState);
   if (follow.shoppingList && follow.shoppingList !== changes.shoppingList) {
     return { ...changes, shoppingList: follow.shoppingList };
   }

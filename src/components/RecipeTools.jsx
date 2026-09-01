@@ -8,7 +8,7 @@ import { nutrientRows } from '../lib/nutrition.js';
 import { formatAmount } from '../data/nutrients.js';
 import { PRIVACY_COPY } from '../data/privacy.js';
 import { recipeConflicts } from '../lib/goals.js';
-import { swapsFor, swapsForDiet, recipeNutrition, shareCode } from '../lib/recipe-tools.js';
+import { swapsFor, swapsForDiet, swapsForGoal, recipeNutrition, shareCode } from '../lib/recipe-tools.js';
 import { Card, Chip, Pill, Meter, Stepper } from './ui.jsx';
 
 const SWAP_DIETS = [
@@ -17,6 +17,12 @@ const SWAP_DIETS = [
   ['dairy-free', 'Make it dairy-free'],
   ['gluten-free', 'Make it gluten-free'],
   ['nut-free', 'Make it nut-free'],
+];
+
+const ADAPT_GOALS = [
+  ['more-protein', 'Adapt: more protein'],
+  ['fewer-calories', 'Adapt: fewer calories'],
+  ['more-fibre', 'Adapt: more fibre'],
 ];
 
 /**
@@ -33,7 +39,10 @@ export function SwapPanel({ recipe, onSwap }) {
   const fits = SWAP_DIETS
     .filter(([diet]) => recipeConflicts(recipe, [diet]).length > 0 && swapsForDiet(recipe, diet).length > 0);
 
-  if (!rows.length && !fits.length) return null;
+  const adapt = ADAPT_GOALS
+    .filter(([goal]) => swapsForGoal(recipe, goal).length > 0);
+
+  if (!rows.length && !fits.length && !adapt.length) return null;
 
   return (
     <Card className="rise rise-2">
@@ -44,6 +53,16 @@ export function SwapPanel({ recipe, onSwap }) {
           {fits.map(([diet, label]) => (
             <Chip key={diet} onClick={() => onSwap({ diet })}>
               <span className="inline-flex items-center gap-1.5"><Repeat size={12} /> {label}</span>
+            </Chip>
+          ))}
+        </div>
+      )}
+
+      {adapt.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {adapt.map(([goal, label]) => (
+            <Chip key={goal} onClick={() => onSwap({ goal })}>
+              <span className="inline-flex items-center gap-1.5"><Sparkles size={12} /> {label}</span>
             </Chip>
           ))}
         </div>

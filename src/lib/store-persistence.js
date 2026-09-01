@@ -5,6 +5,7 @@ import {
 import { normalisePriceAlertConfig } from './price-alerts.js';
 import { HEALTH_VAULT_KEY, withoutHealth } from './health-vault.js';
 import { permissionsForRole } from './household.js';
+import { predictionCorrectionEvent } from './prediction-feedback.js';
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -36,6 +37,14 @@ export const hydrate = (stored = {}) => {
   state.priceAlertConfig = normalisePriceAlertConfig(state.priceAlertConfig || {});
   if (!Array.isArray(state.priceAlerts)) state.priceAlerts = [];
   if (!Array.isArray(state.offers)) state.offers = [];
+  state.predictionCorrections = (Array.isArray(state.predictionCorrections) ? state.predictionCorrections : [])
+    .map((event) => predictionCorrectionEvent(event) || null)
+    .filter(Boolean)
+    .slice(-500);
+  state.predictionSnapshots = (Array.isArray(state.predictionSnapshots) ? state.predictionSnapshots : [])
+    .filter((snapshot) => snapshot?.type === 'prediction_snapshot')
+    .slice(-500);
+  state.autopilotOutcomes = (Array.isArray(state.autopilotOutcomes) ? state.autopilotOutcomes : []).slice(-500);
   return rolloverDay(state);
 };
 
