@@ -14,6 +14,7 @@ import { generateRecipes } from './recipe-gen.js';
 import { RECIPES_300_PLUS } from './recipes-300-plus.js';
 import { RECIPES_600_PLUS } from './recipes-600-plus.js';
 import { RECIPES_900_PLUS } from './recipes-900-plus.js';
+import { RECIPES_DOUBLE } from './recipes-double.js';
 
 const SIGNATURE = [
   {
@@ -308,6 +309,7 @@ export const RECIPES = [
   ...RECIPES_300_PLUS,
   ...RECIPES_600_PLUS,
   ...RECIPES_900_PLUS,
+  ...RECIPES_DOUBLE,
 ];
 
 /**
@@ -331,6 +333,7 @@ export const DISCOVER_FILTERS = [
   'Breakfast', 'Lunch', 'Dinner', 'Quick', 'Budget', 'High protein', 'Healthy',
   'Light', 'One pot', 'Batch cook', 'Freezable', 'Reheatable', 'Vegan', 'Vegetarian', 'Comfort food',
   'Italian', 'Indian', 'Mexican', 'Japanese', 'Mediterranean', 'British', 'Chinese',
+  'Thai', 'Korean', 'Moroccan', 'Greek', 'Turkish', 'Caribbean', 'Gluten-free', 'Dairy-free', 'High fibre', 'Low carb', 'Family friendly',
 ];
 
 const FILTER_MAP = {
@@ -352,6 +355,17 @@ const FILTER_MAP = {
   Vegan: (r) => r.tags.includes('vegan'),
   Vegetarian: (r) => r.tags.includes('vegetarian') || r.tags.includes('vegan'),
   'Comfort food': (r) => r.tags.includes('comfort'),
+  Thai: (r) => r.cuisine === 'Thai',
+  Korean: (r) => r.cuisine === 'Korean',
+  Moroccan: (r) => r.cuisine === 'Moroccan',
+  Greek: (r) => r.cuisine === 'Greek',
+  Turkish: (r) => r.cuisine === 'Turkish',
+  Caribbean: (r) => r.cuisine === 'Caribbean',
+  'Gluten-free': (r) => r.tags.includes('gluten-free') || r.tags.includes('gf') || r.cuisine === 'Japanese' || r.cuisine === 'Mexican',
+  'Dairy-free': (r) => r.tags.includes('dairy-free') || r.tags.includes('vegan'),
+  'High fibre': (r) => r.tags.includes('high-fibre') || r.fibre >= 8,
+  'Low carb': (r) => r.tags.includes('low-carb') || r.carbs <= 30 || r.protein >= 30,
+  'Family friendly': (r) => r.tags.includes('family') || r.tags.includes('kid-friendly'),
 };
 
 export const filterRecipes = (filter, pool = allRecipes()) => {

@@ -17,6 +17,7 @@ import { DELI_DESSERT_FOODS } from './deli-dessert-foods.js';
 import { CATALOGUE_EXPANSION, BRANDED_CATALOGUE_EXPANSION } from './catalogue-expansion.js';
 import { CATALOGUE_300_PLUS, BRANDED_CATALOGUE_300_PLUS } from './catalogue-300.js';
 import { CATALOGUE_600_PLUS } from './catalogue-600.js';
+import { CATALOGUE_DOUBLE } from './catalogue-double.js';
 
 const n = ([kcal, protein, carbs, fat, fibre = 0]) => ({ kcal, protein, carbs, fat, fibre });
 const s = (pairs) => pairs.map(([label, grams]) => ({ label, grams }));
@@ -276,6 +277,7 @@ export const FOODS = [
   ...CATALOGUE_300_PLUS,
   ...BRANDED_CATALOGUE_300_PLUS,
   ...CATALOGUE_600_PLUS,
+  ...CATALOGUE_DOUBLE,
 ];
 
 /* ---------- Restaurant menus ----------

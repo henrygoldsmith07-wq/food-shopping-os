@@ -101,6 +101,7 @@ export default function RecipesTab({ openRecipe }) {
   const [filter, setFilter] = useState('Dinner');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('relevance');
+  const [tagFilter, setTagFilter] = useState('');
   const [view, setView] = useState('library'); // library · mine · favourites
   const [sheet, setSheet] = useState(null); // filters · generate · shared · taste
   const [filters, setFilters] = useState({ diets: [], maxTime: null, include: [], exclude: [], maxMissing: null });
@@ -145,8 +146,8 @@ export default function RecipesTab({ openRecipe }) {
       have: pantryNames,
       suitabilityCtx: app.suitabilityCtx,
       ...filters,
-    }), { query, sort }),
-    [safePool, query, filters, app.pantry, app.suitabilityCtx, sort],
+    }), { query, sort }).filter((recipe) => !tagFilter || recipe.tags.includes(tagFilter)),
+    [safePool, query, filters, app.pantry, app.suitabilityCtx, sort, tagFilter],
   );
 
   const [shown, setShown] = useState(PAGE);
@@ -356,6 +357,10 @@ export default function RecipesTab({ openRecipe }) {
             {filters.diets.length > 0 && ` · ${filters.diets.join(', ')}`}
             {blockedLine && <span style={{ color: 'var(--faint)' }}> · {blockedLine}</span>}
           </p>
+          <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)} aria-label="Filter recipe tags" className="max-w-[112px] rounded-xl border px-2 py-2 text-[0.71875rem] font-bold" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}>
+            <option value="">All tags</option>
+            {['high-protein', 'high-fibre', 'quick', 'budget', 'healthy', 'meal-prep', 'freezer', 'reheatable', 'vegan', 'vegetarian', 'one-pot', 'family', 'comfort'].map((tag) => <option key={tag} value={tag}>{tag.replace('-', ' ')}</option>)}
+          </select>
           <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort recipes" className="rounded-xl border px-2 py-2 text-[0.71875rem] font-bold" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}>
             <option value="relevance">Sort: relevant</option>
             <option value="time">Fastest</option>
@@ -365,13 +370,6 @@ export default function RecipesTab({ openRecipe }) {
             <option value="cost">Lowest cost</option>
           </select>
         </div>
-        <p className="hidden">
-          {recipes.length} recipe{recipes.length === 1 ? '' : 's'}
-          {filters.maxMissing === 0 && ' you can cook right now'}
-          {filters.maxTime && ` in ${filters.maxTime} minutes or less`}
-          {filters.diets.length > 0 && ` · ${filters.diets.join(', ')}`}
-          {blockedLine && <span style={{ color: 'var(--faint)' }}> · {blockedLine}</span>}
-        </p>
         {recipes.length === 0 ? (
           <Card className="text-center py-10">
             <UtensilsCrossed size={30} className="mx-auto mb-2" style={{ color: 'var(--faint)' }} />

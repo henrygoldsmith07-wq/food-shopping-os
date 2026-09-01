@@ -3,6 +3,7 @@ export const RECIPE_TAGS = [
   'family', 'one-pot', 'batch', 'meal-prep', 'freezer', 'reheatable', 'air-fryer',
   'slow-cooker', 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'breakfast',
   'lunch', 'dinner', 'snack', 'comfort', 'date-night', 'spicy', 'kid-friendly',
+  'gluten-free', 'dairy-free', 'low-carb', 'family', 'batch', 'budget', 'healthy',
 ];
 
 export const enrichRecipeTags = (recipe) => ({
