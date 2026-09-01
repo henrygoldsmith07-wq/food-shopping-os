@@ -11,6 +11,9 @@
  * fully offline and self-contained.
  */
 import { generateRecipes } from './recipe-gen.js';
+import { RECIPES_300_PLUS } from './recipes-300-plus.js';
+import { RECIPES_600_PLUS } from './recipes-600-plus.js';
+import { RECIPES_900_PLUS } from './recipes-900-plus.js';
 
 const SIGNATURE = [
   {
@@ -302,6 +305,9 @@ const mealOf = (r) =>
 export const RECIPES = [
   ...SIGNATURE.map((r) => ({ ...r, meal: mealOf(r), signature: true })),
   ...generateRecipes(),
+  ...RECIPES_300_PLUS,
+  ...RECIPES_600_PLUS,
+  ...RECIPES_900_PLUS,
 ];
 
 /**
