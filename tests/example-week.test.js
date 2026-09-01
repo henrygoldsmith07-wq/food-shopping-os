@@ -32,10 +32,23 @@ describe('example week demonstration data', () => {
     expect(stats.meals).toBe(7);
     expect(demo.pantry.length).toBeGreaterThan(0);
     expect(demo.shoppingList).toEqual([]);
-    // No history that would fake streaks / analytics
+    // No diary/cooking history that would fake streaks or analytics
     expect(demo.cooked).toEqual([]);
-    expect(demo.shops).toEqual([]);
     expect(demo.log).toEqual({});
+  });
+
+  it('ships a clearly-labelled receipt history for the sandbox', () => {
+    const day = '2026-07-28';
+    const demo = createExampleWeekState(day);
+    expect(demo.shops.length).toBeGreaterThan(0);
+    demo.shops.forEach((shop) => {
+      expect(shop.imported).toBe(true); // reads as demonstration data everywhere
+      expect(shop.items.length).toBeGreaterThan(0);
+      shop.items.forEach((item) => expect(item.priceSource).toBe('receipt'));
+      expect(shop.date <= day).toBe(true); // history, not the future
+      const total = shop.items.reduce((sum, item) => sum + item.price, 0);
+      expect(shop.total).toBeCloseTo(Math.round(total * 100) / 100, 2);
+    });
   });
 
   it('uses real catalogue recipes so cooking mode works in the demo', () => {
