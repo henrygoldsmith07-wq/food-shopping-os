@@ -5,7 +5,7 @@ import {
 import { clearRobotsCache } from '../src/server/robots.js';
 import { scrapeRetailer } from '../src/server/price-scraper.js';
 import { brandedQueries } from '../src/server/branded-queries.js';
-import { REASON_LABELS, coverageFor } from '../src/lib/live-prices.js';
+import { REASON_LABELS, coverageFor } from '../src/lib/price-coverage.js';
 
 describe('turning a shopping list line into something a shop can find', () => {
   it('folds the punctuation a search box cannot use', () => {

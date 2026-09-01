@@ -77,14 +77,17 @@ describe('earning it', () => {
     onboard();
     cookARecipe();
 
-    // 60 for the cook, 4 for the meal it logged.
+    // 60 for the cook, 4 for the meal it logged, and 40 for the weekly
+    // challenge the cook completes: "Cook something new" has a target of one,
+    // so the first recipe cooked finishes it. The original arithmetic here
+    // counted the first two and not the third.
     fireEvent.click(screen.getByText('Home'));
-    expect(screen.getByText(/Level 1 · 64 XP/)).toBeDefined();
+    expect(screen.getByText(/Level 1 · 104 XP/)).toBeDefined();
     expect(screen.getByText('1 of 5 done')).toBeDefined();
 
     const sheet = openProgress();
-    expect(within(sheet).getByText('64 XP')).toBeDefined();
-    expect(within(sheet).getByText(/96 XP to level 2/)).toBeDefined();
+    expect(within(sheet).getByText('104 XP')).toBeDefined();
+    expect(within(sheet).getByText(/56 XP to level 2/)).toBeDefined();
 
     fireEvent.click(within(sheet).getByText('Earned'));
     expect(within(sheet).getByText('First thing cooked')).toBeDefined();

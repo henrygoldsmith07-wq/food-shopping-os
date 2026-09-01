@@ -15,6 +15,10 @@ import { RECIPES_300_PLUS } from './recipes-300-plus.js';
 import { RECIPES_600_PLUS } from './recipes-600-plus.js';
 import { RECIPES_900_PLUS } from './recipes-900-plus.js';
 import { RECIPES_DOUBLE } from './recipes-double.js';
+import { MASTER_RECIPE_EXPANSION } from './master-recipe-expansion.js';
+import { MORE_RECIPES } from './more-recipes.js';
+import { MORE_RECIPES_TWO } from './more-recipes-two.js';
+import { MORE_RECIPES_THREE } from './more-recipes-three.js';
 
 const SIGNATURE = [
   {
@@ -303,13 +307,22 @@ const mealOf = (r) =>
   || (r.tags.includes('lunch') && 'lunch')
   || 'dinner';
 
+const GENERATED_RECIPES = generateRecipes();
+
+// Discovery shells intentionally remain separate from generated recipes so
+// recipe maths and existing planning constraints never treat missing costs or
+// nutrition as real zeroes.
 export const RECIPES = [
   ...SIGNATURE.map((r) => ({ ...r, meal: mealOf(r), signature: true })),
-  ...generateRecipes(),
+  ...GENERATED_RECIPES,
   ...RECIPES_300_PLUS,
   ...RECIPES_600_PLUS,
   ...RECIPES_900_PLUS,
   ...RECIPES_DOUBLE,
+  ...MASTER_RECIPE_EXPANSION,
+  ...MORE_RECIPES,
+  ...MORE_RECIPES_TWO,
+  ...MORE_RECIPES_THREE,
 ];
 
 /**

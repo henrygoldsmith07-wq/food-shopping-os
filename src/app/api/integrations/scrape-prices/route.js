@@ -8,6 +8,7 @@ import {
 } from '../../../../server/price-scraper.js';
 import { isOpenRouterConfigured } from '../../../../server/openrouter.js';
 import { availableStrategies, firecrawlConfigured } from '../../../../server/crawler.js';
+import { diagnoseScraper } from '../../../../server/scrape-diagnostics.js';
 
 // Scraping every retailer takes longer than a default serverless slice.
 export const maxDuration = 60;
@@ -16,10 +17,40 @@ export const maxDuration = 60;
 const BATCH_BUDGET_MS = Number(process.env.SCRAPE_BATCH_BUDGET_MS || 40000);
 export const dynamic = 'force-dynamic';
 
-/** What the scraper can currently do, so the UI can explain itself before it runs. */
-export async function GET() {
+/** Long enough for a full sweep of every shop, short of the function's limit. */
+const DIAGNOSE_BUDGET_MS = Number(process.env.SCRAPE_DIAGNOSE_BUDGET_MS || 45000);
+
+/**
+ * What the scraper can currently do, so the UI can explain itself before it
+ * runs — and, with `?diagnose=`, what it actually meets on the open web.
+ *
+ * The diagnostic exists because a unit suite proves the parsing logic against
+ * a mocked fetch, which is a different claim from "a real supermarket will
+ * give us a price". It runs the shipped code against the real retailers and
+ * reports, shop by shop, whether robots.txt allowed it, which fetch strategy
+ * answered, how many products the page yielded and how many of those actually
+ * matched what was asked for.
+ *
+ * It lives on the deployed app rather than only in a script because the place
+ * this app runs is the place with a connection to measure from — a developer
+ * machine behind a corporate proxy answers a different question, and answers
+ * it wrongly.
+ */
+export async function GET(request) {
   try {
-    await requireUser();
+    const user = await requireUser();
+    const query = new URL(request.url).searchParams.get('diagnose');
+    if (query !== null) {
+      if (!scraperEnabled()) throw new ApiError(503, 'Live price checking is switched off.');
+      // Far tighter than the price limit: this fans out across every shop at
+      // once and is a thing you run occasionally to answer a question, not a
+      // thing the app does for you.
+      await rateLimit(`scrape-diagnose:${user.id}`, 6, 3600000);
+      const report = await diagnoseScraper(query.trim() || 'baked beans', {
+        deadlineMs: DIAGNOSE_BUDGET_MS,
+      });
+      return NextResponse.json(report);
+    }
     return NextResponse.json({
       enabled: scraperEnabled(),
       aiFallback: isOpenRouterConfigured(),

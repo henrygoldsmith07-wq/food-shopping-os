@@ -1,0 +1,36 @@
+import { brandedRow } from './food-row.js';
+
+const ROWS = [
+  [['heinz-beanz-sausages', 'Heinz Beanz Sausages', '🥫', [98, 5.5, 10.8, 3.2, 3.5, 3.8, 1.1, 0.8], 415, ['tinned', 'meal']], 'Heinz'],
+  [['heinz-baked-beans-no-added-sugar', 'Heinz No Added Sugar Baked Beanz', '🥫', [66, 4.8, 10.7, 0.3, 3.8, 1.7, 0.1, 0.6], 207, ['tinned', 'store-cupboard']], 'Heinz'],
+  [['princes-tuna-spring-water', 'Princes Tuna Chunks in Spring Water', '🐟', [105, 24, 0, 0.8, 0, 0, 0.2, 0.75], 112, ['tinned', 'fish', 'high-protein']], 'Princes'],
+  [['john-west-tuna-oil', 'John West Tuna Chunks in Oil', '🐟', [185, 25, 0, 9, 0, 0, 2, 0.9], 112, ['tinned', 'fish', 'high-protein']], 'John West'],
+  [['mutti-passata', 'Mutti Passata', '🍅', [31, 1.5, 5.1, 0.2, 1.1, 3.6, 0.1, 0.2], 125, ['sauce', 'store-cupboard']], 'Mutti'],
+  [['sacla-pesto', 'Sacla Classic Basil Pesto', '🌿', [475, 4.3, 6.8, 47, 1.5, 2.5, 9.5, 1.8], 30, ['sauce', 'dairy']], 'Sacla'],
+  [['barilla-pesto', 'Barilla Pesto Genovese', '🌿', [478, 4.8, 6.2, 47, 1.4, 2.1, 9.2, 1.7], 30, ['sauce', 'dairy']], 'Barilla'],
+  [['kallo-vegetable-stock', 'Kallo Organic Vegetable Stock Cubes', '🫙', [170, 2, 12, 12, 0, 1, 6, 8], 10, ['store-cupboard', 'vegan']], 'Kallo'],
+  [['cooks-ingredients-coconut-milk', 'Cooks&Co Coconut Milk', '🥥', [183, 2, 3, 18, 0, 1, 16, 0.03], 100, ['tinned', 'vegan']], 'Cooks&Co'],
+  [['morrisons-own-hummus', 'Morrisons Houmous', '🫙', [296, 7.5, 10.5, 25, 5, 1.2, 3.5, 0.75], 40, ['dip', 'vegan']], 'Morrisons'],
+  [['meridian-tahini', 'Meridian Smooth Light Tahini', '🥜', [614, 24, 10, 54, 10, 1.2, 8, 0.05], 15, ['spread', 'vegan']], 'Meridian'],
+  [['quaker-oats', 'Quaker Jumbo Oats', '🌾', [375, 11.7, 60.5, 7.5, 9.7, 1.1, 1.3, 0.01], 40, ['breakfast', 'cereal']], 'Quaker'],
+  [['kelloggs-crunchy-nut', 'Kellogg’s Crunchy Nut Corn Flakes', '🥣', [380, 6.5, 82, 2.5, 3, 35, 0.4, 0.65], 30, ['breakfast', 'cereal']], 'Kellogg’s'],
+  [['weetabix-mini', 'Weetabix Minis Chocolate Chip', '🥣', [387, 10, 74, 5, 8, 24, 1.3, 0.55], 45, ['breakfast', 'cereal']], 'Weetabix'],
+  [['muller-rice', 'Müller Rice Vanilla Custard', '🥣', [121, 3.1, 19.3, 3.2, 0.2, 12.5, 2, 0.15], 180, ['dessert', 'dairy']], 'Müller'],
+  [['ambrosia-rice-pudding', 'Ambrosia Creamy Rice Pudding', '🥣', [116, 3.3, 18.1, 3.1, 0, 13.5, 2, 0.12], 200, ['dessert', 'dairy']], 'Ambrosia'],
+  [['cadbury-brunch-bar', 'Cadbury Brunch Bar', '🍫', [438, 6.4, 66, 16, 4.2, 31, 7.5, 0.36], 32, ['snack', 'treat']], 'Cadbury'],
+  [['nature-valley-oats-honey', 'Nature Valley Oats & Honey Crunchy Bars', '🍯', [472, 7.5, 67, 19, 6, 29, 7, 0.65], 42, ['snack', 'breakfast']], 'Nature Valley'],
+  [['walkers-prawn-cocktail', 'Walkers Prawn Cocktail Crisps', '🥔', [532, 6.5, 53, 32, 4, 2.2, 2.6, 1.4], 25, ['snack']], 'Walkers'],
+  [['doritos-chilli-heatwave', 'Doritos Chilli Heatwave', '🌶️', [496, 6.5, 60, 24, 4, 3, 2.2, 1.5], 30, ['snack', 'vegan']], 'Doritos'],
+  [['tyrells-sea-salt', 'Tyrrells Sea Salt Crisps', '🥔', [529, 6.2, 53, 32, 4.5, 0.5, 2.7, 1.2], 40, ['snack']], 'Tyrrells'],
+  [['coke-zero', 'Coca-Cola Zero Sugar', '🥤', [0, 0, 0, 0, 0, 0, 0, 0.02], 330, ['drink'], null, 'ml'], 'Coca-Cola'],
+  [['diet-lemonade', 'Schweppes Lemonade', '🥤', [36, 0, 8.8, 0, 0, 8.8, 0, 0.02], 330, ['drink'], null, 'ml'], 'Schweppes'],
+  [['volvic-touch-fruit', 'Volvic Touch of Fruit', '💧', [14, 0, 3.2, 0, 0, 3.2, 0, 0.01], 500, ['drink'], null, 'ml'], 'Volvic'],
+  [['innocent-orange-juice', 'Innocent Smooth Orange Juice', '🍊', [43, 0.7, 9.1, 0.1, 0.2, 8.8, 0, 0.01], 250, ['drink', 'juice']], 'Innocent'],
+  [['goodfellas-pepperoni', 'Goodfella’s Deep Pan Pepperoni Pizza', '🍕', [260, 11, 28, 11, 2, 2.5, 5.5, 1.2], 180, ['frozen', 'meal', 'dairy']], 'Goodfella’s'],
+  [['findus-fish-fingers', 'Findus Crispy Cod Fish Fingers', '🐟', [205, 12, 20, 8.5, 1.5, 0.8, 1.2, 0.75], 84, ['frozen', 'fish']], 'Findus'],
+  [['birdseye-sweetcorn', 'Birds Eye Garden Peas', '🫛', [78, 5.4, 10, 1, 5.5, 4.3, 0.2, 0.2], 80, ['frozen', 'veg']], 'Birds Eye'],
+  [['quorn-chicken-pieces', 'Quorn Pieces', '🌱', [104, 14.5, 4.5, 2, 5, 0.8, 0.5, 0.6], 100, ['vegan', 'high-protein']], 'Quorn'],
+  [['beyond-meat-burger', 'Beyond Burger', '🌱', [250, 17, 7, 18, 3, 0.5, 5, 0.75], 113, ['vegan', 'high-protein']], 'Beyond Meat'],
+];
+
+export const BRANDED_FOODS_EVEN_MORE = ROWS.map(([row, brand]) => brandedRow(row, brand));

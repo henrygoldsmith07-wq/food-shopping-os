@@ -128,7 +128,9 @@ export default function LogTab({ initialSheet = null, onIntentUsed }) {
         <p className="text-[0.8125rem] font-semibold rise" style={{ color: 'var(--muted)' }}>{prettyDate()}</p>
 
         <Card className="mt-4 rise rise-1">
-          <div className="flex items-center gap-5">
+          {/* The ring keeps its size; the figures beside it take a line of their
+              own once large text leaves them too little room to sit alongside. */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
             <Ring
               value={totals.kcal}
               max={app.kcalGoal}
@@ -138,7 +140,7 @@ export default function LogTab({ initialSheet = null, onIntentUsed }) {
               label={totals.kcal.toLocaleString()}
               sub={`of ${app.kcalGoal.toLocaleString()}`}
             />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-40">
               <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
                 Calories remaining
               </p>

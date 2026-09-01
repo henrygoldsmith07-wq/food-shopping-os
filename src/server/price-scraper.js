@@ -185,6 +185,18 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
 
   const permission = await isScrapeAllowed(url, { userAgent: USER_AGENT, fetchImpl }).catch(() => null);
   if (!permission?.allowed) {
+    // A blocked network is not a shop refusing, and saying so is not a
+    // detail: one is fixed in the user's own connection settings, the other
+    // is not fixable at all. Reported as its own status so a whole run of
+    // them cannot be read as nine retailers turning someone away.
+    if (permission?.reason === 'network-blocked') {
+      return {
+        ...base,
+        url,
+        status: 'network-blocked',
+        note: 'Something on this network blocked the request before it reached the shop — a proxy, firewall or VPN, not the retailer.',
+      };
+    }
     return {
       ...base,
       url,

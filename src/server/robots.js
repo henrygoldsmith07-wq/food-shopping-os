@@ -10,6 +10,14 @@
  * The parser implements the parts of the spec retailers actually use:
  * User-agent grouping (including `*`), Allow/Disallow with `*` and `$`
  * wildcards, longest-match-wins precedence, and Crawl-delay.
+ *
+ * One thing this module is careful about beyond the spec: a 403 does not
+ * always come from the shop. A filtering proxy between the app and the web
+ * answers with its own 403 and its own wording, and reading that as "the
+ * retailer refuses crawlers" tells the user something false about a third
+ * party while hiding the real problem, which is on their side of the wire.
+ * Both cases still decline to fetch — only the explanation differs, and the
+ * two explanations send someone somewhere completely different to fix it.
  */
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // robots.txt is not volatile
@@ -99,6 +107,39 @@ export const pathAllowed = (group, path = '/') => {
   return decision;
 };
 
+/**
+ * Words a blocking proxy uses and a shop never would.
+ *
+ * A filtering proxy — corporate, school, ISP, or the egress policy on a
+ * sandbox — answers a blocked request with its own 403 and its own
+ * explanation. That 403 did not come from the shop, and reporting it as the
+ * shop refusing is a lie the user cannot see through: they are told nine
+ * retailers turned them away when the truth is their own connection did.
+ */
+const INTERCEPTION = /\b(allowlist|allow list|blocklist|egress|proxy|firewall|gateway|not permitted by (?:your |the )?polic|network polic|access denied by|content filter|blocked by)\b/i;
+
+/** A robots.txt, even a refused one, looks like a robots.txt. */
+const ROBOTS_SHAPED = /^\s*(?:user-agent|disallow|allow|sitemap|crawl-delay)\s*:/im;
+
+/**
+ * Did something between us and the shop answer instead of the shop?
+ *
+ * Deliberately conservative and deliberately consequence-free: this never
+ * grants permission to crawl. Both outcomes decline. All it changes is which
+ * true sentence the user is shown — "this shop asked crawlers not to" or
+ * "something on your network blocked this" — and those send someone to two
+ * completely different places to fix it.
+ */
+export const looksIntercepted = (body = '', response = null) => {
+  const text = String(body || '');
+  if (ROBOTS_SHAPED.test(text)) return false;
+  if (INTERCEPTION.test(text)) return true;
+  // A proxy that says nothing still names itself in the headers a shop's
+  // own 403 would not carry.
+  const via = response?.headers?.get?.('via') || '';
+  return /\bproxy\b/i.test(via);
+};
+
 const fetchRobots = async (origin, userAgent, fetchImpl) => {
   const response = await fetchImpl(`${origin}/robots.txt`, {
     headers: { 'user-agent': userAgent, accept: 'text/plain' },
@@ -111,7 +152,11 @@ const fetchRobots = async (origin, userAgent, fetchImpl) => {
   // would turn an explicit refusal into permission to crawl everything — the
   // one direction this check must never fail in.
   if (response.status === 401 || response.status === 403) {
-    return { body: '', status: 'forbidden' };
+    // ...unless the 403 never reached the server. Read a little of it: a
+    // filtering proxy explains itself, and its explanation looks nothing like
+    // a robots.txt. Either way we do not fetch the page.
+    const body = await response.text().then((text) => text.slice(0, 2000)).catch(() => '');
+    return { body: '', status: looksIntercepted(body, response) ? 'intercepted' : 'forbidden' };
   }
   // Any other 4xx means no robots.txt, which the spec reads as "everything
   // permitted".
@@ -141,7 +186,8 @@ export const isScrapeAllowed = async (target, { userAgent = 'ForqBot', fetchImpl
   const key = `${url.origin}|${userAgent}`;
   const cached = cache.get(key);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-    const denied = cached.status === 'unreachable' || cached.status === 'forbidden';
+    const denied = cached.status === 'unreachable' || cached.status === 'forbidden'
+      || cached.status === 'intercepted';
     return {
       allowed: denied ? false : pathAllowed(cached.group, url.pathname + url.search),
       reason: denied ? `robots-${cached.status}` : 'robots',
@@ -162,6 +208,9 @@ export const isScrapeAllowed = async (target, { userAgent = 'ForqBot', fetchImpl
   }
   if (result.status === 'forbidden') {
     return { allowed: false, reason: 'robots-forbidden', crawlDelay: null, cached: false };
+  }
+  if (result.status === 'intercepted') {
+    return { allowed: false, reason: 'network-blocked', crawlDelay: null, cached: false };
   }
   return {
     allowed: pathAllowed(group, url.pathname + url.search),

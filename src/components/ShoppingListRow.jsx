@@ -44,7 +44,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
       }}
     >
       <div className={largeTouch ? 'p-5' : 'p-3'} style={{ borderColor: 'var(--line)' }}>
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-2.5">
         <button
           onClick={toggle}
           aria-label={`Tick ${item.name}`}
@@ -59,7 +59,14 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
           <Glyph e={item.emoji} size={20} style={{ color: 'var(--muted)' }} />
         </button>
         <div className="min-w-0 flex-1">
-          <p className={cx('font-bold truncate', largeTouch ? 'text-[1rem]' : 'text-[0.875rem]', item.checked && 'line-through opacity-45')}>
+          {/* Wrapped, not truncated. This row puts the name in a flexible
+              column beside a price field and two icon buttons, all of which
+              refuse to shrink — which on a 390px phone leaves the name about
+              110px, or twelve characters. "Wholemeal bread" became
+              "Wholemeal ..." and "Semi-skimmed milk" became "Semi-skim...".
+              The name is the one thing a shopping list exists to tell you, so
+              it gets two lines rather than an ellipsis. */}
+          <p className={cx('font-bold [overflow-wrap:anywhere]', largeTouch ? 'text-[1rem]' : 'text-[0.875rem]', item.checked && 'line-through opacity-45')}>
             {item.name}
             {item.qty && <span className="font-semibold text-[0.75rem]" style={{ color: 'var(--muted)' }}> · {item.qty}</span>}
           </p>
@@ -102,7 +109,13 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
               £{comparablePrice.value.toFixed(2)} / {comparablePrice.unit}
             </p>
           )}
-          {insight.price?.level !== 'unknown' && (
+          {/* `insight.price?.level !== 'unknown'` looked like a guard and was
+              not one: with no insight at all the optional chain yields
+              undefined, undefined !== 'unknown' is true, and the block below
+              then read .level off undefined and took the whole row down. An
+              item only has insights once the derivation has seen it, so a
+              freshly added item crashed its own list row. */}
+          {insight.price && insight.price.level !== 'unknown' && (
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <Pill tone={insight.price.level === 'high' ? 'good' : insight.price.level === 'medium' ? 'accent' : 'warn'}>
                 {insight.price.label}
@@ -156,7 +169,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
           onChange={(e) => app.updateListItem(item.id, { price: Number(e.target.value) || 0 })}
           placeholder="£"
           aria-label={`Price of ${item.name}`}
-          className={cx('shrink-0 rounded-xl border px-2 text-right outline-none', largeTouch ? 'w-24 py-3 text-[0.9375rem]' : 'w-16 py-1.5 text-[0.8125rem]', 'font-bold')}
+          className={cx('shrink-0 rounded-xl border px-2 text-right outline-none', largeTouch ? 'w-24 py-3 text-[0.9375rem]' : 'w-14 py-1.5 text-[0.8125rem]', 'font-bold')}
           style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
         />
         <button
