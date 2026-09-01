@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { CATALOGUE } from '../data/foods.js';
 import { DEFAULT_TARGETS } from '../data/nutrients.js';
 import { guessAisle } from '../data/stores.js';
@@ -33,6 +33,7 @@ import {
 import { useStoreApi } from './store-api.js';
 import { isUnderEighteen } from './youth.js';
 import { readAnalyticsConsent, setAnalyticsConsent } from './product-analytics.js';
+import { createExampleWeekState } from '../data/exampleWeek.js';
 
 export { PHOTO_LIMIT } from './health-actions.js';
 
@@ -56,6 +57,15 @@ export function AppProvider({ children }) {
   if (!initial.current) initial.current = loadStoredState();
   const [state, setState] = useState(initial.current.state);
   const [storageIssue, setStorageIssue] = useState(initial.current.issue);
+
+  /* ---- Sandbox / demonstration kitchen --------------------------------
+     While a demo session is open, every read comes from the demo copy and
+     every write is routed into it — the whole app is clickable, but the
+     real state object is never touched, so nothing persists, nothing syncs,
+     and nothing the visitor does can overwrite an empty (or any) kitchen. */
+  const [demo, setDemoState] = useState(null);
+  const demoRef = useRef(null);
+  const realUndoStack = useRef(null);
   const [cloudStatus, setCloudStatus] = useState({ kind: 'checking', message: 'Checking cloud sync…' });
   const blockPersistence = useRef(initial.current.issue?.kind === 'corrupt');
   const cloudMeta = useRef(null);
@@ -77,6 +87,12 @@ export function AppProvider({ children }) {
   const [tick, setTick] = useState(() => Date.now());
   // Where the catch-up starts: read once, so it doesn't slide as you look at it.
   const [seenFrom] = useState(() => state.lastSeenAt);
+
+  // Stable across the provider's life: the api memoises on this identity.
+  const routedSetState = useCallback((update) => {
+    if (demoRef.current) setDemoState(update);
+    else setState(update);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setTick(Date.now()), 60000);
@@ -179,7 +195,7 @@ export function AppProvider({ children }) {
   // Leaving is the most accurate moment to stamp, and there may be no render
   // left after it — so this one writes directly.
   const latest = useRef(state);
-  latest.current = state;
+  latest.current = demo ?? state;
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') return undefined;
     let cancelled = false;
@@ -313,7 +329,8 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (!cloudReady.current || !cloudMeta.current) return;
-    if (skipCloudPush.current) {
+    // Demo mutations never belong in household sync.
+    if (demoRef.current || skipCloudPush.current) {
       skipCloudPush.current = false;
       return;
     }
@@ -340,7 +357,8 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const mark = () => {
-      if (!blockPersistence.current) persist(latest.current);
+      // A demo session must never reach storage, even on the way out.
+      if (!blockPersistence.current && !demoRef.current) persist(latest.current);
     };
     const onHide = () => { if (document.visibilityState === 'hidden') mark(); };
     document.addEventListener('visibilitychange', onHide);
@@ -368,40 +386,61 @@ export function AppProvider({ children }) {
   setMyRecipes(state.myRecipes);
 
   const api = useStoreApi({
-    blockPersistence, cloudStatus, latest, setState, setStorageIssue, storageIssue,
+    blockPersistence, cloudStatus, latest, setState: routedSetState, setStorageIssue, storageIssue,
     undoHistory, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
   });
 
   /* Everything below is derived — the app never stores a number twice. */
-  const derived = useMemo(() => deriveApp(state), [state]);
+  const effectiveState = demo ?? state;
+  const derived = useMemo(() => deriveApp(effectiveState), [effectiveState]);
 
   /* Reminders answer to the clock as well as to your data, so they're derived
      against the tick rather than only against state changes. */
   const alerts = useMemo(() => {
     const now = new Date(tick);
-    const due = dueNow(state.reminders, { now, done: state.reminderDone });
+    const due = dueNow(effectiveState.reminders, { now, done: effectiveState.reminderDone });
     return {
       remindersDue: due,
       // What came due while the app was shut. It can't notify you then — no
       // server to wake it — so the least it can do is not pretend otherwise.
-      remindersMissed: dueBetween(state.reminders, seenFrom, tick, state.reminderDone)
+      remindersMissed: dueBetween(effectiveState.reminders, seenFrom, tick, effectiveState.reminderDone)
         .filter((m) => !due.some((d) => d.reminder.id === m.reminder.id && d.stamp === m.stamp && d.time === m.time)),
       now,
     };
-  }, [state.reminders, state.reminderDone, seenFrom, tick]);
+  }, [effectiveState.reminders, effectiveState.reminderDone, seenFrom, tick]);
+
+  const enterDemoMode = useCallback(() => {
+    const demoSession = createExampleWeekState(todayStamp());
+    demoRef.current = demoSession;
+    // Undo history is a stack of real states; a demo undo must never pop one
+    // back into the sandbox (or a demo state back into the real app).
+    realUndoStack.current = undoHistory.current;
+    undoHistory.current = [];
+    setDemoState(demoSession);
+  }, [undoHistory]);
+
+  const exitDemoMode = useCallback(() => {
+    demoRef.current = null;
+    undoHistory.current = realUndoStack.current ?? [];
+    realUndoStack.current = null;
+    setDemoState(null);
+  }, [undoHistory]);
 
   const value = useMemo(() => ({
-    ...state,
+    ...effectiveState,
     ...derived,
     ...alerts,
-    reminderLine: (kind) => reminderContext(kind, { ...state, ...derived }),
+    isDemoMode: Boolean(demo),
+    enterDemoMode,
+    exitDemoMode,
+    reminderLine: (kind) => reminderContext(kind, { ...effectiveState, ...derived }),
     healthVault: {
       enabled: state.healthVaultEnabled,
       unlocked: vaultUnlocked,
       platformAvailable: platformUnlockAvailable(),
     },
     ...api,
-  }), [state, derived, alerts, api, vaultUnlocked]);
+  }), [effectiveState, state.healthVaultEnabled, derived, alerts, api, vaultUnlocked, enterDemoMode, exitDemoMode]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
