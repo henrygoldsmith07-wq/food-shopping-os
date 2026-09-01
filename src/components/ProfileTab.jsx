@@ -410,6 +410,19 @@ export default function ProfileTab({ openGuidance }) {
       <BackendPanel />
 <Section title="Your data" className="rise rise-4">
         <Card className="space-y-3">
+          {!app.isDemoMode && (
+            <button
+              type="button"
+              onClick={app.enterDemoMode}
+              className="press w-full rounded-2xl border px-4 py-3 text-left text-[0.84375rem] font-extrabold"
+              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+            >
+              Explore the demo household
+              <span className="mt-0.5 block text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                A fully stocked example week — plan, list, receipts. Nothing is saved and your own data is untouched.
+              </span>
+            </button>
+          )}
           <p className="text-[0.75rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
             Browser storage is not encrypted. Anyone with access to this browser profile can
             access it. Export a backup before clearing site data or changing devices.

@@ -129,7 +129,9 @@ export const createExampleWeekState = (day = todayStamp()) => {
     // shows it labels it as example data — never mistaken for real trips
     shops,
     log: {},
-    cooked: [],
+    // Yesterday's dinner was cooked from the plan, so streaks/cook surfaces
+    // have one honest-looking entry (recipe ids come from the real catalogue)
+    cooked: byId(DEMO_DINNER_IDS[0]) ? [{ recipeId: DEMO_DINNER_IDS[0], date: addDays(day, -1) }] : [],
     waste: [],
     measurements: [],
     workouts: [],
