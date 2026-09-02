@@ -226,6 +226,7 @@ HTTP 200 on a shell is a miss, not a hit:
 | --- | --- | --- | --- |
 | `direct` | nothing | raw HTML | Free and instant. Works on server-rendered shops. Always tried first. |
 | `firecrawl` | `FIRECRAWL_API_KEY` | rendered HTML + markdown | Headless render. Costs credits, so it is only reached when `direct` found nothing. Asks for `rawHtml`, so structured parsing still applies. |
+| `monid` | `MONID_API_KEY` | whatever the configured endpoint returns | Runs one scraping endpoint through [Monid](https://monid.ai)'s API (`MONID_SCRAPE_PROVIDER` / `MONID_SCRAPE_ENDPOINT`). A run spends the Monid balance and takes seconds to minutes, so it sits behind the cheaper rungs. HTML keeps the structured passes; plain text drops to the text pass. |
 | `jina` | nothing | markdown | [r.jina.ai](https://r.jina.ai), keyless, renders JavaScript. Markdown only, so just the text pass can read it — hence last. |
 
 Escalation is what raises the hit rate: a shop that returns a shell to `direct`
@@ -245,9 +246,14 @@ means no fetch by any route.
 | `FIRECRAWL_API_KEY` | unset | Enables the Firecrawl render strategy. Without it the ladder is `direct → jina`. |
 | `FIRECRAWL_BASE_URL` | `https://api.firecrawl.dev/v2` | Pin an API version or point at a self-hosted Firecrawl. |
 | `FIRECRAWL_WAIT_MS` | `2500` | How long Firecrawl waits after load before capturing — raise it for slow shops. |
+| `MONID_API_KEY` | unset | Enables the Monid strategy. Generate a key at [app.monid.ai/access/api-keys](https://app.monid.ai/access/api-keys); runs spend that workspace's balance. |
+| `MONID_SCRAPE_PROVIDER` | `apify` | Which Monid provider the strategy runs. Pick one with `monid discover -q "uk grocery prices"`. |
+| `MONID_SCRAPE_ENDPOINT` | `/apify/website-content-crawler` | Which Monid endpoint to run. Confirm its input schema with `monid inspect` before changing it. |
+| `MONID_SCRAPE_INPUT_JSON` | `{"startUrls":[{"url":"{{url}}"}],"maxCrawlResults":1}` | Body sent to the endpoint; `{{url}}` is replaced with the shop's search page. Match the schema `monid inspect` prints. |
+| `MONID_RUN_TIMEOUT_MS` | `60000` | How long a Monid run may take before the shop is written off as empty and the next rung is tried. |
 | `JINA_API_KEY` | unset | Optional. Raises Jina Reader's rate limit; it works keylessly without one. |
 | `JINA_READER_ENABLED` | `true` | Set to `false` to drop the keyless renderer from the ladder. |
-| `PRICE_SCRAPER_STRATEGIES` | `direct,firecrawl,jina` | Explicit ladder order, comma-separated. |
+| `PRICE_SCRAPER_STRATEGIES` | `direct,firecrawl,monid,jina` | Explicit ladder order, comma-separated. Unconfigured strategies are dropped. |
 | `PRICE_SCRAPER_ENABLED` | `true` | Set to `false` to switch live price checking off entirely. |
 | `PRICE_SCRAPER_RETAILERS` | all | Comma-separated allowlist of retailer ids, e.g. `tesco,aldi`. |
 | `SCRAPER_TIMEOUT_MS` | `9000` | Per-page timeout for the direct fetch. |
