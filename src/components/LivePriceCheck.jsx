@@ -13,6 +13,7 @@ import {
   catalogueStats, clearProductCatalogue, loadProductCatalogue, productRows, recordProducts,
 } from '../lib/product-catalogue.js';
 import { liveMovements } from '../lib/live-price-alerts.js';
+import { recordMonidOutcomes } from '../lib/monid-rollup.js';
 import {
   dailyCheckDue, dailyCheckSettings, recordDailyCheck, setDailyCheckEnabled,
 } from '../lib/daily-price-check.js';
@@ -77,6 +78,9 @@ export default function LivePriceCheck({
       // Keep the run, so checking again next week draws a line rather than
       // replacing today's answer with no memory of the last one.
       recordLivePrices(result.byKey);
+      // Count what the paid rung did this run — filled, missed, or failed —
+      // so its week can be judged against its cost.
+      recordMonidOutcomes(result.byKey);
       setHistory(loadLivePriceHistory());
       // Every check also grows the cross-shop catalogue: what each shop calls
       // this product, what size it sells, and what that works out at per unit.

@@ -99,4 +99,18 @@ describe('MonidProvenance panel', () => {
     const { container } = render(<MonidProvenance results={[{ name: 'eggs', monid: null }]} />);
     await waitFor(() => expect(container.textContent).toBe(''));
   });
+
+  it('summarises the week the paid rung had, with misses and pauses in words', async () => {
+    global.fetch = okFetch({ configured: true, balance: 8 });
+    const week = {
+      [new Date().toISOString().slice(0, 10)]: { filled: 4, missed: 2, failed: 1, paused: 3 },
+    };
+    localStorage.setItem('forq.monidRollup.v1', JSON.stringify(week));
+    render(<MonidProvenance results={[{ name: 'eggs', monid: { status: 'ok', provider: 'apify', rows: 2 } }]} />);
+    await waitFor(() => expect(screen.getByText(/4 of 7 gaps filled this week/i)).toBeTruthy());
+    expect(screen.getByText(/2 the catalogue had no answer for/)).toBeTruthy();
+    expect(screen.getByText(/1 failed/)).toBeTruthy();
+    expect(screen.getByText(/3 stopped by a paused rung/)).toBeTruthy();
+    localStorage.removeItem('forq.monidRollup.v1');
+  });
 });
