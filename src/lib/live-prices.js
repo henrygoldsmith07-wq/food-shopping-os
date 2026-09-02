@@ -189,12 +189,16 @@ export const rankShops = (perRetailer = [], { name } = {}) => {
   // What each shop's cheapest row actually is, next to the others. The top
   // hit for "beans" at one shop is not automatically the same tin another
   // shop returned, and ranking a lookalike as the product is the comparison
-  // this check exists to stop.    const ref = majorityReference(withUnit);
+  // this check exists to stop.
+  const unbrand = (row) => (row.retailer && row.name
+    ? row.name.replace(new RegExp(`^${row.retailer}[\\s-]+`, 'i'), '')
+    : row.name);
+  const ref = majorityReference(withUnit);
   const labelled = withUnit.map((row, index) => ({
     ...row,
     match: index === ref
       ? { classification: 'exact', equivalent: true, reasons: [] }
-      : classifyProductMatch(withUnit[ref], row),
+      : classifyProductMatch({ ...withUnit[ref], name: unbrand(withUnit[ref]) }, { ...row, name: unbrand(row) }),
   }));
   const comparable = labelled.filter((row) => comparableForRanking(row.match));
   const likeForLike = comparable.length >= 2;
@@ -282,7 +286,7 @@ export const rankingSpread = (ranking) => {
   // The spread is a like-for-like claim, so when the ranking separated a
   // different product out, the spread stops at the like-for-like pair.
   const rows = !Array.isArray(ranking) && ranking?.likeForLike
-    ? allRows.filter((row) => !row.match || row.match.equivalent !== false)
+    ? allRows.filter((row) => !row.match || comparableForRanking(row.match))
     : allRows;
   if (rows.length < 2) return null;
   const basis = Array.isArray(ranking) ? 'price' : ranking.basis;

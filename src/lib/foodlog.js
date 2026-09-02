@@ -274,7 +274,10 @@ const singularToken = (token) => {
 };
 
 const sameIngredientToken = (left, right) => left === right || singularToken(left) === singularToken(right);
-const PREPARATION_WORDS = new Set(['baked', 'boiled', 'canned', 'cooked', 'diced', 'dried', 'frozen', 'grilled', 'raw', 'roasted', 'sliced', 'steamed', 'tinned']);
+// 'cooked' is deliberately absent: cooked variants exist in the catalogue
+// precisely because their nutrition differs, so a bare ingredient must never
+// resolve to one.
+const PREPARATION_WORDS = new Set(['baked', 'boiled', 'canned', 'diced', 'dried', 'frozen', 'grilled', 'raw', 'roasted', 'sliced', 'steamed', 'tinned']);
 
 const matchIngredientFood = (name, catalogue) => {
   const query = ingredientTokens(name);
@@ -292,7 +295,11 @@ const matchIngredientFood = (name, catalogue) => {
       const extraWordsArePreparation = foodTokens
         .filter((token) => !query.some((part) => sameIngredientToken(part, token)))
         .every((token) => PREPARATION_WORDS.has(token));
-      if (!exact && !foodMatchesAll && !(queryMatchesAll && extraWordsArePreparation)) return null;
+      if (!exact && !foodMatchesAll
+        // A bare single-word ingredient ("chicken", "water") must never resolve
+        // to a preparation variant — the variants exist because their nutrition
+        // differs, so guessing one on the user's behalf is a wrong answer.
+        && !(query.length > 1 && queryMatchesAll && extraWordsArePreparation)) return null;
       const exactTokenHits = foodTokens.filter((token) => query.includes(token)).length;
       const staple = (food.tags || []).some((tag) => ['grain', 'dairy', 'veg', 'fruit', 'meat', 'fish', 'fat', 'tinned', 'bread', 'spread', 'drink', 'high-protein'].includes(tag));
       const noisy = food.source === 'restaurant' || (food.tags || []).includes('eating out') || (food.tags || []).includes('treat');

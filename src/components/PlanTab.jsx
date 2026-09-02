@@ -27,8 +27,7 @@ import MonthMealRow from './MonthMealRow.jsx';
 import PlanningSignals from './PlanningSignals.jsx';
 import PlanSimulator from './PlanSimulator.jsx';
 
-const dayLabel = (date) =>
-  new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
 /**
  * Pick a recipe for one slot. Defaults to dishes for that meal — breakfasts for
@@ -70,8 +69,7 @@ function RecipePicker({ slot, onPick, onClear, hasMeal }) {
       />
       <div className="flex items-center justify-between gap-3">
         <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-          {list.length} {anyMeal || query ? 'recipes' : `${slot} recipes`}
-          {app.planDiets.length ? ' that fit your diet' : ''}
+          {list.length} {anyMeal || query ? 'recipes' : `${slot} recipes`}{app.planDiets.length ? ' that fit your diet' : ''}
         </p>
         <div className="flex gap-2">
           <Chip active={inSeason} onClick={() => setInSeason((v) => !v)}>In season</Chip>
@@ -342,9 +340,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             <button
               onClick={sendToList}
               className="press w-full rounded-2xl border py-3 text-[0.875rem] font-extrabold"
-              style={addedToList
-                ? { borderColor: 'var(--good)', color: 'var(--good)' }
-                : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
+              style={addedToList ? { borderColor: 'var(--good)', color: 'var(--good)' } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
             >
               <span className="inline-flex items-center gap-2">
                 <ShoppingCart size={15} />

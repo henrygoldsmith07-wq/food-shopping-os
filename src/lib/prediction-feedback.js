@@ -9,6 +9,30 @@ export const PREDICTION_CORRECTION_OPTIONS = [
 
 const validValue = (value) => Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 3;
 
+/** Store actions for recording, resolving and correcting predictions. */
+export const predictionActions = (set) => ({
+  recordPrediction: ({ type, key, probability, confidence, predicted, context } = {}) =>
+    set((s) => ({ predictionSnapshots: [...(s.predictionSnapshots || []), predictionSnapshot({ type, key, probability, confidence, predicted, date: s.day, context })].slice(-500) })),
+  resolvePrediction: (id, outcome) =>
+    set((s) => ({ predictionSnapshots: (s.predictionSnapshots || []).map((snapshot) => snapshot.id === id ? { ...snapshot, outcome: Boolean(outcome), resolvedAt: s.day } : snapshot) })),
+  correctPrediction: ({ predictionType, predictionKey, predicted, actual, context } = {}) =>
+    set((s) => {
+      const value = Number(actual);
+      if (![0, 1, 2, 3].includes(value)) return {};
+      const event = predictionCorrectionEvent({
+        predictionType,
+        predictionKey,
+        predicted,
+        actual: value,
+        date: s.day,
+        context,
+      });
+      return event
+        ? { predictionCorrections: [...(s.predictionCorrections || []), event].slice(-500) }
+        : {};
+    }),
+});
+
 export const predictionCorrectionEvent = ({ predictionType, predictionKey, predicted, actual, date, context = {} } = {}) => {
   const value = Number(actual);
   if (!validValue(value)) return null;
