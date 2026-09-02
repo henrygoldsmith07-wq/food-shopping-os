@@ -69,8 +69,7 @@ describe('MonidProvenance panel', () => {
     global.fetch = okFetch({ configured: true, balance: 12 });
     const results = [
       { name: 'baked beans', monid: { status: 'ok', provider: 'apify', rows: 3 } },
-      { name: 'oat milk', monid: {      status: 'no-match',
-      paused: false, provider: null, rows: 0 } },
+      { name: 'oat milk', monid: { status: 'no-match', paused: false, provider: null, rows: 0 } },
       { name: 'eggs', monid: null },
     ];
     render(<MonidProvenance results={results} />);

@@ -134,6 +134,10 @@ export default function LivePriceCheck({
   const entries = Object.entries(state?.byKey || {});
   const priced = entries.filter(([, entry]) => entry?.best);
   const usedAi = entries.some(([, entry]) => entry?.aiUsed);
+  // The rung paused itself mid-run: the balance is below its floor. Derived
+  // from the results' own stamps, so the banner and the provenance panel
+  // can never disagree about whether Monid was live during this run.
+  const monidPaused = entries.filter(([, entry]) => entry?.monid?.paused === true);
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0;
   const coverage = coverageFor(state?.byKey);
   const stats = catalogueStats(catalogue);
@@ -276,6 +280,18 @@ export default function LivePriceCheck({
                 0% hit rate. Nine shops do not refuse one person at the same
                 moment; something in front of them does, and that is fixable
                 where a retailer's robots.txt is not. */}
+            {monidPaused.length > 0 && (
+              <Card className="mb-2 !p-3" style={{ borderColor: 'var(--warn)' }}>
+                <p className="text-[0.8125rem] font-bold" style={{ color: 'var(--warn)' }}>
+                  Monid is paused — its balance dropped below the floor during this check.
+                </p>
+                <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  The shops were still read normally; only the paid lookups that cover
+                  what shops miss stopped. Top up at app.monid.ai — the next balance
+                  read re-enables the rung. Nothing was charged while paused.
+                </p>
+              </Card>
+            )}
             {coverage.networkBlocked && (
               <Card className="mb-2 !p-3" style={{ borderColor: 'var(--warn)' }}>
                 <p className="text-[0.8125rem] font-bold" style={{ color: 'var(--warn)' }}>
