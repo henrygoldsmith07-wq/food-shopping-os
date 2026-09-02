@@ -59,7 +59,7 @@ export const compose = (parts, servings = 1) => {
 
 const has = (parts, tag) => parts.some((p) => p.tags.includes(tag));
 
-const scores = (parts, n) => {
+export const scores = (parts, n) => {
   const per100kcal = n.kcal ? (100 / n.kcal) : 0;
   const health = Math.max(20, Math.min(98, Math.round(
     55

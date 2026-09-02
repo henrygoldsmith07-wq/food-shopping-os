@@ -42,6 +42,15 @@ const CATEGORY_FILTERS = [
   { id: 'breakfast', label: 'Breakfast' },
   { id: 'snack', label: 'Snacks' },
   { id: 'drink', label: 'Drinks' },
+  { id: 'fruit', label: 'Fruit' },
+  { id: 'veg', label: 'Vegetables' },
+  { id: 'meat', label: 'Meat' },
+  { id: 'fish', label: 'Fish' },
+  { id: 'vegan', label: 'Vegan' },
+  { id: 'branded', label: 'Branded' },
+  { id: 'frozen', label: 'Frozen' },
+  { id: 'tinned', label: 'Tinned' },
+  { id: 'high-protein', label: 'High protein' },
 ];
 
 export const filterFoodList = (foods, filters = EMPTY_FILTERS, diets = []) =>
@@ -51,7 +60,9 @@ export const filterFoodList = (foods, filters = EMPTY_FILTERS, diets = []) =>
     if (filters.highProtein && macros.protein < 15) return false;
     if (filters.highFibre && (macros.fibre || 0) < 5) return false;
     if (filters.under300 && macros.kcal > 300) return false;
-    if (filters.category !== 'all' && !(food.tags || []).includes(filters.category)) return false;
+    if (filters.category !== 'all' && !(food.tags || []).includes(filters.category)
+      && !(food.dietary || []).includes(filters.category)
+      && food.category !== filters.category) return false;
     return true;
   });
 

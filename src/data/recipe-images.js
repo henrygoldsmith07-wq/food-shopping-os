@@ -154,7 +154,7 @@ export const recipeIconImage = (recipe = {}, options = {}) => {
   const palette = resolvePalette(theme);
   const label = FAMILY_LABELS[key] || 'RECIPE ICON';
   const ingredients = heroIngredients(recipe).join(', ');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="680" viewBox="0 0 1024 680" role="img" aria-label="${escapeXml(name)} recipe icon" data-family="${escapeXml(label)}"><title>${escapeXml(name)}${ingredients ? ` — ${escapeXml(ingredients)}` : ''}</title><rect width="1024" height="680" rx="42" fill="${palette.background}"/>${renderMotif(key, palette)}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="680" viewBox="0 0 1024 680" role="img" aria-label="${escapeXml(name)} recipe icon" data-family="${escapeXml(label)}" data-recipe="${escapeXml(recipe.id || name)}"><title>${escapeXml(name)}${ingredients ? ` — ${escapeXml(ingredients)}` : ''}</title><rect width="1024" height="680" rx="42" fill="${palette.background}"/>${renderMotif(key, palette)}</svg>`;
   const icon = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   if (ICON_CACHE.size >= 2048) ICON_CACHE.delete(ICON_CACHE.keys().next().value);
   ICON_CACHE.set(cacheKey, icon);

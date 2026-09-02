@@ -6,6 +6,23 @@ import { STORE_CUPBOARD_FOODS } from '../src/data/store-cupboard-foods.js';
 import { GLOBAL_PANTRY_FOODS } from '../src/data/global-pantry-foods.js';
 import { DELI_DESSERT_FOODS } from '../src/data/deli-dessert-foods.js';
 import { healthScore, matchFood } from '../src/lib/food-tags.js';
+import { CATALOGUE_FIFTH_WAVE } from '../src/data/catalogue-fifth-wave.js';
+import { CATALOGUE_SIXTH_WAVE } from '../src/data/catalogue-sixth-wave.js';
+import { CATALOGUE_TENTH_WAVE } from '../src/data/catalogue-tenth-wave.js';
+import { CATALOGUE_ELEVENTH_WAVE } from '../src/data/catalogue-eleventh-wave.js';
+import { CATALOGUE_TWELFTH_WAVE } from '../src/data/catalogue-twelfth-wave.js';
+import { CATALOGUE_THIRTEENTH_WAVE } from '../src/data/catalogue-thirteenth-wave.js';
+import { CATALOGUE_FOURTEENTH_WAVE } from '../src/data/catalogue-fourteenth-wave.js';
+import { CATALOGUE_SIXTEENTH_WAVE } from '../src/data/catalogue-sixteenth-wave.js';
+import { CATALOGUE_SEVENTEENTH_WAVE } from '../src/data/catalogue-seventeenth-wave.js';
+import { CATALOGUE_EIGHTEENTH_WAVE } from '../src/data/catalogue-eighteenth-wave.js';
+import { CATALOGUE_NINETEENTH_WAVE } from '../src/data/catalogue-nineteenth-wave.js';
+import { CATALOGUE_TWENTIETH_WAVE } from '../src/data/catalogue-twentieth-wave.js';
+import { CATALOGUE_TWENTY_FIRST_WAVE } from '../src/data/catalogue-twenty-first-wave.js';
+import { CATALOGUE_TWENTY_SECOND_WAVE } from '../src/data/catalogue-twenty-second-wave.js';
+import { CATALOGUE_TWENTY_THIRD_WAVE } from '../src/data/catalogue-twenty-third-wave.js';
+import { CATALOGUE_TWENTY_FOURTH_WAVE } from '../src/data/catalogue-twenty-fourth-wave.js';
+import { CATALOGUE_FIFTEENTH_WAVE } from '../src/data/catalogue-fifteenth-wave.js';
 
 /**
  * Energy from macros, the way UK/EU labelling actually computes it.
@@ -19,6 +36,96 @@ const energyFromMacros = ({ protein, carbs, fat, fibre }) =>
 const ADDED = [...STORE_CUPBOARD_FOODS, ...DELI_DESSERT_FOODS, ...BRANDED_FOODS, ...BRANDED_FOODS_EXTRA];
 
 describe('the catalogue holds together', () => {
+  it('includes the tenth wave across core food groups', () => {
+    expect(CATALOGUE_TENTH_WAVE.length).toBeGreaterThanOrEqual(50);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'drink']) {
+      expect(CATALOGUE_TENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the eleventh wave across practical food groups', () => {
+    expect(CATALOGUE_ELEVENTH_WAVE.length).toBeGreaterThanOrEqual(50);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'drink']) {
+      expect(CATALOGUE_ELEVENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the twelfth wave across staples, produce, proteins, dishes and drinks', () => {
+    expect(CATALOGUE_TWELFTH_WAVE.length).toBeGreaterThanOrEqual(40);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'drink']) {
+      expect(CATALOGUE_TWELFTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the thirteenth wave across staple, produce, protein, dish and drink groups', () => {
+    expect(CATALOGUE_THIRTEENTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'drink']) {
+      expect(CATALOGUE_THIRTEENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the fourteenth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_FOURTEENTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_FOURTEENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the fifteenth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_FIFTEENTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_FIFTEENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the sixteenth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_SIXTEENTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_SIXTEENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the seventeenth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_SEVENTEENTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_SEVENTEENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the eighteenth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_EIGHTEENTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_EIGHTEENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the nineteenth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_NINETEENTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_NINETEENTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the twentieth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_TWENTIETH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_TWENTIETH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the twenty-first wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_TWENTY_FIRST_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_TWENTY_FIRST_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the twenty-second wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_TWENTY_SECOND_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_TWENTY_SECOND_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the twenty-third wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_TWENTY_THIRD_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_TWENTY_THIRD_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
+  it('includes the twenty-fourth wave across staples, produce, proteins, dishes, snacks and drinks', () => {
+    expect(CATALOGUE_TWENTY_FOURTH_WAVE.length).toBeGreaterThanOrEqual(35);
+    for (const tag of ['grain', 'veg', 'fruit', 'fish', 'meat', 'dish', 'snack', 'drink']) {
+      expect(CATALOGUE_TWENTY_FOURTH_WAVE.some((food) => food.tags.includes(tag)), tag).toBe(true);
+    }
+  });
   it('has no duplicate ids anywhere', () => {
     const ids = FOODS.map((food) => food.id);
     const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
@@ -167,6 +274,45 @@ describe('the expanded catalogue is reachable', () => {
   it('reaches the catalogue the rest of the app searches', () => {
     expect(CATALOGUE.length).toBeGreaterThanOrEqual(FOODS.length);
     expect(FOODS.length).toBeGreaterThan(500);
+  });
+});
+
+describe('the sixth wave of foods', () => {
+  it('covers more common produce, proteins, grains, snacks and drinks', () => {
+    for (const query of ['brussels sprouts', 'beetroot', 'dried chickpeas', 'haddock', 'trout', 'bulgur', 'gnocchi', 'strawberry jam', 'green tea']) {
+      expect(matchFood(query), query).not.toBeNull();
+    }
+  });
+
+  it('uses unique validated rows', () => {
+    expect(CATALOGUE_SIXTH_WAVE.length).toBeGreaterThan(50);
+    for (const food of CATALOGUE_SIXTH_WAVE) {
+      expect(food.id).toBeTruthy();
+      expect(food.servings[0].grams).toBeGreaterThan(0);
+      for (const key of ['kcal', 'protein', 'carbs', 'fat', 'fibre', 'sugar', 'satFat', 'sodium']) {
+        expect(Number.isFinite(food.per100[key]), `${food.name} ${key}`).toBe(true);
+      }
+    }
+  });
+});
+
+describe('the fifth wave of foods', () => {
+  it('adds recognisable everyday foods to the searched catalogue', () => {
+    for (const query of ['basmati rice dry', 'pitta bread', 'mozzarella', 'fish fingers', 'frozen berries', 'aubergine', 'watermelon', 'chickpea flour']) {
+      expect(matchFood(query), query).not.toBeNull();
+    }
+  });
+
+  it('uses the validated row schema for every new entry', () => {
+    expect(CATALOGUE_FIFTH_WAVE.length).toBeGreaterThan(30);
+    for (const food of CATALOGUE_FIFTH_WAVE) {
+      expect(food.id).toBeTruthy();
+      expect(food.name).toBeTruthy();
+      expect(food.servings[0].grams).toBeGreaterThan(0);
+      for (const key of ['kcal', 'protein', 'carbs', 'fat', 'fibre', 'sugar', 'satFat', 'sodium']) {
+        expect(Number.isFinite(food.per100[key]), `${food.name} ${key}`).toBe(true);
+      }
+    }
   });
 });
 

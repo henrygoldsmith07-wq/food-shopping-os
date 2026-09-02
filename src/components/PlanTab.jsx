@@ -27,8 +27,7 @@ import MonthMealRow from './MonthMealRow.jsx';
 import PlanningSignals from './PlanningSignals.jsx';
 import PlanSimulator from './PlanSimulator.jsx';
 
-const dayLabel = (date) =>
-  new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
 /**
  * Pick a recipe for one slot. Defaults to dishes for that meal — breakfasts for
@@ -70,8 +69,7 @@ function RecipePicker({ slot, onPick, onClear, hasMeal }) {
       />
       <div className="flex items-center justify-between gap-3">
         <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-          {list.length} {anyMeal || query ? 'recipes' : `${slot} recipes`}
-          {app.planDiets.length ? ' that fit your diet' : ''}
+          {list.length} {anyMeal || query ? 'recipes' : `${slot} recipes`}{app.planDiets.length ? ' that fit your diet' : ''}
         </p>
         <div className="flex gap-2">
           <Chip active={inSeason} onClick={() => setInSeason((v) => !v)}>In season</Chip>
@@ -197,7 +195,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             <Chip active={view === 'week'} onClick={() => { setView('week'); setOffset(0); clearRangeStatus(); }}>Week</Chip>
             <Chip active={view === 'month'} onClick={() => { setView('month'); setOffset(0); clearRangeStatus(); }}>Month</Chip>
           </div>
-          <div className="flex items-center gap-1">
+          {/* Arrows keep their tap target; the date label gives way rather than pushing the page sideways. */}
+          <div className="flex min-w-0 items-center gap-1">
             <button
               onClick={() => { setOffset((o) => o - 1); clearRangeStatus(); }}
               aria-label={view === 'week' ? 'Previous week' : 'Previous month'}
@@ -208,7 +207,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             </button>
             <button
               onClick={() => { setOffset(0); clearRangeStatus(); }}
-              className="tap press shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[0.78125rem] font-extrabold"
+              className="tap press min-w-0 rounded-full px-3 py-1.5 text-[0.78125rem] font-extrabold"
               style={{ background: offset ? 'var(--card-2)' : 'transparent', color: offset ? 'var(--ink)' : 'var(--faint)' }}
             >
               {offset ? 'Today' : rangeLabel}
@@ -341,9 +340,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             <button
               onClick={sendToList}
               className="press w-full rounded-2xl border py-3 text-[0.875rem] font-extrabold"
-              style={addedToList
-                ? { borderColor: 'var(--good)', color: 'var(--good)' }
-                : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
+              style={addedToList ? { borderColor: 'var(--good)', color: 'var(--good)' } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
             >
               <span className="inline-flex items-center gap-2">
                 <ShoppingCart size={15} />

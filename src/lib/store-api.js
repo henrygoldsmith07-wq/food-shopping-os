@@ -34,7 +34,7 @@ import { COUPON_KINDS, LOYALTY_PROGRAMMES, normaliseCoupon } from './coupons.js'
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
-import { predictionCorrectionEvent, predictionSnapshot } from './prediction-feedback.js';
+import { predictionActions } from './prediction-feedback.js';
 export function useStoreApi({
   blockPersistence, cloudStatus, latest, setState, setStorageIssue, storageIssue,
   undoHistory, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
@@ -377,26 +377,7 @@ export function useStoreApi({
           };
         }),
       ...offerActions(set, latest),
-      recordPrediction: ({ type, key, probability, confidence, predicted, context } = {}) =>
-        set((s) => ({ predictionSnapshots: [...(s.predictionSnapshots || []), predictionSnapshot({ type, key, probability, confidence, predicted, date: s.day, context })].slice(-500) })),
-      resolvePrediction: (id, outcome) =>
-        set((s) => ({ predictionSnapshots: (s.predictionSnapshots || []).map((snapshot) => snapshot.id === id ? { ...snapshot, outcome: Boolean(outcome), resolvedAt: s.day } : snapshot) })),
-      correctPrediction: ({ predictionType, predictionKey, predicted, actual, context } = {}) =>
-        set((s) => {
-          const value = Number(actual);
-          if (![0, 1, 2, 3].includes(value)) return {};
-          const event = predictionCorrectionEvent({
-            predictionType,
-            predictionKey,
-            predicted,
-            actual: value,
-            date: s.day,
-            context,
-          });
-          return event
-            ? { predictionCorrections: [...(s.predictionCorrections || []), event].slice(-500) }
-            : {};
-        }),
+      ...predictionActions(set),
       compareBaskets: (items, offersByStore, options) => compareBaskets(items, offersByStore, options),
       wasteLearningProfile: () => wasteLearningProfile({
         purchases: latest.current.shops || [],

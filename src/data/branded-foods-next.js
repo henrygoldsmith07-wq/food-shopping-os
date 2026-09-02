@@ -1,0 +1,35 @@
+import { brandedRow } from './food-row.js';
+
+const ROWS = [
+  [['sainsburys-baked-beans', 'Sainsbury’s Baked Beans', '🥫', [75, 4.6, 12, 0.3, 3.8, 4.5, 0.1, 0.6], 207, ['tinned', 'store-cupboard']], 'Sainsbury’s'],
+  [['tesco-baked-beans', 'Tesco Baked Beans', '🥫', [76, 4.7, 12.2, 0.3, 3.8, 4.6, 0.1, 0.6], 207, ['tinned', 'store-cupboard']], 'Tesco'],
+  [['asda-baked-beans', 'ASDA Baked Beans', '🥫', [76, 4.6, 12, 0.3, 3.8, 4.5, 0.1, 0.6], 207, ['tinned', 'store-cupboard']], 'ASDA'],
+  [['waitrose-tomato-soup', 'Waitrose Tomato Soup', '🍲', [48, 1.2, 7.2, 1.5, 0.8, 5.5, 0.3, 0.55], 400, ['tinned', 'soup']], 'Waitrose'],
+  [['sainsburys-chocolate-fudge-cake', 'Sainsbury’s Chocolate Fudge Cake', '🍰', [390, 4.8, 48, 20, 2.3, 33, 11, 0.45], 80, ['dessert', 'treat']], 'Sainsbury’s'],
+  [['mr-kipling-battenberg', 'Mr Kipling Battenberg', '🍰', [421, 4.7, 59, 19, 1.2, 45, 8.5, 0.3], 80, ['dessert', 'treat']], 'Mr Kipling'],
+  [['mr-kipling-viennese-whirls', 'Mr Kipling Viennese Whirls', '🍪', [510, 5.2, 62, 27, 1.8, 30, 15, 0.45], 28, ['snack', 'treat']], 'Mr Kipling'],
+  [['foxs-chocolate-creams', 'Fox’s Chocolate Creams', '🍪', [494, 5.5, 66, 23, 3.2, 34, 11, 0.55], 14, ['snack', 'treat']], 'Fox’s'],
+  [['walkers-cheese-onion', 'Walkers Cheese & Onion Crisps', '🥔', [532, 6.4, 52, 33, 4, 3, 2.8, 1.5], 25, ['snack', 'dairy']], 'Walkers'],
+  [['monster-munch-flaming', 'Monster Munch Flamin’ Hot', '🌶️', [488, 4.6, 60, 25, 2.4, 3.3, 2.4, 1.9], 22, ['snack']], 'Monster Munch'],
+  [['ritz-crackers', 'Ritz Original Crackers', '🍘', [500, 7, 62, 24, 2, 5, 10, 1.4], 25, ['snack']], 'Ritz'],
+  [['jacobs-cream-crackers', 'Jacob’s Cream Crackers', '🍘', [439, 10, 72, 12, 3.5, 2, 2.5, 1.3], 15, ['snack']], 'Jacob’s'],
+  [['cadbury-freddo', 'Cadbury Freddo', '🍫', [534, 7.3, 57, 30, 2.1, 56, 18, 0.24], 15, ['snack', 'treat', 'dairy']], 'Cadbury'],
+  [['rowntrees-fruit-pastilles', 'Rowntree’s Fruit Pastilles', '🍬', [350, 0, 86, 0, 0, 72, 0, 0.02], 25, ['snack', 'treat']], 'Rowntree’s'],
+  [['swizzels-love-hearts', 'Swizzels Love Hearts', '🍬', [390, 0, 97, 0, 0, 85, 0, 0.02], 25, ['snack', 'treat']], 'Swizzels'],
+  [['graze-protein-oats', 'graze Protein Oats', '🥣', [430, 19, 45, 18, 8, 12, 3, 0.45], 50, ['breakfast', 'high-protein']], 'graze'],
+  [['innocent-kids-juice', 'Innocent Kids Orange Juice', '🍊', [42, 0.6, 9, 0.1, 0.2, 8.5, 0, 0.01], 150, ['drink', 'juice']], 'Innocent'],
+  [['starbucks-frappuccino', 'Starbucks Bottled Frappuccino', '☕', [67, 2.8, 9.8, 1.9, 0, 9.5, 1.2, 0.18], 250, ['drink', 'dairy'], null, 'ml'], 'Starbucks'],
+  [['monster-ultra', 'Monster Ultra White', '🥤', [2, 0, 0.9, 0, 0, 0, 0, 0.14], 500, ['drink'], null, 'ml'], 'Monster'],
+  [['wagamama-gyoza-kit', 'Wagamama Gyoza Meal Kit', '🥟', [190, 7, 27, 6, 1, 2, 1.2, 1.1], 250, ['meal', 'world']], 'Wagamama'],
+  [['birds-eye-chicken-nuggets', 'Birds Eye Chicken Nuggets', '🍗', [228, 14, 18, 11, 1.2, 1.1, 2.1, 1], 100, ['frozen', 'meat']], 'Birds Eye'],
+  [['mccain-hash-browns', 'McCain Hash Browns', '🥔', [179, 2.5, 26, 7, 2.5, 0.5, 0.7, 0.45], 100, ['frozen']], 'McCain'],
+  [['dr-oetker-ristorante', 'Dr. Oetker Ristorante Mozzarella Pizza', '🍕', [231, 10, 30, 7.5, 2.2, 3, 3.8, 1.1], 170, ['frozen', 'meal', 'dairy']], 'Dr. Oetker'],
+  [['quorn-vegan-nuggets', 'Quorn Vegan Nuggets', '🌱', [210, 14, 18, 9, 5, 1, 1, 1], 100, ['frozen', 'vegan', 'high-protein']], 'Quorn'],
+  [['alpro-soya-original', 'Alpro Soya Original', '🥛', [39, 3.3, 2, 1.8, 0.4, 2, 0.3, 0.1], 200, ['drink', 'vegan']], 'Alpro'],
+  [['benecol-original', 'Benecol Original Yogurt Drink', '🥛', [44, 1.1, 7, 1.2, 0, 7, 0.8, 0.1], 100, ['drink', 'dairy']], 'Benecol'],
+  [['philadelphia-light', 'Philadelphia Light', '🧀', [157, 7.7, 4.5, 12, 0, 4.5, 8, 0.85], 30, ['dairy', 'cheese']], 'Philadelphia'],
+  [['ginsters-pasty', 'Ginsters Cornish Pasty', '🥟', [274, 7.7, 27, 14, 2.2, 1.5, 7, 1.1], 227, ['meal', 'bakery']], 'Ginsters'],
+  [['rustlers-quarter-pounder', 'Rustlers Quarter Pounder', '🍔', [250, 13, 20, 12, 1, 3, 5, 1.5], 190, ['meal', 'frozen']], 'Rustlers'],
+];
+
+export const BRANDED_FOODS_NEXT = ROWS.map(([row, brand]) => brandedRow(row, brand));

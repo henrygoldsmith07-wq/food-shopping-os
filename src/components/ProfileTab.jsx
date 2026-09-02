@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { Glyph } from './icons.jsx';
+import { DemoHouseholdEntry } from './DemoWalkthrough.jsx';
 import { formatAmount } from '../data/nutrients.js';
 import { nutrientRows, snackSummary, timingInsight } from '../lib/nutrition.js';
 import { YOUTH_COPY } from '../lib/youth.js';
@@ -410,18 +411,17 @@ export default function ProfileTab({ openGuidance }) {
       <BackendPanel />
 <Section title="Your data" className="rise rise-4">
         <Card className="space-y-3">
+          <DemoHouseholdEntry />
           <p className="text-[0.75rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
             Browser storage is not encrypted. Anyone with access to this browser profile can
             access it. Export a backup before clearing site data or changing devices.
           </p>
           <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
             Your local copy contains {Object.keys(app.log).length} logged day{Object.keys(app.log).length === 1 ? '' : 's'},
-            {' '}{app.pantry.length} pantry item{app.pantry.length === 1 ? '' : 's'}, {app.shops.length} recorded shop{app.shops.length === 1 ? '' : 's'},
-            {' '}{app.cooked.length} meal{app.cooked.length === 1 ? '' : 's'} cooked.
+            {' '}{app.pantry.length} pantry item{app.pantry.length === 1 ? '' : 's'}, {app.shops.length} recorded shop{app.shops.length === 1 ? '' : 's'}, {' '}{app.cooked.length} meal{app.cooked.length === 1 ? '' : 's'} cooked.
           </p>
           <button
-            type="button"
-            onClick={() => setPrivacyOpen(true)}
+            type="button" onClick={() => setPrivacyOpen(true)}
             className="press w-full rounded-2xl border px-4 py-3 text-left text-[0.84375rem] font-extrabold"
             style={{ borderColor: 'var(--line)' }}
           >

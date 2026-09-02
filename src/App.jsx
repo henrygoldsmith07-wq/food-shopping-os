@@ -6,6 +6,7 @@ import { AppProvider, useApp } from './lib/store.jsx';
 import Onboarding from './components/Onboarding.jsx';
 import HomeTab from './components/HomeTab.jsx';
 import ProfileTab from './components/ProfileTab.jsx';
+import DemoWalkthrough, { DemoBanner } from './components/DemoWalkthrough.jsx';
 import { Sheet } from './components/ui.jsx';
 import AppHeader from './components/AppHeader.jsx';
 import { cx } from './lib/utils.js';
@@ -327,6 +328,8 @@ function Shell() {
           the day. Invisible until it has focus. */}
       <a href="#main" className="skip-link">Skip to content</a>
 
+      <DemoBanner />
+
       <div className="app-workspace">
         <AppHeader
           tab={activeTab}
@@ -462,6 +465,8 @@ function Shell() {
           {notice}
         </div>
       )}
+      {/* Sandbox walkthrough: floats over the app while a demo is open. */}
+      <DemoWalkthrough onNavigate={goTab} />
       <GeofenceWatcher />
     </div>
   );

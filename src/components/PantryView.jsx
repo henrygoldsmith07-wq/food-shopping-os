@@ -8,8 +8,11 @@ import { cx, gbp, expiryStatus } from '../lib/utils.js';
 import {
   daysUntil, expiringSoon, freshnessOf, pantryAnalytics, pantryAvailability, pantryConfidenceLevel,
   pantryTruthLabel, pantryTruthTone, pantryUseLabel, pantryUncertaintyLabel, pantryValue,
-  quantityRangeLabel,
 } from '../lib/kitchen.js';
+// From pantry-intelligence directly. `kitchen.js` re-exports several sibling
+// modules but not this one, so importing it from there yielded undefined and
+// calling it took the whole pantry screen down on render.
+import { quantityRangeLabel } from '../lib/pantry-intelligence.js';
 import { expiryBuckets } from '../lib/shopping.js';
 import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_LOCATION, LOCATIONS } from '../data/pantry.js';
 import { Card, Chip, Empty, GestureMenu, Pill, Section } from './ui.jsx';
@@ -21,6 +24,7 @@ import KitchenInventory from './KitchenInventory.jsx';
 import PantryChecks from './PantryChecks.jsx';
 import BarcodeAdd from './BarcodeAdd.jsx';
 import PantryShare from './PantryShare.jsx';
+import PantryEmptyState from './PantryEmptyState.jsx';
 
 export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan }) {
   const app = useApp();
@@ -225,14 +229,11 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
       )}
 
       {empty ? (
-        <Card className="text-center py-10">
-          <Package size={30} className="mx-auto mb-2" style={{ color: 'var(--faint)' }} />
-          <p className="font-bold">Your pantry is empty</p>
-          <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            Add what you have in and Forq can tell you what's about to go off, what a
-            recipe still needs, and what your kitchen is worth.
-          </p>
-        </Card>
+        <PantryEmptyState
+          app={app}
+          onScan={() => { setScanning(true); setAdding(false); setCapturing(false); setStocking(false); }}
+          onAddManually={() => { setAdding(true); setScanning(false); setCapturing(false); setStocking(false); }}
+        />
       ) : (
         <>
           <input
@@ -361,8 +362,12 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                   <Glyph e={p.emoji} size={22} style={{ color: 'var(--muted)' }} />
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-[0.875rem] truncate">{p.name}</p>
+                    {/* "Opened" is worth saying; "Unopened" is not. Every item
+                        starts unopened, so printing it put the same dead word on
+                        every row and pushed the location and shop out of a line
+                        that truncates. */}
                     <p className="text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
-                      {[quantityRangeLabel(p), p.opened ? 'Opened' : 'Unopened', p.location, p.store].filter(Boolean).join(' · ') || p.cat}
+                      {[quantityRangeLabel(p), p.opened ? 'Opened' : null, p.location, p.store].filter(Boolean).join(' · ') || p.cat}
                     </p>
                     {fresh.kind !== 'unknown' && (
                       <p className="text-[0.65625rem] font-semibold" style={{ color: 'var(--muted)' }}>{fresh.label}</p>

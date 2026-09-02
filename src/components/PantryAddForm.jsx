@@ -10,9 +10,21 @@ import { NumberField } from './FoodDetail.jsx';
  * than assumed: whether you definitely have it, and how sure the amount is.
  * The quick-add flow next door fills the same fields from what you said.
  */
+/*
+ * `amountConfidence: ''` means "read it from what was typed", which is what
+ * the derivation already does when no value is stated: an amount the parser
+ * reads cleanly is exact, one it cannot read is unknown.
+ *
+ * It used to default to 'approximate', asserted on the user's behalf before
+ * they had typed anything, and the chips that would let them say otherwise sit
+ * behind a details disclosure most people never open. So "280 g" — typed
+ * exactly, parsed exactly, stored exactly — was displayed as
+ * "210–350 g estimated". Guessing on behalf of someone who told you the answer
+ * is worse than having no default at all.
+ */
 const BLANK = {
   name: '', qty: '', cost: '', location: DEFAULT_LOCATION,
-  confidence: 'definite', amountConfidence: 'approximate',
+  confidence: 'definite', amountConfidence: '',
   cat: DEFAULT_CATEGORY, store: '', expiry: '',
 };
 
@@ -95,7 +107,7 @@ export default function PantryAddForm() {
             ))}
           </div>
           <div className="flex gap-2 overflow-x-auto no-scrollbar" aria-label="Amount confidence">
-            {[['exact','Amount known'],['approximate','Amount approx.'],['unknown','Amount unknown']].map(([id,label]) => (
+            {[['','From what you typed'],['exact','Amount known'],['approximate','Amount approx.'],['unknown','Amount unknown']].map(([id,label]) => (
               <Chip key={id} active={draft.amountConfidence === id} onClick={() => field('amountConfidence')(id)}>{label}</Chip>
             ))}
           </div>

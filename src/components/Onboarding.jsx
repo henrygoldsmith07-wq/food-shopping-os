@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, CalendarDays, Check, Package, ShoppingCart, SlidersHorizontal,
+  ArrowRight, CalendarDays, Check, FlaskConical, Package, ShoppingCart, SlidersHorizontal,
   Upload, UtensilsCrossed,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
@@ -438,6 +438,16 @@ export default function Onboarding() {
         <div className="mt-4 text-center">
           <button
             className="press px-4 py-2 text-[0.78125rem] font-bold"
+            style={{ color: 'var(--accent)' }}
+            onClick={app.enterDemoMode}
+          >
+            <span className="inline-flex items-center gap-1.5"><FlaskConical size={14} /> Explore an example week first</span>
+          </button>
+          <p className="mt-0.5 px-6 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+            A fully stocked demo kitchen — plan, list, receipts. Nothing is saved and your own start is untouched.
+          </p>
+          <button
+            className="press mt-3 px-4 py-2 text-[0.78125rem] font-bold"
             style={{ color: 'var(--muted)' }}
             onClick={() => restoreRef.current?.click()}
           >

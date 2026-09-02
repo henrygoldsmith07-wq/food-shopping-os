@@ -1,0 +1,43 @@
+import { foodRow } from './food-row.js';
+
+// Eighteenth wave: further everyday, regional and international foods.
+const ROWS = [
+  ['eighteenth-red-quinoa', 'Red quinoa, cooked', '🌾', [120, 4.4, 21, 1.9, 2.8, 0.9, 0.1, 0.02], 150, ['grain', 'vegan'], 'quinoa'],
+  ['eighteenth-teff-flour', 'Teff flour', '🌾', [367, 13.3, 73, 2.4, 8, 1.8, 0.1, 0.02], 40, ['grain', 'vegan'], 'quinoa'],
+  ['eighteenth-cassava-flour', 'Cassava flour', '🌾', [350, 1.6, 84, 0.5, 4, 2, 0.1, 0.02], 40, ['grain', 'vegan'], 'white-rice'],
+  ['eighteenth-multigrain-bread', 'Multigrain bread', '🍞', [252, 12, 43, 4, 6, 4, 0.1, 1.1], 40, ['bread'], 'wholemeal-bread'],
+  ['eighteenth-bagel-everything', 'Everything bagel', '🥯', [270, 10, 52, 3, 3, 5, 0.1, 1.3], 90, ['bread'], 'wholemeal-bread'],
+  ['eighteenth-hazelnut-butter', 'Hazelnut butter', '🥜', [628, 15, 17, 61, 10, 4, 0.1, 0.1], 16, ['spread', 'nuts-seeds'], 'real-almonds'],
+  ['eighteenth-tiger-nuts', 'Tiger nuts', '🌰', [475, 4, 46, 24, 33, 18, 0.1, 0.1], 30, ['nuts-seeds', 'snack'], 'almonds'],
+  ['eighteenth-yellow-lentils', 'Yellow lentils, cooked', '🫘', [116, 9, 20, 0.4, 8, 1.8, 0.1, 0.2], 150, ['plant-protein', 'vegan'], 'lentils'],
+  ['eighteenth-fava-beans', 'Fava beans, cooked', '🫘', [110, 7.6, 19.7, 0.4, 5.4, 1.8, 0.1, 0.2], 100, ['plant-protein', 'vegan'], 'peas'],
+  ['eighteenth-bitter-melon', 'Bitter melon', '🥒', [17, 1, 3.7, 0.2, 2.8, 1.9, 0.1, 0.1], 100, ['veg', 'vegan'], 'courgette-noodles'],
+  ['eighteenth-yellow-squash', 'Yellow squash', '🥒', [16, 1.2, 3.4, 0.2, 1.1, 2.2, 0.1, 0.1], 100, ['veg', 'vegan'], 'broccoli'],
+  ['eighteenth-mustard-greens', 'Mustard greens', '🥬', [27, 2.9, 4.7, 0.4, 3.2, 1.3, 0.1, 0.2], 80, ['veg', 'vegan'], 'spinach'],
+  ['eighteenth-turnip-greens', 'Turnip greens', '🥬', [32, 1.5, 5.5, 0.3, 3.2, 0.5, 0.1, 0.2], 80, ['veg', 'vegan'], 'spinach'],
+  ['eighteenth-plantain-chips', 'Plantain chips', '🍌', [519, 2.3, 58, 33, 4.4, 2, 0.1, 1], 30, ['snack'], 'crisps'],
+  ['eighteenth-dates-medjool', 'Medjool dates', '🌴', [277, 1.8, 75, 0.2, 6.7, 66, 0.1, 0], 45, ['fruit', 'snack'], 'real-dates'],
+  ['eighteenth-passionfruit', 'Passion fruit pulp', '🟣', [97, 2.2, 23, 0.7, 10.4, 11, 0.1, 0], 60, ['fruit', 'vegan', 'high-fibre'], 'orange'],
+  ['eighteenth-satsuma', 'Satsuma', '🍊', [47, 0.8, 12, 0.3, 1.7, 9, 0.1, 0], 80, ['fruit', 'vegan'], 'orange'],
+  ['eighteenth-beef-liver', 'Beef liver, cooked', '🥩', [191, 29, 5, 5, 0, 0, 0.1, 0.5], 100, ['meat', 'high-protein'], 'beef-mince'],
+  ['eighteenth-lamb-shoulder', 'Lamb shoulder, cooked', '🍖', [286, 24, 0, 21, 0, 0, 0.1, 0.7], 150, ['meat'], 'beef-mince'],
+  ['eighteenth-chicken-giblets', 'Chicken giblets, cooked', '🍗', [170, 25, 0, 7, 0, 0, 0.1, 0.6], 100, ['meat'], 'chicken-breast'],
+  ['eighteenth-goose', 'Goose, cooked', '🍗', [305, 25, 0, 22, 0, 0, 0.1, 0.6], 150, ['meat'], 'chicken-breast'],
+  ['eighteenth-salmon-smoked', 'Smoked salmon, sliced', '🐟', [117, 18, 0, 4.3, 0, 0, 0.1, 2.3], 50, ['fish'], 'salmon-fillet'],
+  ['eighteenth-tinned-mackerel', 'Mackerel, tinned', '🐟', [305, 24, 0, 23, 0, 0, 0.1, 1.8], 100, ['fish', 'tinned'], 'salmon-fillet'],
+  ['eighteenth-calamari', 'Calamari, cooked', '🦑', [92, 15.6, 3.1, 1.4, 0, 0, 0.1, 0.6], 100, ['fish', 'high-protein'], 'prawns'],
+  ['eighteenth-seafood-paella', 'Seafood paella', '🥘', [160, 8, 20, 5, 1, 1.5, 0.1, 1.2], 350, ['dish', 'fish'], 'white-rice'],
+  ['eighteenth-fish-curry', 'Fish curry', '🍛', [130, 12, 6, 7, 1, 1, 0.1, 1], 300, ['dish', 'fish'], 'cod-fillet'],
+  ['eighteenth-lamb-curry', 'Lamb curry', '🍛', [165, 11, 7, 10, 1, 1.5, 0.1, 1], 300, ['dish', 'meat'], 'beef-mince'],
+  ['eighteenth-stuffed-aubergine', 'Stuffed aubergine', '🍆', [105, 4, 12, 4, 3, 2, 0.1, 0.7], 200, ['dish', 'veg'], 'aubergine'],
+  ['eighteenth-bean-soup', 'Bean soup', '🥣', [70, 4, 11, 1.5, 3.5, 1.5, 0.1, 0.8], 300, ['soup', 'vegan'], 'kidney-beans'],
+  ['eighteenth-rice-noodle-salad', 'Rice noodle salad', '🥗', [115, 2, 18, 3, 1, 2, 0.1, 0.8], 200, ['salad', 'vegan'], 'white-rice'],
+  ['eighteenth-tuna-pasta', 'Tuna pasta', '🍝', [155, 10, 21, 4, 1.5, 2, 0.1, 0.9], 300, ['dish', 'fish'], 'pasta'],
+  ['eighteenth-yorkshire-pudding', 'Yorkshire pudding', '🥞', [220, 7, 24, 10, 1, 1, 0.1, 0.7], 80, ['side'], 'white-bread'],
+  ['eighteenth-shortbread', 'Shortbread', '🍪', [502, 5, 64, 25, 2, 18, 0.1, 0.4], 30, ['snack', 'treat'], 'butter'],
+  ['eighteenth-fruit-tart', 'Fruit tart', '🥧', [250, 4, 35, 10, 1.5, 20, 0.1, 0.5], 100, ['dessert'], 'white-bread'],
+  ['eighteenth-fruit-tea', 'Fruit tea', '🍵', [1, 0, 0.2, 0, 0, 0, 0.1, 0], 250, ['drink', 'vegan'], null, 'ml'],
+  ['eighteenth-sparkling-water', 'Sparkling water', '💧', [0, 0, 0, 0, 0, 0, 0.1, 0], 250, ['drink', 'vegan'], null, 'ml'],
+];
+
+export const CATALOGUE_EIGHTEENTH_WAVE = ROWS.map(foodRow);

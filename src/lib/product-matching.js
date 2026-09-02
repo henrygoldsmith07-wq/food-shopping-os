@@ -1,4 +1,4 @@
-const STOP_WORDS = new Set(['the', 'pack', 'packet', 'size', 'each', 'of', 'tesco', 'aldi', 'asda', 'lidl', 'sainsburys', 'sainsbury', 'cowbelle', 'heinz', 'own', 'brand']);
+const STOP_WORDS = new Set(['the', 'pack', 'packet', 'size', 'each', 'of']);
 const VARIANT_WORDS = new Set(['organic', 'light', 'free', 'free-range', 'wholemeal', 'wholegrain', 'reduced', 'salt', 'sugar', 'vegan', 'vegetarian', 'smoked', 'plain', 'original', 'hot', 'mild', 'british']);
 
 const clean = (value) => String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9.]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -49,7 +49,7 @@ export const classifyProductMatch = (left, right) => {
   // Different brands can still be comparable when the underlying product and variant match.
   // Brand is retained as provenance, but it must not hide the like-for-like unit-price answer.
   if (a.brand && b.brand && a.brand !== b.brand && a.product !== b.product) return { classification: 'unknown', confidence: 0.05, equivalent: false, left: a, right: b, reasons: ['different brands'] };
-  if (a.variant !== b.variant && a.variant && b.variant) return { classification: 'approximation', confidence: 0.35, equivalent: false, left: a, right: b, reasons: ['variant differs'] };
+  if (a.variant !== b.variant) return { classification: 'approximation', confidence: 0.35, equivalent: false, left: a, right: b, reasons: ['variant differs'] };
   const stripBrand = (value, brand) => brand ? value.replace(new RegExp(`^${brand}\\s+`), '') : value;
   const productEquivalent = a.product === b.product
     || stripBrand(a.product, a.brand) === stripBrand(b.product, b.brand);

@@ -17,31 +17,44 @@ const norm = (str) => String(str || '').toLowerCase().trim();
 
 /* ---------- Search ---------- */
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const score = (food, q) => {
   const name = norm(food.name);
   const brand = norm(food.brand);
-  if (name === q) return 100;
-  if (name.startsWith(q)) return 80;
-  if (name.includes(q)) return 60;
+  const aliases = (food.aliases || []).map(norm);
+  const metadata = [food.category, food.subcategory, food.cuisine, food.preparationState, food.rawCooked]
+    .filter(Boolean).map(norm);
+  if (name === q || aliases.includes(q)) return 100;
+  if (aliases.some((alias) => alias === q)) return 100;
+  const wholeWord = new RegExp(`\\b${escapeRegex(q)}\\b`).test(name)
+    || aliases.some((alias) => new RegExp(`\\b${escapeRegex(q)}\\b`).test(alias));
+  if (wholeWord) return 90;
+  if (name.startsWith(q) || aliases.some((alias) => alias.startsWith(q))) return 80;
+  if (name.includes(q) || aliases.some((alias) => alias.includes(q))) return 60;
   if (brand.includes(q)) return 40;
+  if (metadata.some((value) => value.includes(q))) return 30;
   if ((food.tags || []).some((t) => norm(t).includes(q))) return 25;
   return 0;
 };
+
+/** How far a custom food outranks catalogue entries on equal match quality. */
+const CUSTOM_FOOD_BOOST = 30;
 
 export const searchFoods = (query, catalogue = CATALOGUE, limit = 40) => {
   const q = norm(query);
   if (!q) return catalogue.slice(0, limit);
   const words = q.split(/\s+/).filter(Boolean);
   return catalogue
-    .map((food) => {
+    .map((food, index) => {
       const scores = words.map((w) => score(food, w));
-      const ownFoodBoost = food.source === 'custom' ? 15 : 0;
+      const ownFoodBoost = food.source === 'custom' ? CUSTOM_FOOD_BOOST : 0;
       return scores.some((sc) => sc === 0)
         ? null
-        : { food, total: scores.reduce((a, b) => a + b, ownFoodBoost) };
+        : { food, index, total: scores.reduce((a, b) => a + b, ownFoodBoost) };
     })
     .filter(Boolean)
-    .sort((a, b) => b.total - a.total || a.food.name.localeCompare(b.food.name))
+    .sort((a, b) => b.total - a.total || Number(b.food.source === 'custom') - Number(a.food.source === 'custom') || a.index - b.index || a.food.name.localeCompare(b.food.name))
     .slice(0, limit)
     .map((r) => r.food);
 };
@@ -267,7 +280,10 @@ const singularToken = (token) => {
 };
 
 const sameIngredientToken = (left, right) => left === right || singularToken(left) === singularToken(right);
-const PREPARATION_WORDS = new Set(['baked', 'boiled', 'canned', 'cooked', 'diced', 'dried', 'frozen', 'grilled', 'raw', 'roasted', 'sliced', 'steamed', 'tinned']);
+// 'cooked' is deliberately absent: cooked variants exist in the catalogue
+// precisely because their nutrition differs, so a bare ingredient must never
+// resolve to one.
+const PREPARATION_WORDS = new Set(['baked', 'boiled', 'canned', 'diced', 'dried', 'frozen', 'grilled', 'raw', 'roasted', 'sliced', 'steamed', 'tinned']);
 
 const matchIngredientFood = (name, catalogue) => {
   const query = ingredientTokens(name);
@@ -285,7 +301,11 @@ const matchIngredientFood = (name, catalogue) => {
       const extraWordsArePreparation = foodTokens
         .filter((token) => !query.some((part) => sameIngredientToken(part, token)))
         .every((token) => PREPARATION_WORDS.has(token));
-      if (!exact && !foodMatchesAll && !(queryMatchesAll && extraWordsArePreparation)) return null;
+      if (!exact && !foodMatchesAll
+        // A bare single-word ingredient ("chicken", "water") must never resolve
+        // to a preparation variant — the variants exist because their nutrition
+        // differs, so guessing one on the user's behalf is a wrong answer.
+        && !(query.length > 1 && queryMatchesAll && extraWordsArePreparation)) return null;
       const exactTokenHits = foodTokens.filter((token) => query.includes(token)).length;
       const staple = (food.tags || []).some((tag) => ['grain', 'dairy', 'veg', 'fruit', 'meat', 'fish', 'fat', 'tinned', 'bread', 'spread', 'drink', 'high-protein'].includes(tag));
       const noisy = food.source === 'restaurant' || (food.tags || []).includes('eating out') || (food.tags || []).includes('treat');

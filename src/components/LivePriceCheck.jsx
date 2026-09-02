@@ -3,8 +3,9 @@ import { Globe, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { shoppingNameKey } from '../lib/shopping.js';
 import {
-  checkAge, checkLivePricesForList, clearLivePriceCache, coverageFor, rankShops,
+  checkAge, checkLivePricesForList, clearLivePriceCache, rankShops,
 } from '../lib/live-prices.js';
+import { coverageFor } from '../lib/price-coverage.js';
 import {
   clearLivePriceHistory, historyFor, loadLivePriceHistory, recordLivePrices,
 } from '../lib/live-price-history.js';
@@ -26,6 +27,7 @@ import FoodTags from './FoodTags.jsx';
 import FoodTagFilters from './FoodTagFilters.jsx';
 import BrandedSuggestions from './BrandedSuggestions.jsx';
 import PriceWatch from './PriceWatch.jsx';
+import MonidProvenance from './MonidProvenance.jsx';
 
 /**
  * Live prices, read from the shops' own search pages when you ask.
@@ -270,7 +272,23 @@ export default function LivePriceCheck({
             {/* Where the misses went. A hit rate with no breakdown is a number
                 nobody can act on: shops that are down and shops that refuse to
                 be read are the same figure and different problems entirely. */}
-            {coverage.unpriced > 0 && (
+            {/* A whole run failing the same network-shaped way is not a
+                0% hit rate. Nine shops do not refuse one person at the same
+                moment; something in front of them does, and that is fixable
+                where a retailer's robots.txt is not. */}
+            {coverage.networkBlocked && (
+              <Card className="mb-2 !p-3" style={{ borderColor: 'var(--warn)' }}>
+                <p className="text-[0.8125rem] font-bold" style={{ color: 'var(--warn)' }}>
+                  Every shop was blocked before the request reached it.
+                </p>
+                <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  A proxy, firewall or VPN on this connection answered instead of the shops —
+                  so this is not a price result and none of these retailers refused you. On a
+                  different network the same check should behave completely differently.
+                </p>
+              </Card>
+            )}
+            {coverage.unpriced > 0 && !coverage.networkBlocked && (
               <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--faint)' }}>
                 {coverage.unpriced} unpriced —{' '}
                 {coverage.reasons.map((row) => `${row.count} × ${row.label}`).join(' · ')}
@@ -322,8 +340,22 @@ export default function LivePriceCheck({
                         </div>
                         {entry.best && (
                           <div className="text-right shrink-0">
-                            <p className="font-extrabold text-[1rem] tabular-nums">{gbp(entry.best.price, { always: true })}</p>
-                            <p className="text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>{entry.best.retailer}</p>
+                            {/* The headline follows the ranking below it. It used
+                                to show the cheapest ticket while the ranking
+                                underneath named a different shop as best value,
+                                so one card gave two answers to one question. */}
+                            <p className="font-extrabold text-[1rem] tabular-nums">
+                              {gbp(bestValue?.price ?? entry.best.price, { always: true })}
+                            </p>
+                            <p className="text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>
+                              {bestValue?.retailer || entry.best.retailer}
+                            </p>
+                            {bestValue?.unit && (
+                              <p className="text-[0.6875rem] font-semibold tabular-nums" style={{ color: 'var(--faint)' }}>
+                                {gbp(bestValue.unit.value, { always: true })}
+                                {bestValue.unit.dim === 'count' ? ` ${bestValue.unit.unit}` : ` / ${bestValue.unit.unit}`}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -335,7 +367,7 @@ export default function LivePriceCheck({
                         disabled={offlineMode || !isOnline}
                       />
 
-                      <LiveShopRanking perRetailer={entry.perRetailer} />
+                      <LiveShopRanking perRetailer={entry.perRetailer} name={item.name} />
 
                       {entry.unanswered?.length > 0 && (
                         <details className="mt-2">
@@ -383,6 +415,7 @@ export default function LivePriceCheck({
                 Some prices were read off the page by AI because the shop published no structured price data. Treat those as a hint and confirm at the shelf.
               </p>
             )}
+            <MonidProvenance results={entries.map(([key, entry]) => ({ name: entry.name || key, ...entry }))} />
             {stats.products > 0 && (
               <p className="mt-2.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
                 Catalogue: {stats.products} product{stats.products === 1 ? '' : 's'} across{' '}

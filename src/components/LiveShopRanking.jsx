@@ -1,6 +1,6 @@
 import { ExternalLink } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
-import { methodLabel, methodTone, rankShops, rankingSpread, viaLabel } from '../lib/live-prices.js';
+import { methodLabel, methodTone, monidLabel, monidTone, rankShops, rankingSpread, viaLabel } from '../lib/live-prices.js';
 import { Pill } from './ui.jsx';
 
 /**
@@ -92,7 +92,9 @@ export default function LiveShopRanking({ perRetailer = [], name }) {
                 {viaLabel(row.via) ? ` · ${viaLabel(row.via)}` : ''}
               </span>
               {row.isCheapest && <Pill tone="good">{byUnit ? 'best value' : 'cheapest'}</Pill>}
-              <Pill tone={methodTone(row.method)}>{methodLabel(row.method)}</Pill>
+              {row.source === 'monid'
+                ? <Pill tone={monidTone}>paid data</Pill>
+                : <Pill tone={methodTone(row.method)}>{methodLabel(row.method)}</Pill>}
               {row.broadened && (
                 <span title={`Searched for "${row.searched}"`}>
                   <Pill tone="warn">wider search</Pill>
@@ -128,6 +130,12 @@ export default function LiveShopRanking({ perRetailer = [], name }) {
           {ranking.mixedScales
             ? 'These packs are sized on different scales — by weight against by count — so they are listed by price rather than ranked by value.'
             : 'Not every shop stated a pack size, so this is ranked on the ticket price. The smaller pack will look cheaper.'}
+        </p>
+      )}
+      {ranked.some((row) => row.source === 'monid') && (
+        <p className="mt-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+          {monidLabel}. The shop rows above were read by Forq itself; this one came from a data
+          service and should be checked the same way.
         </p>
       )}
     </div>

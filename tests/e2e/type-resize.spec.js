@@ -9,6 +9,10 @@ const onboard = async (page) => {
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible();
 };
 
+const settle = (page) => page.evaluate(() => document.getAnimations()
+  .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+  .forEach((animation) => animation.finish()));
+
 const pageOverflow = (page) => page.evaluate(() => ({
   clientWidth: document.documentElement.clientWidth,
   scrollWidth: document.documentElement.scrollWidth,
@@ -29,9 +33,12 @@ test('main screens reflow at 200% text without page-level horizontal overflow', 
 
   for (const tab of ['Home', 'Plan', 'Log', 'Shop', 'Recipes']) {
     await page.getByRole('button', { name: tab, exact: true }).click();
-    await page.evaluate(() => document.getAnimations()
-      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
-      .forEach((animation) => animation.finish()));
+    // Lazily-loaded panels land a beat after the tab does, and one of them
+    // overflowing is exactly what this test is for — so settle twice, with the
+    // wait in between, rather than measuring a screen that is still arriving.
+    await settle(page);
+    await page.waitForTimeout(600);
+    await settle(page);
     const overflow = await pageOverflow(page);
     expect(overflow.scrollWidth, `${tab} is wider than the viewport at 200% text`).toBeLessThanOrEqual(overflow.clientWidth + 1);
     expect(await unmarkedClippedText(page), `${tab} clips text at 200%`).toEqual([]);

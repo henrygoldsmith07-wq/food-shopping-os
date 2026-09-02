@@ -48,6 +48,47 @@ export const methodTone = (method) => ({
   'ai-extracted': 'warn',
 }[method] || 'muted');
 
+/**
+ * Monid rows are the ones this app did not read off a shop page itself.
+ *
+ * Everything else in the table is the app's own reading of a retailer's page;
+ * a Monid row is a paid lookup through a hosted data service, and the two
+ * deserve different trust and different labels. Kept beside the other method
+ * maps so the ranking and the provenance panel cannot describe the same row
+ * in different words.
+ */
+export const monidLabel = 'from Monid, a paid data service — not read from a shop page';
+
+export const monidTone = 'accent';
+
+/**
+ * The Monid rows of one check, plus the shape of the miss.
+ *
+ * A run where Monid found nothing is not the same as a run where Monid was
+ * never asked or never answered, and the panel says which: a `disabled` or
+ * `error` status is about this deployment, a `no-match` is about the product,
+ * and only `ok` with rows means money was spent and something came back.
+ * `rows` is flat (the adapter returns one result per product, not per shop);
+ * `named` re-attaches which list item each row belongs to when the caller
+ * knows it, so the panel can say "for X, Monid had Y".
+ */
+export const splitMonidRows = (results = []) => {
+  const list = Array.isArray(results) ? results : [];
+  const monidResults = list.filter((entry) => entry?.source === 'monid');
+  const monid = monidResults[0] || null;
+  const rows = (monid?.rows || []).slice();
+  // Monid rows carry the item's own `query`; scoped rows are used when the
+  // panel renders per-item and should not show another item's prices.
+  return {
+    monid,
+    rows,
+    status: monid?.status || null,
+    note: monid?.note || null,
+    provider: monid?.provider || null,
+    named: (query) => rows.filter((row) => !query || row.query === query),
+  };
+};
+
 /** Minutes since a check, for copy that ages honestly. */
 export const checkAge = (checkedAt, now = Date.now()) => {
   const stamp = checkedAt ? new Date(checkedAt).getTime() : NaN;
@@ -189,12 +230,16 @@ export const rankShops = (perRetailer = [], { name } = {}) => {
   // What each shop's cheapest row actually is, next to the others. The top
   // hit for "beans" at one shop is not automatically the same tin another
   // shop returned, and ranking a lookalike as the product is the comparison
-  // this check exists to stop.    const ref = majorityReference(withUnit);
+  // this check exists to stop.
+  const unbrand = (row) => (row.retailer && row.name
+    ? row.name.replace(new RegExp(`^${row.retailer}[\\s-]+`, 'i'), '')
+    : row.name);
+  const ref = majorityReference(withUnit);
   const labelled = withUnit.map((row, index) => ({
     ...row,
     match: index === ref
       ? { classification: 'exact', equivalent: true, reasons: [] }
-      : classifyProductMatch(withUnit[ref], row),
+      : classifyProductMatch({ ...withUnit[ref], name: unbrand(withUnit[ref]) }, { ...row, name: unbrand(row) }),
   }));
   const comparable = labelled.filter((row) => comparableForRanking(row.match));
   const likeForLike = comparable.length >= 2;
@@ -282,7 +327,7 @@ export const rankingSpread = (ranking) => {
   // The spread is a like-for-like claim, so when the ranking separated a
   // different product out, the spread stops at the like-for-like pair.
   const rows = !Array.isArray(ranking) && ranking?.likeForLike
-    ? allRows.filter((row) => !row.match || row.match.equivalent !== false)
+    ? allRows.filter((row) => !row.match || comparableForRanking(row.match))
     : allRows;
   if (rows.length < 2) return null;
   const basis = Array.isArray(ranking) ? 'price' : ranking.basis;
@@ -372,68 +417,14 @@ export const entryFromResult = (name, result) => ({
   shopsChecked: result.shopsChecked || 0,
   shopsAnswered: result.shopsAnswered || 0,
   aiUsed: Boolean(result.aiUsed),
+  // The paid-data side of the check, kept separate from the scraped rows so
+  // the panel can report it without re-deriving it — including the miss
+  // statuses: "Monid was asked and had nothing" survives the shaping too.
+  monid: result.monid
+    ? { status: result.monid.status, provider: result.monid.provider || null, rows: result.monid.rows || 0 }
+    : null,
   checkedAt: result.checkedAt || new Date().toISOString(),
 });
-
-/**
- * What the check actually achieved, and where the rest went.
- *
- * "47 of 52 priced" is the number people mean by a success rate, and it is
- * worth nothing on its own: five unpriced items because five shops are down
- * is a different problem from five unpriced items because the shops all
- * refuse to be read. So the misses are counted by the reason the shop gave,
- * which is the only version of this number anyone can act on.
- *
- * Reasons are counted per item, not per shop-visit: an item that nine shops
- * declined is one unpriced item whose dominant reason is "declined", not nine
- * failures. Counting visits would make a single stubborn item look like a
- * collapse.
- */
-export const REASON_LABELS = {
-  declined: 'shop’s robots.txt said no',
-  blocked: 'shop blocked an automated request',
-  'rate-limited': 'shop asked us to slow down',
-  unreachable: 'shop could not be reached',
-  'no-match': 'shop had no matching product',
-  'no-search-url': 'shop has no public search',
-  aborted: 'check was stopped early',
-};
-
-export const coverageFor = (byKey = {}) => {
-  const entries = Object.values(byKey || {});
-  const reasons = {};
-  let priced = 0;
-  let broadened = 0;
-  for (const entry of entries) {
-    if (entry?.best) {
-      priced += 1;
-      if (entry.best.broadened) broadened += 1;
-      continue;
-    }
-    // The most common thing the shops said about this item is the reason it
-    // has no price. A tie is broken by the order shops were asked, which is
-    // stable, so the same run always reports the same reason.
-    const tally = {};
-    for (const shop of entry?.unanswered || []) {
-      const status = shop?.status || 'unreachable';
-      tally[status] = (tally[status] || 0) + 1;
-    }
-    const [top] = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-    const reason = top?.[0] || 'unreachable';
-    reasons[reason] = (reasons[reason] || 0) + 1;
-  }
-  const total = entries.length;
-  return {
-    total,
-    priced,
-    unpriced: total - priced,
-    broadened,
-    pct: total ? Math.round((priced / total) * 100) : null,
-    reasons: Object.entries(reasons)
-      .map(([reason, count]) => ({ reason, count, label: REASON_LABELS[reason] || reason }))
-      .sort((a, b) => b.count - a.count),
-  };
-};
 
 /** How many items go up in one request. The route caps this at 12. */
 export const BATCH_SIZE = 4;
