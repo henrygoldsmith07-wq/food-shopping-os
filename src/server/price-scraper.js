@@ -232,12 +232,17 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
       ...base,
       url,
       attempts: crawl.attempts,
-      status: code === 'rate-limited' ? 'rate-limited' : code === 'blocked' ? 'blocked' : 'unreachable',
+      status: code === 'rate-limited' ? 'rate-limited'
+        : code === 'blocked' ? 'blocked'
+        : code === 'aborted' ? 'aborted'
+        : 'unreachable',
       note: code === 'rate-limited'
         ? 'This shop rate-limited the request. Try again in a few minutes.'
         : code === 'blocked'
           ? 'This shop blocked an automated request. Open its search page directly.'
-          : `Could not reach this shop (${code}).`,
+          : code === 'aborted'
+            ? 'The time budget ran out before this shop answered — cut off, not refused.'
+            : `Could not reach this shop (${code}).`,
     };
   }
 

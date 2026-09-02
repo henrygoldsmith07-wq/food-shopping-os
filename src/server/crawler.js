@@ -287,7 +287,25 @@ const STRATEGIES = { direct: directFetch, firecrawl: firecrawlFetch, monid: moni
 export const runStrategy = async (name, url, options = {}) => {
   const strategy = STRATEGIES[name];
   if (!strategy) throw failure('unknown-strategy', `No fetch strategy named "${name}"`);
-  return strategy(url, options);
+  // Abort must mean "return now", not "whenever the transport feels like it".
+  // Real fetch honours the signal, but a mocked or non-abort-aware transport
+  // ignores it and a worker would sit on the await for the full request —
+  // the exact hang the caller's budget exists to prevent. Racing the call
+  // against the abort cuts every strategy loose the moment it fires; the
+  // rejection reads as the abort so the orchestrator can skip the retry.
+  const { signal } = options;
+  if (!signal) return strategy(url, options);
+  let onAbort;
+  const aborted = new Promise((_, reject) => {
+    onAbort = () => reject(failure('aborted', 'Request aborted'));
+  });
+  signal.addEventListener('abort', onAbort, { once: true });
+  if (signal.aborted) onAbort();
+  try {
+    return await Promise.race([strategy(url, options), aborted]);
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
 };
 
 /**

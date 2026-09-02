@@ -438,7 +438,10 @@ describe('checking a product across shops', () => {
     });
     expect(Date.now() - started).toBeLessThan(3000);
     expect(out.shopsChecked).toBe(2);
-    expect(out.results.every((result) => result.status === 'no-match')).toBe(true);
+    // The budget cut both shops off mid-request — each is reported as
+    // aborted, with the market fallback having answered for neither.
+    expect(out.results.every((result) => result.status === 'aborted')).toBe(true);
+    expect(out.marketUsed).toBe(false);
   });
 
   it('a budget also stops the query ladder inside a shop', async () => {
