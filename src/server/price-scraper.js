@@ -400,11 +400,17 @@ export const scrapePrices = async (query, {
     return { query: trimmed, results: [], cheapest: [], checkedAt, status: 'disabled' };
   }
   const shops = scrapeableRetailers(retailerIds);
-  // A budget stops shops being *started* once the time is gone. Shops already
-  // mid-flight finish, and unchecked shops are simply absent from the results
-  // — never invented — so a slow renderer cannot turn a price check into a
-  // hang.
+  // A budget is a promise about response time, so shops still in flight when
+  // it expires are aborted, not just deserted — a check returns at the budget
+  // and the market fallback answers for whatever was cut. The market itself
+  // runs on the caller's signal: the abort exists to bound the shop loop, not
+  // to take the fallback down with it.
+  const budgetController = new AbortController();
+  const abortBudget = () => budgetController.abort();
+  if (signal?.aborted) budgetController.abort();
+  else signal?.addEventListener('abort', abortBudget);
   const deadline = budgetMs ? Date.now() + budgetMs : null;
+  const budgetTimer = deadline ? setTimeout(abortBudget, Math.max(0, deadline - Date.now())) : null;
   // Indexed so results keep retailer order however the workers interleave.
   const results = new Array(shops.length);
   let next = 0;
@@ -412,17 +418,21 @@ export const scrapePrices = async (query, {
     for (;;) {
       const index = next;
       next += 1;
-      if (index >= shops.length || signal?.aborted) return;
-      if (deadline && Date.now() > deadline) return;
+      if (index >= shops.length || budgetController.signal.aborted) return;
       results[index] = await scrapeRetailer(shops[index], trimmed, {
-        fetchImpl, allowModel, signal, strategies, deadline,
+        fetchImpl, allowModel, signal: budgetController.signal, strategies, deadline,
       });
       if (gapMs) await new Promise((resolve) => { setTimeout(resolve, gapMs); });
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
-  );
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
+    );
+  } finally {
+    if (budgetTimer) clearTimeout(budgetTimer);
+    signal?.removeEventListener('abort', abortBudget);
+  }
   const settled = results.filter(Boolean);
   // A shop that would not answer may still have a listing on the market:
   // one Google Shopping run fills the silence instead of ending in nothing.

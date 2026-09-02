@@ -421,21 +421,24 @@ describe('checking a product across shops', () => {
     expect(out.best.retailer).toBe('Asda');
   });
 
-  it('stops starting shops once the budget is spent, rather than hanging', async () => {
+  it('returns on the budget even with shops still in flight', async () => {
+    vi.stubEnv('PRICE_SCRAPER_MARKET', 'off');
     const fetchImpl = vi.fn(async (url) => {
       const target = String(url);
       if (target.endsWith('/robots.txt')) return res(allowAllRobots, { type: 'text/plain' });
-      // Slow enough to burn the whole budget before the workers come back
-      // for the third shop — which then must never be started.
-      await new Promise((resolve) => { setTimeout(resolve, 150); });
+      // Far longer than the budget: the check must come back on time with the
+      // shop reported honestly, not wait for the straggler.
+      await new Promise((resolve) => { setTimeout(resolve, 5000); });
       return res(page);
     });
+    const started = Date.now();
     const out = await scrapePrices('milk', {
-      retailerIds: ['tesco', 'asda', 'aldi'], fetchImpl, allowModel: false, gapMs: 0,
-      budgetMs: 60,
+      retailerIds: ['tesco', 'asda'], fetchImpl, allowModel: false, gapMs: 0,
+      budgetMs: 150,
     });
+    expect(Date.now() - started).toBeLessThan(3000);
     expect(out.shopsChecked).toBe(2);
-    expect(out.results.map((result) => result.retailer)).toEqual(['Tesco', 'Asda']);
+    expect(out.results.every((result) => result.status === 'no-match')).toBe(true);
   });
 
   it('a budget also stops the query ladder inside a shop', async () => {
