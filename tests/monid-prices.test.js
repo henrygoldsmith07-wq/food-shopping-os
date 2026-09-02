@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  endpointFromDiscovery, fillGapsFromBatch, monidBalance, monidBatchPrices,
-  monidPrices, monidOnPath, monidStatus, parseMonidJson,
-  rowsFromMonidReply, runMonid,
+  __resetBatchShapeForTests, cliErrorBody, endpointFromDiscovery, fillGapsFromBatch,
+  monidBalance, monidBatchPrices, monidPrices, monidOnPath, monidStatus,
+  parseMonidJson, rowsFromMonidReply, runMonid,
 } from '../src/server/monid-prices.js';
 
 const execOk = (stdout) => (cmd, args, opts, cb) => cb(null, stdout, '');
@@ -128,11 +128,30 @@ describe('monidBalance and monidStatus', () => {
     expect(status.note).toMatch(/monid keys add/i);
   });
 
+  it('reports a missing key as not configured — not as an unknown balance', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    const status = await monidStatus({
+      execImpl: (cmd, args, opts, cb) =>
+        cb(new Error('exit 1'), '{"error":{"code":"AUTH_FAILED","message":"No active API key. Run \"monid keys add\" to configure one."}}', ''),
+    });
+    expect(status.configured).toBe(false);
+    expect(status.note).toMatch(/keys add/i);
+  });
+
   it('reports an unknown balance, never a zero, when the CLI cannot answer', async () => {
     process.env.MONID_FORCE_CONFIGURED = 'true';
     const status = await monidStatus({ execImpl: execFail('no key') });
     expect(status).toMatchObject({ configured: true, balance: null });
     expect(status.note).toMatch(/API key/i);
+  });
+});
+
+describe('cliErrorBody', () => {
+  it('prefers the CLI\'s JSON error body over stderr, and never returns nothing', () => {
+    expect(cliErrorBody({ stdout: '{"error":{"code":"AUTH_FAILED","message":"No active API key."}}', stderr: 'Command failed' }))
+      .toBe('No active API key.');
+    expect(cliErrorBody({ stdout: '', stderr: 'ECONNRESET' })).toBe('ECONNRESET');
+    expect(cliErrorBody({ stdout: '', stderr: '' })).toBe('no detail reported');
   });
 });
 
@@ -188,16 +207,26 @@ describe('monidBatchPrices', () => {
     expect(batch).toMatchObject({ ok: false, status: 'disabled' });
   });
 
+  it('reports a missing key as disabled with the fix, not a generic error', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    __resetBatchShapeForTests();
+    const batch = await monidBatchPrices(['eggs'], {
+      execImpl: (cmd, args, opts, cb) =>
+        cb(new Error('exit 1'), '{"error":{"code":"AUTH_FAILED","message":"No active API key."}}', ''),
+    });
+    expect(batch).toMatchObject({ ok: false, status: 'disabled' });
+    expect(batch.note).toMatch(/keys add/);
+  });
+
   it('retries the next payload shape when the endpoint rejects the input', async () => {
     process.env.MONID_FORCE_CONFIGURED = 'true';
-    batchShapeName = null;
+    __resetBatchShapeForTests();
     const runs = [];
     const exec = (cmd, args, opts, cb) => {
-      const argv = args[0] === process.execPath ? args.slice(1) : args;
-      if (argv[0] === 'discover') {
+      if (args.includes('discover')) {
         cb(null, '{"results":[{"provider":"apify","endpoint":"/g/s"}]}', '');
       } else {
-        runs.push(JSON.parse(argv[argv.indexOf('-i') + 1]));
+        runs.push(JSON.parse(args[args.indexOf('-i') + 1]));
         if (runs.length === 1) cb(new Error('run failed'), '', 'Error: input validation failed: missing field `items`');
         else cb(null, JSON.stringify({ products: [{ name: 'eggs x6', price: 1.35 }] }), '');
       }
@@ -210,11 +239,10 @@ describe('monidBatchPrices', () => {
 
   it('does not re-send different JSON when the failure is not about the payload', async () => {
     process.env.MONID_FORCE_CONFIGURED = 'true';
-    batchShapeName = null;
+    __resetBatchShapeForTests();
     let runs = 0;
     const exec = (cmd, args, opts, cb) => {
-      const argv = args[0] === process.execPath ? args.slice(1) : args;
-      if (argv[0] === 'discover') cb(null, '{"results":[{"provider":"apify","endpoint":"/g/s"}]}', '');
+      if (args.includes('discover')) cb(null, '{"results":[{"provider":"apify","endpoint":"/g/s"}]}', '');
       else { runs += 1; cb(new Error('run failed'), '', 'Error: 401 unauthorized: bad API key'); }
     };
     const batch = await monidBatchPrices(['eggs'], { execImpl: exec });
@@ -224,22 +252,22 @@ describe('monidBatchPrices', () => {
 
   it('remembers the working shape for the rest of the process', async () => {
     process.env.MONID_FORCE_CONFIGURED = 'true';
-    batchShapeName = null;
+    __resetBatchShapeForTests();
     let runs = 0;
     const exec = (cmd, args, opts, cb) => {
-      const argv = args[0] === process.execPath ? args.slice(1) : args;
-      if (argv[0] === 'discover') cb(null, '{"results":[{"provider":"apify","endpoint":"/g/s"}]}', '');
+      if (args.includes('discover')) cb(null, '{"results":[{"provider":"apify","endpoint":"/g/s"}]}', '');
       else {
         runs += 1;
         if (runs === 1) cb(new Error('run failed'), '', 'Error: input invalid: unknown field `queries`');
         else cb(null, JSON.stringify({ products: [{ name: 'eggs x6', price: 1.35 }] }), '');
       }
     };
-    await monidBatchPrices(['eggs'], { execImpl: exec });
-    expect(batchShapeName).toBe('items');
+    const first = await monidBatchPrices(['eggs'], { execImpl: exec });
+    expect(first.shape).toBe('items');
     // Second call goes straight to the learned shape — no repeat of the 400.
-    await monidBatchPrices(['eggs'], { execImpl: exec });
-    expect(runs).toBe(3); // discover + 1 failed run + 2 clean runs
+    const second = await monidBatchPrices(['eggs'], { execImpl: exec });
+    expect(second).toMatchObject({ ok: true, shape: 'items' });
+    expect(runs).toBe(3); // runs only: (1 failed + 1 clean) in the first call, 1 clean in the second
   });
 });
 

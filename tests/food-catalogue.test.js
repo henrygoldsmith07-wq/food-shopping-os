@@ -278,7 +278,7 @@ describe('the expanded catalogue is reachable', () => {
 });
 
 describe('the sixth wave of foods', () => {
-  it('covers more common produce, proteins, grains, snacks and drinks', () => {
+  it('covers more common produce, proteins, grains, snacks and drinks, including common shorthand', () => {
     for (const query of ['brussels sprouts', 'beetroot', 'dried chickpeas', 'haddock', 'trout', 'bulgur', 'gnocchi', 'strawberry jam', 'green tea']) {
       expect(matchFood(query), query).not.toBeNull();
     }

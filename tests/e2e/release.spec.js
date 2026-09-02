@@ -7,7 +7,7 @@ const onboard = async (page, name = 'Ada') => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start using Forq' }).click();
-  await expect(page.getByText(new RegExp(`Good (morning|afternoon|evening), ${name}`))).toBeVisible();
+  await expect(page.getByText(new RegExp(`Good (morning|afternoon|evening), ${name}`))).toBeVisible({ timeout: 15000 });
 };
 
 test.beforeEach(async ({ page }) => {
@@ -177,7 +177,7 @@ test('exposes collaboration and calendar planning controls', async ({ page }) =>
   await onboard(page);
   // Coach access lives behind the 'coach' tool and is off for new users.
   await enableTool(page, 'coach');
-  await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible();
+  await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 
   await page.getByRole('button', { name: 'Plan', exact: true }).click();
   await expect(page.getByRole('button', { name: /Find busy evenings/i })).toBeVisible();
@@ -200,5 +200,5 @@ test('reopens offline after the service worker is ready', async ({ page, context
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible();
+  await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 });

@@ -59,6 +59,15 @@ const norm = (value) => words(value).join(' ');
  */
 const headOfName = (value) => String(value || '').replace(/\([^)]*\)/g, '').split(',')[0];
 
+// Common shopping shorthand used by the catalogue's strict matcher. These
+// aliases only expand a query; they never relax the rule that every meaningful
+// catalogue word must be present.
+const QUERY_ALIASES = new Map([
+  ['bulgur', 'bulgur wheat'],
+  ['aubergine', 'eggplant'],
+  ['courgette', 'zucchini'],
+]);
+
 /**
  * Find the catalogue food a shopping item actually is.
  *
@@ -73,10 +82,12 @@ export const matchFood = (name, catalogue = undefined) => {
   // The catalogue search does not itself handle plurals — "Bananas" finds
   // nothing — so it is asked for both what was typed and its singular form.
   const singularised = [...words(name)].join(' ');
-  let candidates = [
-    ...(searchFoods(name, catalogue, 8) || []),
-    ...(searchFoods(singularised, catalogue, 8) || []),
-  ];
+  const expandedQueries = [name, singularised];
+  for (const word of words(name)) {
+    const alias = QUERY_ALIASES.get(word);
+    if (alias) expandedQueries.push(alias);
+  }
+  let candidates = expandedQueries.flatMap((query) => searchFoods(query, catalogue, 8) || []);
   // The catalogue search matches raw text, so an accent defeats it: "pate"
   // finds nothing even though "Pâté" is right there. When it comes back empty,
   // scan once with the same accent-folded comparison used below.
@@ -84,7 +95,8 @@ export const matchFood = (name, catalogue = undefined) => {
     const pool = catalogue || CATALOGUE;
     candidates = pool.filter((food) => {
       const head = words(headOfName(food.name)).filter((word) => word.length > 2);
-      return head.length > 0 && head.every((word) => wanted.has(word));
+      const aliases = new Set([...wanted, ...[...wanted].flatMap((word) => words(QUERY_ALIASES.get(word) || ''))]);
+      return head.length > 0 && head.every((word) => aliases.has(word));
     }).slice(0, 8);
   }
   const seen = new Set();
@@ -92,11 +104,12 @@ export const matchFood = (name, catalogue = undefined) => {
     if (seen.has(food.id)) continue;
     seen.add(food.id);
     const foodWords = words(headOfName(food.name)).filter((word) => word.length > 2);
+    const aliases = new Set([...wanted, ...[...wanted].flatMap((word) => words(QUERY_ALIASES.get(word) || ''))]);
     if (!foodWords.length) continue;
     // Every meaningful word of the catalogue name must appear in what the user
     // typed. "Milk" does not match "Milk chocolate"; "semi skimmed milk" does
     // match "Semi-skimmed milk", and "bananas" matches "Banana".
-    if (foodWords.every((word) => wanted.has(word))) return food;
+    if (foodWords.every((word) => aliases.has(word))) return food;
   }
   return null;
 };

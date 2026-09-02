@@ -15,7 +15,8 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "check:scraper": "node scripts/check-scraper.mjs"
+    "check:scraper": "node scripts/check-scraper.mjs",
+    "check:monid": "node scripts/check-monid.mjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",

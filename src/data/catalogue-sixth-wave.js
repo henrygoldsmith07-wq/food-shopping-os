@@ -46,7 +46,7 @@ const ROWS = [
   ['sixth-hemp-seeds', 'Hemp seeds', '🌱', [553, 32, 9, 49, 4, 1.5, 4.5, 0.02], 30, ['seeds', 'plant-protein'], 'almonds'],
   ['sixth-flaxseed', 'Linseeds', '🌱', [534, 18, 29, 42, 27, 1.6, 3.7, 0.02], 15, ['seeds', 'high-fibre'], 'almonds'],
   ['sixth-sesame-seeds', 'Sesame seeds', '🌱', [573, 18, 23, 50, 12, 0.3, 7, 0.02], 15, ['seeds'], 'almonds'],
-  ['sixth-bulgur', 'Bulgur, cooked', '🌾', [83, 3.1, 18.6, 0.2, 4.5, 0.1, 0.1, 0.01], 150, ['grain', 'high-fibre'], 'couscous'],
+  ['sixth-bulgur', 'Bulgur', '🌾', [83, 3.1, 18.6, 0.2, 4.5, 0.1, 0.1, 0.01], 150, ['grain', 'high-fibre'], 'couscous'],
   ['sixth-polenta', 'Polenta, cooked', '🌽', [70, 1.6, 15, 0.2, 1.5, 0.2, 0.1, 0.01], 180, ['grain'], 'white-rice'],
   ['sixth-soba', 'Soba noodles, cooked', '🍜', [99, 5, 21, 0.1, 1.5, 0.5, 0.1, 0.1], 180, ['grain', 'world'], 'pasta'],
   ['sixth-gnocchi', 'Gnocchi, cooked', '🥔', [150, 3.5, 32, 1, 1.5, 0.5, 0.2, 0.2], 180, ['grain', 'prepared'], 'potato'],

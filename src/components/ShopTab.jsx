@@ -420,8 +420,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                       </p>
                       <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
                         {items.map((item) => (
-                          <ShoppingListRow
-                            key={item.id}
+                          <ShoppingListRow key={item.id || item.name}
                             item={item}
                             onAisle={app.setItemAisle}
                             onStore={app.setItemStore}

@@ -75,7 +75,10 @@ export const runMonid = async (args, { execImpl = execFile, timeoutMs = CLI_TIME
   try {
     const { stdout } = await new Promise((resolve, reject) => {
       execImpl(command, argv, { timeout: timeoutMs, windowsHide: true }, (error, stdout, stderr) => {
-        if (error) reject(Object.assign(error, { stderr: String(stderr || '') }));
+        // Keep stdout on failure too: this CLI reports structured errors as
+        // JSON on stdout with exit 1 and an empty stderr, so discarding it
+        // would discard the only explanation of what went wrong.
+        if (error) reject(Object.assign(error, { stderr: String(stderr || ''), stdout: String(stdout || '') }));
         else resolve({ stdout: String(stdout || '') });
       });
     });
@@ -84,11 +87,30 @@ export const runMonid = async (args, { execImpl = execFile, timeoutMs = CLI_TIME
     const timedOut = error?.killed || error?.signal === 'SIGTERM';
     return {
       ok: false,
-      stdout: '',
+      stdout: String(error?.stdout || ''),
       stderr: String(error?.stderr || error?.message || 'monid failed'),
       status: timedOut ? 'timeout' : 'error',
     };
   }
+};
+
+const isAuthFailure = (run) => {
+  const body = parseMonidJson(run?.stdout || '');
+  const text = `${body?.error?.code || ''} ${body?.error?.message || ''} ${run?.stdout || ''} ${run?.stderr || ''}`;
+  return /AUTH_FAILED|no active api key|unauthor/i.test(text);
+};
+
+/**
+ * The most informative text a failed CLI call left behind.
+ *
+ * Preference order: the JSON error body on stdout (the CLI's structured
+ * errors live there), then stderr, then a plain admission of ignorance.
+ * Notes shown to users are built from this, so "Command failed" never
+ * outranks "No active API key. Run monid keys add".
+ */
+export const cliErrorBody = (run) => {
+  const body = parseMonidJson(run?.stdout || '');
+  return String(body?.error?.message || body?.error?.code || run?.stderr || '').trim() || 'no detail reported';
 };
 
 /** First JSON value found in a reply that may be fenced, chatty or prefixed. */
@@ -209,6 +231,9 @@ const looksLikeInputError = (stderr = '') =>
 
 let batchShapeName = null; // memoized across calls; null = not yet learned
 
+/** Test-only: forget the learned payload shape so a test can walk the ladder again. */
+export const __resetBatchShapeForTests = () => { batchShapeName = null; };
+
 /**
  * A whole list through Monid, one discover + one run.
  *
@@ -232,7 +257,16 @@ export const monidBatchPrices = async (queries = [], {
   // separate paid discoveries to learn what one free discovery already says.
   const discoveryQuery = wanted.slice(0, 3).join(', ');
   const run = await runMonid(discoverArgs(discoveryQuery), { execImpl, timeoutMs });
-  if (!run.ok) return { ok: false, status: run.status, note: `Monid discovery failed: ${run.stderr.slice(0, 200)}`, byQuery: new Map() };
+  if (!run.ok) {
+    if (isAuthFailure(run)) {
+      return {
+        ok: false, status: 'disabled',
+        note: 'Monid has no active API key — run `monid keys add -k <key> -l main`. Nothing was charged.',
+        byQuery: new Map(),
+      };
+    }
+    return { ok: false, status: run.status, note: `Monid discovery failed: ${cliErrorBody(run)}`.slice(0, 260), byQuery: new Map() };
+  }
 
   const endpoint = endpointFromDiscovery(run.stdout);
   if (!endpoint) return { ok: false, status: 'no-match', note: 'Monid has no matching endpoint for this list.', byQuery: new Map() };
@@ -259,7 +293,7 @@ export const monidBatchPrices = async (queries = [], {
   if (!runOut.ok) {
     return {
       ok: false, provider: endpoint.provider, endpoint: endpoint.endpoint,
-      status: runOut.status, note: `Monid run failed: ${runOut.stderr.slice(0, 200)}`, byQuery: new Map(),
+      status: runOut.status, note: `Monid run failed: ${cliErrorBody(runOut)}`.slice(0, 260), byQuery: new Map(),
     };
   }
   const payload = parseMonidJson(runOut.stdout);
@@ -341,7 +375,10 @@ export const monidPrices = async (query, {
 
   const run = await runMonid(discoverArgs(wanted), { execImpl, timeoutMs });
   if (!run.ok) {
-    return { ...base, status: run.status, note: `Monid discovery failed: ${run.stderr.slice(0, 200)}` };
+    if (isAuthFailure(run)) {
+      return { ...base, status: 'disabled', note: 'Monid has no active API key — run `monid keys add -k <key> -l main`. Nothing was charged.' };
+    }
+    return { ...base, status: run.status, note: `Monid discovery failed: ${cliErrorBody(run)}`.slice(0, 260) };
   }
   const found = endpointFromDiscovery(run.stdout);
   if (!found) {
@@ -353,7 +390,10 @@ export const monidPrices = async (query, {
   const args = ['run', '-p', provider, '-e', endpoint, '-i', JSON.stringify({ query: wanted }), '-w', '-j'];
   const runOut = await runMonid(args, { execImpl, timeoutMs });
   if (!runOut.ok) {
-    return { ...base, provider, endpoint, status: runOut.status, note: `Monid run failed: ${runOut.stderr.slice(0, 200)}` };
+    if (isAuthFailure(runOut)) {
+      return { ...base, provider, endpoint, status: 'disabled', note: 'Monid has no active API key — run `monid keys add -k <key> -l main`. Nothing was charged.' };
+    }
+    return { ...base, provider, endpoint, status: runOut.status, note: `Monid run failed: ${cliErrorBody(runOut)}`.slice(0, 260) };
   }
   const payload = parseMonidJson(runOut.stdout);
   const rows = rowsFromMonidReply(payload, { retailer, query: wanted });
@@ -378,7 +418,10 @@ export const monidPrices = async (query, {
 export const monidBalance = async ({ execImpl = execFile, timeoutMs = 15000 } = {}) => {
   if (!monidOnPath()) return { ok: false, reason: 'disabled' };
   const run = await runMonid(['balance', '-j'], { execImpl, timeoutMs });
-  if (!run.ok) return { ok: false, reason: run.status };
+  if (!run.ok) {
+    if (isAuthFailure(run)) return { ok: false, reason: 'auth' };
+    return { ok: false, reason: run.status };
+  }
   const parsed = parseMonidJson(run.stdout);
   if (!parsed) return { ok: false, reason: 'error' };
   // The CLI's shape: `balance` is a number of credits. Accept a couple of
@@ -402,6 +445,13 @@ export const monidStatus = async ({ execImpl = execFile } = {}) => {
     };
   }
   const probed = await monidBalance({ execImpl });
+  if (!probed.ok && probed.reason === 'auth') {
+    return {
+      configured: false,
+      balance: null,
+      note: 'No active Monid API key — run `monid keys add -k <key> -l main` to enable paid lookups.',
+    };
+  }
   return {
     configured: true,
     balance: probed.ok ? probed.balance : null,
