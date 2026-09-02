@@ -9,15 +9,16 @@
  *
  * So fetching is a ladder rather than a single attempt:
  *
+ *   monid      — a scraping endpoint run through the Monid API (api.monid.ai).
+ *                Free on this workspace, so when MONID_API_KEY is set it
+ *                leads: it renders JavaScript and returns real HTML, which
+ *                keeps the structured passes working. A run takes seconds to
+ *                minutes, so without a key the ladder simply starts at direct.
  *   direct     — plain fetch. Free, instant, works on server-rendered shops.
  *   firecrawl  — headless render via Firecrawl. Needs FIRECRAWL_API_KEY and
- *                costs credits, so it is only reached when direct found
- *                nothing. Returns real HTML, so structured parsing still works.
- *   monid      — a scraping endpoint run through the Monid API (api.monid.ai).
- *                Needs MONID_API_KEY, spends that balance, and takes seconds
- *                to minutes, so it sits behind the cheaper rungs. Whichever
- *                endpoint is configured decides the format; HTML keeps the
- *                structured passes available, plain text drops to the text pass.
+ *                costs credits, so it is only reached when the rungs before
+ *                it found nothing. Returns real HTML, so structured parsing
+ *                still works.
  *   jina       — r.jina.ai. Keyless, renders JavaScript, returns markdown
  *                rather than HTML, so only the text pass can read it. Last
  *                resort, and free.
@@ -26,7 +27,7 @@
  * a price" are different questions, and only the second one matters.
  */
 
-const DEFAULT_ORDER = ['direct', 'firecrawl', 'monid', 'jina'];
+const DEFAULT_ORDER = ['monid', 'direct', 'firecrawl', 'jina'];
 
 export const USER_AGENT = process.env.SCRAPER_USER_AGENT
   || 'ForqBot/1.0 (+https://github.com/henrygoldsmith07-wq/food-shopping-os; price comparison for personal shopping lists)';
@@ -66,7 +67,7 @@ export const availableStrategies = () => {
   });
 };
 
-/** Plain fetch, as a browser would. Cheapest and always tried first. */
+/** Plain fetch, as a browser would. Free and instant; leads when Monid is not configured. */
 export const directFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
   const response = await fetchImpl(url, {
     headers: {
@@ -176,9 +177,9 @@ const monidInput = (url) => {
 
 /**
  * Monid's run API. Fire-and-poll: POST /v1/run starts the configured
- * endpoint, then GET /v1/runs/:id until it finishes. A run spends the
- * workspace's Monid balance, so this is only reached when the cheaper
- * strategies found nothing, and it never retries on its own.
+ * endpoint, then GET /v1/runs/:id until it finishes. A run takes seconds
+ * to minutes, and it never retries on its own — a failed or timed-out run
+ * just hands the shop to the next rung down the ladder.
  */
 export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
   const key = process.env.MONID_API_KEY;

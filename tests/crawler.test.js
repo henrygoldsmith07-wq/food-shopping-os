@@ -41,9 +41,9 @@ describe('which strategies are available', () => {
     expect(availableStrategies()).toEqual(['direct', 'firecrawl', 'jina']);
   });
 
-  it('adds Monid to the ladder once its key exists', () => {
+  it('puts Monid at the front of the ladder once its key exists', () => {
     vi.stubEnv('MONID_API_KEY', 'mk-test');
-    expect(availableStrategies()).toEqual(['direct', 'monid', 'jina']);
+    expect(availableStrategies()).toEqual(['monid', 'direct', 'jina']);
     expect(monidConfigured()).toBe(true);
   });
 
