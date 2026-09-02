@@ -161,18 +161,33 @@ const contentFrom = (value, found = { html: null, markdown: null }, depth = 0) =
 };
 
 /**
- * The body sent to the configured Monid endpoint. Endpoints have their own
- * input schemas (that is what `monid inspect` reports), so the template is
- * overridable; `{{url}}` is where the shop's search page goes.
+ * The input sent to the configured Monid endpoint. Endpoints have their own
+ * input schemas (that is what `monid inspect` reports), so each placement is
+ * its own overridable JSON template and `{{url}}` is where the shop's search
+ * page goes. The default targets context.dev's rendered-HTML scrape, which
+ * takes the target URL as a query parameter — with a GB exit and caching
+ * switched off, because a cached page shows yesterday's prices.
  */
-const monidInput = (url) => {
-  const template = process.env.MONID_SCRAPE_INPUT_JSON
-    || '{"startUrls":[{"url":"{{url}}"}],"maxCrawlResults":1}';
-  try {
-    return JSON.parse(template.replace('{{url}}', () => url));
-  } catch {
-    throw failure('bad-config', 'MONID_SCRAPE_INPUT_JSON is not valid JSON');
+const monidTemplates = (url) => {
+  const input = {};
+  for (const [field, envName, fallback] of [
+    ['body', 'MONID_SCRAPE_INPUT_JSON', null],
+    ['queryParams', 'MONID_SCRAPE_QUERY_JSON',
+      '{"url":"{{url}}","country":"gb","maxAgeMs":0,"waitForMs":10000}'],
+    ['pathParams', 'MONID_SCRAPE_PATH_JSON', null],
+  ]) {
+    const template = process.env[envName] ?? fallback;
+    if (!template) continue;
+    try {
+      input[field] = JSON.parse(template.split('{{url}}').join(url));
+    } catch {
+      throw failure('bad-config', `${envName} is not valid JSON`);
+    }
   }
+  if (!Object.keys(input).length) {
+    throw failure('bad-config', 'No Monid input template is configured');
+  }
+  return input;
 };
 
 /**
@@ -185,8 +200,8 @@ export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
   const key = process.env.MONID_API_KEY;
   if (!key) throw failure('not-configured', 'Monid has no API key');
   const base = (process.env.MONID_API_BASE_URL || 'https://api.monid.ai').replace(/\/+$/, '');
-  const provider = process.env.MONID_SCRAPE_PROVIDER || 'apify';
-  const endpoint = process.env.MONID_SCRAPE_ENDPOINT || '/apify/website-content-crawler';
+  const provider = process.env.MONID_SCRAPE_PROVIDER || 'context.dev';
+  const endpoint = process.env.MONID_SCRAPE_ENDPOINT || '/web/scrape/html';
   const headers = { authorization: `Bearer ${key}`, 'content-type': 'application/json' };
   const runTimeoutMs = Number(process.env.MONID_RUN_TIMEOUT_MS || 60000);
   const pollMs = Math.max(0, Number(process.env.MONID_POLL_MS || 2000));
@@ -195,7 +210,7 @@ export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
   const start = await fetchImpl(`${base}/v1/run`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ provider, endpoint, input: { body: monidInput(url) } }),
+    body: JSON.stringify({ provider, endpoint, input: monidTemplates(url) }),
     signal: requestSignal,
     cache: 'no-store',
   });

@@ -164,11 +164,30 @@ describe('the individual fetch strategies', () => {
     const page = await monidFetch('https://a.test/s', { fetchImpl });
     expect(sent.url).toBe('https://api.monid.ai/v1/run');
     expect(sent.auth).toBe('Bearer mk-test');
-    expect(sent.body.provider).toBe('apify');
-    expect(sent.body.input.body).toEqual({
-      startUrls: [{ url: 'https://a.test/s' }], maxCrawlResults: 1,
+    expect(sent.body.provider).toBe('context.dev');
+    expect(sent.body.endpoint).toBe('/web/scrape/html');
+    expect(sent.body.input.queryParams).toEqual({
+      url: 'https://a.test/s', country: 'gb', maxAgeMs: 0, waitForMs: 10000,
     });
     expect(page).toMatchObject({ via: 'monid', html: PRICED, markdown: null });
+  });
+
+  it('monid lets an endpoint take its input in the body instead', async () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    vi.stubEnv('MONID_POLL_MS', '0');
+    vi.stubEnv('MONID_SCRAPE_QUERY_JSON', '{}');
+    vi.stubEnv('MONID_SCRAPE_INPUT_JSON', '{"startUrls":["{{url}}"],"{{url}}":true}');
+    let body = null;
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (init.method === 'POST') {
+        body = JSON.parse(init.body);
+        return json({ runId: 'r1' });
+      }
+      return json({ status: 'COMPLETED', output: { html: PRICED } });
+    });
+    await monidFetch('https://a.test/s', { fetchImpl });
+    expect(body.input.body).toEqual({ startUrls: ['https://a.test/s'], 'https://a.test/s': true });
+    expect(body.input.queryParams).toEqual({});
   });
 
   it('monid reads the page wherever the endpoint parked it', async () => {

@@ -247,9 +247,10 @@ means no fetch by any route.
 | `FIRECRAWL_BASE_URL` | `https://api.firecrawl.dev/v2` | Pin an API version or point at a self-hosted Firecrawl. |
 | `FIRECRAWL_WAIT_MS` | `2500` | How long Firecrawl waits after load before capturing — raise it for slow shops. |
 | `MONID_API_KEY` | unset | Enables the Monid strategy and puts it at the front of the ladder. Generate a key at [app.monid.ai/access/api-keys](https://app.monid.ai/access/api-keys). |
-| `MONID_SCRAPE_PROVIDER` | `apify` | Which Monid provider the strategy runs. Pick one with `monid discover -q "uk grocery prices"`. |
-| `MONID_SCRAPE_ENDPOINT` | `/apify/website-content-crawler` | Which Monid endpoint to run. Confirm its input schema with `monid inspect` before changing it. |
-| `MONID_SCRAPE_INPUT_JSON` | `{"startUrls":[{"url":"{{url}}"}],"maxCrawlResults":1}` | Body sent to the endpoint; `{{url}}` is replaced with the shop's search page. Match the schema `monid inspect` prints. |
+| `MONID_SCRAPE_PROVIDER` | `context.dev` | Which Monid provider the strategy runs. Pick one with `monid discover -q "uk grocery prices"`. |
+| `MONID_SCRAPE_ENDPOINT` | `/web/scrape/html` | Which Monid endpoint to run. Confirm its input schema with `monid inspect` before changing it. |
+| `MONID_SCRAPE_QUERY_JSON` | `{"url":"{{url}}","country":"gb","maxAgeMs":0,"waitForMs":10000}` | Query parameters for the endpoint; `{{url}}` is replaced with the shop's search page. The default asks for a GB exit, no cached copy, and a patient post-load wait — grocery grids hydrate slowly, and a cached page shows yesterday's prices. |
+| `MONID_SCRAPE_INPUT_JSON` | unset | Optional body for endpoints that take one. `MONID_SCRAPE_PATH_JSON` is the same idea for path parameters. |
 | `MONID_RUN_TIMEOUT_MS` | `60000` | How long a Monid run may take before the shop is written off as empty and the next rung is tried. |
 | `JINA_API_KEY` | unset | Optional. Raises Jina Reader's rate limit; it works keylessly without one. |
 | `JINA_READER_ENABLED` | `true` | Set to `false` to drop the keyless renderer from the ladder. |
