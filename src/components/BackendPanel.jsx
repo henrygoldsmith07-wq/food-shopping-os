@@ -127,6 +127,15 @@ function BackendPanelContent({ backend }) {
                 Continue with Microsoft
               </button>
             )}
+            {backend.providers?.dev && (
+              <button
+                className="press rounded-2xl border px-4 py-3 text-[0.8125rem] font-extrabold"
+                style={{ borderColor: 'var(--line)' }}
+                onClick={() => signIn('dev', { callbackUrl: '/', name: session?.user?.name || 'Preview user' })}
+              >
+                <span className="inline-flex items-center gap-2"><LogIn size={15} /> Sign in for this preview</span>
+              </button>
+            )}
           </div>
         )}
 

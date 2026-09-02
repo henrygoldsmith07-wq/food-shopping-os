@@ -35,6 +35,13 @@ uploads, calendar reads and writes, open product observations and an AI relay to
 5. Run `npm run db:migrate` to record the current data-store migration.
 6. Run `npm run dev`.
 
+**No credentials yet?** `node scripts/dev-preview.mjs` runs the whole stack
+against a local in-memory Redis behind an Upstash-compatible bridge, with a
+preview-only sign-in (`AUTH_DEV_LOGIN`) that needs no OAuth account — the
+fastest way to see live prices, the market fallback and Open Prices populate
+in the app. Data is in-memory and disposable, and it is not a development
+mode for production.
+
 `npm run db:check` verifies the connection and applied migrations. Production
 deployments should run `npm run db:migrate` as a controlled release step before
 the new application version receives traffic.
@@ -224,8 +231,9 @@ HTTP 200 on a shell is a miss, not a hit:
 
 | Strategy | Needs | Returns | Notes |
 | --- | --- | --- | --- |
-| `direct` | nothing | raw HTML | Free and instant. Works on server-rendered shops. Always tried first. |
-| `firecrawl` | `FIRECRAWL_API_KEY` | rendered HTML + markdown | Headless render. Costs credits, so it is only reached when `direct` found nothing. Asks for `rawHtml`, so structured parsing still applies. |
+| `monid` | `MONID_API_KEY` | whatever the configured endpoint returns | Leads the ladder when configured. Runs one scraping endpoint through [Monid](https://monid.ai)'s API (`MONID_SCRAPE_PROVIDER` / `MONID_SCRAPE_ENDPOINT`); free on this workspace's plan. Renders JavaScript, and HTML keeps the structured passes — plain text drops to the text pass. A run takes seconds to minutes. |
+| `direct` | nothing | raw HTML | Free and instant. Works on server-rendered shops. Leads when no Monid key is set. |
+| `firecrawl` | `FIRECRAWL_API_KEY` | rendered HTML + markdown | Headless render. Costs credits, so it is only reached when the rungs before it found nothing. Asks for `rawHtml`, so structured parsing still applies. |
 | `jina` | nothing | markdown | [r.jina.ai](https://r.jina.ai), keyless, renders JavaScript. Markdown only, so just the text pass can read it — hence last. |
 
 Escalation is what raises the hit rate: a shop that returns a shell to `direct`
@@ -237,18 +245,43 @@ load prices" where a renderer was needed.
 that declined — the permission check runs before any strategy, and a refusal
 means no fetch by any route.
 
+### When the shops stay silent
+
+Several UK grocers never show a headless renderer their prices: some gate the
+grid behind a postcode, some refuse every route, one forbids the crawl in
+robots.txt. So when every checked shop came back without a price, the scraper
+runs one Google Shopping query through Monid (`apify /burbn/google-shopping-scraper`)
+and folds the market's answers in: a listing for a checked shop fills that
+shop's empty result, and listings from shops not being checked land in an
+"Other shops" group so nothing is thrown away. Market rows are labelled with
+their provenance (`Google Shopping (Asda) listing`) and carry medium
+confidence — they are the store's own listing, but not a price read from its
+page. Set `PRICE_SCRAPER_MARKET=off` to disable, or `on` to run it even when
+the shops answered.
+
 ### Environment variables
 
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `NVIDIA_API_KEY` | *bundled key* | Free NVIDIA NIM catalogue. Powers the AI assistant and the scraper's fallback extraction. A key is **shipped in the source**, so this works with no setup; set this to use your own, or to an empty string to turn NVIDIA off. |
-| `FIRECRAWL_API_KEY` | unset | Enables the Firecrawl render strategy. Without it the ladder is `direct → jina`. |
+| `FIRECRAWL_API_KEY` | unset | Enables the Firecrawl render strategy. Without it the ladder skips Firecrawl. |
 | `FIRECRAWL_BASE_URL` | `https://api.firecrawl.dev/v2` | Pin an API version or point at a self-hosted Firecrawl. |
 | `FIRECRAWL_WAIT_MS` | `2500` | How long Firecrawl waits after load before capturing — raise it for slow shops. |
+| `MONID_API_KEY` | unset | Enables the Monid strategy and puts it at the front of the ladder. Generate a key at [app.monid.ai/access/api-keys](https://app.monid.ai/access/api-keys). |
+| `MONID_SCRAPE_PROVIDER` | `context.dev` | Which Monid provider the strategy runs. Pick one with `monid discover -q "uk grocery prices"`. |
+| `MONID_SCRAPE_ENDPOINT` | `/web/scrape/html` | Which Monid endpoint to run. Confirm its input schema with `monid inspect` before changing it. |
+| `MONID_SCRAPE_QUERY_JSON` | `{"url":"{{url}}","country":"gb","maxAgeMs":0,"waitForMs":10000}` | Query parameters for the endpoint; `{{url}}` is replaced with the shop's search page. The default asks for a GB exit, no cached copy, and a patient post-load wait — grocery grids hydrate slowly, and a cached page shows yesterday's prices. |
+| `MONID_SCRAPE_INPUT_JSON` | unset | Optional body for endpoints that take one. `MONID_SCRAPE_PATH_JSON` is the same idea for path parameters. |
+| `MONID_RUN_TIMEOUT_MS` | `60000` | How long a Monid run may take before the shop is written off as empty and the next rung is tried. |
 | `JINA_API_KEY` | unset | Optional. Raises Jina Reader's rate limit; it works keylessly without one. |
 | `JINA_READER_ENABLED` | `true` | Set to `false` to drop the keyless renderer from the ladder. |
-| `PRICE_SCRAPER_STRATEGIES` | `direct,firecrawl,jina` | Explicit ladder order, comma-separated. |
+| `PRICE_SCRAPER_STRATEGIES` | `monid,direct,firecrawl,jina` | Explicit ladder order, comma-separated. Unconfigured strategies are dropped. |
+| `PRICE_SCRAPER_MARKET` | `auto` | Google Shopping fallback through Monid: `auto` runs only when no shop produced a price, `on` always runs it, `off` disables. |
+| `MONID_MARKET_PROVIDER` | `apify` | Provider for the market fallback's Google Shopping endpoint. |
+| `MONID_MARKET_ENDPOINT` | `/burbn/google-shopping-scraper` | Endpoint for the market fallback. Confirm its schema with `monid inspect` before changing it. |
+| `MONID_MARKET_INPUT_JSON` | `{"searchQuery":"{{query}}","country":"gb","language":"en","maxResults":10}` | Body for the market endpoint; `{{query}}` is replaced with the shopping-list search. |
 | `PRICE_SCRAPER_ENABLED` | `true` | Set to `false` to switch live price checking off entirely. |
+| `SCRAPE_BATCH_BUDGET_MS` | `40000` | Per-request wall-time budget for the scraper: shops are not *started* once the budget is spent (in-flight ones finish, and the market fallback answers for them), so a slow renderer cannot turn a check into a hang. |
 | `PRICE_SCRAPER_RETAILERS` | all | Comma-separated allowlist of retailer ids, e.g. `tesco,aldi`. |
 | `SCRAPER_TIMEOUT_MS` | `9000` | Per-page timeout for the direct fetch. |
 | `SCRAPER_RENDER_TIMEOUT_MS` | `25000` | Per-page timeout for a rendering strategy. |

@@ -420,4 +420,43 @@ describe('checking a product across shops', () => {
     expect(out.results[1]).toMatchObject({ retailer: 'Asda', status: 'ok' });
     expect(out.best.retailer).toBe('Asda');
   });
+
+  it('returns on the budget even with shops still in flight', async () => {
+    vi.stubEnv('PRICE_SCRAPER_MARKET', 'off');
+    const fetchImpl = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.endsWith('/robots.txt')) return res(allowAllRobots, { type: 'text/plain' });
+      // Far longer than the budget: the check must come back on time with the
+      // shop reported honestly, not wait for the straggler.
+      await new Promise((resolve) => { setTimeout(resolve, 5000); });
+      return res(page);
+    });
+    const started = Date.now();
+    const out = await scrapePrices('milk', {
+      retailerIds: ['tesco', 'asda'], fetchImpl, allowModel: false, gapMs: 0,
+      budgetMs: 150,
+    });
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(out.shopsChecked).toBe(2);
+    expect(out.results.every((result) => result.status === 'no-match')).toBe(true);
+  });
+
+  it('a budget also stops the query ladder inside a shop', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.endsWith('/robots.txt')) return res(allowAllRobots, { type: 'text/plain' });
+      await new Promise((resolve) => { setTimeout(resolve, 120); });
+      return res(page);
+    });
+    const out = await scrapeRetailer({
+      id: 'tesco', name: 'Tesco',
+      search: (q) => `https://www.tesco.com/groceries/en-GB/search?query=${encodeURIComponent(q)}`,
+    }, 'milk', { fetchImpl, allowModel: false, deadline: Date.now() + 60 });
+    // Rung one ran; the budget spent itself during it, so the broader rungs
+    // were never asked.
+    expect(out.query).toBe('milk');
+    const pageFetches = fetchImpl.mock.calls
+      .filter(([url]) => !String(url).endsWith('/robots.txt'));
+    expect(pageFetches).toHaveLength(1);
+  });
 });

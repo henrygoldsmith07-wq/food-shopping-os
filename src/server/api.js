@@ -12,7 +12,15 @@ export class ApiError extends Error {
 
 export function assertSameOrigin(request) {
   const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) throw new ApiError(403, 'Invalid request origin.');
+  if (!origin) return;
+  // `request.url` is rebuilt from the server's own host, which behind a tunnel
+  // or a proxy is not the host the browser actually used. The Host header is
+  // what the browser aimed at, and Origin-vs-Host is the classic CSRF check:
+  // a cross-site page can forge neither of them to match.
+  const host = request.headers.get('host');
+  if (host && (origin === `https://${host}` || origin === `http://${host}`)) return;
+  if (origin === new URL(request.url).origin) return;
+  throw new ApiError(403, 'Invalid request origin.');
 }
 
 export async function requireUser() {

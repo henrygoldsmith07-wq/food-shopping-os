@@ -232,20 +232,65 @@ const normaliseObservedPrice = (raw) => {
   });
 };
 
+/**
+ * How many Open Food Facts barcodes one shopping-list phrase is worth
+ * pricing: each one costs a request to Open Prices, and five covers the
+ * own-brand and branded versions of a typical item.
+ */
+const BARCODES_PER_QUERY = 5;
+
+/**
+ * Turn a shopping-list phrase into barcodes worth pricing.
+ *
+ * Open Prices has no fuzzy product search — its `product_name` filter is an
+ * exact-title match, which a phrase like "semi skimmed milk" never hits.
+ * Open Food Facts has full-text search, and its barcodes are exactly what
+ * Open Prices keys on, so the phrase is resolved there first.
+ */
+const barcodesForQuery = async (query, { signal } = {}) => {
+  const base = openFoodFactsBase();
+  if (!base) return [];
+  const endpoint = new URL('/cgi/search.pl', base);
+  endpoint.searchParams.set('search_terms', query);
+  endpoint.searchParams.set('json', '1');
+  endpoint.searchParams.set('page_size', String(BARCODES_PER_QUERY));
+  endpoint.searchParams.set('fields', 'code');
+  const payload = await getJson(endpoint, { headers: openDataHeaders(), signal }, 'Open Food Facts is temporarily unavailable.', { allowNotFound: true, timeoutMs: RETAILER_TIMEOUTS.openFoodFacts });
+  const products = Array.isArray(payload?.products) ? payload.products : [];
+  return [...new Set(products.map((product) => barcode(product?.code)).filter(Boolean))];
+};
+
+const pricesForBarcode = async (code, { signal } = {}) => {
+  const base = openPricesBase();
+  const endpoint = new URL('/api/v1/prices', base);
+  endpoint.searchParams.set('size', '30');
+  endpoint.searchParams.set('currency', 'GBP');
+  endpoint.searchParams.set('product_code', code);
+  const payload = await getJson(endpoint, { headers: openDataHeaders(), signal }, 'Open Prices is temporarily unavailable.', { timeoutMs: RETAILER_TIMEOUTS.openPrices });
+  return rowsFrom(payload).slice(0, 30).map(normaliseObservedPrice).filter(Boolean);
+};
+
 export const lookupOpenPrices = async (input, { signal } = {}) => {
   const parsed = priceLookupSchema.parse(input);
   if (process.env.OPEN_PRICES_ENABLED === 'false') return [];
   const base = openPricesBase();
   if (!base) throw new ApiError(503, 'Open Prices is not configured.');
-  const endpoint = new URL('/api/v1/prices', base);
-  endpoint.searchParams.set('size', '30');
-  endpoint.searchParams.set('currency', 'GBP');
-  if (parsed.barcode) endpoint.searchParams.set('product_code', parsed.barcode);
-  if (!parsed.barcode && parsed.query) endpoint.searchParams.set('product_name', parsed.query);
-  const payload = await getJson(endpoint, { headers: openDataHeaders(), signal }, 'Open Prices is temporarily unavailable.', { timeoutMs: RETAILER_TIMEOUTS.openPrices });
-  const rows = rowsFrom(payload).slice(0, 30).map(normaliseObservedPrice).filter(Boolean);
+
+  // A barcode prices exactly. A phrase is resolved to barcodes first, then
+  // each barcode is priced on its own request — the API only filters one
+  // product_code at a time.
+  const rawRows = [];
+  if (parsed.barcode) {
+    rawRows.push(...await pricesForBarcode(parsed.barcode, { signal }));
+  } else if (parsed.query) {
+    const codes = await barcodesForQuery(parsed.query, { signal });
+    for (const code of codes.slice(0, BARCODES_PER_QUERY)) {
+      if (signal?.aborted) break;
+      rawRows.push(...await pricesForBarcode(code, { signal }));
+    }
+  }
   // Enrich with freshness + fallback labeling
-  const enriched = rows.map((row) => {
+  const enriched = rawRows.map((row) => {
     const freshness = priceFreshness(row.observedAt);
     return {
       ...row,

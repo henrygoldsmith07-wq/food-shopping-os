@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   availableStrategies, crawlPage, directFetch, firecrawlConfigured, firecrawlFetch,
-  jinaFetch, runStrategy,
+  jinaFetch, monidConfigured, monidFetch, runStrategy,
 } from '../src/server/crawler.js';
 import { clearRobotsCache, isScrapeAllowed } from '../src/server/robots.js';
 import { deterministicPass, scrapeRetailer } from '../src/server/price-scraper.js';
@@ -39,6 +39,12 @@ describe('which strategies are available', () => {
   it('puts Firecrawl in the ladder once its key exists', () => {
     vi.stubEnv('FIRECRAWL_API_KEY', 'fc-test');
     expect(availableStrategies()).toEqual(['direct', 'firecrawl', 'jina']);
+  });
+
+  it('puts Monid at the front of the ladder once its key exists', () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    expect(availableStrategies()).toEqual(['monid', 'direct', 'jina']);
+    expect(monidConfigured()).toBe(true);
   });
 
   it('honours an explicit strategy order from the environment', () => {
@@ -144,6 +150,83 @@ describe('the individual fetch strategies', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('monid starts a run and polls it to completion', async () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    vi.stubEnv('MONID_POLL_MS', '0');
+    let sent = null;
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (init.method === 'POST') {
+        sent = { url: String(url), body: JSON.parse(init.body), auth: init.headers.authorization };
+        return json({ runId: 'r1' });
+      }
+      return json({ status: 'COMPLETED', output: { items: [{ html: PRICED }] } });
+    });
+    const page = await monidFetch('https://a.test/s', { fetchImpl });
+    expect(sent.url).toBe('https://api.monid.ai/v1/run');
+    expect(sent.auth).toBe('Bearer mk-test');
+    expect(sent.body.provider).toBe('context.dev');
+    expect(sent.body.endpoint).toBe('/web/scrape/html');
+    expect(sent.body.input.queryParams).toEqual({
+      url: 'https://a.test/s', country: 'gb', maxAgeMs: 0, waitForMs: 10000,
+    });
+    expect(page).toMatchObject({ via: 'monid', html: PRICED, markdown: null });
+  });
+
+  it('monid lets an endpoint take its input in the body instead', async () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    vi.stubEnv('MONID_POLL_MS', '0');
+    vi.stubEnv('MONID_SCRAPE_QUERY_JSON', '{}');
+    vi.stubEnv('MONID_SCRAPE_INPUT_JSON', '{"startUrls":["{{url}}"],"{{url}}":true}');
+    let body = null;
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (init.method === 'POST') {
+        body = JSON.parse(init.body);
+        return json({ runId: 'r1' });
+      }
+      return json({ status: 'COMPLETED', output: { html: PRICED } });
+    });
+    await monidFetch('https://a.test/s', { fetchImpl });
+    expect(body.input.body).toEqual({ startUrls: ['https://a.test/s'], 'https://a.test/s': true });
+    expect(body.input.queryParams).toEqual({});
+  });
+
+  it('monid reads the page wherever the endpoint parked it', async () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    vi.stubEnv('MONID_POLL_MS', '0');
+    // No `output` envelope, `id` instead of `runId`, markdown rather than html.
+    const fetchImpl = vi.fn(async (url, init) => (init.method === 'POST'
+      ? json({ id: 'r2' })
+      : json({ status: 'SUCCEEDED', result: { markdown: '# Milk £1.45' } })));
+    await expect(monidFetch('https://a.test/s', { fetchImpl }))
+      .resolves.toMatchObject({ via: 'monid', html: null, markdown: '# Milk £1.45' });
+  });
+
+  it('monid surfaces a failed run rather than returning an empty page', async () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    vi.stubEnv('MONID_POLL_MS', '0');
+    const fetchImpl = vi.fn(async (url, init) => (init.method === 'POST'
+      ? json({ runId: 'r3' })
+      : json({ status: 'FAILED', error: 'endpoint timed out' })));
+    await expect(monidFetch('https://a.test/s', { fetchImpl }))
+      .rejects.toMatchObject({ code: 'render-failed' });
+  });
+
+  it('monid reports a broken input template as configuration, not as an answer', async () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    vi.stubEnv('MONID_SCRAPE_INPUT_JSON', '{oops');
+    const fetchImpl = vi.fn();
+    await expect(monidFetch('https://a.test/s', { fetchImpl }))
+      .rejects.toMatchObject({ code: 'bad-config' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('monid refuses to run without a key instead of calling unauthenticated', async () => {
+    const fetchImpl = vi.fn();
+    await expect(monidFetch('https://a.test/s', { fetchImpl }))
+      .rejects.toMatchObject({ code: 'not-configured' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('jina reads keylessly and returns markdown, not html', async () => {
     const fetchImpl = vi.fn(async (url, init) => {
       expect(String(url)).toBe('https://r.jina.ai/https://a.test/s');
@@ -193,6 +276,26 @@ describe('escalation — the point of the ladder', () => {
       { strategy: 'direct', ok: true, accepted: false },
       { strategy: 'firecrawl', ok: true, accepted: true },
     ]);
+  });
+
+  it('escalates through monid when direct returned only a shell', async () => {
+    vi.stubEnv('MONID_API_KEY', 'mk-test');
+    vi.stubEnv('MONID_POLL_MS', '0');
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (init?.method === 'POST') return json({ runId: 'r4' });
+      if (String(url).includes('api.monid.ai')) {
+        return json({ status: 'COMPLETED', output: { items: [{ html: PRICED }] } });
+      }
+      return res(SHELL);
+    });
+    const out = await crawlPage('https://a.test/s', {
+      fetchImpl,
+      strategies: ['direct', 'monid'],
+      accept: (page) => deterministicPass(page, 'milk').rows.length > 0,
+    });
+    expect(out).toMatchObject({ ok: true, via: 'monid' });
+    expect(out.attempts[0]).toMatchObject({ strategy: 'direct', ok: true, accepted: false });
+    expect(out.attempts[1]).toMatchObject({ strategy: 'monid', ok: true, accepted: true });
   });
 
   it('keeps going when a shop blocks the direct fetch outright', async () => {

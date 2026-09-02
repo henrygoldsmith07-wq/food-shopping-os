@@ -69,6 +69,7 @@ export async function GET() {
       google: Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET),
       apple: Boolean(process.env.AUTH_APPLE_ID && process.env.AUTH_APPLE_SECRET),
       microsoft: Boolean(process.env.AUTH_MICROSOFT_ID && process.env.AUTH_MICROSOFT_SECRET),
+      dev: process.env.AUTH_DEV_LOGIN === 'true',
     },
     capabilities: {
       ai: Boolean(process.env.OPENAI_API_KEY),

@@ -9,10 +9,16 @@
  *
  * So fetching is a ladder rather than a single attempt:
  *
+ *   monid      — a scraping endpoint run through the Monid API (api.monid.ai).
+ *                Free on this workspace, so when MONID_API_KEY is set it
+ *                leads: it renders JavaScript and returns real HTML, which
+ *                keeps the structured passes working. A run takes seconds to
+ *                minutes, so without a key the ladder simply starts at direct.
  *   direct     — plain fetch. Free, instant, works on server-rendered shops.
  *   firecrawl  — headless render via Firecrawl. Needs FIRECRAWL_API_KEY and
- *                costs credits, so it is only reached when direct found
- *                nothing. Returns real HTML, so structured parsing still works.
+ *                costs credits, so it is only reached when the rungs before
+ *                it found nothing. Returns real HTML, so structured parsing
+ *                still works.
  *   jina       — r.jina.ai. Keyless, renders JavaScript, returns markdown
  *                rather than HTML, so only the text pass can read it. Last
  *                resort, and free.
@@ -21,7 +27,7 @@
  * a price" are different questions, and only the second one matters.
  */
 
-const DEFAULT_ORDER = ['direct', 'firecrawl', 'jina'];
+const DEFAULT_ORDER = ['monid', 'direct', 'firecrawl', 'jina'];
 
 export const USER_AGENT = process.env.SCRAPER_USER_AGENT
   || 'ForqBot/1.0 (+https://github.com/henrygoldsmith07-wq/food-shopping-os; price comparison for personal shopping lists)';
@@ -31,6 +37,7 @@ const RENDER_TIMEOUT_MS = Number(process.env.SCRAPER_RENDER_TIMEOUT_MS || 25000)
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 
 export const firecrawlConfigured = () => Boolean(process.env.FIRECRAWL_API_KEY);
+export const monidConfigured = () => Boolean(process.env.MONID_API_KEY);
 export const jinaEnabled = () => process.env.JINA_READER_ENABLED !== 'false';
 
 /** A fetch error the orchestrator can turn into a per-shop status. */
@@ -54,12 +61,13 @@ export const availableStrategies = () => {
   const order = configured.length ? configured : DEFAULT_ORDER;
   return order.filter((name) => {
     if (name === 'firecrawl') return firecrawlConfigured();
+    if (name === 'monid') return monidConfigured();
     if (name === 'jina') return jinaEnabled();
     return name === 'direct';
   });
 };
 
-/** Plain fetch, as a browser would. Cheapest and always tried first. */
+/** Plain fetch, as a browser would. Free and instant; leads when Monid is not configured. */
 export const directFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
   const response = await fetchImpl(url, {
     headers: {
@@ -115,6 +123,139 @@ export const firecrawlFetch = async (url, { fetchImpl = fetch, signal } = {}) =>
 };
 
 /**
+ * Pull page content out of a completed run without trusting one field name.
+ * Endpoints return different envelopes — a bare HTML string, an items array,
+ * a nested result object — so walk the JSON once and take the first strings
+ * that look like a document: HTML first so the structured passes keep
+ * working, then markdown/text as the text-only fallback.
+ */
+const HTML_KEYS = ['html', 'rawhtml'];
+const TEXT_KEYS = ['markdown', 'text', 'content'];
+
+const contentFrom = (value, found = { html: null, markdown: null }, depth = 0) => {
+  if (found.html || depth > 6) return found;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      contentFrom(entry, found, depth + 1);
+      if (found.html) break;
+    }
+    return found;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value)) {
+      if (typeof entry !== 'string' || !entry) continue;
+      const name = key.toLowerCase();
+      if (!found.html && HTML_KEYS.includes(name)) found.html = entry;
+      else if (!found.markdown && TEXT_KEYS.includes(name)) found.markdown = entry;
+    }
+    if (!found.html) {
+      for (const entry of Object.values(value)) {
+        if (entry && typeof entry === 'object') {
+          contentFrom(entry, found, depth + 1);
+          if (found.html) break;
+        }
+      }
+    }
+  }
+  return found;
+};
+
+/**
+ * The input sent to the configured Monid endpoint. Endpoints have their own
+ * input schemas (that is what `monid inspect` reports), so each placement is
+ * its own overridable JSON template and `{{url}}` is where the shop's search
+ * page goes. The default targets context.dev's rendered-HTML scrape, which
+ * takes the target URL as a query parameter — with a GB exit and caching
+ * switched off, because a cached page shows yesterday's prices.
+ */
+const monidTemplates = (url) => {
+  const input = {};
+  for (const [field, envName, fallback] of [
+    ['body', 'MONID_SCRAPE_INPUT_JSON', null],
+    ['queryParams', 'MONID_SCRAPE_QUERY_JSON',
+      '{"url":"{{url}}","country":"gb","maxAgeMs":0,"waitForMs":10000}'],
+    ['pathParams', 'MONID_SCRAPE_PATH_JSON', null],
+  ]) {
+    const template = process.env[envName] ?? fallback;
+    if (!template) continue;
+    try {
+      input[field] = JSON.parse(template.split('{{url}}').join(url));
+    } catch {
+      throw failure('bad-config', `${envName} is not valid JSON`);
+    }
+  }
+  if (!Object.keys(input).length) {
+    throw failure('bad-config', 'No Monid input template is configured');
+  }
+  return input;
+};
+
+/**
+ * Start a Monid run and wait for it to finish, returning the endpoint's
+ * output exactly as it came. Fire-and-poll: POST /v1/run starts the run,
+ * then GET /v1/runs/:id until it completes. A run takes seconds to minutes,
+ * and it never retries on its own — a failed or timed-out run just hands
+ * the shop to the next rung down the ladder.
+ */
+export const monidRunOutput = async (provider, endpoint, input, { fetchImpl = fetch, signal } = {}) => {
+  const key = process.env.MONID_API_KEY;
+  if (!key) throw failure('not-configured', 'Monid has no API key');
+  const base = (process.env.MONID_API_BASE_URL || 'https://api.monid.ai').replace(/\/+$/, '');
+  const headers = { authorization: `Bearer ${key}`, 'content-type': 'application/json' };
+  const runTimeoutMs = Number(process.env.MONID_RUN_TIMEOUT_MS || 60000);
+  const pollMs = Math.max(0, Number(process.env.MONID_POLL_MS || 2000));
+  const requestSignal = signal || AbortSignal.timeout(runTimeoutMs + 5000);
+
+  const start = await fetchImpl(`${base}/v1/run`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ provider, endpoint, input }),
+    signal: requestSignal,
+    cache: 'no-store',
+  });
+  if (!start.ok) throw failure(classify(start.status), `monid ${start.status}`);
+  const started = await start.json().catch(() => null);
+  const runId = started?.runId || started?.id || started?.run?.id;
+  if (!runId) throw failure('render-failed', 'Monid returned no run id');
+
+  const deadline = Date.now() + runTimeoutMs;
+  for (;;) {
+    if (signal?.aborted) throw failure('aborted', 'Monid run aborted');
+    await new Promise((resolve) => { setTimeout(resolve, pollMs); });
+    if (Date.now() > deadline) {
+      throw failure('timeout', `Monid run ${runId} did not finish in ${runTimeoutMs}ms`);
+    }
+    const poll = await fetchImpl(`${base}/v1/runs/${encodeURIComponent(runId)}`, {
+      headers, signal: requestSignal, cache: 'no-store',
+    });
+    if (!poll.ok) throw failure(classify(poll.status), `monid run ${poll.status}`);
+    const run = await poll.json().catch(() => null);
+    const status = String(run?.status || run?.state || '').toUpperCase();
+    if (/COMPLETE|SUCCEED|DONE/.test(status)) return run?.output ?? run?.result ?? run;
+    if (/FAIL|ERROR|ABORT|CANCEL|TIMEOUT/.test(status)) {
+      throw failure('render-failed', run?.error || `Monid run ${status.toLowerCase()}`);
+    }
+  }
+};
+
+/**
+ * One page fetch through the configured Monid scraping endpoint.
+ */
+export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
+  const output = await monidRunOutput(
+    process.env.MONID_SCRAPE_PROVIDER || 'context.dev',
+    process.env.MONID_SCRAPE_ENDPOINT || '/web/scrape/html',
+    monidTemplates(url),
+    { fetchImpl, signal },
+  );
+  const content = contentFrom(output);
+  const html = content.html ? cap(content.html) : null;
+  const markdown = content.markdown ? cap(content.markdown) : null;
+  if (!html && !markdown) throw failure('empty', 'Monid run finished without page content');
+  return { html, markdown, via: 'monid' };
+};
+
+/**
  * Jina Reader. Keyless, renders JavaScript, and returns markdown — so the
  * structured passes cannot run on it and only the text pass applies. That is
  * why it sits last: its answers are the least verifiable of the three.
@@ -140,7 +281,7 @@ export const jinaFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
   return { html: null, markdown, via: 'jina' };
 };
 
-const STRATEGIES = { direct: directFetch, firecrawl: firecrawlFetch, jina: jinaFetch };
+const STRATEGIES = { direct: directFetch, firecrawl: firecrawlFetch, monid: monidFetch, jina: jinaFetch };
 
 /** Run one named strategy. Unknown names are a configuration error, not a crash. */
 export const runStrategy = async (name, url, options = {}) => {

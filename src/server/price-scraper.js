@@ -31,6 +31,7 @@ import {
 } from './scrape-parse.js';
 import { isMatch, matchScore, searchQueries } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
+import { marketFallback } from './monid-market.js';
 
 const MAX_ROWS_PER_RETAILER = 8;
 /**
@@ -326,6 +327,10 @@ export const scrapeRetailer = async (retailer, query, options = {}) => {
   let strategies = options.strategies || null;
   for (const rung of ladder.length ? ladder : [wanted]) {
     if (options.signal?.aborted) break;
+    // A budget is a promise about response time: once it is spent, the shop
+    // keeps whatever the first rungs found and the market fallback answers
+    // for it, instead of the request hanging on rung three.
+    if (options.deadline && Date.now() > options.deadline) break;
     if (tried.length) {
       await new Promise((resolve) => { setTimeout(resolve, options.retryGapMs ?? RETRY_GAP_MS); });
     }
@@ -387,7 +392,7 @@ const SHOP_CONCURRENCY = Math.max(1, Number(process.env.PRICE_SCRAPER_CONCURRENC
 
 export const scrapePrices = async (query, {
   retailerIds = [], fetchImpl = fetch, allowModel = true, signal, gapMs = 250,
-  strategies = null, concurrency = SHOP_CONCURRENCY,
+  strategies = null, concurrency = SHOP_CONCURRENCY, budgetMs = null,
 } = {}) => {
   const trimmed = String(query || '').trim();
   const checkedAt = new Date().toISOString();
@@ -395,6 +400,17 @@ export const scrapePrices = async (query, {
     return { query: trimmed, results: [], cheapest: [], checkedAt, status: 'disabled' };
   }
   const shops = scrapeableRetailers(retailerIds);
+  // A budget is a promise about response time, so shops still in flight when
+  // it expires are aborted, not just deserted — a check returns at the budget
+  // and the market fallback answers for whatever was cut. The market itself
+  // runs on the caller's signal: the abort exists to bound the shop loop, not
+  // to take the fallback down with it.
+  const budgetController = new AbortController();
+  const abortBudget = () => budgetController.abort();
+  if (signal?.aborted) budgetController.abort();
+  else signal?.addEventListener('abort', abortBudget);
+  const deadline = budgetMs ? Date.now() + budgetMs : null;
+  const budgetTimer = deadline ? setTimeout(abortBudget, Math.max(0, deadline - Date.now())) : null;
   // Indexed so results keep retailer order however the workers interleave.
   const results = new Array(shops.length);
   let next = 0;
@@ -402,21 +418,30 @@ export const scrapePrices = async (query, {
     for (;;) {
       const index = next;
       next += 1;
-      if (index >= shops.length || signal?.aborted) return;
+      if (index >= shops.length || budgetController.signal.aborted) return;
       results[index] = await scrapeRetailer(shops[index], trimmed, {
-        fetchImpl, allowModel, signal, strategies,
+        fetchImpl, allowModel, signal: budgetController.signal, strategies, deadline,
       });
       if (gapMs) await new Promise((resolve) => { setTimeout(resolve, gapMs); });
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
-  );
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
+    );
+  } finally {
+    if (budgetTimer) clearTimeout(budgetTimer);
+    signal?.removeEventListener('abort', abortBudget);
+  }
   const settled = results.filter(Boolean);
-  const cheapest = cheapestAcross(settled);
+  // A shop that would not answer may still have a listing on the market:
+  // one Google Shopping run fills the silence instead of ending in nothing.
+  const market = await marketFallback(trimmed, settled, { fetchImpl, signal });
+  const answered = market.group ? [...settled, market.group] : settled;
+  const cheapest = cheapestAcross(answered);
   return {
     query: trimmed,
-    results: settled,
+    results: answered,
     cheapest,
     best: cheapest[0] || null,
     checkedAt,
@@ -428,6 +453,7 @@ export const scrapePrices = async (query, {
     // shops, all answered directly" are very different cost profiles.
     strategiesAvailable: strategies || availableStrategies(),
     strategiesUsed: [...new Set(settled.map((result) => result.via).filter(Boolean))],
+    marketUsed: market.used,
     status: 'ok',
   };
 };

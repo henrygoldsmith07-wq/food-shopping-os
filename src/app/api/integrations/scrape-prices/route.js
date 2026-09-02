@@ -99,17 +99,25 @@ export async function POST(request) {
       for (const item of input.items) {
         // Sequential per item: one item already fans out across every shop,
         // and stacking whole items on top of that is what gets an IP blocked.
+        // Each item also gets what is left of the budget, so a slow shop
+        // inside one item cannot push the response past the function limit.
         if (Date.now() > deadline) {
           remaining.push(item);
           continue;
         }
-        checks.push(await scrapePrices(item, { retailerIds: input.retailerIds || [] }));
+        checks.push(await scrapePrices(item, {
+          retailerIds: input.retailerIds || [],
+          budgetMs: deadline - Date.now(),
+        }));
       }
       return NextResponse.json({ checks, remaining, checkedAt: new Date().toISOString() });
     }
 
     const input = scrapeRequestSchema.parse(body);
-    const result = await scrapePrices(input.query, { retailerIds: input.retailerIds || [] });
+    const result = await scrapePrices(input.query, {
+      retailerIds: input.retailerIds || [],
+      budgetMs: BATCH_BUDGET_MS,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return handleApiError(error);
