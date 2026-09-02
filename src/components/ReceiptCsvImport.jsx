@@ -32,7 +32,13 @@ export default function ReceiptCsvImport({ onDone }) {
 
   const run = () => {
     if (!result?.shops.length) return;
-    result.shops.forEach((shop) => app.saveReceipt(shop));
+    // One import, one undo step — every trip in the file reverts together.
+    app.beginImportBatch();
+    try {
+      result.shops.forEach((shop) => app.saveReceipt(shop));
+    } finally {
+      app.endImportBatch();
+    }
     setImported(result.stats);
     setText('');
   };

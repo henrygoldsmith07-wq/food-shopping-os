@@ -36,7 +36,7 @@ import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
 export function useStoreApi({
   blockPersistence, cloudStatus, latest, setState, setStorageIssue, storageIssue,
-  undoHistory, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
+  undoHistory, undoBatch, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
 }) {
   const api = useMemo(() => {      const set = (patch) => setState((s) => {
       let changes = typeof patch === 'function' ? patch(s) : patch;
@@ -58,6 +58,10 @@ export function useStoreApi({
       }
       if (s.healthVaultEnabled && !vaultKey.current
         && Object.keys(changes).some((key) => HEALTH_FIELDS.includes(key))) return s;
+      if (undoBatch?.current) {  // one import, one undo step
+        if (undoBatch.current === 'open') undoBatch.current = s;
+        return { ...s, ...changes };
+      }
       undoHistory.current = [...undoHistory.current.slice(-29), s];
       return { ...s, ...changes };
     });
@@ -81,7 +85,7 @@ export function useStoreApi({
           vaultSalt.current = null;
           setVaultUnlocked(false);
           blockPersistence.current = false;
-          undoHistory.current = [];
+          undoHistory.current = []; undoBatch.current = null;
           setStorageIssue(null);
           setState(restored);
           return { ok: true };
@@ -105,7 +109,7 @@ export function useStoreApi({
         vaultSalt.current = null;
         setVaultUnlocked(false);
         blockPersistence.current = false;
-        undoHistory.current = [];
+        undoHistory.current = []; undoBatch.current = null;
         setStorageIssue(null);
         setState({ ...EMPTY_STATE, day: todayStamp() });
       },
@@ -489,7 +493,7 @@ export function useStoreApi({
     // and lets the hook rules check this list instead of being told to skip it.
   }, [
     storageIssue, cloudStatus, blockPersistence, latest, setState, setStorageIssue,
-    setVaultUnlocked, undoHistory, vaultKey, vaultSalt, vaultWrites,
+    setVaultUnlocked, undoHistory, undoBatch, vaultKey, vaultSalt, vaultWrites,
   ]);
   return api;
 }

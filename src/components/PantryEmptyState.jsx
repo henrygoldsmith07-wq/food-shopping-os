@@ -31,8 +31,14 @@ export default function PantryEmptyState({ app, onScan, onAddManually }) {
       return;
     }
     // Through saveReceipt, not a raw write: imported trips get the same pantry
-    // reconciliation, price memory and undoable single-step as scanned ones.
-    shops.forEach((shop) => app.saveReceipt(shop));
+    // reconciliation, price memory and one-step undo as scanned ones. The batch
+    // makes the whole file a single undo step, however many trips it holds.
+    app.beginImportBatch();
+    try {
+      shops.forEach((shop) => app.saveReceipt(shop));
+    } finally {
+      app.endImportBatch();
+    }
     setSeedStatus(
       `Imported ${stats.items} items across ${stats.shops} trips.`
       + (stats.skipped ? ` ${stats.skipped} row${stats.skipped === 1 ? '' : 's'} skipped.` : ''),
