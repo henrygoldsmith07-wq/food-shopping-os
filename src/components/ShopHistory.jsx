@@ -26,7 +26,17 @@ export default function ShopHistory({ shops }) {
           {[...shops].reverse().map((s) => (
             <Card key={s.id} className="flex items-center justify-between !p-3.5">
               <div className="min-w-0">
-                <p className="font-bold text-[0.90625rem] truncate">{s.store}</p>
+                <p className="font-bold text-[0.90625rem] truncate">
+                  {s.store}
+                  {s.imported && (
+                    <span
+                      className="ml-2 inline-block rounded-full px-1.5 align-middle text-[0.625rem] font-bold"
+                      style={{ background: 'var(--card-2)', color: 'var(--muted)' }}
+                    >
+                      Imported
+                    </span>
+                  )}
+                </p>
                 <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
                   {prettyDate(s.date)} · {s.items.length} item{s.items.length === 1 ? '' : 's'}
                 </p>

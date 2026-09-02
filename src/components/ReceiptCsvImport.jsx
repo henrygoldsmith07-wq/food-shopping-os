@@ -43,6 +43,7 @@ export default function ReceiptCsvImport({ onDone }) {
         <Check size={26} strokeWidth={2.4} className="mx-auto mb-2" style={{ color: 'var(--good)' }} />
         <p className="font-extrabold">
           Imported {imported.parsed} items across {imported.shops} {imported.shops === 1 ? 'trip' : 'trips'}.
+          {imported.skipped ? ` ${imported.skipped} row${imported.skipped === 1 ? ' was' : 's were'} skipped.` : ''}
         </p>
         <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
           They count like any recorded shop — price memory and analytics included.

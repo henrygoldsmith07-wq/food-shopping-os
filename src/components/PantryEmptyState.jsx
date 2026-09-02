@@ -30,10 +30,12 @@ export default function PantryEmptyState({ app, onScan, onAddManually }) {
       setSeedStatus(errors[0] || 'No usable rows found. Expected columns: date, store, item, qty, price.');
       return;
     }
-    app.set((s) => ({ shops: [...s.shops, ...shops] }));
+    // Through saveReceipt, not a raw write: imported trips get the same pantry
+    // reconciliation, price memory and undoable single-step as scanned ones.
+    shops.forEach((shop) => app.saveReceipt(shop));
     setSeedStatus(
       `Imported ${stats.items} items across ${stats.shops} trips.`
-      + (errors.length ? ` ${errors.length} row${errors.length === 1 ? '' : 's'} skipped.` : ''),
+      + (stats.skipped ? ` ${stats.skipped} row${stats.skipped === 1 ? '' : 's'} skipped.` : ''),
     );
   };
 

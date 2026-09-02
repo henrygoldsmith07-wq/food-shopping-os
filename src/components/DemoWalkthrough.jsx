@@ -65,9 +65,13 @@ export default function DemoWalkthrough({ onNavigate }) {
     const s = DEMO_WALKTHROUGH[step];
     if (s?.action) runAction(s.action);
     if (s?.tab) onNavigate?.(s.tab);
-    if (step < DEMO_WALKTHROUGH.length - 1) {
-      setStep(step + 1);
+    if (step >= DEMO_WALKTHROUGH.length - 1) {
+      // Last step: finishing means leaving the sandbox entirely. Without this
+      // the walkthrough card could never be dismissed from its own button.
+      app.exitDemoMode();
+      return;
     }
+    setStep(step + 1);
   };
 
   return (
