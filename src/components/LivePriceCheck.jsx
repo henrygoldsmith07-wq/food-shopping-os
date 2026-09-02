@@ -27,6 +27,7 @@ import FoodTags from './FoodTags.jsx';
 import FoodTagFilters from './FoodTagFilters.jsx';
 import BrandedSuggestions from './BrandedSuggestions.jsx';
 import PriceWatch from './PriceWatch.jsx';
+import MonidProvenance from './MonidProvenance.jsx';
 
 /**
  * Live prices, read from the shops' own search pages when you ask.
@@ -414,6 +415,7 @@ export default function LivePriceCheck({
                 Some prices were read off the page by AI because the shop published no structured price data. Treat those as a hint and confirm at the shelf.
               </p>
             )}
+            <MonidProvenance results={entries.map(([key, entry]) => ({ name: entry.name || key, ...entry }))} />
             {stats.products > 0 && (
               <p className="mt-2.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
                 Catalogue: {stats.products} product{stats.products === 1 ? '' : 's'} across{' '}

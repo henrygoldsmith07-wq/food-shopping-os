@@ -31,6 +31,7 @@ import {
 } from './scrape-parse.js';
 import { isMatch, matchScore, searchQueries } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
+import { monidPrices, monidOnPath } from './monid-prices.js';
 
 const MAX_ROWS_PER_RETAILER = 8;
 /**
@@ -387,7 +388,7 @@ const SHOP_CONCURRENCY = Math.max(1, Number(process.env.PRICE_SCRAPER_CONCURRENC
 
 export const scrapePrices = async (query, {
   retailerIds = [], fetchImpl = fetch, allowModel = true, signal, gapMs = 250,
-  strategies = null, concurrency = SHOP_CONCURRENCY,
+  strategies = null, concurrency = SHOP_CONCURRENCY, allowMonid = true,
 } = {}) => {
   const trimmed = String(query || '').trim();
   const checkedAt = new Date().toISOString();
@@ -412,8 +413,21 @@ export const scrapePrices = async (query, {
   await Promise.all(
     Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
   );
+  // Monid is the last rung of the whole ladder, not of any one shop: one
+  // hosted lookup per product, appended after the local shops have had their
+  // say. Opt-in — off unless the CLI and key are present, and off entirely
+  // with MONID_DISABLED=true.
   const settled = results.filter(Boolean);
-  const cheapest = cheapestAcross(settled);
+  let monid = null;
+  if (allowMonid !== false && monidOnPath()) {
+    try {
+      monid = await monidPrices(trimmed, { fetchImpl });
+    } catch {
+      monid = null;
+    }
+  }
+  const withMonid = monid && monid.rows?.length ? [...settled, monid] : settled;
+  const cheapest = cheapestAcross(withMonid);
   return {
     query: trimmed,
     results: settled,
@@ -422,7 +436,8 @@ export const scrapePrices = async (query, {
     checkedAt,
     shopsChecked: settled.length,
     shopsAnswered: settled.filter((result) => result.status === 'ok').length,
-    aiUsed: settled.some((result) => result.rows.some((row) => row.method === 'ai-extracted')),
+    monid: monid ? { status: monid.status, provider: monid.provider || null, rows: monid.rows.length } : null,
+    aiUsed: withMonid.some((result) => result.rows.some((row) => row.method === 'ai-extracted')),
     // Which fetch strategies were available, and which actually answered.
     // Worth surfacing: "eight shops, all answered by the renderer" and "eight
     // shops, all answered directly" are very different cost profiles.

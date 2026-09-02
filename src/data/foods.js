@@ -23,6 +23,24 @@ import { CATALOGUE_300_PLUS, BRANDED_CATALOGUE_300_PLUS } from './catalogue-300.
 import { CATALOGUE_600_PLUS } from './catalogue-600.js';
 import { CATALOGUE_DOUBLE } from './catalogue-double.js';
 import { MASTER_FOOD_EXPANSION } from './master-food-expansion.js';
+import { CATALOGUE_SEVENTH_WAVE } from './catalogue-seventh-wave.js';
+import { CATALOGUE_EIGHTH_WAVE } from './catalogue-eighth-wave.js';
+import { CATALOGUE_NINTH_WAVE } from './catalogue-ninth-wave.js';
+import { CATALOGUE_TENTH_WAVE } from './catalogue-tenth-wave.js';
+import { CATALOGUE_ELEVENTH_WAVE } from './catalogue-eleventh-wave.js';
+import { CATALOGUE_TWELFTH_WAVE } from './catalogue-twelfth-wave.js';
+import { CATALOGUE_THIRTEENTH_WAVE } from './catalogue-thirteenth-wave.js';
+import { CATALOGUE_FOURTEENTH_WAVE } from './catalogue-fourteenth-wave.js';
+import { CATALOGUE_FIFTEENTH_WAVE } from './catalogue-fifteenth-wave.js';
+import { CATALOGUE_SIXTEENTH_WAVE } from './catalogue-sixteenth-wave.js';
+import { CATALOGUE_SEVENTEENTH_WAVE } from './catalogue-seventeenth-wave.js';
+import { CATALOGUE_EIGHTEENTH_WAVE } from './catalogue-eighteenth-wave.js';
+import { CATALOGUE_NINETEENTH_WAVE } from './catalogue-nineteenth-wave.js';
+import { CATALOGUE_TWENTIETH_WAVE } from './catalogue-twentieth-wave.js';
+import { CATALOGUE_TWENTY_FIRST_WAVE } from './catalogue-twenty-first-wave.js';
+import { CATALOGUE_TWENTY_SECOND_WAVE } from './catalogue-twenty-second-wave.js';
+import { CATALOGUE_TWENTY_THIRD_WAVE } from './catalogue-twenty-third-wave.js';
+import { CATALOGUE_TWENTY_FOURTH_WAVE } from './catalogue-twenty-fourth-wave.js';
 
 const n = ([kcal, protein, carbs, fat, fibre = 0]) => ({ kcal, protein, carbs, fat, fibre });
 const s = (pairs) => pairs.map(([label, grams]) => ({ label, grams }));
@@ -292,6 +310,24 @@ export const FOODS = [
   ...CATALOGUE_600_PLUS,
   ...CATALOGUE_DOUBLE,
   ...MASTER_FOOD_EXPANSION,
+  ...CATALOGUE_SEVENTH_WAVE,
+  ...CATALOGUE_EIGHTH_WAVE,
+  ...CATALOGUE_NINTH_WAVE,
+  ...CATALOGUE_TENTH_WAVE,
+  ...CATALOGUE_ELEVENTH_WAVE,
+  ...CATALOGUE_TWELFTH_WAVE,
+  ...CATALOGUE_THIRTEENTH_WAVE,
+  ...CATALOGUE_FOURTEENTH_WAVE,
+  ...CATALOGUE_FIFTEENTH_WAVE,
+  ...CATALOGUE_SIXTEENTH_WAVE,
+  ...CATALOGUE_SEVENTEENTH_WAVE,
+  ...CATALOGUE_EIGHTEENTH_WAVE,
+  ...CATALOGUE_NINETEENTH_WAVE,
+  ...CATALOGUE_TWENTIETH_WAVE,
+  ...CATALOGUE_TWENTY_FIRST_WAVE,
+  ...CATALOGUE_TWENTY_SECOND_WAVE,
+  ...CATALOGUE_TWENTY_THIRD_WAVE,
+  ...CATALOGUE_TWENTY_FOURTH_WAVE,
 ].filter((food) => {
   if (seenFoodIds.has(food.id)) return false;
   seenFoodIds.add(food.id);
