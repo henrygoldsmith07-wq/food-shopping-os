@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Database, RefreshCw } from 'lucide-react';
 import { monidLabel } from '../lib/monid-provenance.js';
 import { monidRollup } from '../lib/monid-rollup.js';
-import { Pill } from './ui.jsx';
+import { Pill, Sparkline } from './ui.jsx';
 
 /**
  * What a Monid lookup cost and where its rows came from — in one place.
@@ -50,7 +50,7 @@ export default function MonidProvenance({ results = [] }) {
 
   const priced = runs.filter((run) => run.status === 'ok' && run.rows > 0);
   const missed = runs.filter((run) => run.status !== 'ok');
-  const { totals } = monidRollup();
+  const { totals, days } = monidRollup();
   const balanceKnown = Boolean(status?.configured === true && typeof status?.balance === 'number');
   // Unknown covers both "probe failed" and "configured but would not say" —
   // either way the honest display is "unknown", never a zero.
@@ -115,7 +115,7 @@ export default function MonidProvenance({ results = [] }) {
         </button>
       </p>
 
-      <MonidWeek totals={totals} />
+      <MonidWeek totals={totals} days={days} />
 
       {status?.configured === false && (
         <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--warn)' }}>
@@ -134,16 +134,21 @@ export default function MonidProvenance({ results = [] }) {
  * of the week's gaps it filled, and where the misses went. Quiet unless the
  * week actually asked Monid for something: an unused rung is not a report.
  */
-function MonidWeek({ totals }) {
+function MonidWeek({ totals, days }) {
   const asked = totals.filled + totals.missed + totals.failed;
   if (!asked) return null;
   const parts = [`${totals.filled} of ${asked} gaps filled this week`];
   if (totals.missed) parts.push(`${totals.missed} the catalogue had no answer for`);
   if (totals.failed) parts.push(`${totals.failed} failed`);
   if (totals.paused) parts.push(`${totals.paused} stopped by a paused rung`);
+  // Daily filled counts, not rates: a day that asked nothing truthfully has
+  // zero fills, where a rate would be a fabrication. The words carry the rate.
   return (
-    <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-      {parts.join(' · ')}.
-    </p>
+    <div className="mt-1 flex items-baseline gap-2">
+      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+        {parts.join(' · ')}.
+      </p>
+      <Sparkline points={days.map((entry) => entry.filled)} width={84} height={20} color="var(--accent)" />
+    </div>
   );
 }

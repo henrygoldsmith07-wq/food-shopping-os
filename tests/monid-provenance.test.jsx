@@ -113,4 +113,20 @@ describe('MonidProvenance panel', () => {
     expect(screen.getByText(/3 stopped by a paused rung/)).toBeTruthy();
     localStorage.removeItem('forq.monidRollup.v1');
   });
+
+  it('draws the week sparkline beside the tally, and nothing for an empty week', async () => {
+    global.fetch = okFetch({ configured: true, balance: 8 });
+    const week = {
+      [new Date().toISOString().slice(0, 10)]: { filled: 4, missed: 2, failed: 1, paused: 0 },
+    };
+    localStorage.setItem('forq.monidRollup.v1', JSON.stringify(week));
+    const { container } = render(<MonidProvenance results={[{ name: 'eggs', monid: { status: 'ok', provider: 'apify', rows: 2 } }]} />);
+    await waitFor(() => expect(screen.getByText(/4 of 7 gaps filled this week/i)).toBeTruthy());
+    expect(container.querySelector('svg')).toBeTruthy(); // the week's fills, drawn
+    localStorage.removeItem('forq.monidRollup.v1');
+    cleanup();
+    const quiet = render(<MonidProvenance results={[{ name: 'eggs', monid: null }]} />);
+    await waitFor(() => expect(screen.getByText(/Monid is connected/i)).toBeTruthy());
+    expect(quiet.container.querySelector('svg')).toBe(null); // an unasked week is not drawn
+  });
 });
