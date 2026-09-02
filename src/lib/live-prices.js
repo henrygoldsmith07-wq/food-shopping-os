@@ -384,9 +384,8 @@ export const entryFromResult = (name, result) => ({
   shopsChecked: result.shopsChecked || 0,
   shopsAnswered: result.shopsAnswered || 0,
   aiUsed: Boolean(result.aiUsed),
-  // The paid-data side of the check, kept separate from the scraped rows so
-  // the panel can report it without re-deriving it — including the miss
-  // statuses: "Monid was asked and had nothing" survives the shaping too.
+  // The paid-data side of the check, kept separate from the scraped rows
+  // so the panel can report it without re-deriving it — misses included.
   monid: result.monid
     ? {
       status: result.monid.status,

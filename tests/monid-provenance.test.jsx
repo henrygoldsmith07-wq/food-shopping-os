@@ -47,12 +47,12 @@ describe('entryFromResult carries provenance through shaping', () => {
     shopsChecked: 1,
     shopsAnswered: 1,
     aiUsed: false,
-    monid: { status: 'no-match', provider: null, rows: 0 },
+    monid: { status: 'no-match', paused: false, provider: null, rows: 0 },
   };
 
   it('keeps the monid outcome, including misses, on the entry', () => {
     const entry = entryFromResult('baked beans', base);
-    expect(entry.monid).toEqual({ status: 'no-match', provider: null, rows: 0 });
+    expect(entry.monid).toEqual({ status: 'no-match', paused: false, provider: null, rows: 0 });
   });
 
   it('omits the monid field entirely when Monid was off', () => {
@@ -69,7 +69,8 @@ describe('MonidProvenance panel', () => {
     global.fetch = okFetch({ configured: true, balance: 12 });
     const results = [
       { name: 'baked beans', monid: { status: 'ok', provider: 'apify', rows: 3 } },
-      { name: 'oat milk', monid: { status: 'no-match', provider: null, rows: 0 } },
+      { name: 'oat milk', monid: {      status: 'no-match',
+      paused: false, provider: null, rows: 0 } },
       { name: 'eggs', monid: null },
     ];
     render(<MonidProvenance results={results} />);
