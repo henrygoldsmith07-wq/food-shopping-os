@@ -326,7 +326,7 @@ function Shell() {
     <div className="app-shell min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* The first stop for a keyboard or switch user: past the chrome, into
           the day. Invisible until it has focus. */}
-      <a href="#main" className="skip-link">Skip to content</a>
+      <a href="#content" className="skip-link">Skip to content</a>
 
       <DemoBanner />
 
@@ -338,7 +338,9 @@ function Shell() {
         />
 
         {/* Room at the foot for the tab bar and the screen's primary action. */}
-        <main id="main" tabIndex={-1} className="app-main pb-44">
+        <main id="content" tabIndex={-1} className="app-main pb-44" onFocus={(event) => {
+          if (event.target === event.currentTarget) event.currentTarget.scrollIntoView({ block: 'start' });
+        }}>
           {app.storageIssue && (
             <div role="alert" className="mx-5 mt-4 flex items-start gap-2 rounded-2xl border p-3" style={{ borderColor: 'var(--warn)' }}>
               <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />

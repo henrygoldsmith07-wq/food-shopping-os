@@ -347,12 +347,19 @@ select { font-size: 1rem !important; }
 
 /* Skip past the chrome to the day's content — the first thing a keyboard or
    switch user meets, and invisible until it has focus. */
+.skip-link-landmark {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
 .skip-link {
   position: fixed;
   top: 0;
   left: 50%;
   transform: translate(-50%, -110%);
   z-index: 60;
+  pointer-events: none;
   padding: 0.75rem 1.25rem;
   border-radius: 0 0 1rem 1rem;
   background: var(--accent);
@@ -361,7 +368,7 @@ select { font-size: 1rem !important; }
   font-size: 0.875rem;
   transition: transform 160ms ease;
 }
-.skip-link:focus { transform: translate(-50%, 0); }
+.skip-link:focus { transform: translate(-50%, 0); pointer-events: auto; }
 
 ::selection { background: var(--accent-soft); }
 
