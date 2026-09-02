@@ -327,6 +327,10 @@ export const scrapeRetailer = async (retailer, query, options = {}) => {
   let strategies = options.strategies || null;
   for (const rung of ladder.length ? ladder : [wanted]) {
     if (options.signal?.aborted) break;
+    // A budget is a promise about response time: once it is spent, the shop
+    // keeps whatever the first rungs found and the market fallback answers
+    // for it, instead of the request hanging on rung three.
+    if (options.deadline && Date.now() > options.deadline) break;
     if (tried.length) {
       await new Promise((resolve) => { setTimeout(resolve, options.retryGapMs ?? RETRY_GAP_MS); });
     }
@@ -388,7 +392,7 @@ const SHOP_CONCURRENCY = Math.max(1, Number(process.env.PRICE_SCRAPER_CONCURRENC
 
 export const scrapePrices = async (query, {
   retailerIds = [], fetchImpl = fetch, allowModel = true, signal, gapMs = 250,
-  strategies = null, concurrency = SHOP_CONCURRENCY,
+  strategies = null, concurrency = SHOP_CONCURRENCY, budgetMs = null,
 } = {}) => {
   const trimmed = String(query || '').trim();
   const checkedAt = new Date().toISOString();
@@ -396,6 +400,11 @@ export const scrapePrices = async (query, {
     return { query: trimmed, results: [], cheapest: [], checkedAt, status: 'disabled' };
   }
   const shops = scrapeableRetailers(retailerIds);
+  // A budget stops shops being *started* once the time is gone. Shops already
+  // mid-flight finish, and unchecked shops are simply absent from the results
+  // — never invented — so a slow renderer cannot turn a price check into a
+  // hang.
+  const deadline = budgetMs ? Date.now() + budgetMs : null;
   // Indexed so results keep retailer order however the workers interleave.
   const results = new Array(shops.length);
   let next = 0;
@@ -404,8 +413,9 @@ export const scrapePrices = async (query, {
       const index = next;
       next += 1;
       if (index >= shops.length || signal?.aborted) return;
+      if (deadline && Date.now() > deadline) return;
       results[index] = await scrapeRetailer(shops[index], trimmed, {
-        fetchImpl, allowModel, signal, strategies,
+        fetchImpl, allowModel, signal, strategies, deadline,
       });
       if (gapMs) await new Promise((resolve) => { setTimeout(resolve, gapMs); });
     }

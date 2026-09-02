@@ -7,11 +7,11 @@
 	"scripts": {
 		"setup": {
 			"enabled": true,
-			"command": "npm ci --no-audit --no-fund"
+			"command": "apt-get update -qq && apt-get install -y -qq redis-server 2>/dev/null; npm ci --no-audit --no-fund"
 		},
 		"run": {
 			"enabled": true,
-			"command": "npm run dev"
+			"command": "node scripts/dev-preview.mjs"
 		},
 		"archive": {
 			"enabled": true,

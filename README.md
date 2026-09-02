@@ -35,6 +35,13 @@ uploads, calendar reads and writes, open product observations and an AI relay to
 5. Run `npm run db:migrate` to record the current data-store migration.
 6. Run `npm run dev`.
 
+**No credentials yet?** `node scripts/dev-preview.mjs` runs the whole stack
+against a local in-memory Redis behind an Upstash-compatible bridge, with a
+preview-only sign-in (`AUTH_DEV_LOGIN`) that needs no OAuth account — the
+fastest way to see live prices, the market fallback and Open Prices populate
+in the app. Data is in-memory and disposable, and it is not a development
+mode for production.
+
 `npm run db:check` verifies the connection and applied migrations. Production
 deployments should run `npm run db:migrate` as a controlled release step before
 the new application version receives traffic.
@@ -274,6 +281,7 @@ the shops answered.
 | `MONID_MARKET_ENDPOINT` | `/burbn/google-shopping-scraper` | Endpoint for the market fallback. Confirm its schema with `monid inspect` before changing it. |
 | `MONID_MARKET_INPUT_JSON` | `{"searchQuery":"{{query}}","country":"gb","language":"en","maxResults":10}` | Body for the market endpoint; `{{query}}` is replaced with the shopping-list search. |
 | `PRICE_SCRAPER_ENABLED` | `true` | Set to `false` to switch live price checking off entirely. |
+| `SCRAPE_BATCH_BUDGET_MS` | `40000` | Per-request wall-time budget for the scraper: shops are not *started* once the budget is spent (in-flight ones finish, and the market fallback answers for them), so a slow renderer cannot turn a check into a hang. |
 | `PRICE_SCRAPER_RETAILERS` | all | Comma-separated allowlist of retailer ids, e.g. `tesco,aldi`. |
 | `SCRAPER_TIMEOUT_MS` | `9000` | Per-page timeout for the direct fetch. |
 | `SCRAPER_RENDER_TIMEOUT_MS` | `25000` | Per-page timeout for a rendering strategy. |
