@@ -238,6 +238,20 @@ load prices" where a renderer was needed.
 that declined — the permission check runs before any strategy, and a refusal
 means no fetch by any route.
 
+### When the shops stay silent
+
+Several UK grocers never show a headless renderer their prices: some gate the
+grid behind a postcode, some refuse every route, one forbids the crawl in
+robots.txt. So when every checked shop came back without a price, the scraper
+runs one Google Shopping query through Monid (`apify /burbn/google-shopping-scraper`)
+and folds the market's answers in: a listing for a checked shop fills that
+shop's empty result, and listings from shops not being checked land in an
+"Other shops" group so nothing is thrown away. Market rows are labelled with
+their provenance (`Google Shopping (Asda) listing`) and carry medium
+confidence — they are the store's own listing, but not a price read from its
+page. Set `PRICE_SCRAPER_MARKET=off` to disable, or `on` to run it even when
+the shops answered.
+
 ### Environment variables
 
 | Variable | Default | What it does |
@@ -255,6 +269,10 @@ means no fetch by any route.
 | `JINA_API_KEY` | unset | Optional. Raises Jina Reader's rate limit; it works keylessly without one. |
 | `JINA_READER_ENABLED` | `true` | Set to `false` to drop the keyless renderer from the ladder. |
 | `PRICE_SCRAPER_STRATEGIES` | `monid,direct,firecrawl,jina` | Explicit ladder order, comma-separated. Unconfigured strategies are dropped. |
+| `PRICE_SCRAPER_MARKET` | `auto` | Google Shopping fallback through Monid: `auto` runs only when no shop produced a price, `on` always runs it, `off` disables. |
+| `MONID_MARKET_PROVIDER` | `apify` | Provider for the market fallback's Google Shopping endpoint. |
+| `MONID_MARKET_ENDPOINT` | `/burbn/google-shopping-scraper` | Endpoint for the market fallback. Confirm its schema with `monid inspect` before changing it. |
+| `MONID_MARKET_INPUT_JSON` | `{"searchQuery":"{{query}}","country":"gb","language":"en","maxResults":10}` | Body for the market endpoint; `{{query}}` is replaced with the shopping-list search. |
 | `PRICE_SCRAPER_ENABLED` | `true` | Set to `false` to switch live price checking off entirely. |
 | `PRICE_SCRAPER_RETAILERS` | all | Comma-separated allowlist of retailer ids, e.g. `tesco,aldi`. |
 | `SCRAPER_TIMEOUT_MS` | `9000` | Per-page timeout for the direct fetch. |

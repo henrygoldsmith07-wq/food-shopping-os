@@ -31,6 +31,7 @@ import {
 } from './scrape-parse.js';
 import { isMatch, matchScore, searchQueries } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
+import { marketFallback } from './monid-market.js';
 
 const MAX_ROWS_PER_RETAILER = 8;
 /**
@@ -413,10 +414,14 @@ export const scrapePrices = async (query, {
     Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
   );
   const settled = results.filter(Boolean);
-  const cheapest = cheapestAcross(settled);
+  // A shop that would not answer may still have a listing on the market:
+  // one Google Shopping run fills the silence instead of ending in nothing.
+  const market = await marketFallback(trimmed, settled, { fetchImpl, signal });
+  const answered = market.group ? [...settled, market.group] : settled;
+  const cheapest = cheapestAcross(answered);
   return {
     query: trimmed,
-    results: settled,
+    results: answered,
     cheapest,
     best: cheapest[0] || null,
     checkedAt,
@@ -428,6 +433,7 @@ export const scrapePrices = async (query, {
     // shops, all answered directly" are very different cost profiles.
     strategiesAvailable: strategies || availableStrategies(),
     strategiesUsed: [...new Set(settled.map((result) => result.via).filter(Boolean))],
+    marketUsed: market.used,
     status: 'ok',
   };
 };

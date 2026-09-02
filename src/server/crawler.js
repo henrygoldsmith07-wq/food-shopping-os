@@ -191,17 +191,16 @@ const monidTemplates = (url) => {
 };
 
 /**
- * Monid's run API. Fire-and-poll: POST /v1/run starts the configured
- * endpoint, then GET /v1/runs/:id until it finishes. A run takes seconds
- * to minutes, and it never retries on its own — a failed or timed-out run
- * just hands the shop to the next rung down the ladder.
+ * Start a Monid run and wait for it to finish, returning the endpoint's
+ * output exactly as it came. Fire-and-poll: POST /v1/run starts the run,
+ * then GET /v1/runs/:id until it completes. A run takes seconds to minutes,
+ * and it never retries on its own — a failed or timed-out run just hands
+ * the shop to the next rung down the ladder.
  */
-export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
+export const monidRunOutput = async (provider, endpoint, input, { fetchImpl = fetch, signal } = {}) => {
   const key = process.env.MONID_API_KEY;
   if (!key) throw failure('not-configured', 'Monid has no API key');
   const base = (process.env.MONID_API_BASE_URL || 'https://api.monid.ai').replace(/\/+$/, '');
-  const provider = process.env.MONID_SCRAPE_PROVIDER || 'context.dev';
-  const endpoint = process.env.MONID_SCRAPE_ENDPOINT || '/web/scrape/html';
   const headers = { authorization: `Bearer ${key}`, 'content-type': 'application/json' };
   const runTimeoutMs = Number(process.env.MONID_RUN_TIMEOUT_MS || 60000);
   const pollMs = Math.max(0, Number(process.env.MONID_POLL_MS || 2000));
@@ -210,7 +209,7 @@ export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
   const start = await fetchImpl(`${base}/v1/run`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ provider, endpoint, input: monidTemplates(url) }),
+    body: JSON.stringify({ provider, endpoint, input }),
     signal: requestSignal,
     cache: 'no-store',
   });
@@ -232,17 +231,28 @@ export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
     if (!poll.ok) throw failure(classify(poll.status), `monid run ${poll.status}`);
     const run = await poll.json().catch(() => null);
     const status = String(run?.status || run?.state || '').toUpperCase();
-    if (/COMPLETE|SUCCEED|DONE/.test(status)) {
-      const content = contentFrom(run?.output ?? run?.result ?? run);
-      const html = content.html ? cap(content.html) : null;
-      const markdown = content.markdown ? cap(content.markdown) : null;
-      if (!html && !markdown) throw failure('empty', 'Monid run finished without page content');
-      return { html, markdown, via: 'monid' };
-    }
+    if (/COMPLETE|SUCCEED|DONE/.test(status)) return run?.output ?? run?.result ?? run;
     if (/FAIL|ERROR|ABORT|CANCEL|TIMEOUT/.test(status)) {
       throw failure('render-failed', run?.error || `Monid run ${status.toLowerCase()}`);
     }
   }
+};
+
+/**
+ * One page fetch through the configured Monid scraping endpoint.
+ */
+export const monidFetch = async (url, { fetchImpl = fetch, signal } = {}) => {
+  const output = await monidRunOutput(
+    process.env.MONID_SCRAPE_PROVIDER || 'context.dev',
+    process.env.MONID_SCRAPE_ENDPOINT || '/web/scrape/html',
+    monidTemplates(url),
+    { fetchImpl, signal },
+  );
+  const content = contentFrom(output);
+  const html = content.html ? cap(content.html) : null;
+  const markdown = content.markdown ? cap(content.markdown) : null;
+  if (!html && !markdown) throw failure('empty', 'Monid run finished without page content');
+  return { html, markdown, via: 'monid' };
 };
 
 /**
