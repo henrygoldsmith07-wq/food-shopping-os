@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Database, RefreshCw } from 'lucide-react';
-import { monidLabel } from '../lib/live-prices.js';
+import { monidLabel } from '../lib/monid-provenance.js';
 import { Pill } from './ui.jsx';
 
 /**
