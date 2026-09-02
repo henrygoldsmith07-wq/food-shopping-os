@@ -6,16 +6,21 @@
  * estimates (`nutritionStatus`) until generated or imported data fills them
  * in. Ids are namespaced `more3-` to stay clear of every earlier pool.
  */
-const make = (id, name, cuisine, meal, tags, difficulty = 'Easy', time = 30) => ({
-  id: `more3-${id}`, name, title: name,
-  emoji: meal === 'breakfast' ? '🍳' : meal === 'lunch' ? '🥗' : '🍲',
-  cuisine, meal,
-  tags: [...new Set([cuisine.toLowerCase(), ...tags])],
-  time, prep: Math.min(15, time), difficulty, servings: 4,
-  kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0,
-  nutritionStatus: 'estimated-from-ingredients',
-  ingredients: [], steps: [], discoverable: true,
-});
+import { estimateRecipe } from './recipe-estimate.js';
+
+const make = (id, name, cuisine, meal, tags, difficulty = 'Easy', time = 30) => {
+  const { dietTags, ...estimated } = estimateRecipe(name);
+  return {
+    id: `more3-${id}`, name, title: name,
+    emoji: meal === 'breakfast' ? '🍳' : meal === 'lunch' ? '🥗' : '🍲',
+    cuisine, meal,
+    tags: [...new Set([cuisine.toLowerCase(), ...tags.filter((t) => !['vegan', 'vegetarian', 'meat', 'fish'].includes(t)), ...dietTags])],
+    time, prep: Math.min(15, time), difficulty, servings: 4,
+    nutritionStatus: 'estimated-from-ingredients',
+    ...estimated,
+    discoverable: true,
+  };
+};
 
 export const MORE_RECIPES_THREE = [
   /* Breakfast */

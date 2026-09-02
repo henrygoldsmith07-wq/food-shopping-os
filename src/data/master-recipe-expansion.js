@@ -7,6 +7,8 @@
  * filters, while its nutrition is explicitly marked as an estimate.
  */
 
+import { estimateRecipe } from './recipe-estimate.js';
+
 const slug = (value) => value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 const unique = (items) => [...new Set(items.filter(Boolean))];
 
@@ -60,7 +62,14 @@ const inferDifficulty = (name) => name.includes('slow cooker') || name.includes(
 const makeRecipe = (name) => {
   const lower = name.toLowerCase();
   const cuisine = inferCuisine(lower);
-  const tags = inferTags(lower, cuisine);
+  const { dietTags, ...estimated } = estimateRecipe(name);
+  /* Diet tags come from the estimated ingredients, not the name keywords. */
+  const tags = unique([
+    ...inferTags(lower, cuisine).filter((t) => !['vegan', 'vegetarian', 'meat', 'fish'].includes(t)),
+    ...dietTags,
+    ...(estimated.ingredients.some((i) => /chicken|beef|pork|lamb|duck|sausage|bacon|steak|burger|meatball|wing/i.test(i.name)) ? ['meat'] : []),
+    ...(estimated.ingredients.some((i) => /salmon|cod|haddock|tuna|prawn|mackerel|sardine|crab|lobster|squid/i.test(i.name)) ? ['fish'] : []),
+  ]);
   const meal = inferMeal(lower, tags);
   const isBreakfast = meal === 'breakfast';
   const isDessert = ['cake', 'pie', 'pudding', 'brownie', 'blondie', 'mousse', 'tiramisu', 'tart', 'ice cream', 'panna cotta', 'pavlova', 'trifle', 'profiterole', 'cannoli', 'sundae', 'cookie', 'donut', 'doughnut', 'baklava', 'delight'].some((word) => lower.includes(word));
@@ -83,8 +92,7 @@ const makeRecipe = (name) => {
     fat: 0,
     fibre: 0,
     nutritionStatus: 'estimated-from-ingredients',
-    ingredients: [],
-    steps: [],
+    ...estimated,
     discoverable: true,
   };
 };

@@ -17,6 +17,8 @@ const norm = (str) => String(str || '').toLowerCase().trim();
 
 /* ---------- Search ---------- */
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const score = (food, q) => {
   const name = norm(food.name);
   const brand = norm(food.brand);
@@ -24,6 +26,10 @@ const score = (food, q) => {
   const metadata = [food.category, food.subcategory, food.cuisine, food.preparationState, food.rawCooked]
     .filter(Boolean).map(norm);
   if (name === q || aliases.includes(q)) return 100;
+  if (aliases.some((alias) => alias === q)) return 100;
+  const wholeWord = new RegExp(`\\b${escapeRegex(q)}\\b`).test(name)
+    || aliases.some((alias) => new RegExp(`\\b${escapeRegex(q)}\\b`).test(alias));
+  if (wholeWord) return 90;
   if (name.startsWith(q) || aliases.some((alias) => alias.startsWith(q))) return 80;
   if (name.includes(q) || aliases.some((alias) => alias.includes(q))) return 60;
   if (brand.includes(q)) return 40;

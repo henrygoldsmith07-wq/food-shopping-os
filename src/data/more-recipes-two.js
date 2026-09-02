@@ -1,8 +1,16 @@
-const make = (id, name, cuisine, meal, tags, difficulty = 'Easy', time = 30) => ({
-  id: `more-recipe-two-${id}`, name, title: name, emoji: meal === 'breakfast' ? '🍳' : meal === 'lunch' ? '🥗' : '🍲', cuisine, meal,
-  tags: [...new Set([cuisine.toLowerCase(), ...tags])], time, prep: Math.min(15, time), difficulty, servings: 4,
-  kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, nutritionStatus: 'estimated-from-ingredients', ingredients: [], steps: [], discoverable: true,
-});
+import { estimateRecipe } from './recipe-estimate.js';
+
+const make = (id, name, cuisine, meal, tags, difficulty = 'Easy', time = 30) => {
+  const { dietTags, ...estimated } = estimateRecipe(name);
+  return {
+    id: `more-recipe-two-${id}`, name, title: name, emoji: meal === 'breakfast' ? '🍳' : meal === 'lunch' ? '🥗' : '🍲', cuisine, meal,
+    tags: [...new Set([cuisine.toLowerCase(), ...tags.filter((t) => !['vegan', 'vegetarian', 'meat', 'fish'].includes(t)), ...dietTags])],
+    time, prep: Math.min(15, time), difficulty, servings: 4,
+    nutritionStatus: 'estimated-from-ingredients',
+    ...estimated,
+    discoverable: true,
+  };
+};
 
 export const MORE_RECIPES_TWO = [
   make('egg-muffins', 'Cheesy Vegetable Egg Muffins', 'British', 'breakfast', ['breakfast', 'vegetarian', 'meal-prep', 'high-protein'], 'Easy', 30),
