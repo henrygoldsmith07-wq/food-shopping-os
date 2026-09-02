@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, ClipboardList, Info, Move, ShoppingCart, Snowflake,
-  Sparkles, X,
-} from 'lucide-react';
+import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, ClipboardList, Info, Move, ShoppingCart, Snowflake, Sparkles, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
@@ -21,6 +18,7 @@ import { tasteScore } from '../lib/taste.js';
 import { Section, Card, Chip, Pill, Sheet, FoodArt } from './ui.jsx';
 import { MonthGrid, WeekGrid } from './PlanCalendar.jsx';
 import PlanGenerator from './PlanGenerator.jsx';
+import PlanRepeatLastWeek from './PlanRepeatLastWeek.jsx';
 import PrimaryAction from './PrimaryAction.jsx';
 import CalendarAvailability from './CalendarAvailability.jsx';
 import MonthMealRow from './MonthMealRow.jsx';
@@ -225,6 +223,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
         {offset !== 0 && (
           <p className="mb-2 text-[0.78125rem] font-bold" style={{ color: 'var(--muted)' }}>{rangeLabel}</p>
         )}
+        <PlanRepeatLastWeek dates={week} />
         {moving && (
           <Card className="!p-3 mb-2.5 flex items-center justify-between gap-2" style={{ borderColor: 'var(--accent)' }}>
             <p className="text-[0.78125rem] font-bold inline-flex items-center gap-1.5">

@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
-import { Check, History, Plus, Receipt } from 'lucide-react';
+import { Check, ClipboardPaste, History, Plus, Receipt } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
+import { parsePastedList } from '../lib/shopping-paste.js';
 import { gbp } from '../lib/utils.js';
 import { COMMON_STORES, checkedTotalOf, guessAisle } from '../data/stores.js';
 import { findShoppingDuplicate, quantitySuggestion } from '../lib/shopping.js';
@@ -22,9 +23,20 @@ export function AddItem({ onAdd }) {
   const [price, setPrice] = useState('');
   const [note, setNote] = useState('');
   const [priority, setPriority] = useState('normal');
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasted, setPasted] = useState('');
   const duplicate = findShoppingDuplicate(name, app.shoppingList);
   const usualQuantity = quantitySuggestion(name, app.shops);
   const amountInput = useRef(null);
+
+  const submitPaste = () => {
+    const rows = parsePastedList(pasted);
+    if (!rows.length) return;
+    onAdd(rows);
+    recordProductEvent('list_pasted', { count: rows.length });
+    setPasted('');
+    setPasteOpen(false);
+  };
 
   const submit = () => {
     if (name.trim().length < 2 || duplicate?.kind === 'exact') return;
@@ -104,6 +116,39 @@ export function AddItem({ onAdd }) {
       >
         <span className="inline-flex items-center gap-1.5"><Plus size={15} /> Add item</span>
       </button>
+
+      <button
+        onClick={() => setPasteOpen((value) => !value)}
+        aria-expanded={pasteOpen}
+        className="press w-full rounded-xl border py-2 text-[0.75rem] font-bold"
+        style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+      >
+        <span className="inline-flex items-center justify-center gap-1.5"><ClipboardPaste size={13} /> Paste a whole list</span>
+      </button>
+      {pasteOpen && (
+        <div className="space-y-2">
+          <textarea
+            value={pasted}
+            onChange={(event) => setPasted(event.target.value)}
+            placeholder="One item per line, e.g.\n2 pints of milk\n6 eggs\nBread"
+            aria-label="Paste your shopping list"
+            rows={5}
+            className="w-full rounded-xl border p-2.5 text-[0.8125rem] font-semibold outline-none"
+            style={{ background: 'var(--card-2)', borderColor: 'var(--line)', color: 'var(--ink)' }}
+          />
+          <button
+            onClick={submitPaste}
+            disabled={!parsePastedList(pasted).length}
+            className="press w-full rounded-xl py-2.5 text-[0.8125rem] font-extrabold disabled:opacity-40"
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+          >
+            Add {parsePastedList(pasted).length || ''} items to the list
+          </button>
+          <p className="text-[0.65625rem] font-semibold" style={{ color: 'var(--faint)' }}>
+            Quantities like “2 pints of milk” or “6 eggs” are picked up; everything else stays as written and can be edited after.
+          </p>
+        </div>
+      )}
     </Card>
   );
 }

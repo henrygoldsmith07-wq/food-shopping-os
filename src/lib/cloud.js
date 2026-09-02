@@ -303,6 +303,27 @@ export const listHouseholdAudit = () => request('/api/households/audit', {
   headers: selectedHeaders(),
 });
 
+/** Invite someone by email. Returns { token, expiresInHours } — the token is
+ * shown once; the server stores only its hash. */
+export const createHouseholdInvitation = (input) => request('/api/households/invitations', {
+  method: 'POST',
+  headers: selectedHeaders(),
+  body: JSON.stringify(input),
+});
+
+/** Accept an invitation with the signed-in account's matching email; on
+ * success the household becomes this device's sync target, version 0, exactly
+ * as a fresh pull would set it. */
+export const acceptHouseholdInvitation = async (token) => {
+  const result = await request('/api/households/invitations', {
+    method: 'PATCH',
+    headers: selectedHeaders(),
+    body: JSON.stringify({ token }),
+  });
+  if (result?.householdId) saveMeta({ ...readMeta(), householdId: result.householdId, version: 0 });
+  return result;
+};
+
 export function selectedCloudHouseholdId() {
   return readMeta().householdId || null;
 }

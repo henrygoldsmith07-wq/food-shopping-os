@@ -320,7 +320,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 <span className="inline-flex items-center gap-1.5"><FileUp size={14} /> Import receipts</span>
               </button>
             </div>
-            {adding && <AddItem onAdd={(item) => app.addToList({ ...item, store })} />}
+            {adding && <AddItem onAdd={(items) => app.addToList((Array.isArray(items) ? items : [items]).map((item) => ({ ...item, store })))} />}
             {voiceStatus && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>{voiceStatus}</p>}
           </Section>
 

@@ -81,6 +81,9 @@ export const applyWasteLearning = (items = [], profile = []) => {
     return {
       ...item,
       qty: qty || item.qty,
+      // `wasteNote` is the row-level rendering hook; `wasteLearning` keeps the
+      // evidence for anything that wants more than the sentence.
+      wasteNote: `Bought ${row.purchases} time${row.purchases === 1 ? '' : 's'} recently; wasted on ${row.wasteEvents} occasion${row.wasteEvents === 1 ? '' : 's'}.${qty ? ' Buy less this time.' : ' Consider a smaller pack.'}`,
       wasteLearning: {
         reduced: Boolean(qty),
         reduction: row.quantityReduction,

@@ -26,6 +26,7 @@ import HomeFoodLoop from './HomeFoodLoop.jsx';
 import LoopCheck from './LoopCheck.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
 import KitchenAdventure from './KitchenAdventure.jsx';
+import MilestonesCard from './MilestonesCard.jsx';
 
 /** Capture routes that open straight into the diary's matching sheet. */
 const LOG_SHORTCUTS = [
@@ -424,6 +425,8 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           </Card>
         </div>
       )}
+
+      <div className="px-5"><MilestonesCard /></div>
 
       {/* Rearranging the dashboard is a thing you do *to* these cards, so the
           control sits with them rather than up in the header. */}

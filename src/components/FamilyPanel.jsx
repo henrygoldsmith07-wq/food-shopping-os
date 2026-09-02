@@ -7,6 +7,7 @@ import { householdFromShareCode, householdShareCode } from '../lib/household.js'
 import { Card, Chip } from './ui.jsx';
 import CoachAccess from './CoachAccess.jsx';
 import HouseholdAudit from './HouseholdAudit.jsx';
+import HouseholdInvites from './HouseholdInvites.jsx';
 import PeopleView from './FamilyPeople.jsx';
 
 const VIEWS = ['People', 'Tasks', 'Sharing', 'Activity'];
@@ -142,6 +143,8 @@ function SharingView() {
       </Card>
 
       {app.hasTool('coach') && <CoachAccess />}
+
+      <HouseholdInvites />
 
       <Card className="space-y-3">
         <div>
