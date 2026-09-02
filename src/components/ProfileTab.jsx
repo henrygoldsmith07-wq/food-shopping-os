@@ -11,6 +11,7 @@ import { YOUTH_COPY } from '../lib/youth.js';
 import { badgeProgress, cuisineSplit, spendByMonth, weekDates } from '../lib/kitchen.js';
 import { gbp } from '../lib/utils.js';
 import NutritionPanel from './NutritionPanel.jsx';
+import { DemoHouseholdEntry } from './DemoWalkthrough.jsx';
 import GoalsPanel from './GoalsPanel.jsx';
 import FamilyPanel from './FamilyPanel.jsx';
 import QuestsPanel from './QuestsPanel.jsx';
@@ -69,12 +70,11 @@ export default function ProfileTab({ openGuidance }) {
   /** Your data, as the JSON it is stored as — yours to keep or move. */
   const exportData = () => {
     const blob = new Blob([app.exportData()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = URL.createObjectURL(blob);
     a.download = `forq-${app.day}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
   };
   const importData = async (event) => {
     const file = event.target.files?.[0];
@@ -410,27 +410,14 @@ export default function ProfileTab({ openGuidance }) {
       <BackendPanel />
 <Section title="Your data" className="rise rise-4">
         <Card className="space-y-3">
-          {!app.isDemoMode && (
-            <button
-              type="button"
-              onClick={app.enterDemoMode}
-              className="press w-full rounded-2xl border px-4 py-3 text-left text-[0.84375rem] font-extrabold"
-              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
-            >
-              Explore the demo household
-              <span className="mt-0.5 block text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                A fully stocked example week — plan, list, receipts. Nothing is saved and your own data is untouched.
-              </span>
-            </button>
-          )}
+          {!app.isDemoMode && <DemoHouseholdEntry />}
           <p className="text-[0.75rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
             Browser storage is not encrypted. Anyone with access to this browser profile can
             access it. Export a backup before clearing site data or changing devices.
           </p>
           <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
             Your local copy contains {Object.keys(app.log).length} logged day{Object.keys(app.log).length === 1 ? '' : 's'},
-            {' '}{app.pantry.length} pantry item{app.pantry.length === 1 ? '' : 's'}, {app.shops.length} recorded shop{app.shops.length === 1 ? '' : 's'},
-            {' '}{app.cooked.length} meal{app.cooked.length === 1 ? '' : 's'} cooked.
+            {' '}{app.pantry.length} pantry item{app.pantry.length === 1 ? '' : 's'}, {app.shops.length} recorded shop{app.shops.length === 1 ? '' : 's'}, {' '}{app.cooked.length} meal{app.cooked.length === 1 ? '' : 's'} cooked.
           </p>
           <button
             type="button"
