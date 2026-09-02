@@ -43,6 +43,7 @@ export default function MonidProvenance({ results = [] }) {
       status: entry.monid?.status || 'not-asked',
       provider: entry.monid?.provider || null,
       rows: entry.monid?.rows || 0,
+      paused: entry.monid?.paused === true,
     }))
     .filter((run) => run.status !== 'not-asked'), [results]);
 
@@ -59,6 +60,9 @@ export default function MonidProvenance({ results = [] }) {
     error: 'lookup failed',
     timeout: 'lookup timed out',
   };
+  const describe = (run) => (run.status === 'disabled' && run.paused
+    ? 'paused — the Monid balance is below its floor; top up at app.monid.ai'
+    : statusLabel[run.status] || run.status);
 
   if (!runs.length) {
     if (!status?.configured) return null;
@@ -88,7 +92,7 @@ export default function MonidProvenance({ results = [] }) {
         ))}
         {missed.map((run) => (
           <li key={run.name} className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-            {run.name}: Monid {statusLabel[run.status] || run.status}.
+            {run.name}: Monid {describe(run)}.
           </li>
         ))}
       </ul>

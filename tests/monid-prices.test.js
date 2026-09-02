@@ -1,9 +1,26 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
-  __resetBatchShapeForTests, cliErrorBody, endpointFromDiscovery, fillGapsFromBatch,
-  monidBalance, monidBatchPrices, monidPrices, monidOnPath, monidStatus,
-  parseMonidJson, rowsFromMonidReply, runMonid,
+  __resetBatchShapeForTests, __setKnownBalanceForTests, cliErrorBody,
+  endpointFromDiscovery, fillGapsFromBatch, monidBalance, monidBatchPrices,
+  monidPrices, monidOnPath, monidStatus, parseMonidJson, rowsFromMonidReply, runMonid,
 } from '../src/server/monid-prices.js';
+
+// Hermetic Monid tests: the CLI is force-enabled for this file only, and all
+// persistent state lands in a throwaway temp file — never the developer's
+// real ~/.forq, never the real CLI. tests/setup.js disables Monid globally;
+// this file turns it back on and restores that before exiting.
+const stateDir = mkdtempSync(join(tmpdir(), 'forq-monid-'));
+const stateFile = join(stateDir, 'monid-state.json');
+process.env.MONID_DISABLED = '';
+process.env.MONID_STATE_FILE = stateFile;
+afterAll(() => {
+  delete process.env.MONID_FORCE_CONFIGURED;
+  process.env.MONID_DISABLED = 'true';
+  rmSync(stateDir, { recursive: true, force: true });
+});
 
 const execOk = (stdout) => (cmd, args, opts, cb) => cb(null, stdout, '');
 const execFail = (message, extra = {}) => (cmd, args, opts, cb) => {
@@ -246,8 +263,38 @@ describe('monidBatchPrices', () => {
       else { runs += 1; cb(new Error('run failed'), '', 'Error: 401 unauthorized: bad API key'); }
     };
     const batch = await monidBatchPrices(['eggs'], { execImpl: exec });
-    expect(batch).toMatchObject({ ok: false, status: 'error' });
+    // A 401 is an auth failure, not a payload problem: reported as-is (one
+    // run, no shape retry) and mapped to the honest "no working key" state.
+    expect(batch).toMatchObject({ ok: false, status: 'disabled' });
+    expect(batch.note).toMatch(/keys add/);
     expect(runs).toBe(1);
+  });
+
+  it('persists the learned shape so a cold start skips the ladder', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    rmSync(stateFile, { force: true }); // start from a genuinely cold state
+    __resetBatchShapeForTests({ allowPersisted: true });
+    let runs = 0;
+    const exec = (cmd, args, opts, cb) => {
+      if (args.includes('discover')) cb(null, '{"results":[{"provider":"apify","endpoint":"/g/s"}]}', '');
+      else {
+        runs += 1;
+        if (runs === 1) cb(new Error('run failed'), '', 'Error: input invalid: unknown field `queries`');
+        else cb(null, JSON.stringify({ products: [{ name: 'eggs x6', price: 1.35 }] }), '');
+      }
+    };
+    const first = await monidBatchPrices(['eggs'], { execImpl: exec });
+    expect(first.shape).toBe('items');
+    // The winner was written to the state file...
+    const saved = JSON.parse(readFileSync(stateFile, 'utf8'));
+    expect(saved.batchShape).toBe('items');
+    // ...and a fresh module instance reads it back instead of re-walking.
+    vi.resetModules();
+    const fresh = await import('../src/server/monid-prices.js');
+    fresh.__resetBatchShapeForTests({ allowPersisted: true });
+    const second = await fresh.monidBatchPrices(['eggs'], { execImpl: exec });
+    expect(second).toMatchObject({ ok: true, shape: 'items' });
+    expect(runs).toBe(3); // learned once; the cold start went straight to `items`
   });
 
   it('remembers the working shape for the rest of the process', async () => {
@@ -268,6 +315,83 @@ describe('monidBatchPrices', () => {
     const second = await monidBatchPrices(['eggs'], { execImpl: exec });
     expect(second).toMatchObject({ ok: true, shape: 'items' });
     expect(runs).toBe(3); // runs only: (1 failed + 1 clean) in the first call, 1 clean in the second
+  });
+});
+
+describe('low-balance auto-disable', () => {
+  afterEach(() => {
+    delete process.env.MONID_FORCE_CONFIGURED;
+    delete process.env.MONID_MIN_BALANCE;
+    __setKnownBalanceForTests(null);
+    __resetBatchShapeForTests();
+  });
+
+  const discoverExec = (runsLeft = Infinity) => {
+    let runs = 0;
+    return (cmd, args, opts, cb) => {
+      if (args.includes('discover')) cb(null, '{"results":[{"provider":"apify","endpoint":"/g/s"}]}', '');
+      else {
+        runs += 1;
+        if (runs <= runsLeft) cb(null, JSON.stringify({ products: [{ name: 'eggs x6', price: 1.35 }] }), '');
+        else cb(new Error('run failed'), '', 'Error: 402 payment required');
+      }
+    };
+  };
+
+  it('pauses the paid rung, with the fix in words, when credits run out', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    __setKnownBalanceForTests(0);
+    const batch = await monidBatchPrices(['eggs'], { execImpl: discoverExec() });
+    expect(batch).toMatchObject({ ok: false, status: 'disabled' });
+    expect(batch.note).toMatch(/paused.*top up/i);
+    expect(batch.note).toMatch(/balance read re-enables/i);
+  });
+
+  it('does not pause on an unknown balance', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    const batch = await monidBatchPrices(['eggs'], { execImpl: discoverExec(1) });
+    expect(batch.ok).toBe(true); // never read a balance — no pause
+  });
+
+  it('re-enables once a balance read sees credits again', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    __setKnownBalanceForTests(0);
+    const paused = await monidBatchPrices(['eggs'], { execImpl: execOk('{}') });
+    expect(paused.status).toBe('disabled');
+    __setKnownBalanceForTests(5);
+    const live = await monidBatchPrices(['eggs'], { execImpl: discoverExec(1) });
+    expect(live.ok).toBe(true);
+  });
+
+  it('respects MONID_MIN_BALANCE=0 as a switch for the check itself', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    process.env.MONID_MIN_BALANCE = '0';
+    __setKnownBalanceForTests(0);
+    const batch = await monidBatchPrices(['eggs'], { execImpl: discoverExec(1) });
+    expect(batch.ok).toBe(true);
+  });
+
+  it('shows the paused state and balance in the status card', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    __setKnownBalanceForTests(0);
+    const status = await monidStatus({ execImpl: execOk('{"balance": 0}') });
+    expect(status).toMatchObject({ configured: true, balance: 0, paused: true });
+    expect(status.note).toMatch(/paused/i);
+  });
+
+  it('always reports paused: false when the rung is active', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    __setKnownBalanceForTests(9);
+    const status = await monidStatus({ execImpl: execOk('{"balance": 9}') });
+    expect(status.paused).toBe(false);
+  });
+
+  it('does not pause single-item lookups either', async () => {
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    __setKnownBalanceForTests(0);
+    const result = await monidPrices('eggs', { execImpl: execOk('{"results":[]}') });
+    expect(result).toMatchObject({ status: 'disabled' });
+    expect(result.note).toMatch(/paused/i);
   });
 });
 
@@ -300,8 +424,8 @@ describe('fillGapsFromBatch', () => {
   it('stamps the failure status on every gap when the batch fails', () => {
     const checks = [shopHit('baked beans'), gap('eggs')];
     const { monidBatch, checks: filled } = fillGapsFromBatch(checks, { ok: false, status: 'timeout' });
-    expect(monidBatch).toEqual({ status: 'timeout', items: 1 });
-    expect(filled[1].monid).toEqual({ status: 'timeout', provider: null, rows: 0 });
+    expect(monidBatch).toEqual({ status: 'timeout', items: 1, paused: false });
+    expect(filled[1].monid).toEqual({ status: 'timeout', provider: null, rows: 0, paused: false });
     expect(filled[1].rows).toEqual([]); // nothing fabricated
   });
 

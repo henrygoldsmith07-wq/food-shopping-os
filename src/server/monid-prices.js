@@ -6,135 +6,31 @@
  * app's own shop ladder could not price can still be looked up through it —
  * paid for from the workspace's Monid balance, so it is opt-in, not default.
  *
- * Deliberate shape: one exported async function that returns the same rows
- * the local scraper returns, plus a cheap `monidOnPath()` probe that never
- * shells out. Everything else is plumbing around those two facts:
- *   - `runMonid` never throws; failure is a status, like every other rung.
+ * Deliberate shape: exported async functions that return the same rows the
+ * local scraper returns. The CLI plumbing lives in monid-cli.js; everything
+ * here is pricing decisions:
  *   - rows carry `source: 'monid'` so a price from Monid is never mistaken
  *     for one the app scraped itself.
+ *   - a depleted balance pauses the rung (honestly, with a note) instead of
+ *     erroring mid-shop; the next balance read re-enables it.
  *   - `execImpl` is injectable so the unit suite runs without a CLI.
  */
 
 import { execFile } from 'child_process';
-import { existsSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
+import {
+  CLI_TIMEOUT_MS, cliErrorBody, ignorePersistedState, isAuthFailure, monidOnPath,
+  parseMonidJson, readMonidState, runMonid, setIgnorePersistedState, writeMonidState,
+} from './monid-cli.js';
 import { isMatch } from './search-terms.js';
+
+export {
+  cliErrorBody, monidOnPath, parseMonidJson, runMonid,
+} from './monid-cli.js';
 
 /** Cap rows like every other source, so a chatty endpoint cannot flood a list. */
 const MAX_ROWS_PER_ENDPOINT = 8;
-/** A CLI call that has not answered within this is treated as dead, not hung. */
-const CLI_TIMEOUT_MS = 45000;
 
-/**
- * Where npm may have put the global CLI. MONID_CLI_ROOT wins so a deployment
- * can point at its own install; the rest are the usual global prefixes.
- */
-const candidateRoots = () => [
-  process.env.MONID_CLI_ROOT,
-  process.env.APPDATA ? join(process.env.APPDATA, 'npm') : null,
-  join(homedir(), '.npm-global'),
-  '/usr/local/lib',
-  '/usr/lib',
-].filter(Boolean);
-
-/** The CLI's JS entry, found without shelling out. Null when absent. */
-export const monidEntry = () => {
-  for (const root of candidateRoots()) {
-    const entry = join(root, 'node_modules', '@monid-ai', 'cli', 'dist', 'index.js');
-    if (existsSync(entry)) return entry;
-  }
-  return null;
-};
-
-/**
- * Present and spawnable — a filesystem probe, safe on hot paths. The env
- * switches are for deployments: MONID_DISABLED=true turns Monid off even
- * where the CLI exists; MONID_FORCE_CONFIGURED is for tests with an
- * injected exec.
- */
-export const monidOnPath = () => {
-  if (process.env.MONID_DISABLED === 'true') return false;
-  return Boolean(process.env.MONID_FORCE_CONFIGURED) || Boolean(monidEntry());
-};
-
-/**
- * Run `monid` and return its stdout. Never throws — failure is a status.
- *
- * The entry is spawned with Node itself: the npm shim is a .cmd file on
- * Windows, which execFile has refused to spawn since the CVE-2024-27980
- * hardening, and shell:true would reopen the injection surface that
- * hardening exists to close. Handing the JS entry to `process.execPath`
- * works on every platform with no quoting involved. `execImpl` is
- * injectable so the unit suite runs without a CLI installed.
- */
-export const runMonid = async (args, { execImpl = execFile, timeoutMs = CLI_TIMEOUT_MS } = {}) => {
-  const entry = monidEntry();
-  const command = entry ? process.execPath : 'monid';
-  const argv = entry ? [entry, ...args] : args;
-  try {
-    const { stdout } = await new Promise((resolve, reject) => {
-      execImpl(command, argv, { timeout: timeoutMs, windowsHide: true }, (error, stdout, stderr) => {
-        // Keep stdout on failure too: this CLI reports structured errors as
-        // JSON on stdout with exit 1 and an empty stderr, so discarding it
-        // would discard the only explanation of what went wrong.
-        if (error) reject(Object.assign(error, { stderr: String(stderr || ''), stdout: String(stdout || '') }));
-        else resolve({ stdout: String(stdout || '') });
-      });
-    });
-    return { ok: true, stdout, stderr: '' };
-  } catch (error) {
-    const timedOut = error?.killed || error?.signal === 'SIGTERM';
-    return {
-      ok: false,
-      stdout: String(error?.stdout || ''),
-      stderr: String(error?.stderr || error?.message || 'monid failed'),
-      status: timedOut ? 'timeout' : 'error',
-    };
-  }
-};
-
-const isAuthFailure = (run) => {
-  const body = parseMonidJson(run?.stdout || '');
-  const text = `${body?.error?.code || ''} ${body?.error?.message || ''} ${run?.stdout || ''} ${run?.stderr || ''}`;
-  return /AUTH_FAILED|no active api key|unauthor/i.test(text);
-};
-
-/**
- * The most informative text a failed CLI call left behind.
- *
- * Preference order: the JSON error body on stdout (the CLI's structured
- * errors live there), then stderr, then a plain admission of ignorance.
- * Notes shown to users are built from this, so "Command failed" never
- * outranks "No active API key. Run monid keys add".
- */
-export const cliErrorBody = (run) => {
-  const body = parseMonidJson(run?.stdout || '');
-  return String(body?.error?.message || body?.error?.code || run?.stderr || '').trim() || 'no detail reported';
-};
-
-/** First JSON value found in a reply that may be fenced, chatty or prefixed. */
-export const parseMonidJson = (text = '') => {
-  const raw = String(text).trim();
-  if (!raw) return null;
-  // Whole-string parse first: some CLI replies are bare arrays, and the
-  // object-extraction fallback below would silently collapse one of those
-  // to its first element.
-  try {
-    return JSON.parse(raw);
-  } catch {
-    // Not pure JSON; fall through to extraction.
-  }
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(raw.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-};
-
+/** A shelf price that is not plausible is not a price. Strings like '£1.25' are stripped to their digits first. */
 const clampPrice = (value) => {
   const price = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.]/g, ''));
   return Number.isFinite(price) && price > 0 && price <= 1000 ? Math.round(price * 100) / 100 : null;
@@ -182,15 +78,6 @@ export const rowsFromMonidReply = (reply, { retailer, query }) => {
   }).filter(Boolean);
 };
 
-/**
- * Price one product through Monid.
- *
- * Returns the same envelope as a per-retailer result in price-scraper.js, so
- * callers can append it without reshaping anything: `{ retailerId, retailer,
- * rows, status, note }`. Statuses mirror the local ladder — `disabled` when
- * Monid is not set up, `error`/`timeout` when the CLI failed, `no-match` when
- * it answered with nothing usable, `ok` when there are rows.
- */
 const discoverArgs = (query) => ['discover', '-q', `grocery product price ${query}`, '-l', '3', '-j'];
 
 /**
@@ -217,8 +104,8 @@ export const endpointFromDiscovery = (stdout) => {
  * finds the truth empirically: `queries` is sent first, then `items`, then a
  * single `query`. A shape that produces an input-validation error is retried
  * with the next; a shape that answers — even empty — is the endpoint's
- * contract and is memoized for the process, so the ladder runs once per
- * deployment, not once per check.
+ * contract and is memoized for the process (and persisted, so a cold start
+ * skips the ladder), so the ladder runs once per deployment.
  */
 const BATCH_SHAPES = [
   { name: 'queries', body: (list) => ({ queries: list }) },
@@ -231,8 +118,52 @@ const looksLikeInputError = (stderr = '') =>
 
 let batchShapeName = null; // memoized across calls; null = not yet learned
 
+const hydrateBatchShape = () => {
+  if (batchShapeName || ignorePersistedState()) return;
+  const saved = readMonidState().batchShape;
+  if (BATCH_SHAPES.some((shape) => shape.name === saved)) batchShapeName = saved;
+};
+
 /** Test-only: forget the learned payload shape so a test can walk the ladder again. */
-export const __resetBatchShapeForTests = () => { batchShapeName = null; };
+export const __resetBatchShapeForTests = ({ allowPersisted = false } = {}) => {
+  batchShapeName = null;
+  setIgnorePersistedState(!allowPersisted);
+};
+
+/**
+ * Credits below which the paid rung pauses itself (0 turns the check off).
+ *
+ * A depleted balance should degrade to scraped-only pricing — an honest
+ * pause with a note — not an error surfacing mid-shop. The floor is read
+ * per call so a deployment can tighten it without a restart.
+ */
+const minBalance = () => {
+  const configured = Number(process.env.MONID_MIN_BALANCE);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 1;
+};
+
+let knownBalance = null; // last successfully read credit balance; null = never read
+
+const knownBalanceOrNull = () => {
+  if (knownBalance === null && !ignorePersistedState()) {
+    const saved = Number(readMonidState().lastBalance);
+    if (Number.isFinite(saved) && saved >= 0) knownBalance = saved;
+  }
+  return knownBalance;
+};
+
+const balanceTooLow = () => {
+  const balance = knownBalanceOrNull();
+  return balance !== null && minBalance() > 0 && balance < minBalance();
+};
+
+/** Test-only: pretend the last balance read saw this many credits. */
+export const __setKnownBalanceForTests = (value) => { knownBalance = value; };
+
+const pausedNote = () => {
+  const balance = knownBalanceOrNull();
+  return `Monid is paused — ${balance} credit${balance === 1 ? '' : 's'} left, below the ${minBalance()}-credit floor. Top up at app.monid.ai; the next balance read re-enables the rung.`;
+};
 
 /**
  * A whole list through Monid, one discover + one run.
@@ -251,6 +182,9 @@ export const monidBatchPrices = async (queries = [], {
   const wanted = [...new Set(queries.map((entry) => String(entry || '').trim()).filter(Boolean))];
   if (!wanted.length) return { ok: false, status: 'no-match', note: 'Nothing to look up.', byQuery: new Map() };
   if (!monidOnPath()) return { ok: false, status: 'disabled', note: 'Monid is not set up.', byQuery: new Map() };
+  if (balanceTooLow()) {
+    return { ok: false, status: 'disabled', paused: true, note: pausedNote(), byQuery: new Map() };
+  }
 
   // The discovery query is the list's own shape, not one item's: a list of
   // milks should surface a grocery endpoint, and it does not take four
@@ -275,6 +209,7 @@ export const monidBatchPrices = async (queries = [], {
   // the ladder. Each rung only runs when the last failure looked like a
   // payload problem — a failure that is not about the input (rate limit,
   // auth, network) is reported as-is rather than retried with new JSON.
+  if (!batchShapeName) hydrateBatchShape();
   const shapeOrder = batchShapeName
     ? BATCH_SHAPES.filter((shape) => shape.name === batchShapeName)
     : BATCH_SHAPES;
@@ -287,7 +222,18 @@ export const monidBatchPrices = async (queries = [], {
       '-w', '-j',
     ], { execImpl, timeoutMs });
     usedShape = shape.name;
-    if (runOut.ok) { batchShapeName = shape.name; break; }
+    if (runOut.ok) {
+      batchShapeName = shape.name;
+      writeMonidState({ batchShape: shape.name }); // survive a restart
+      break;
+    }
+    if (isAuthFailure(runOut)) {
+      return {
+        ok: false, status: 'disabled', provider: endpoint.provider, endpoint: endpoint.endpoint,
+        note: 'Monid has no active API key — run `monid keys add -k <key> -l main`. Nothing was charged.',
+        byQuery: new Map(),
+      };
+    }
     if (!looksLikeInputError(runOut.stderr)) break;
   }
   if (!runOut.ok) {
@@ -329,9 +275,9 @@ export const fillGapsFromBatch = (checks = [], batch) => {
   if (!gaps.length) return { monidBatch: null, checks };
   if (!batch?.ok) {
     for (const check of checks) {
-      if (!priced(check)) check.monid = { status: batch?.status || 'error', provider: null, rows: 0 };
+      if (!priced(check)) check.monid = { status: batch?.status || 'error', provider: null, rows: 0, paused: batch?.paused === true };
     }
-    return { monidBatch: { status: batch?.status || 'error', items: gaps.length }, checks };
+    return { monidBatch: { status: batch?.status || 'error', items: gaps.length, paused: batch?.paused === true }, checks };
   }
   for (const check of checks) {
     if (priced(check)) continue;
@@ -351,6 +297,16 @@ export const fillGapsFromBatch = (checks = [], batch) => {
   return { monidBatch: { provider: batch.provider, endpoint: batch.endpoint, items: gaps.length }, checks };
 };
 
+/**
+ * Price one product through Monid.
+ *
+ * Returns the same envelope as a per-retailer result in price-scraper.js, so
+ * callers can append it without reshaping anything: `{ retailerId, retailer,
+ * rows, status, note }`. Statuses mirror the local ladder — `disabled` when
+ * Monid is not set up (or paused on a low balance), `error`/`timeout` when
+ * the CLI failed, `no-match` when it answered with nothing usable, `ok` when
+ * there are rows.
+ */
 export const monidPrices = async (query, {
   execImpl = execFile, retailer = null, timeoutMs = CLI_TIMEOUT_MS,
 } = {}) => {
@@ -371,6 +327,9 @@ export const monidPrices = async (query, {
       status: 'disabled',
       note: 'Monid is not set up on this machine — install the CLI and run `monid keys add`. The local scraper is unchanged.',
     };
+  }
+  if (balanceTooLow()) {
+    return { ...base, status: 'disabled', paused: true, note: pausedNote() };
   }
 
   const run = await runMonid(discoverArgs(wanted), { execImpl, timeoutMs });
@@ -403,17 +362,18 @@ export const monidPrices = async (query, {
     endpoint,
     rows,
     status: rows.length ? 'ok' : 'no-match',
-    note: rows.length ? null : 'Monid answered but reported no usable product prices.',
+    note: rows.length ? null : 'Monid answered, but none of it matched this product closely enough to show.',
   };
 };
 
 /**
- * What is left in the workspace's Monid balance, in the CLI's own terms.
+ * What is left of the Monid balance, for the cost side of the ledger.
  *
- * Surfaces the cost side of the "we paid for this" label: a price fetched
- * through Monid spent the workspace's money, and the panel that displays the
- * provenance should be able to show what that is costing. Never throws — a
- * failed probe is `ok: false`, which the UI renders as "balance unknown".
+ * Every paid lookup — scraped or batched — runs through Monid and spent the
+ * workspace's money, and the panel that displays the provenance should be
+ * able to show what that is costing. Never throws — a failed probe is
+ * `ok: false`, which the UI renders as "balance unknown". A successful read
+ * also refreshes the low-balance gate, which is what re-enables a paused rung.
  */
 export const monidBalance = async ({ execImpl = execFile, timeoutMs = 15000 } = {}) => {
   if (!monidOnPath()) return { ok: false, reason: 'disabled' };
@@ -427,14 +387,19 @@ export const monidBalance = async ({ execImpl = execFile, timeoutMs = 15000 } = 
   // The CLI's shape: `balance` is a number of credits. Accept a couple of
   // spellings so a CLI tweak does not silently zero the display.
   const value = typeof parsed.balance === 'number' ? parsed.balance : Number(parsed.balance);
-  if (Number.isFinite(value)) return { ok: true, balance: value, currency: parsed.currency || null };
+  if (Number.isFinite(value)) {
+    knownBalance = value; // every successful read refreshes the low-balance gate
+    writeMonidState({ lastBalance: value });
+    return { ok: true, balance: value, currency: parsed.currency || null };
+  }
   return { ok: false, reason: 'error' };
 };
 
 /**
  * One probe for the status UI: is Monid set up here at all, and if so, what
  * is left of its balance. Folded into one call so a status card makes a
- * single subprocess round-trip instead of three.
+ * single subprocess round-trip instead of three. `paused: true` means the
+ * key exists but the balance is below the floor.
  */
 export const monidStatus = async ({ execImpl = execFile } = {}) => {
   if (!monidOnPath()) {
@@ -452,10 +417,19 @@ export const monidStatus = async ({ execImpl = execFile } = {}) => {
       note: 'No active Monid API key — run `monid keys add -k <key> -l main` to enable paid lookups.',
     };
   }
+  if (balanceTooLow()) {
+    return {
+      configured: true,
+      balance: knownBalanceOrNull(),
+      paused: true,
+      note: pausedNote(),
+    };
+  }
   return {
     configured: true,
     balance: probed.ok ? probed.balance : null,
     currency: probed.currency || null,
+    paused: false,
     note: probed.ok
       ? null
       : 'Balance unavailable — the CLI answered but did not report a number (is an API key configured?).',

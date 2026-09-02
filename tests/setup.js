@@ -21,3 +21,9 @@ globalThis.__FORQ_TEST_SCREENS__ = {
 };
 
 window.scrollTo = () => {};
+
+// The Monid adapter must be inert in every test: no real CLI spawns, no
+// writes to the developer's real ~/.forq state file. The adapter-suite tests
+// that exercise Monid's own logic re-enable it locally and point
+// MONID_STATE_FILE at a throwaway file.
+process.env.MONID_DISABLED = 'true';
