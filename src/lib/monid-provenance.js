@@ -31,7 +31,7 @@ export const monidTone = 'accent';
  */
 export const splitMonidRows = (results = []) => {
   const list = Array.isArray(results) ? results : [];
-  const monidResults = list.filter((entry) => entry?.source === 'monid');
+  const monidResults = list.filter((entry) => entry?.source === 'monid' || entry?.monid);
   const monid = monidResults[0] || null;
   const rows = (monid?.rows || []).slice();
   // Monid rows carry the item's own `query`; scoped rows are used when the
