@@ -53,6 +53,15 @@ describe('receipt CSV import', () => {
     expect(errors[0]).toMatch(/Bread/);
   });
 
+  it('reports the exact skipped count even when only some reasons are shown', () => {
+    const rows = ['date,store,item,qty,price'];
+    for (let i = 0; i < 8; i += 1) rows.push(`2026-08-03,Tesco,Thing ${i},1,`);
+    const { stats, errors } = parseReceiptCsv(rows.join('\n'));
+    expect(stats.parsed).toBe(0);
+    expect(stats.skipped).toBe(8);
+    expect(errors.length).toBeLessThanOrEqual(5); // reasons are capped, the count is not
+  });
+
   it('returns an empty, explained result for an empty file', () => {
     const { shops, errors } = parseReceiptCsv('');
     expect(shops).toEqual([]);

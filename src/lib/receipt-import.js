@@ -36,8 +36,10 @@ const splitCsvLine = (line) => {
 };
 
 const parsePrice = (raw) => {
-  const value = Number(String(raw ?? '').replace(/[£$€\s]/g, '').replace(/,/g, '.'));
-  return Number.isFinite(value) && value >= 0 ? Math.round(value * 100) / 100 : null;
+  const value = String(raw ?? '').replace(/[£$€\s]/g, '').replace(/,/g, '.');
+  if (!value) return null; // an absent price is not £0.00 — the row is skipped
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null;
 };
 
 const parseDate = (raw, fallback) => {
@@ -91,16 +93,22 @@ export const parseReceiptCsv = (text, { today = todayStamp(), importToPantry = f
 
   const groups = new Map();
   let parsedRows = 0;
+  let skippedRows = 0;
 
   dataRows.forEach((line, index) => {
     const cells = splitCsvLine(line);
     const item = String(cells[columns.item] ?? '').trim();
-    if (!item) return;
+    if (!item) {
+      skippedRows += 1;
+      return;
+    }
     const price = parsePrice(cells[columns.price]);
     const date = parseDate(cells[columns.date], today);
     const store = String(cells[columns.store] ?? '').trim() || 'Unnamed shop';
     if (price === null) {
-      errors.push(`Row ${index + 1}: no readable price for “${item}” — skipped.`);
+      skippedRows += 1;
+      // Only the first few reasons are kept for display; the count is exact.
+      if (errors.length < 5) errors.push(`Row ${index + 1}: no readable price for “${item}” — skipped.`);
       return;
     }
     parsedRows += 1;
@@ -132,7 +140,7 @@ export const parseReceiptCsv = (text, { today = todayStamp(), importToPantry = f
 
   return {
     shops,
-    stats: { rows: dataRows.length, parsed: parsedRows, shops: shops.length, items: parsedRows },
-    errors: errors.slice(0, 5),
+    stats: { rows: dataRows.length, parsed: parsedRows, skipped: skippedRows, shops: shops.length, items: parsedRows },
+    errors: errors,
   };
 };
