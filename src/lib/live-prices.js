@@ -118,10 +118,16 @@ export const fetchScraperStatus = async ({ signal } = {}) => {
 
 /** Check one product across the shops. Throws with `.status` on failure. */
 export const checkLivePrice = async (query, { retailerIds = [], signal } = {}) => {
+  const wanted = typeof query === 'string' ? query.trim() : '';
+  if (!wanted) {
+    const error = new Error('Enter a product to check.');
+    error.status = 400;
+    throw error;
+  }
   const response = await fetch('/api/integrations/scrape-prices', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query, retailerIds }),
+    body: JSON.stringify({ query: wanted, retailerIds }),
     signal,
     cache: 'no-store',
   });
