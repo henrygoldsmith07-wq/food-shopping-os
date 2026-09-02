@@ -329,6 +329,11 @@ function Shell() {
       <a href="#content" className="skip-link">Skip to content</a>
 
       <DemoBanner />
+      {!navigator.onLine && (
+        <div className="mx-auto max-w-3xl border-b px-5 py-2 text-center text-xs font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }} role="status">
+          Offline mode — your changes stay on this device and will sync when you reconnect.
+        </div>
+      )}
 
       <div className="app-workspace">
         <AppHeader

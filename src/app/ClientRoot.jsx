@@ -12,11 +12,22 @@ function RootSession() {
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
+    const announceOnlineState = () => {
+      document.documentElement.dataset.forqOnline = navigator.onLine ? 'true' : 'false';
+    };
+    announceOnlineState();
+    window.addEventListener('online', announceOnlineState);
+    window.addEventListener('offline', announceOnlineState);
     if (new URLSearchParams(window.location.search).get('demo') === '1') {
       app.enterDemoMode();
       window.history.replaceState({}, '', '/');
     }
-    return () => { delete document.documentElement.dataset.forqReady; };
+    return () => {
+      delete document.documentElement.dataset.forqReady;
+      delete document.documentElement.dataset.forqOnline;
+      window.removeEventListener('online', announceOnlineState);
+      window.removeEventListener('offline', announceOnlineState);
+    };
   }, [app.enterDemoMode]);
   return <App />;
 }
