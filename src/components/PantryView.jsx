@@ -24,6 +24,7 @@ import KitchenInventory from './KitchenInventory.jsx';
 import PantryChecks from './PantryChecks.jsx';
 import BarcodeAdd from './BarcodeAdd.jsx';
 import PantryShare from './PantryShare.jsx';
+import PantryEmptyState from './PantryEmptyState.jsx';
 
 export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan }) {
   const app = useApp();
@@ -228,14 +229,11 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
       )}
 
       {empty ? (
-        <Card className="text-center py-10">
-          <Package size={30} className="mx-auto mb-2" style={{ color: 'var(--faint)' }} />
-          <p className="font-bold">Your pantry is empty</p>
-          <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            Add what you have in and Forq can tell you what's about to go off, what a
-            recipe still needs, and what your kitchen is worth.
-          </p>
-        </Card>
+        <PantryEmptyState
+          app={app}
+          onScan={() => { setScanning(true); setAdding(false); setCapturing(false); setStocking(false); }}
+          onAddManually={() => { setAdding(true); setScanning(false); setCapturing(false); setStocking(false); }}
+        />
       ) : (
         <>
           <input

@@ -165,7 +165,7 @@ const CORE_FOODS = [
     { unit: 'ml', tags: ['dairy', 'drink'], micronutrientId: 'semi-skimmed-milk' }),
   food('oat-drink', 'Oat drink', '🥛', [46, 1, 6.7, 1.5, 0.8],
     [['Splash (50 ml)', 50], ['Glass (200 ml)', 200], ['Mug (250 ml)', 250]],
-    { unit: 'ml', tags: ['vegan', 'drink', 'milk alternative'], micronutrientId: 'semi-skimmed-milk' }),
+    { unit: 'ml', tags: ['vegan', 'drink', 'milk alternative'], micronutrientId: 'semi-skimmed-milk', aliases: ['Oat milk'] }),
   food('plain-yogurt', 'Plain yogurt', '🥣', [61, 3.5, 4.7, 3.3],
     [['Small pot (125 g)', 125], ['Bowl (170 g)', 170]],
     { tags: ['dairy', 'breakfast'], micronutrientId: 'greek-yogurt' }),

@@ -3,6 +3,7 @@ import { FinishShop } from './ShopForms.jsx';
 import OffersPanel from './OffersPanel.jsx';
 import BarcodeAdd from './BarcodeAdd.jsx';
 import ReceiptScan from './ReceiptScan.jsx';
+import ReceiptCsvImport from './ReceiptCsvImport.jsx';
 import ShoppingExport from './ShoppingExport.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 
@@ -101,6 +102,11 @@ export default function ShopSheets({
       </Sheet>
       <Sheet open={sheet === 'receipt'} onClose={() => setSheet(null)} title="Read a receipt">
         <ReceiptScan onDone={() => { setSheet(null); onOpenPantry?.(); }} />
+      </Sheet>
+      <Sheet open={sheet === 'csv'} onClose={() => setSheet(null)} title="Import past receipts">
+        <div className="px-5 pb-10">
+          <ReceiptCsvImport onDone={() => { setSheet(null); onOpenPantry?.(); }} />
+        </div>
       </Sheet>
       <Sheet open={sheet === 'export'} onClose={() => setSheet(null)} title="Your list as text">
         <ShoppingExport text={asText()} />

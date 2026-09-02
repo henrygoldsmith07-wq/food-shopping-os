@@ -77,6 +77,36 @@ export const createExampleWeekState = (day = todayStamp()) => {
     { id: uid('dp'), name: 'Onion', emoji: '🧅', cat: 'Fresh', location: 'Cupboard', qty: '3', cost: 0, store: '', expiry: addDays(day, 7), low: false },
   ];
 
+  // Two clearly-labelled receipt trips from the past week so budget, price
+  // memory and restock surfaces have something honest to chew on. Marked
+  // `imported` like CSV imports — they read as demonstration data everywhere
+  // history is shown.
+  const receipt = (offsetDays, store, items) => ({
+    id: uid('dh'),
+    date: addDays(day, offsetDays),
+    store,
+    total: Math.round(items.reduce((sum, item) => sum + item.price, 0) * 100) / 100,
+    saved: 0,
+    imported: true,
+    items: items.map(({ name, emoji, price, qty }) => ({
+      name, emoji, price, qty, priceSource: 'receipt', recordedAt: addDays(day, offsetDays),
+    })),
+  });
+  const shops = [
+    receipt(-5, 'Demo Market', [
+      { name: 'Chicken thighs', emoji: '🍗', price: 4.5, qty: '600 g' },
+      { name: 'Coconut milk', emoji: '🥫', price: 1.1, qty: '1 tin' },
+      { name: 'Basmati rice', emoji: '🍚', price: 2.3, qty: '1 kg' },
+      { name: 'Semi-skimmed milk', emoji: '🥛', price: 1.65, qty: '2 L' },
+    ]),
+    receipt(-2, 'Demo Grocer', [
+      { name: 'Salmon fillet', emoji: '🐟', price: 5.4, qty: '2 fillets' },
+      { name: 'Kidney beans', emoji: '🥫', price: 0.9, qty: '2 tins' },
+      { name: 'Bell pepper', emoji: '🫑', price: 1.2, qty: '3' },
+      { name: 'Sourdough loaf', emoji: '🍞', price: 2.1, qty: '1' },
+    ]),
+  ];
+
   const mode = applyProductMode('meal_planning', {});
   const listPreview = shoppingForPlan(plan, dates, { pantry });
 
@@ -95,10 +125,13 @@ export const createExampleWeekState = (day = todayStamp()) => {
     pantry,
     // Pre-seed an empty list; walkthrough generates it so the hand-off is visible
     shoppingList: [],
-    // Explicitly empty history — no fake shops, logs, XP or badges
-    shops: [],
+    // Demonstration receipt history, marked `imported` so every surface that
+    // shows it labels it as example data — never mistaken for real trips
+    shops,
     log: {},
-    cooked: [],
+    // Yesterday's dinner was cooked from the plan, so streaks/cook surfaces
+    // have one honest-looking entry (recipe ids come from the real catalogue)
+    cooked: byId(DEMO_DINNER_IDS[0]) ? [{ recipeId: DEMO_DINNER_IDS[0], date: addDays(day, -1) }] : [],
     waste: [],
     measurements: [],
     workouts: [],

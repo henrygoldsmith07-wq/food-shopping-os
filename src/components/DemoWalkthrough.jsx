@@ -138,6 +138,25 @@ export default function DemoWalkthrough({ onNavigate }) {
   );
 }
 
+/** Profile entry point into the sandbox — hidden while a demo is already open. */
+export function DemoHouseholdEntry() {
+  const app = useApp();
+  if (app.isDemoMode) return null;
+  return (
+    <button
+      type="button"
+      onClick={app.enterDemoMode}
+      className="press w-full rounded-2xl border px-4 py-3 text-left text-[0.84375rem] font-extrabold"
+      style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+    >
+      Explore the demo household
+      <span className="mt-0.5 block text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+        A fully stocked example week — plan, list, receipts. Nothing is saved and your own data is untouched.
+      </span>
+    </button>
+  );
+}
+
 /** Compact top strip when demo is active. */
 export function DemoBanner() {
   const app = useApp();
