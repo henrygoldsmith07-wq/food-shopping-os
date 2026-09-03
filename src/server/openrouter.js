@@ -13,6 +13,8 @@
  * picture to a text model and returning whatever that hallucinates.
  */
 
+import { raceAbort, racedFetch, abortError } from './abort-race.js';
+
 /**
  * Capability order: position = preference. Every token must appear in the id.
  *
@@ -116,15 +118,15 @@ const matchScore = (id) => {
 };
 
 /** Free/chat-capable models, strongest first, for the active provider. */
-export async function rankedFreeModels(fetchImpl = fetch) {
+export async function rankedFreeModels(fetchImpl = fetch, options = {}) {
   const provider = activeProvider();
   if (!provider) return [];
   const key = `${provider.id}:${provider.base}`;
   if (cachedRanking && cachedFor === key && Date.now() - cachedAt < CATALOG_TTL_MS) return cachedRanking;
   try {
-    const res = await fetchImpl(`${provider.base}/models`, {
+    const res = await racedFetch(fetchImpl, `${provider.base}/models`, {
       headers: { authorization: `Bearer ${provider.key}` },
-    });
+    }, { signal: options?.signal, timeoutMs: options?.timeoutMs ?? 15000 });
     if (!res.ok) throw new Error(`catalog ${res.status}`);
     const body = await res.json();
     let ids = (body?.data || []).map((m) => m.id).filter((id) => typeof id === 'string');
@@ -146,41 +148,61 @@ export async function rankedFreeModels(fetchImpl = fetch) {
 /**
  * Chat completion with failover down the intelligence ranking. A 401 stops
  * immediately — a bad key never fixes itself on the next model.
+ *
+ * `timeoutMs` bounds each model attempt and `signal` aborts the whole walk:
+ * a stalled transport or a caller whose time budget expired must not keep
+ * stepping through the ladder (or hang on one await) — abort means stop now.
  */
 export async function freeChat({
   system, user, maxTokens = 1200, temperature = 0.4, maxAttempts = 6, fetchImpl = fetch,
+  signal, timeoutMs = 20000,
 } = {}) {
   const provider = activeProvider();
   if (!provider) throw new Error('no-free-model');
-  const models = await rankedFreeModels(fetchImpl);
+  const models = await rankedFreeModels(fetchImpl, { signal, timeoutMs });
   if (!models.length) throw new Error('no-free-model');
   let lastError = null;
   for (const model of models.slice(0, Math.max(1, maxAttempts))) {
+    if (signal?.aborted) throw abortError('Model request aborted');
+    const attemptSignal = AbortSignal.any([
+      ...(signal ? [signal] : []),
+      ...(timeoutMs ? [AbortSignal.timeout(timeoutMs)] : []),
+    ]);
     try {
-      const res = await fetchImpl(`${provider.base}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${provider.key}`,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          temperature,
-          max_tokens: maxTokens,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
+      const res = await raceAbort(
+        () => fetchImpl(`${provider.base}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${provider.key}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            temperature,
+            max_tokens: maxTokens,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+          }),
+          signal: attemptSignal,
         }),
-      });
+        // Race the composed signal too: a transport that ignores its own
+        // signal must still be cut loose by either the caller's abort or the
+        // per-attempt deadline.
+        attemptSignal,
+      );
       if (!res.ok) {
         lastError = Object.assign(new Error(`provider ${res.status}`), { status: res.status });
         if (res.status === 401) break;
         continue;
       }
-      const body = await res.json();
+      const body = await raceAbort(() => res.json(), signal);
       return { text: body?.choices?.[0]?.message?.content ?? '', model };
     } catch (error) {
+      // An abort is the caller giving up, not a model failing — stop the
+      // whole walk rather than spending the next slot on a dead request.
+      if (error?.name === 'AbortError') throw abortError('Model request aborted');
       lastError = error;
       if (error?.status === 401) break;
     }
@@ -197,8 +219,9 @@ const looksMultimodal = (id) => {
 };
 
 /** Free chat-capable models that can also read an image, strongest first. */
-export async function rankedVisionModels(fetchImpl = fetch) {
-  return (await rankedFreeModels(fetchImpl)).filter(looksMultimodal);
+/** Free vision models, strongest first — the chat ranking filtered to readers. */
+export async function rankedVisionModels(fetchImpl = fetch, options = {}) {
+  return (await rankedFreeModels(fetchImpl, options)).filter(looksMultimodal);
 }
 
 /**
@@ -209,48 +232,61 @@ export async function rankedVisionModels(fetchImpl = fetch) {
  * caller then tells the user to type it in, which is the honest answer.
  */
 export async function freeVision({
-  system, user, image, maxTokens = 1200, fetchImpl = fetch,
+  system, user, image, maxTokens = 1200, fetchImpl = fetch, signal, timeoutMs = 30000,
 } = {}) {
   const provider = activeProvider();
   if (!provider) throw new Error('no-free-model');
   if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(String(image || ''))) {
     throw new Error('bad-image');
   }
-  const models = await rankedVisionModels(fetchImpl);
+  const models = await rankedVisionModels(fetchImpl, { signal, timeoutMs });
   if (!models.length) throw new Error('no-vision-model');
   let lastError = null;
   for (const model of models.slice(0, 4)) {
+    if (signal?.aborted) throw abortError('Model request aborted');
+    const attemptSignal = AbortSignal.any([
+      ...(signal ? [signal] : []),
+      ...(timeoutMs ? [AbortSignal.timeout(timeoutMs)] : []),
+    ]);
     try {
-      const res = await fetchImpl(`${provider.base}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${provider.key}`,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.2,
-          max_tokens: maxTokens,
-          messages: [
-            { role: 'system', content: system },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: user },
-                { type: 'image_url', image_url: { url: image } },
-              ],
-            },
-          ],
+      const res = await raceAbort(
+        () => fetchImpl(`${provider.base}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${provider.key}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            max_tokens: maxTokens,
+            messages: [
+              { role: 'system', content: system },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: user },
+                  { type: 'image_url', image_url: { url: image } },
+                ],
+              },
+            ],
+          }),
+          signal: attemptSignal,
         }),
-      });
+        // Race the composed signal too: a transport that ignores its own
+        // signal must still be cut loose by either the caller's abort or the
+        // per-attempt deadline.
+        attemptSignal,
+      );
       if (!res.ok) {
         lastError = Object.assign(new Error(`provider ${res.status}`), { status: res.status });
         if (res.status === 401) break;
         continue;
       }
-      const body = await res.json();
+      const body = await raceAbort(() => res.json(), signal);
       return { text: body?.choices?.[0]?.message?.content ?? '', model };
     } catch (error) {
+      if (error?.name === 'AbortError') throw abortError('Model request aborted');
       lastError = error;
       if (error?.status === 401) break;
     }

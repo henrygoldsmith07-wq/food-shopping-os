@@ -89,9 +89,11 @@ export const parseModelJson = (text = '') => {
  * Ask the model ladder to read a page the parsers could not.
  *
  * `freeChat` walks the ranking itself, so a rate-limited Nemotron Ultra costs
- * one retry into DeepSeek rather than the whole lookup.
+ * one retry into DeepSeek rather than the whole lookup. The caller's signal
+ * rides along: a budget that has expired stops the ladder mid-walk instead of
+ * letting it keep spending a dead request's time.
  */
-export const extractWithModel = async (text, query, { fetchImpl = fetch } = {}) => {
+export const extractWithModel = async (text, query, { fetchImpl = fetch, signal } = {}) => {
   if (!isOpenRouterConfigured() || !text.trim()) return { rows: [], model: null };
   const { text: reply, model } = await freeChat({
     system: SYSTEM_PROMPT,
@@ -100,6 +102,8 @@ export const extractWithModel = async (text, query, { fetchImpl = fetch } = {}) 
     temperature: 0,
     maxAttempts: 8,
     fetchImpl,
+    signal,
+    timeoutMs: Number(process.env.SCRAPER_MODEL_TIMEOUT_MS || 12000),
   });
   const parsed = parseModelJson(reply);
   const products = Array.isArray(parsed?.products) ? parsed.products : [];
@@ -259,7 +263,7 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
   const nothingRelevant = !rows.some((row) => isMatch(row.name, wanted));
   if (nothingRelevant && allowModel && isOpenRouterConfigured() && pageText.trim()) {
     try {
-      const extracted = await extractWithModel(priceRelevantText(pageText), wanted, { fetchImpl });
+      const extracted = await extractWithModel(priceRelevantText(pageText), wanted, { fetchImpl, signal });
       model = extracted.model;
       const verified = mergeCandidates([verifyAgainstPage(extracted.rows, pageText)]);
       // Keep whatever the parsers found as well. The model is a second reader

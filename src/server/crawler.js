@@ -27,6 +27,8 @@
  * a price" are different questions, and only the second one matters.
  */
 
+import { racedFetch, raceAbort } from './abort-race.js';
+
 const DEFAULT_ORDER = ['monid', 'direct', 'firecrawl', 'jina'];
 
 export const USER_AGENT = process.env.SCRAPER_USER_AGENT
@@ -205,12 +207,21 @@ export const monidRunOutput = async (provider, endpoint, input, { fetchImpl = fe
   const runTimeoutMs = Number(process.env.MONID_RUN_TIMEOUT_MS || 60000);
   const pollMs = Math.max(0, Number(process.env.MONID_POLL_MS || 2000));
   const requestSignal = signal || AbortSignal.timeout(runTimeoutMs + 5000);
+  // Each HTTP leg gets a deadline of its own and is raced against the abort:
+  // a signal-blind or stalled transport must not be able to hold the run —
+  // and the caller's whole check — hostage past the poll deadline.
+  const REQUEST_TIMEOUT_MS = 15000;
+  const leg = (url, init) => racedFetch(fetchImpl, url, init, { signal: requestSignal, timeoutMs: REQUEST_TIMEOUT_MS })
+    .catch((error) => {
+      if (error?.name === 'AbortError') throw failure('aborted', 'Monid run aborted');
+      if (error?.name === 'TimeoutError') throw failure('timeout', `Monid request did not finish in ${REQUEST_TIMEOUT_MS}ms`);
+      throw error;
+    });
 
-  const start = await fetchImpl(`${base}/v1/run`, {
+  const start = await leg(`${base}/v1/run`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ provider, endpoint, input }),
-    signal: requestSignal,
     cache: 'no-store',
   });
   if (!start.ok) throw failure(classify(start.status), `monid ${start.status}`);
@@ -225,8 +236,8 @@ export const monidRunOutput = async (provider, endpoint, input, { fetchImpl = fe
     if (Date.now() > deadline) {
       throw failure('timeout', `Monid run ${runId} did not finish in ${runTimeoutMs}ms`);
     }
-    const poll = await fetchImpl(`${base}/v1/runs/${encodeURIComponent(runId)}`, {
-      headers, signal: requestSignal, cache: 'no-store',
+    const poll = await leg(`${base}/v1/runs/${encodeURIComponent(runId)}`, {
+      headers, cache: 'no-store',
     });
     if (!poll.ok) throw failure(classify(poll.status), `monid run ${poll.status}`);
     const run = await poll.json().catch(() => null);
@@ -288,23 +299,15 @@ export const runStrategy = async (name, url, options = {}) => {
   const strategy = STRATEGIES[name];
   if (!strategy) throw failure('unknown-strategy', `No fetch strategy named "${name}"`);
   // Abort must mean "return now", not "whenever the transport feels like it".
-  // Real fetch honours the signal, but a mocked or non-abort-aware transport
-  // ignores it and a worker would sit on the await for the full request —
-  // the exact hang the caller's budget exists to prevent. Racing the call
-  // against the abort cuts every strategy loose the moment it fires; the
-  // rejection reads as the abort so the orchestrator can skip the retry.
-  const { signal } = options;
-  if (!signal) return strategy(url, options);
-  let onAbort;
-  const aborted = new Promise((_, reject) => {
-    onAbort = () => reject(failure('aborted', 'Request aborted'));
-  });
-  signal.addEventListener('abort', onAbort, { once: true });
-  if (signal.aborted) onAbort();
+  // A mocked or non-abort-aware transport ignores the signal and a worker
+  // would sit on the await for the full request — the exact hang the
+  // caller's budget exists to prevent. The rejection reads as the abort so
+  // the orchestrator can skip the retry.
   try {
-    return await Promise.race([strategy(url, options), aborted]);
-  } finally {
-    signal.removeEventListener('abort', onAbort);
+    return await raceAbort(() => strategy(url, options), options.signal);
+  } catch (error) {
+    if (error?.name === 'AbortError') throw failure('aborted', 'Request aborted');
+    throw error;
   }
 };
 

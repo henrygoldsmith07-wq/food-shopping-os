@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   availableStrategies, crawlPage, directFetch, firecrawlConfigured, firecrawlFetch,
-  jinaFetch, monidConfigured, monidFetch, runStrategy,
+  jinaFetch, monidConfigured, monidFetch, monidRunOutput, runStrategy,
 } from '../src/server/crawler.js';
 import { clearRobotsCache, isScrapeAllowed } from '../src/server/robots.js';
 import { deterministicPass, scrapeRetailer } from '../src/server/price-scraper.js';
@@ -102,6 +102,17 @@ describe('a robots.txt we are not allowed to read', () => {
 });
 
 describe('the individual fetch strategies', () => {
+  it('a Monid run comes back aborted as soon as the caller aborts, even on a transport that ignores the signal', async () => {
+    vi.stubEnv('MONID_API_KEY', 'monid-test');
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 50);
+    const fetchImpl = vi.fn(async () => new Promise((resolve) => { setTimeout(resolve, 5000); }));
+    const started = Date.now();
+    await expect(monidRunOutput('test', 'https://run.test', {}, { fetchImpl, signal: controller.signal }))
+      .rejects.toMatchObject({ code: 'aborted' });
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
   it('direct returns the raw document', async () => {
     const fetchImpl = vi.fn(async () => res(PRICED));
     await expect(directFetch('https://a.test/s', { fetchImpl }))
