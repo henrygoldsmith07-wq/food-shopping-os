@@ -175,7 +175,7 @@ function PantryDashboard({ report }) {
         <Stat label="Dated" value={`${report.datedCoverage}%`} />
       </div>
       <div className="grid grid-cols-2 gap-2.5">
-        <Stat label="Use soon" value={report.useSoon} detail="within three days" />
+        <Stat label="Use first" value={report.useSoon} detail="expiring within three days" />
         <Stat label="Running low" value={report.low} detail="marked by you" />
       </div>
       <Breakdown title="By location" rows={report.byLocation} />

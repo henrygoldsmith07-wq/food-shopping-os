@@ -83,7 +83,11 @@ export default function HomeFoodLoop({ app, foodLoop, expiring, low, goTab, open
             className="press mt-2 w-full rounded-xl border px-3.5 py-2.5 text-[0.75rem] font-extrabold"
             style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
           >
-            Review pantry · {expiring.length + low.length} item{expiring.length + low.length === 1 ? '' : 's'} need attention
+            {expiring.length > 0 && low.length > 0
+              ? `Use first — ${expiring.length} expiring · ${low.length} running low`
+              : expiring.length > 0
+                ? `Use first · ${expiring.length} expiring item${expiring.length === 1 ? '' : 's'}`
+                : `Running low · ${low.length} item${low.length === 1 ? '' : 's'}`}
           </button>
         )}
       </Card>

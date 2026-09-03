@@ -29,7 +29,7 @@ export default function PlanningSignals({ app }) {
         {app.useSoonIngredients?.length > 0 && (
           <div>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Use soon</p>
+              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Use first</p>
               <span className="text-[0.6875rem] font-bold" style={{ color: 'var(--warn, #a55a12)' }}>{app.useSoonIngredients.length} ingredient{app.useSoonIngredients.length === 1 ? '' : 's'}</span>
             </div>
             <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>

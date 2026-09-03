@@ -59,7 +59,7 @@ export const guidanceFor = (app) => {
     items.push({
       id: 'expiry',
       priority: 95,
-      label: 'Use soon',
+      label: 'Use first',
       title: `Use ${names.toLowerCase()} next`,
       reason: `${expiring.length === 1 ? 'It expires' : 'They expire'} within three days, so this is the clearest chance to prevent waste.`,
       evidence: `${expiring.length} pantry item${expiring.length === 1 ? '' : 's'} expiring`,

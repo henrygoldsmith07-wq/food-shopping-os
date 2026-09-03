@@ -301,7 +301,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
 
           {location === 'All' && !query && expiring.length > 0 && (
             <Section
-              title="Use soon"
+              title="Use first"
               action={onPlan ? 'Open meal planner' : undefined}
               onAction={onPlan}
               className="!px-0"

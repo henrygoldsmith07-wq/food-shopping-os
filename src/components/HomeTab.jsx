@@ -256,7 +256,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                   {expiring.length > 0 && (
                     <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
                       <p className="text-[0.75rem] font-bold mb-2 flex items-center gap-1.5" style={{ color: 'var(--danger)' }}>
-                        <AlarmClock size={13} /> Use soon
+                        <AlarmClock size={13} /> Use first
                       </p>
                       <div className="flex gap-2 flex-wrap">
                         {expiring.slice(0, 4).map((p) => {
