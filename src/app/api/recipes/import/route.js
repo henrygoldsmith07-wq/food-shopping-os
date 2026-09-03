@@ -11,7 +11,7 @@ import {
 import {
   draftToRecipeText, extractionPrompt, parseRecipeDraft, RECIPE_SYSTEM,
 } from '../../../../server/recipe-extract.js';
-import { recipeTextFromMarkup } from '../../../../lib/recipe-markup.js';
+import { recipeTextFromMarkup } from '../../../../shared/recipe-markup.js';
 
 /**
  * Recipe import: a link, a photo, or text already read off one.

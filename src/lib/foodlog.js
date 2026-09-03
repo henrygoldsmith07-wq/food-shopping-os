@@ -11,7 +11,7 @@ import { CATALOGUE, FOODS } from '../data/foods.js';
 import { NUTRIENT_KEYS } from '../data/nutrients.js';
 import { EMPTY, buildEntry, nutrientNumber, nutrientValue, recipeAsFood, timeStamp, mealForTime } from './nutrition.js';
 
-export { recipeTextFromMarkup } from './recipe-markup.js';
+export { recipeTextFromMarkup } from '../shared/recipe-markup.js';
 
 const norm = (str) => String(str || '').toLowerCase().trim();
 
