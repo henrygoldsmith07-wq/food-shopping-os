@@ -77,6 +77,13 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
             {item.name}
             {item.qty && !qtyEditing && <span className="font-semibold text-[0.75rem]" style={{ color: 'var(--muted)' }}> · {item.qty}</span>}
           </p>
+          {item.checked && item.checkedBy && app.members.length > 1 && (
+            <p className="mt-0.5 text-[0.65625rem] font-bold" style={{ color: 'var(--faint)' }}>
+              ✓ {item.checkedBy === app.activeMemberId
+                ? 'You'
+                : app.members.find((member) => member.id === item.checkedBy)?.name || 'Someone'} ticked this
+            </p>
+          )}
           {/* Quantity taps straight into an inline edit — the field the row
               already shows is the one people most often need to correct. */}
           {item.qty && !qtyEditing && (

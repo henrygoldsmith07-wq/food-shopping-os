@@ -317,7 +317,14 @@ export function useStoreApi({
       toggleChecked: (id) =>
         set((s) => ({
           shoppingList: s.shoppingList.map((i) => (i.id === id
-            ? { ...i, checked: !i.checked, checkedAt: i.checked ? null : Date.now() }
+            ? {
+              ...i,
+              checked: !i.checked,
+              checkedAt: i.checked ? null : Date.now(),
+              // Who ticked it — so a shared list reads as people's ticks,
+              // not a single anonymous checkmark. Cleared on untick.
+              checkedBy: i.checked ? null : s.activeMemberId || null,
+            }
             : i)),
         })),
       clearChecked: () => set((s) => ({ shoppingList: s.shoppingList.filter((i) => !i.checked) })),
