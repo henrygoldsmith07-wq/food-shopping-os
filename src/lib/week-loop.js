@@ -156,7 +156,7 @@ export const weekLoopSnapshot = (app) => {
  *
  * Returns {} when there is nothing to change, so callers can spread it.
  */
-export const reconcileListWithPlan = (state, dates = weekDates(state?.day)) => {
+export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { planChanged = false } = {}) => {
   if (!state || !householdPermission(state, 'shopping')) return {};
   const list = Array.isArray(state.shoppingList) ? state.shoppingList : [];
   const plan = state.plan || {};
@@ -179,9 +179,18 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day)) => {
 
   // A dish planned anywhere still owns its rows — moving Tuesday's dinner
   // into next month must not strand its shopping mid-move.
+  const planEntriesAll = planEntries(plan, Object.keys(plan).sort());
   const plannedRecipeNames = new Set(
-    planEntries(plan, Object.keys(plan).sort()).map((entry) => entry.recipe?.name).filter(Boolean),
+    planEntriesAll.map((entry) => entry.recipe?.name).filter(Boolean),
   );
+
+  // Only prune when this list answers to a plan this state can actually see:
+  // the write itself changed the plan, or the plan holds entries that could
+  // own the rows. A pantry or portion write against an empty plan (rows from
+  // a proposal the loop has not committed yet) must never empty unchecked
+  // rows — the removal branch below can only prove a row unwanted against a
+  // plan it is looking at.
+  const canPrune = planChanged || planEntriesAll.length > 0;
 
   const presentKeys = new Set(list.map((row) => keyOf(row.name)));
   let changed = false;
@@ -189,7 +198,7 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day)) => {
   for (const row of list) {
     const key = keyOf(row.name);
     const auto = Boolean(row.fromRecipe) && !row.checked;
-    if (auto && !needed.has(key) && !plannedRecipeNames.has(row.fromRecipe)) {
+    if (canPrune && auto && !needed.has(key) && !plannedRecipeNames.has(row.fromRecipe)) {
       changed = true;
       continue; // the plan no longer asks for this
     }
@@ -252,7 +261,7 @@ export const withAutoListSync = (state, changes) => {
   const keys = Object.keys(changes || {});
   if (!keys.length || !keys.some((key) => LIST_SYNC_TRIGGERS.includes(key))) return changes;
   const nextState = { ...state, ...changes };
-  const follow = reconcileListWithPlan(nextState);
+  const follow = reconcileListWithPlan(nextState, undefined, { planChanged: keys.includes('plan') });
   if (follow.shoppingList && follow.shoppingList !== changes.shoppingList) {
     return { ...changes, shoppingList: follow.shoppingList };
   }

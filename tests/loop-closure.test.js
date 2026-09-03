@@ -244,3 +244,47 @@ describe('plan edits rewrite the list by themselves', () => {
     expect(withAutoListSync({ ...EMPTY_STATE, day: TODAY }, changes)).toBe(changes);
   });
 });
+
+describe('a non-plan write never prunes a list without a committed plan', () => {
+  const recipe = RECIPES.find((r) => (r.ingredients || []).length >= 2);
+  const autoRow = (name, qty, over = {}) => ({
+    id: `s-${name}`, name, qty, fromRecipe: recipe.name, checked: false,
+    lastAutoQty: qty, price: 0, ...over,
+  });
+
+  it('a pantry move leaves every row alone when the plan is empty (rows from an uncommitted proposal)', () => {
+    const state = {
+      ...EMPTY_STATE,
+      day: TODAY,
+      portions: 2,
+      plan: {},
+      shoppingList: [
+        autoRow('Onion', '2'),
+        autoRow('Broccoli', '1'),
+        autoRow('Bought milk', '2 pints', { checked: true }),
+        { id: 's-manual', name: 'Batteries', qty: '', checked: false },
+      ],
+    };
+    // { pantry } is a LIST_SYNC_TRIGGER, so the list re-derives in this write.
+    // With no committed plan the reconcile cannot prove any row unwanted —
+    // emptying the unchecked rows here would be data loss, not tidy-up.
+    const changes = withAutoListSync(state, { pantry: [{ id: 'p-1', name: 'Onion', cat: 'Produce' }] });
+    expect(changes).toEqual({ pantry: [{ id: 'p-1', name: 'Onion', cat: 'Produce' }] });
+    expect(changes).not.toHaveProperty('shoppingList');
+  });
+
+  it('a pantry move keeps rows whose dish is still planned anywhere in the calendar', () => {
+    const state = {
+      ...EMPTY_STATE,
+      day: TODAY,
+      portions: 2,
+      plan: { [daysAgo(-1)]: { dinner: recipe.id } },
+      shoppingList: [autoRow('Rice', '500 g')],
+    };
+    const changes = withAutoListSync(state, { pantry: [{ id: 'p-1', name: 'Rice', cat: 'Cupboard', qty: '1 kg' }] });
+    // Rice survives untouched — and the reconcile may add the dish's other
+    // missing ingredients, which is the designed fill-in, never a wipe.
+    expect(changes.shoppingList.map((r) => r.name)).toContain('Rice');
+    expect(changes.shoppingList.find((r) => r.name === 'Rice')).toMatchObject({ qty: '500 g', fromRecipe: recipe.name });
+  });
+});
