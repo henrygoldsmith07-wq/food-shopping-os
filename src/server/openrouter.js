@@ -147,8 +147,16 @@ export async function rankedFreeModels(fetchImpl = fetch) {
  * Chat completion with failover down the intelligence ranking. A 401 stops
  * immediately — a bad key never fixes itself on the next model.
  */
+const TIMEOUT_ERROR = (ms) => Object.assign(new Error('AI provider timed out.'), { status: 504 });
+
+/**
+ * Chat completion with failover down the intelligence ranking. A 401 stops
+ * immediately — a bad key never fixes itself on the next model. A provider
+ * that hangs is aborted after `timeoutMs` and costs one rung of the ladder
+ * rather than the whole request: the next model gets its own full budget.
+ */
 export async function freeChat({
-  system, user, maxTokens = 1200, temperature = 0.4, maxAttempts = 6, fetchImpl = fetch,
+  system, user, maxTokens = 1200, temperature = 0.4, maxAttempts = 6, fetchImpl = fetch, timeoutMs = 45000,
 } = {}) {
   const provider = activeProvider();
   if (!provider) throw new Error('no-free-model');
@@ -156,6 +164,8 @@ export async function freeChat({
   if (!models.length) throw new Error('no-free-model');
   let lastError = null;
   for (const model of models.slice(0, Math.max(1, maxAttempts))) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetchImpl(`${provider.base}/chat/completions`, {
         method: 'POST',
@@ -163,6 +173,7 @@ export async function freeChat({
           authorization: `Bearer ${provider.key}`,
           'content-type': 'application/json',
         },
+        signal: controller.signal,
         body: JSON.stringify({
           model,
           temperature,
@@ -181,8 +192,12 @@ export async function freeChat({
       const body = await res.json();
       return { text: body?.choices?.[0]?.message?.content ?? '', model };
     } catch (error) {
-      lastError = error;
-      if (error?.status === 401) break;
+      lastError = controller.signal.aborted
+        ? TIMEOUT_ERROR(timeoutMs)
+        : error;
+      if (!controller.signal.aborted && error?.status === 401) break;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastError || new Error('no-free-model');
@@ -209,7 +224,7 @@ export async function rankedVisionModels(fetchImpl = fetch) {
  * caller then tells the user to type it in, which is the honest answer.
  */
 export async function freeVision({
-  system, user, image, maxTokens = 1200, fetchImpl = fetch,
+  system, user, image, maxTokens = 1200, fetchImpl = fetch, timeoutMs = 45000,
 } = {}) {
   const provider = activeProvider();
   if (!provider) throw new Error('no-free-model');
@@ -220,6 +235,8 @@ export async function freeVision({
   if (!models.length) throw new Error('no-vision-model');
   let lastError = null;
   for (const model of models.slice(0, 4)) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetchImpl(`${provider.base}/chat/completions`, {
         method: 'POST',
@@ -227,6 +244,7 @@ export async function freeVision({
           authorization: `Bearer ${provider.key}`,
           'content-type': 'application/json',
         },
+        signal: controller.signal,
         body: JSON.stringify({
           model,
           temperature: 0.2,
@@ -251,8 +269,12 @@ export async function freeVision({
       const body = await res.json();
       return { text: body?.choices?.[0]?.message?.content ?? '', model };
     } catch (error) {
-      lastError = error;
-      if (error?.status === 401) break;
+      lastError = controller.signal.aborted
+        ? TIMEOUT_ERROR(timeoutMs)
+        : error;
+      if (!controller.signal.aborted && error?.status === 401) break;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastError || new Error('no-vision-model');

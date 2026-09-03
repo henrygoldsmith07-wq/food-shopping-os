@@ -47,6 +47,7 @@ export async function POST(request) {
         throw new ApiError(503, 'No AI model is available right now. Type or paste the list instead.');
       }
       if (error?.status === 429) throw new ApiError(429, 'The AI provider is rate limiting us. Try again shortly.');
+      if (error?.status === 504) throw new ApiError(504, 'The AI provider did not respond in time. Try again shortly.');
       throw error;
     }
 

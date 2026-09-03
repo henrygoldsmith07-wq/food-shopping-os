@@ -94,6 +94,34 @@ describe('freeChat — failover walks down the intelligence ranking', () => {
     vi.stubEnv('OPENROUTER_API_KEY', '');
     await expect(freeChat({ system: 's', user: 'u', fetchImpl: vi.fn() })).rejects.toThrow('no-free-model');
   });
+
+  it('aborts a provider that hangs and walks to the next model with its own budget', async () => {
+    const tried = [];
+    // A fetch that never answers but honours the abort signal — exactly what
+    // a wedged provider does.
+    const hanging = (url, init) => new Promise((resolve, reject) => {
+      if (String(url).endsWith('/models')) return resolve(jsonRes(catalog));
+      tried.push(JSON.parse(init.body).model);
+      init.signal.addEventListener('abort', () => {
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+      });
+    });
+    await expect(freeChat({
+      system: 's', user: 'u', fetchImpl: hanging, timeoutMs: 20, maxAttempts: 2,
+    })).rejects.toMatchObject({ status: 504, message: 'AI provider timed out.' });
+    // Two rungs were given a full budget each, then the request gave up.
+    expect(tried.length).toBe(2);
+  });
+
+  it('carries an abort signal so callers can cancel, and succeeds normally when fast', async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (String(url).endsWith('/models')) return jsonRes(catalog);
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      return jsonRes({ choices: [{ message: { content: 'fast reply' } }] });
+    });
+    const out = await freeChat({ system: 's', user: 'u', fetchImpl, timeoutMs: 2000 });
+    expect(out.text).toBe('fast reply');
+  });
 });
 
 describe('freeVision — the models that can actually see', () => {
