@@ -1,5 +1,7 @@
 import { Cloud, CloudOff, Download, LoaderCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
+import { hasQueuedCloud, lastSyncedAt, queuedSince } from '../lib/cloud.js';
+import { timeAgo } from '../lib/utils.js';
 
 const ACTIVE = new Set(['live', 'ready', 'connecting', 'reconnecting', 'error', 'offline']);
 
@@ -25,6 +27,11 @@ export default function CloudSyncRow() {
   const exportable = canExportSync(kind);
   const Icon = kind === 'live' || kind === 'ready' ? Cloud : kind === 'connecting' || kind === 'reconnecting' ? LoaderCircle : CloudOff;
   const refresh = () => window.dispatchEvent(new Event('forq-cloud-refresh'));
+  const syncedAt = kind === 'live' || kind === 'ready' ? lastSyncedAt() : null;
+  const queuedAt = hasQueuedCloud() ? queuedSince() : null;
+  const detail = queuedAt
+    ? `Changes queued on this device from ${new Date(queuedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : (syncedAt ? `Last synced ${timeAgo(syncedAt)}` : '');
   const exportBackup = () => {
     const data = app.exportData?.();
     if (!data || typeof document === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return;
@@ -38,9 +45,16 @@ export default function CloudSyncRow() {
 
   return (
     <div className="flex items-center justify-between gap-3 px-5 text-[0.71875rem] font-bold" style={{ color: 'var(--muted)' }}>
-      <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
-        <Icon size={13} className={kind === 'connecting' || kind === 'reconnecting' ? 'animate-spin' : undefined} />
-        {syncCopy(kind)}
+      <span className="inline-flex min-w-0 flex-col gap-0.5">
+        <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
+          <Icon size={13} className={kind === 'connecting' || kind === 'reconnecting' ? 'animate-spin' : undefined} />
+          {syncCopy(kind)}
+        </span>
+        {detail && (
+          <span className="truncate text-[0.65625rem] font-semibold" style={{ color: 'var(--faint)' }}>
+            {detail}
+          </span>
+        )}
       </span>
       {(exportable || refreshable) && (
         <div className="inline-flex shrink-0 items-center gap-1">

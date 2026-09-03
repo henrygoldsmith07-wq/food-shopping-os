@@ -38,6 +38,18 @@ const readQueue = () => {
   }
 };
 
+/** When this device last confirmed a successful sync, or null. */
+export function lastSyncedAt() {
+  const meta = readMeta();
+  return meta.syncedAt || null;
+}
+
+/** When offline changes were queued, or null. */
+export function queuedSince() {
+  const queued = readQueue();
+  return queued?.queuedAt || null;
+}
+
 const saveQueue = (state, meta) => {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify({ state, meta, queuedAt: Date.now() }));
@@ -85,10 +97,10 @@ export async function initialiseCloud(localState) {
       ? Number(saved.version || 0)
       : null;
     if (remote.state) {
-      saveMeta(meta);
+      saveMeta({ ...meta, syncedAt: Date.now() });
       return {
         state: remote.state,
-        meta,
+        meta: { ...meta, syncedAt: Date.now() },
         baseVersion,
         status: { kind: 'ready', message: 'Synced with your household.' },
       };
@@ -98,9 +110,9 @@ export async function initialiseCloud(localState) {
         method: 'PUT',
         body: JSON.stringify({ version: 0, deviceId: meta.deviceId, state: syncState(localState) }),
       });
-      meta = saveMeta({ ...meta, version: result.version });
+      meta = saveMeta({ ...meta, version: result.version, syncedAt: Date.now() });
     } else {
-      saveMeta(meta);
+      saveMeta({ ...meta, syncedAt: Date.now() });
     }
     return { meta, status: { kind: 'ready', message: 'Cloud sync is ready.' } };
   } catch (error) {
@@ -121,7 +133,7 @@ export async function pushCloud(state, meta, { queueOnFailure = true } = {}) {
       body: JSON.stringify({ version: meta.version, deviceId: meta.deviceId, state: syncState(state) }),
     });
     return {
-      meta: saveMetaIfNewer({ ...meta, version: result.version }),
+      meta: saveMetaIfNewer({ ...meta, version: result.version, syncedAt: Date.now() }),
       status: { kind: 'ready', message: 'All changes synced.' },
     };
   } catch (error) {
@@ -161,7 +173,7 @@ export async function pullCloud(meta) {
     });
     return {
       state: remote.version > meta.version ? remote.state : null,
-      meta: saveMetaIfNewer({ ...meta, householdId: remote.householdId, version: remote.version }),
+      meta: saveMetaIfNewer({ ...meta, householdId: remote.householdId, version: remote.version, syncedAt: Date.now() }),
       status: { kind: 'ready', message: 'Household changes received live.' },
     };
   } catch (error) {

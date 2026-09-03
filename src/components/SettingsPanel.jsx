@@ -6,6 +6,7 @@ import BackendPanel from './BackendPanel.jsx';
 import PrivacyPanel from './PrivacyPanel.jsx';
 import { Card, Section, Sheet, Toggle } from './ui.jsx';
 import { ACCENT_UNLOCKS } from '../data/quests.js';
+import StorageHealth from './StorageHealth.jsx';
 
 const UNLOCK_COLOURS = { sage: '#6b7f6a', clay: '#8c5a44', ink: '#2f3640' };
 const ACCENTS = [
@@ -107,6 +108,7 @@ export default function SettingsPanel() {
       <Section title="Privacy & data" className="rise rise-2">
         <Card className="space-y-3">
           <DemoHouseholdEntry />
+          <StorageHealth />
           <p className="text-[0.75rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
             Browser storage is not encrypted. Anyone with access to this browser profile can
             access it. Export a backup before clearing site data or changing devices.

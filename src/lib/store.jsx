@@ -101,7 +101,17 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') return undefined;
+    const BASE_DELAY = 30000;
+    const MAX_DELAY = 5 * 60 * 1000;
     let retrying = false;
+    let timer = null;
+    let backoff = BASE_DELAY;
+    const settle = (result) => {
+      // A confirmed sync resets the clock; a failed attempt backs off so a
+      // dead network isn't hammered every thirty seconds forever.
+      if (result?.status?.kind === 'ready') backoff = BASE_DELAY;
+      else if (result) backoff = Math.min(backoff * 2, MAX_DELAY);
+    };
     const retry = async () => {
       if (retrying || cloudInitialising.current) return;
       retrying = true;
@@ -120,15 +130,25 @@ export function AppProvider({ children }) {
             return current.kind === 'reconnecting' ? current : result.status;
           });
         }
+        settle(result);
       } finally {
         retrying = false;
+        schedule();
       }
     };
-    window.addEventListener('online', retry);
-    const timer = setInterval(retry, 30000);
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(retry, backoff);
+    };
+    const onOnline = () => {
+      backoff = BASE_DELAY; // a fresh connection deserves an immediate honest try
+      retry();
+    };
+    window.addEventListener('online', onOnline);
+    schedule();
     return () => {
-      window.removeEventListener('online', retry);
-      clearInterval(timer);
+      window.removeEventListener('online', onOnline);
+      clearTimeout(timer);
     };
   }, []);
 
