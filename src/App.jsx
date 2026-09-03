@@ -324,13 +324,9 @@ function Shell() {
 
   return (
     <div className="app-shell min-h-screen" style={{ background: 'var(--bg)' }}>
-      {/* The first stop for a keyboard or switch user: past the chrome, into
-          the day. Invisible until it has focus. */}
-      <a href="#content" className="skip-link">Skip to content</a>
-
       <DemoBanner />
       {!navigator.onLine && (
-        <div className="mx-auto max-w-3xl border-b px-5 py-2 text-center text-xs font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }} role="status">
+        <div className="mx-auto max-w-3xl border-b px-5 py-2 text-center text-xs font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
           Offline mode — your changes stay on this device and will sync when you reconnect.
         </div>
       )}
@@ -343,7 +339,7 @@ function Shell() {
         />
 
         {/* Room at the foot for the tab bar and the screen's primary action. */}
-        <main id="content" tabIndex={-1} className="app-main pb-44" onFocus={(event) => {
+        <main id="main" tabIndex={-1} className="app-main pb-44" onFocus={(event) => {
           if (event.target === event.currentTarget) event.currentTarget.scrollIntoView({ block: 'start' });
         }}>
           {app.storageIssue && (
@@ -479,10 +475,14 @@ function Shell() {
   );
 }
 
+export function AppContent() {
+  return <Shell />;
+}
+
 export default function App() {
   return (
     <AppProvider>
-      <Shell />
+      <AppContent />
     </AppProvider>
   );
 }

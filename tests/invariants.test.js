@@ -88,7 +88,9 @@ describe('merge-conflict tripwires', () => {
       });
     }
     expect(violations).toEqual([]);
-    expect(liveRegions).toBeLessThanOrEqual(20);
+    // The recovery status in UndoNotice is the deliberate 21st live region.
+    // Keep the ceiling explicit so future announcements still need review.
+    expect(liveRegions).toBeLessThanOrEqual(21);
   });
 
   it('keeps one page-level heading per primary screen', () => {

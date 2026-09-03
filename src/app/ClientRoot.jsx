@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import App from '../App.jsx';
+import { AppContent } from '../App.jsx';
 import ErrorBoundary from '../components/ErrorBoundary.jsx';
 import { AppProvider, useApp } from '../lib/store.jsx';
 
@@ -29,7 +29,7 @@ function RootSession() {
       window.removeEventListener('offline', announceOnlineState);
     };
   }, [app.enterDemoMode]);
-  return <App />;
+  return <AppContent />;
 }
 
 export default function ClientRoot() {

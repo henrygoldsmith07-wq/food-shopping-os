@@ -86,8 +86,11 @@ test('honours increased contrast and forced system colours', async ({ page }) =>
 test('exports and restores a complete backup from first run', async ({ page }) => {
   await onboard(page);
   await page.getByRole('button', { name: /^You — profile/ }).click();
+  const profile = page.getByRole('dialog', { name: 'You' });
+  await profile.getByRole('button', { name: 'Settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export' }).click();
+  await settings.getByRole('button', { name: 'Export' }).click();
   const download = await downloadPromise;
   const backup = await download.path();
 
@@ -131,7 +134,10 @@ test('home, recipes and Guidance have no automatically detectable accessibility 
 test('privacy disclosure is reachable and accessible without an account', async ({ page }) => {
   await onboard(page);
   await page.getByRole('button', { name: /^You — profile/ }).click();
-  await page.getByRole('button', { name: 'Privacy, storage & deletion' }).click();
+  const profile = page.getByRole('dialog', { name: 'You' });
+  await profile.getByRole('button', { name: 'Settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByRole('button', { name: 'Privacy, storage & deletion' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Privacy & data' });
   await expect(dialog.getByText('Stored on this device')).toBeVisible();

@@ -335,38 +335,8 @@ export const Sheet = ({ open, onClose, children, full = false, title }) => {
       );
       (focusable || panel.current)?.focus();
     }, 0);
-    // A modal traps Tab: focus cycles within the panel instead of escaping
-    // into the page behind it. Only the top-most open dialog owns the trap,
-    // so a sheet opened inside another sheet keeps the inner one in charge.
-    const trapTab = (event) => {
-      if (event.key !== 'Tab') return;
-      const open = [...document.querySelectorAll('[aria-modal="true"]:not([aria-hidden="true"])')];
-      if (open.length && open[open.length - 1] !== panel.current) return;
-      const focusable = panel.current?.querySelectorAll(
-        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusable?.length) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      } else if (![...focusable].includes(document.activeElement)) {
-        // Focus landed on the backdrop or behind the sheet — pull it back in.
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    panel.current?.addEventListener('keydown', trapTab);
     return () => {
       clearTimeout(timer);
-      panel.current?.removeEventListener('keydown', trapTab);
       if (previousFocus.current?.isConnected) previousFocus.current.focus();
       else document.getElementById('main')?.focus?.();
     };
@@ -423,12 +393,14 @@ export const Sheet = ({ open, onClose, children, full = false, title }) => {
             return;
           }
           if (event.key !== 'Tab') return;
-          const focusable = [...panel.current.querySelectorAll(
+          const open = [...document.querySelectorAll('[aria-modal="true"]:not([aria-hidden="true"])')];
+          if (open.length && open[open.length - 1] !== event.currentTarget) return;
+          const focusable = [...event.currentTarget.querySelectorAll(
             'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
           )].filter((element) => element.offsetParent !== null || element === document.activeElement);
           if (!focusable.length) {
             event.preventDefault();
-            panel.current.focus();
+            event.currentTarget.focus();
             return;
           }
           const first = focusable[0];
@@ -437,6 +409,9 @@ export const Sheet = ({ open, onClose, children, full = false, title }) => {
             event.preventDefault();
             last.focus();
           } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          } else if (!event.currentTarget.contains(document.activeElement)) {
             event.preventDefault();
             first.focus();
           }

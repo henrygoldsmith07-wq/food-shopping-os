@@ -33,11 +33,11 @@ export default function PlanSimulator() {
 
   return (
     <Card className="space-y-3">
-      <div className="flex items-start gap-2">
-        <SlidersHorizontal size={17} style={{ color: 'var(--accent)' }} />
-        <div className="min-w-0 flex-1">
-          <p className="font-extrabold">Plan simulator</p>
-          <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+      <div className="flex flex-wrap items-start gap-2">
+        <SlidersHorizontal size={17} className="shrink-0" style={{ color: 'var(--accent)' }} />
+        <div className="min-w-0 flex-[1_1_12rem]">
+          <p className="break-words font-extrabold">Plan simulator</p>
+          <p className="break-words text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
             Stress-test the week before you commit it. Every score is explainable.
           </p>
         </div>

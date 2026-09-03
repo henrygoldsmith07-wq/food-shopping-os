@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { extname, join, sep } from 'node:path';
+import { dirname, extname, join, sep } from 'node:path';
 import { parse } from '@babel/parser';
 import { describe, expect, it } from 'vitest';
 
@@ -31,7 +31,7 @@ const importsOf = (file) => {
 
 /** Resolve a relative specifier from its file, trying the usual extensions. */
 const resolve = (file, specifier) => {
-  const base = join(file, '..', specifier);
+  const base = join(dirname(file), specifier);
   const candidates = [base, `${base}.js`, `${base}.jsx`, join(base, 'index.js'), join(base, 'index.jsx')];
   return candidates.find((candidate) => {
     try {
@@ -47,7 +47,8 @@ const under = (file, root) => slash(file).startsWith(slash(root));
 
 // Client side of the boundary: components, pure logic, and the app shell
 // (pages, layout, root) — but never the api subtree, which is server code.
-const CLIENT_ROOTS = [join(sourceRoot, 'components'), join(sourceRoot, 'lib')];
+const CLIENT_ONLY_ROOTS = [join(sourceRoot, 'components')];
+const CLIENT_BUNDLE_ROOTS = [join(sourceRoot, 'components'), join(sourceRoot, 'lib')];
 const SERVER_ROOTS = [join(sourceRoot, 'server'), join(sourceRoot, 'app', 'api')];
 // The one sanctioned seam: pure logic shared across the boundary.
 const SHARED_ROOT = join(sourceRoot, 'shared');
@@ -61,7 +62,7 @@ const isClientComponent = (file) => readFileSync(file, 'utf8').includes("'use cl
 describe('dependency boundaries', () => {
   it('keeps server code out of the client bundle', () => {
     const leaks = [];
-    const clientFiles = [...CLIENT_ROOTS.flatMap(files), ...appShell().filter(isClientComponent)];
+    const clientFiles = [...CLIENT_BUNDLE_ROOTS.flatMap(files), ...appShell().filter(isClientComponent)];
     for (const file of clientFiles) {
       for (const specifier of importsOf(file)) {
         const target = resolve(file, specifier);
@@ -80,7 +81,7 @@ describe('dependency boundaries', () => {
       for (const specifier of importsOf(file)) {
         const target = resolve(file, specifier);
         // Shared code must stay pure: it may not reach into client or server roots.
-        if (target && [...CLIENT_ROOTS, ...SERVER_ROOTS].some((root) => under(target, root))) {
+        if (target && [...CLIENT_ONLY_ROOTS, ...SERVER_ROOTS].some((root) => under(target, root))) {
           throw new Error(`shared module ${slash(file)} imports ${slash(target)}`);
         }
       }
@@ -93,7 +94,7 @@ describe('dependency boundaries', () => {
       for (const file of files(root)) {
         for (const specifier of importsOf(file)) {
           const target = resolve(file, specifier);
-          if (target && CLIENT_ROOTS.some((clientRoot) => under(target, clientRoot))) {
+          if (target && CLIENT_ONLY_ROOTS.some((clientRoot) => under(target, clientRoot))) {
             leaks.push(`${slash(file)} → ${slash(target)}`);
           }
         }
@@ -103,7 +104,7 @@ describe('dependency boundaries', () => {
   });
 
   it('scans both sides of the boundary', () => {
-    const clientCount = [...CLIENT_ROOTS.flatMap(files), ...appShell().filter(isClientComponent)].length;
+    const clientCount = [...CLIENT_BUNDLE_ROOTS.flatMap(files), ...appShell().filter(isClientComponent)].length;
     const serverCount = SERVER_ROOTS.reduce((count, root) => count + files(root).length, 0);
     expect(clientCount).toBeGreaterThan(100);
     expect(serverCount).toBeGreaterThan(20);

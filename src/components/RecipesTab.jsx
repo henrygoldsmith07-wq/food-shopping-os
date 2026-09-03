@@ -349,19 +349,19 @@ export default function RecipesTab({ openRecipe }) {
       )}
 
       <Section className="mt-4 rise rise-2">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+        <div className="mb-3 grid min-w-0 gap-2 sm:flex sm:items-center sm:justify-between">
+          <p className="min-w-0 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
             {recipes.length} recipe{recipes.length === 1 ? '' : 's'}
             {filters.maxMissing === 0 && ' you can cook right now'}
             {filters.maxTime && ` in ${filters.maxTime} minutes or less`}
             {filters.diets.length > 0 && ` · ${filters.diets.join(', ')}`}
             {blockedLine && <span style={{ color: 'var(--faint)' }}> · {blockedLine}</span>}
           </p>
-          <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)} aria-label="Filter recipe tags" className="max-w-[112px] rounded-xl border px-2 py-2 text-[0.71875rem] font-bold" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}>
+          <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)} aria-label="Filter recipe tags" className="w-full min-w-0 rounded-xl border px-2 py-2 text-[0.71875rem] font-bold sm:w-auto sm:max-w-[112px]" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}>
             <option value="">All tags</option>
             {['high-protein', 'high-fibre', 'quick', 'budget', 'healthy', 'meal-prep', 'freezer', 'reheatable', 'vegan', 'vegetarian', 'one-pot', 'family', 'comfort'].map((tag) => <option key={tag} value={tag}>{tag.replace('-', ' ')}</option>)}
           </select>
-          <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort recipes" className="rounded-xl border px-2 py-2 text-[0.71875rem] font-bold" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}>
+          <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort recipes" className="w-full min-w-0 rounded-xl border px-2 py-2 text-[0.71875rem] font-bold sm:w-auto" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}>
             <option value="relevance">Sort: relevant</option>
             <option value="time">Fastest</option>
             <option value="protein">Most protein</option>

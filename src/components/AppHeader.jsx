@@ -65,6 +65,7 @@ export default function AppHeader({ tab, onProfile, onGuidance }) {
 
   return (
     <header className="app-header px-5 pt-12 pb-3">
+      <a href="#main" className="skip-link">Skip to content</a>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           {screen ? (
@@ -163,7 +164,7 @@ export default function AppHeader({ tab, onProfile, onGuidance }) {
       )}
 
       {hasSyncStatus && !needsAttention && (
-        <div className={live || reconnecting ? 'mt-2' : 'sr-only'} role="status" aria-label={app.cloudStatus.message}>
+        <div className={live || reconnecting ? 'mt-2' : 'sr-only'} aria-label={app.cloudStatus.message}>
           {live || reconnecting ? (
             <Pill tone={live ? 'accent' : 'muted'}>
               <SyncIcon size={12} className={reconnecting ? 'animate-spin' : undefined} />

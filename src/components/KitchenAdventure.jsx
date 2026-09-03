@@ -12,7 +12,7 @@ export default function KitchenAdventure() {
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Trophy size={19} /></span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2"><p className="font-extrabold">Kitchen adventure</p><Pill tone="accent"><Flame size={11} /> {summary.completed}/{summary.total}</Pill></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><p className="min-w-0 flex-auto font-extrabold">Kitchen adventure</p><Pill tone="accent"><Flame size={11} /> {summary.completed}/{summary.total}</Pill></div>
           <p className="mt-0.5 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Complete real kitchen actions to earn bonus XP this week.</p>
         </div>
       </div>

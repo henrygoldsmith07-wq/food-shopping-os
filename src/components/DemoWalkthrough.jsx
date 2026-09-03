@@ -163,7 +163,6 @@ export function DemoBanner() {
   if (!app.isDemoMode) return null;
   return (
     <div
-      role="status"
       className="px-4 py-2 text-center text-[0.75rem] font-extrabold"
       style={{ background: 'color-mix(in srgb, var(--warn) 18%, var(--card))', color: 'var(--ink)' }}
     >
