@@ -407,8 +407,7 @@ export const Sheet = ({ open, onClose, children, full = false, title }) => {
             event.currentTarget.focus();
             return;
           }
-          const first = focusable[0];
-          const last = focusable[focusable.length - 1];
+          const first = focusable[0], last = focusable[focusable.length - 1];
           if (event.shiftKey && document.activeElement === first) {
             event.preventDefault();
             last.focus();
