@@ -202,6 +202,17 @@ export const resolvePrice = (name, sources = {}, options = {}) => {
     };
   }
   const [best, ...rest] = candidates;
+  // A disagreement worth surfacing: two sources far apart usually means the
+  // scraper matched a different product, not that the price moved. The flag
+  // names the most distant rival and how far apart they are, so the UI can
+  // say which sources disagree instead of issuing a generic warning.
+  const rival = best.price > 0 && rest.length
+    ? rest.reduce((furthest, row) => (
+      Math.abs(row.price - best.price) > Math.abs(furthest.price - best.price) ? row : furthest))
+    : null;
+  const disagreement = rival && Math.abs(rival.price - best.price) / best.price >= 0.5
+    ? { rival, gap: Math.round((Math.abs(rival.price - best.price) / best.price) * 100) }
+    : false;
   return {
     name,
     resolved: true,
@@ -215,11 +226,7 @@ export const resolvePrice = (name, sources = {}, options = {}) => {
     date: best.date,
     candidates,
     alternatives: rest,
-    // A disagreement worth surfacing: two sources far apart usually means the
-    // scraper matched a different product, not that the price moved.
-    disagreement: rest.length && best.price > 0
-      ? Math.max(...rest.map((row) => Math.abs(row.price - best.price) / best.price)) >= 0.5
-      : false,
+    disagreement,
   };
 };
 

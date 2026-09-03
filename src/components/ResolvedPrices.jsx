@@ -92,8 +92,11 @@ export default function ResolvedPrices({ items = [], sources = {} }) {
             {row.disagreement && (
               <p className="mt-1.5 inline-flex items-start gap-1.5 text-[0.65625rem] font-semibold" style={{ color: 'var(--warn)' }}>
                 <AlertTriangle size={11} className="mt-px shrink-0" aria-hidden="true" />
-                Sources disagree by more than half. That usually means a search matched a
-                different product rather than the price moving — check the page before trusting it.
+                <span>
+                  {gbp(row.price, { always: true })} ({row.sourceLabel}) vs {gbp(row.disagreement.rival.price, { always: true })}
+                  {' '}({row.disagreement.rival.sourceLabel || row.disagreement.rival.source}) — {row.disagreement.gap}% apart.
+                  {' '}That usually means a search matched a different product rather than the price moving — check the page before trusting it.
+                </span>
               </p>
             )}
 

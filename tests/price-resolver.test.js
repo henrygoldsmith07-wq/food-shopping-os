@@ -136,7 +136,24 @@ describe('flagging sources that disagree', () => {
   it('raises a flag when two sources are more than half apart', () => {
     // Usually a mis-matched product rather than a real price move.
     const sources = { scraped: { milk: scraped(12) }, receipts: { milk: receipt(1.1, 1) } };
-    expect(resolvePrice('milk', sources, { now: NOW }).disagreement).toBe(true);
+    expect(resolvePrice('milk', sources, { now: NOW }).disagreement).toBeTruthy();
+  });
+
+  it('names the most distant rival and the gap between them', () => {
+    // A mid disagreement should not hide the worst one: the receipt is the
+    // outlier and the flag must point at it.
+    const sources = {
+      scraped: { milk: scraped(1.45) },
+      receipts: { milk: receipt(6, 1) },
+      observed: { milk: observed(1.5, 1) },
+    };
+    const { disagreement } = resolvePrice('milk', sources, { now: NOW });
+    expect(disagreement).toBeTruthy();
+    expect(disagreement.rival.source).toBe('recorded');
+    expect(disagreement.rival.price).toBe(6);
+    expect(disagreement.gap).toBeGreaterThanOrEqual(300);
+    // The label travels with the rival, ready for the UI to print.
+    expect(disagreement.rival.sourceLabel).toMatch(/paid/i);
   });
 
   it('stays quiet when they broadly agree', () => {
