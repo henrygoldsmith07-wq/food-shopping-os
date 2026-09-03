@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Camera, Check, Minus, Package, Plus, ScanLine, ShoppingCart, Sparkles, Trash2, TrendingDown, TriangleAlert, X } from 'lucide-react';
+import { BarChart3, Camera, Check, Minus, Package, Plus, ScanLine, ShoppingCart, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react';
+import WasteCauseCard from './WasteCauseCard.jsx';
 import { useApp } from '../lib/store.jsx';
 import { cx, gbp, expiryStatus } from '../lib/utils.js';
 import {
@@ -228,16 +229,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
               {undated} item{undated === 1 ? ' has' : 's have'} no use-by date, so {undated === 1 ? 'it isn’t' : 'they aren’t'} tracked here.
             </p>
           )}
-          {app.wasted.count > 0 && (
-            <Card className="mt-2 flex items-center gap-3 !p-3">
-              <TrendingDown size={16} style={{ color: 'var(--muted)' }} />
-              <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                You’ve binned {app.wasted.count} item{app.wasted.count === 1 ? '' : 's'}, worth{' '}
-                {gbp(app.wasted.cost, { always: true })} at what you paid
-                {app.wasted.worst?.cost > 0 && ` — the priciest was ${app.wasted.worst.name}`}.
-              </p>
-            </Card>
-          )}
+          {app.wasted.count > 0 && <WasteCauseCard />}
         </Section>
       )}
 
