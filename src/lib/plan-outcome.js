@@ -15,6 +15,7 @@
  */
 
 import { planEntries } from './mealplan.js';
+import { uid } from './state.js';
 
 export const PLAN_REASONS = [
   { id: 'no-time', label: 'No time' },
@@ -28,12 +29,66 @@ export const PLAN_REASONS = [
   { id: 'takeaway', label: 'Takeaway / ate out' },
   { id: 'cooked-a-different-meal', label: 'Cooked a different meal' },
   { id: 'other', label: 'Something else' },
+  { id: 'missed', label: 'Missed it' },
 ];
 
 const REASON_BY_ID = new Map(PLAN_REASONS.map((r) => [r.id, r.label]));
 export const reasonLabel = (id) => REASON_BY_ID.get(id) || id || 'Something else';
 
 const eventKey = (date, slot) => `${date}|${slot}`;
+
+/**
+ * Planned slots whose date passed with no recorded outcome at all.
+ *
+ * The household can cook, skip or swap a planned meal — all three write an
+ * event. A slot that simply passed without any of those is the silent miss:
+ * nobody told the waste log, so the "never cooked" bucket could never see it.
+ * Pure: plan + events in, unresolved past slots out.
+ */
+export const missedMealSlots = (plan = {}, { before, events = [] } = {}) => {
+  if (!before) return [];
+  const resolved = new Set(events
+    .filter((event) => event?.date && event?.slot)
+    .map((event) => eventKey(event.date, event.slot)));
+  const missed = [];
+  for (const [date, day] of Object.entries(plan)) {
+    if (!day || typeof day !== 'object' || date >= before) continue;
+    for (const [slot, recipeId] of Object.entries(day)) {
+      if (!recipeId || resolved.has(eventKey(date, slot))) continue;
+      missed.push({ date, slot, recipeId });
+    }
+  }
+  return missed;
+};
+
+/**
+ * Mark silent misses so the waste log can see them.
+ *
+ * Runs when the app rolls over to a new day: any planned slot dated before
+ * today that still has no outcome event is now definitionally never cooked.
+ * Idempotent — resolved slots and already-marked slots are left alone, and
+ * the same state returned unchanged when there is nothing to record.
+ */
+export const captureMissedMeals = (state = {}) => {
+  const events = Array.isArray(state.mealPlanEvents) ? state.mealPlanEvents : [];
+  const missed = missedMealSlots(state.plan || {}, {
+    before: state.day,
+    events,
+  });
+  if (!missed.length) return state;
+  const stamps = missed.map(({ date, slot, recipeId }) => ({
+    id: uid('mpe'),
+    date,
+    slot,
+    plannedRecipeId: recipeId,
+    actualRecipeId: null,
+    status: 'skipped',
+    reason: 'missed',
+    missed: true,
+    at: Date.now(),
+  }));
+  return { ...state, mealPlanEvents: [...events, ...stamps].slice(-500) };
+};
 
 /**
  * Build plan vs reality for a date range.

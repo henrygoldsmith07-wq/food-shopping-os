@@ -6,6 +6,7 @@ import { normalisePriceAlertConfig } from './price-alerts.js';
 import { HEALTH_VAULT_KEY, withoutHealth } from './health-vault.js';
 import { permissionsForRole } from './household.js';
 import { predictionCorrectionEvent } from './prediction-feedback.js';
+import { captureMissedMeals } from './plan-outcome.js';
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -45,7 +46,12 @@ export const hydrate = (stored = {}) => {
     .filter((snapshot) => snapshot?.type === 'prediction_snapshot')
     .slice(-500);
   state.autopilotOutcomes = (Array.isArray(state.autopilotOutcomes) ? state.autopilotOutcomes : []).slice(-500);
-  return rolloverDay(state);
+  const rolled = rolloverDay(state);
+  // A day actually passed since this household last opened the app: any
+  // planned slot dated before today that never got cooked, skipped or
+  // swapped is now a silent miss — mark it so the waste log sees it.
+  if (rolled === state) return rolled;
+  return captureMissedMeals(rolled);
 };
 
 export const parseBackup = (text) => {
