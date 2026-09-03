@@ -165,12 +165,13 @@ export const productRows = (entry) => {
   // miscomparison the table exists to prevent. Pack-size differences stay in
   // — that is what per-amount is for — while brand and variant differences
   // keep their rows but lose the value claims.
-  const ref = majorityReference(rows);
+  const matchOptions = { ingredient: entry?.name, generic: true };
+  const ref = majorityReference(rows, matchOptions);
   const annotated = rows.map((row, index) => ({
     ...row,
     match: index === ref
       ? { classification: 'exact', equivalent: true, reasons: [] }
-      : classifyProductMatch(rows[ref], row),
+      : classifyProductMatch(rows[ref], row, matchOptions),
   }));
   const comparable = annotated.filter((row) => comparableForRanking(row.match));
   // Pack-size differences are intentional input to per-amount comparison;

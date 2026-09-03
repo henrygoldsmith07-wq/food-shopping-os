@@ -1,5 +1,11 @@
 const STOP_WORDS = new Set(['the', 'pack', 'packet', 'size', 'each', 'of']);
 const VARIANT_WORDS = new Set(['organic', 'light', 'free', 'free-range', 'wholemeal', 'wholegrain', 'reduced', 'salt', 'sugar', 'vegan', 'vegetarian', 'smoked', 'plain', 'original', 'hot', 'mild', 'british']);
+/* These prefixes are retailer or own-label names, not a product variant. They
+   are ignored only for generic catalogue searches; direct matching remains
+   conservative so a named brand is never silently treated as another brand. */
+const GENERIC_PREFIXES = new Set([
+  'tesco', 'aldi', 'asda', 'lidl', 'sainsbury', 'sainsburys', 'cowbelle', 'own', 'brand',
+]);
 
 const clean = (value) => String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9.]+/g, ' ').replace(/\s+/g, ' ').trim();
 const singular = (value) => value === 'beanz' ? 'bean' : value.endsWith('ies') ? `${value.slice(0, -3)}y` : value.endsWith('s') && !value.endsWith('ss') ? value.slice(0, -1) : value;
@@ -41,18 +47,24 @@ export const normaliseProduct = (offer = {}) => {
 
 const same = (a, b) => a && b && a === b;
 
-export const classifyProductMatch = (left, right) => {
+export const classifyProductMatch = (left, right, { ingredient = '', generic = false } = {}) => {
   const a = normaliseProduct(left);
   const b = normaliseProduct(right);
   const reasons = [];
   if (!a.product || !b.product) return { classification: 'unknown', confidence: 0, equivalent: false, left: a, right: b, reasons: ['product name is incomplete'] };
   // Different brands can still be comparable when the underlying product and variant match.
   // Brand is retained as provenance, but it must not hide the like-for-like unit-price answer.
-  if (a.brand && b.brand && a.brand !== b.brand && a.product !== b.product) return { classification: 'unknown', confidence: 0.05, equivalent: false, left: a, right: b, reasons: ['different brands'] };
-  if (a.variant !== b.variant) return { classification: 'approximation', confidence: 0.35, equivalent: false, left: a, right: b, reasons: ['variant differs'] };
+  if (!generic && a.brand && b.brand && a.brand !== b.brand && a.product !== b.product) return { classification: 'unknown', confidence: 0.05, equivalent: false, left: a, right: b, reasons: ['different brands'] };
+  const effectiveVariant = (value) => {
+    const filtered = generic ? value?.split(' ').filter((word) => word !== 'british') : value?.split(' ');
+    return filtered?.filter(Boolean).join(' ') || null;
+  };
+  if (effectiveVariant(a.variant) !== effectiveVariant(b.variant)) return { classification: 'approximation', confidence: 0.35, equivalent: false, left: a, right: b, reasons: ['variant differs'] };
   const stripBrand = (value, brand) => brand ? value.replace(new RegExp(`^${brand}\\s+`), '') : value;
+  const genericProduct = (value) => value.split(' ').filter((word) => !GENERIC_PREFIXES.has(word)).join(' ');
   const productEquivalent = a.product === b.product
-    || stripBrand(a.product, a.brand) === stripBrand(b.product, b.brand);
+    || stripBrand(a.product, a.brand) === stripBrand(b.product, b.brand)
+    || (generic && ingredient && genericProduct(a.product) === genericProduct(b.product));
   if (!productEquivalent) return { classification: 'unknown', confidence: 0.15, equivalent: false, left: a, right: b, reasons: ['product description differs'] };
   if (a.totalQuantity !== null && b.totalQuantity !== null && a.totalQuantity !== b.totalQuantity) return { classification: 'approximation', confidence: 0.45, equivalent: false, left: a, right: b, reasons: ['total quantity differs'] };
   if (a.brand && b.brand && same(a.brand, b.brand) && a.totalQuantity !== null && b.totalQuantity !== null) {
@@ -99,9 +111,9 @@ export const matchDifferenceLabel = (match) => ({
  * cheapest ticket on ties, first on further ties — so the same input always
  * picks the same reference.
  */
-export const majorityReference = (rows = []) => {
+export const majorityReference = (rows = [], options = {}) => {
   const counts = rows.map((row, i) => rows.reduce(
-    (sum, other, j) => (i === j || !comparableForRanking(classifyProductMatch(row, other)) ? sum : sum + 1),
+    (sum, other, j) => (i === j || !comparableForRanking(classifyProductMatch(row, other, options)) ? sum : sum + 1),
     0,
   ));
   let best = 0;

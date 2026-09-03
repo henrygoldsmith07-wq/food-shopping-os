@@ -82,8 +82,7 @@ export default function ProductShops({ product }) {
 
       {ticketMisleads && bestValue && cheapest && (
         <p className="mt-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--warn)' }}>
-          {cheapest.retailer} has the cheaper ticket, but {bestValue.retailer} is better value per
-          amount{product.margin ? ` by ${product.margin}%` : ''} — the sizes are different.
+          {`${cheapest.retailer} has the cheaper ticket, but ${bestValue.retailer} is better value per amount${product.margin ? ` by ${product.margin}%` : ''} — the sizes are different.`}
         </p>
       )}
       {mixedScales && (

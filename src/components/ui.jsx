@@ -397,7 +397,11 @@ export const Sheet = ({ open, onClose, children, full = false, title }) => {
           if (open.length && open[open.length - 1] !== event.currentTarget) return;
           const focusable = [...event.currentTarget.querySelectorAll(
             'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-          )].filter((element) => element.offsetParent !== null || element === document.activeElement);
+          )].filter((element) => {
+            if (element.closest('[aria-hidden="true"]')) return false;
+            const style = typeof window !== 'undefined' ? window.getComputedStyle(element) : null;
+            return style?.display !== 'none' && style?.visibility !== 'hidden';
+          });
           if (!focusable.length) {
             event.preventDefault();
             event.currentTarget.focus();

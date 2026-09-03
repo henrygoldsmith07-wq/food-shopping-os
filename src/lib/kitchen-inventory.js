@@ -22,7 +22,7 @@
 
 import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_LOCATION, LOCATIONS } from '../data/pantry.js';
 import { formatQuantity, parseQuantity } from './measure.js';
-import { canonicalName } from './aliases.js';
+import { canonicalName, sameIngredient } from './aliases.js';
 import { searchFoods } from './foodlog.js';
 import { CATALOGUE } from '../data/foods.js';
 
@@ -175,6 +175,16 @@ const looksLikeSameThing = (food, name) => {
   return covers(found, asked) || covers(asked, found);
 };
 
+/* Preserve a user's wording only when the catalogue rearranged the same words.
+   Extra preparation words such as "cooked" still use the catalogue label, as do
+   normal same-order matches so display casing and singular forms stay stable. */
+const wordsDifferOnlyByOrder = (left, right) => {
+  const a = words(left);
+  const b = words(right);
+  if (a.length !== b.length || a.every((word, index) => word === b[index])) return false;
+  return [...a].sort().every((word, index) => word === [...b].sort()[index]);
+};
+
 /**
  * One spoken or written line, as a pantry row.
  *
@@ -200,13 +210,17 @@ export const parseInventoryLine = (line, {
     ...searchFoods(name, catalogue, 6),
     ...(singular && singular !== name.toLowerCase() ? searchFoods(singular, catalogue, 6) : []),
   ];
-  const food = candidates.find((candidate) =>
-    looksLikeSameThing(candidate, name)
-    || canonicalName(candidate.name, learnedAliases) === ingredient) || null;
+  // Prefer the catalogue entry that belongs to the same canonical ingredient
+  // before accepting a broader text match. Otherwise a generic "eggs" line can
+  // land on the first dish whose name happens to contain that word.
+  const exactAlias = candidates.find((candidate) =>
+    canonicalName(candidate.name, learnedAliases) === ingredient);
+  const food = exactAlias || candidates.find((candidate) => looksLikeSameThing(candidate, name)) || null;
   const category = categoryFor(raw, food);
+  const displayName = food && wordsDifferOnlyByOrder(name, food.name) ? name : food?.name || name;
 
   return {
-    name: food ? food.name : name,
+    name: displayName,
     emoji: food?.emoji || '🍽️',
     qty,
     cat: CATEGORIES.includes(category) ? category : DEFAULT_CATEGORY,
@@ -238,10 +252,10 @@ export const parseInventoryText = (text, options = {}) => {
     if (rows.length >= MAX_ROWS) break;
     const row = parseInventoryLine(line, options);
     if (!row) continue;
-    const key = canonicalName(row.name, options.learnedAliases || {});
-    const existing = byIngredient.get(key);
+    const existing = [...byIngredient.values()].find((candidate) =>
+      sameIngredient(candidate.name, row.name, options.learnedAliases || {}));
     if (!existing) {
-      byIngredient.set(key, row);
+      byIngredient.set(canonicalName(row.name, options.learnedAliases || {}), row);
       rows.push(row);
       continue;
     }
