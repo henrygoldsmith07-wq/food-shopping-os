@@ -7,6 +7,7 @@ import {
 import {
   clearRobotsCache, groupFor, isScrapeAllowed, parseRobots, pathAllowed,
 } from '../src/server/robots.js';
+import { rankedFreeModels } from '../src/server/openrouter.js';
 import {
   cheapestAcross, extractWithModel, parseModelJson, scrapePrices, scrapeRetailer,
   scrapeableRetailers, verifyAgainstPage,
@@ -442,6 +443,42 @@ describe('checking a product across shops', () => {
     // aborted, with the market fallback having answered for neither.
     expect(out.results.every((result) => result.status === 'aborted')).toBe(true);
     expect(out.marketUsed).toBe(false);
+  });
+
+  it('stops the model ladder too when the budget is already spent', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+    // Seed the model ranking first, in the same process, so the scrape's
+    // ladder definitely walks into the stalling completion endpoint instead
+    // of silently skipping the model when the catalog call itself is slow.
+    await rankedFreeModels(vi.fn(async () => res(
+      JSON.stringify({ data: [{ id: 'nvidia/nemotron-3-ultra:free' }] }),
+      { type: 'application/json' },
+    )));
+    // A page the parsers cannot answer — no matching product — so the model
+    // is genuinely the next reader, and its endpoint stalls far past its own
+    // per-attempt deadline while ignoring any signal. The deterministic
+    // answer must stand, and the stall must be cut loose, not waited out.
+    const blankPage = html('', '<p>no products here</p>');
+    const fetchImpl = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.endsWith('/robots.txt')) return res(allowAllRobots, { type: 'text/plain' });
+      if (target.includes('/chat/completions')) {
+        await new Promise((resolve) => { setTimeout(resolve, 5000); });
+        return res(JSON.stringify({ choices: [{ message: { content: '{"products":[]}' } }] }), { type: 'application/json' });
+      }
+      return res(blankPage);
+    });
+    vi.stubEnv('SCRAPER_MODEL_TIMEOUT_MS', '120');
+    const started = Date.now();
+    const out = await scrapePrices('milk', {
+      retailerIds: ['tesco', 'asda'], fetchImpl, allowModel: true, gapMs: 0,
+    });
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(out.shopsChecked).toBe(2);
+    // Each shop lands on its deterministic answer ('no-match') — or, if the
+    // budget (none here) would have fired first, the honest 'aborted'. What
+    // it must never be is a hang or a made-up answer from the model.
+    expect(out.results.every((result) => result.status === 'no-match' || result.status === 'aborted')).toBe(true);
   });
 
   it('a budget also stops the query ladder inside a shop', async () => {
