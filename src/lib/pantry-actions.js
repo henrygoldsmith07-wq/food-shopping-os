@@ -14,6 +14,14 @@ const appendEvent = (state, event) => [...(state.pantryEvents || []), event].sli
 const appendConflicts = (state, conflicts = []) => [...(state.pantryConflicts || []), ...conflicts].slice(-100);
 
 export const pantryActions = (set) => ({
+  /** Bulk delete, atomic on purpose: one snapshot, one undo reverses all. */
+  removePantryItems: (ids) => set((state) => {
+    if (!householdPermission(state, 'pantry')) return {};
+    const gone = new Set(ids);
+    const pantry = state.pantry.filter((entry) => !gone.has(entry.id));
+    return pantry.length === state.pantry.length ? {} : { pantry };
+  }),
+
   usePantryItem: (id) => set((state) => {
     if (!householdPermission(state, 'pantry')) return {};
     const item = state.pantry.find((entry) => entry.id === id);

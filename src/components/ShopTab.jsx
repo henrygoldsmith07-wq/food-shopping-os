@@ -26,6 +26,7 @@ import BarcodeAdd from './BarcodeAdd.jsx';
 import BudgetPanel from './BudgetPanel.jsx';
 import StoreIntegrations from './StoreIntegrations.jsx';
 import ShoppingListRow from './ShoppingListRow.jsx';
+import BulkListActions from './BulkListActions.jsx';
 import RestockSection from './RestockSection.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { useShoppingSession } from '../lib/shopping-session.js';
@@ -410,6 +411,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             </Section>
           ) : (
             <Section className="rise rise-2" title={shoppingMode ? `${visibleList.length - ticked} items to go` : 'Your list'}>
+              <BulkListActions ticked={ticked} />
               <div className="space-y-4">
                 {grouped.map(([aisle, items]) => {
                   const allDone = items.every((i) => i.checked);

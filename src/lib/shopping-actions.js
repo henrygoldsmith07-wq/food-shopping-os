@@ -1,5 +1,7 @@
 import { householdPermission } from './household.js';
 import { shoppingNameKey } from './shopping.js';
+import { reconcilePurchase } from './pantry-intelligence.js';
+import { uid } from './state.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
 
@@ -34,6 +36,48 @@ export const shoppingActions = (set) => ({
     if (!householdPermission(state, 'shopping')) return {};
     const value = text(store, 80);
     return { shoppingList: state.shoppingList.map((item) => (item.id === id ? { ...item, store: value } : item)) };
+  }),
+
+  // Bulk variants are atomic on purpose: one snapshot, so one undo reverses
+  // the whole operation. Looping the single-item actions from a component
+  // would leave the undo stack N calls deep with no way back but N taps.
+  removeListItems: (ids) => set((state) => {
+    if (!householdPermission(state, 'shopping')) return {};
+    const gone = new Set(ids);
+    const shoppingList = state.shoppingList.filter((item) => !gone.has(item.id));
+    return shoppingList.length === state.shoppingList.length ? {} : { shoppingList };
+  }),
+
+  /** Send every ticked item to the pantry in one move, merging with stock the
+   * same way a recorded shop does. One atomic snapshot means one undo takes
+   * the whole operation back. */
+  moveCheckedToPantry: (location = 'Cupboard') => set((state) => {
+    if (!householdPermission(state, 'shopping') || !householdPermission(state, 'pantry')) return {};
+    const bought = state.shoppingList.filter((item) => item.checked);
+    if (!bought.length) return {};
+    const reconciled = reconcilePurchase(state.pantry, bought.map((item) => ({
+      ...item,
+      store: item.store || '',
+      location,
+      price: Number(item.price) || 0,
+    })), {
+      learnedAliases: state.aliasMemory || {},
+      date: state.day,
+      today: state.day,
+      location,
+      idFactory: () => uid('p'),
+    });
+    return {
+      pantry: reconciled.pantry,
+      shoppingList: state.shoppingList.filter((item) => !bought.some((boughtItem) => boughtItem.id === item.id)),
+      pantryConflicts: reconciled.conflicts.length
+        ? [...(state.pantryConflicts || []), ...reconciled.conflicts].slice(-100)
+        : state.pantryConflicts,
+      pantryEvents: [...(state.pantryEvents || []), {
+        id: uid('pe'), type: 'bulk_move_to_pantry', date: state.day,
+        added: reconciled.added.length, merged: reconciled.matches.filter((match) => match.action === 'merged').length,
+      }].slice(-100),
+    };
   }),
 });
 

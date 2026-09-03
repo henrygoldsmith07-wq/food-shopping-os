@@ -13,6 +13,13 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
   const app = useApp();
   const [moving, setMoving] = useState(false);
   const [swapping, setSwapping] = useState(false);
+  const [qtyEditing, setQtyEditing] = useState(false);
+  const [qtyDraft, setQtyDraft] = useState('');
+  const commitQty = () => {
+    setQtyEditing(false);
+    const next = String(qtyDraft || '').trim();
+    if (next && next !== item.qty) app.updateListItem(item.id, { qty: next });
+  };
   const comparablePrice = unitPrice(item);
   const insight = app.shoppingInsights?.byId?.[item.id] || {};
   const substitutions = insight.substitutions?.candidates || [];
@@ -68,8 +75,33 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
               it gets two lines rather than an ellipsis. */}
           <p className={cx('font-bold [overflow-wrap:anywhere]', largeTouch ? 'text-[1rem]' : 'text-[0.875rem]', item.checked && 'line-through opacity-45')}>
             {item.name}
-            {item.qty && <span className="font-semibold text-[0.75rem]" style={{ color: 'var(--muted)' }}> · {item.qty}</span>}
+            {item.qty && !qtyEditing && <span className="font-semibold text-[0.75rem]" style={{ color: 'var(--muted)' }}> · {item.qty}</span>}
           </p>
+          {/* Quantity taps straight into an inline edit — the field the row
+              already shows is the one people most often need to correct. */}
+          {item.qty && !qtyEditing && (
+            <button
+              type="button"
+              onClick={() => { setQtyDraft(item.qty); setQtyEditing(true); }}
+              className="press mt-0.5 text-[0.65625rem] font-bold underline underline-offset-2"
+              style={{ color: 'var(--faint)' }}
+            >edit</button>
+          )}
+          {qtyEditing && (
+            <input
+              autoFocus
+              value={qtyDraft}
+              onChange={(event) => setQtyDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') commitQty();
+                if (event.key === 'Escape') setQtyEditing(false);
+              }}
+              onBlur={commitQty}
+              aria-label={`Quantity for ${item.name}`}
+              className="mt-1 w-24 rounded-lg border px-2 py-1 text-[0.75rem] font-bold outline-none"
+              style={{ background: 'var(--card-2)', borderColor: 'var(--accent)', color: 'var(--ink)' }}
+            />
+          )}
           {item.priority === 'high' && <p className="text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>Need it</p>}
           {item.confidenceEvidence && (
             <p className="text-[0.6875rem] font-bold" style={{ color: item.confidenceEvidence.tone === 'warn' ? 'var(--warn)' : 'var(--muted)' }}>

@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  BarChart3, Camera, Check, Minus, Package, Plus, ScanLine, ShoppingCart, Sparkles, Trash2, TrendingDown,
-  TriangleAlert, X,
-} from 'lucide-react';
+import { BarChart3, Camera, Check, Minus, Package, Plus, ScanLine, ShoppingCart, Sparkles, Trash2, TrendingDown, TriangleAlert, X } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { cx, gbp, expiryStatus } from '../lib/utils.js';
 import {
@@ -25,6 +22,7 @@ import PantryChecks from './PantryChecks.jsx';
 import BarcodeAdd from './BarcodeAdd.jsx';
 import PantryShare from './PantryShare.jsx';
 import PantryEmptyState from './PantryEmptyState.jsx';
+import UndoNotice from './UndoNotice.jsx';
 
 export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan }) {
   const app = useApp();
@@ -37,6 +35,16 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
   const [capturing, setCapturing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [stocking, setStocking] = useState(false);
+  const [removed, setRemoved] = useState(null); // { id, name } — fuels the undo offer
+  const removePantryItem = (id) => {
+    const item = app.pantry.find((entry) => entry.id === id);
+    app.removePantryItem(id);
+    if (item) setRemoved({ id, name: item.name, at: Date.now() });
+  };
+  const undoRemove = () => {
+    app.undoLast();
+    setRemoved(null);
+  };
 
   useEffect(() => {
     if (quickAddKey) {
@@ -104,6 +112,11 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
 
   return (
     <div className="px-5 pb-8 space-y-5">
+      <UndoNotice
+        key={removed?.at || 'idle'}
+        message={removed ? `${removed.name} removed from your pantry.` : ''}
+        onUndo={removed ? undoRemove : null}
+      />
       <div className="grid grid-cols-3 gap-2.5">
         {[
           [gbp(pantryValue(app.pantry), { always: true }), 'pantry value'],
@@ -340,7 +353,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                 { label: useLabel, onClick: () => app.usePantryItem(p.id) },
                 { label: p.openedDate ? 'Opened — reset opened date' : 'Mark opened today', onClick: () => app.updatePantryItem(p.id, { openedDate: p.openedDate ? null : app.day }) },
                 { label: 'Add to shopping list', onClick: () => app.addToList({ name: p.name, emoji: p.emoji, qty: p.qty }) },
-                { label: 'Remove', tone: 'danger', onClick: () => app.removePantryItem(p.id) },
+                { label: 'Remove', tone: 'danger', onClick: () => removePantryItem(p.id) },
               ];
               if (confidence.requiresConfirmation && confidence.recommendationImpact) {
                 menuActions.unshift({ label: 'Confirm stock', onClick: () => app.confirmPantryItem(p.id) });
@@ -355,7 +368,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                   key={p.id}
                   label={p.name}
                   actions={menuActions}
-                  onSwipeLeft={() => app.removePantryItem(p.id)}
+                  onSwipeLeft={() => removePantryItem(p.id)}
                   onSwipeRight={() => app.togglePantryLow(p.id)}
                 >
                   <div className="flex items-center gap-3 p-3" style={{ borderColor: 'var(--line)' }}>
@@ -402,7 +415,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                       {p.low ? <TriangleAlert size={15} /> : <Check size={15} />}
                     </button>
                     <button
-                      onClick={() => app.removePantryItem(p.id)}
+                      onClick={() => removePantryItem(p.id)}
                       aria-label={`Remove ${p.name}`}
                       className="press p-1"
                       style={{ color: 'var(--faint)' }}
