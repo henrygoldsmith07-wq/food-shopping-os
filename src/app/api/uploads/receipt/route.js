@@ -2,6 +2,7 @@ import { del, put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import { ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../../server/api.js';
 import { requireHousehold } from '../../../../server/households.js';
+import { writeAuditEvent } from '../../../../server/audit.js';
 import { getDatabase } from '../../../../server/database.js';
 
 const MAX_SIZE = 8 * 1024 * 1024;
@@ -52,6 +53,12 @@ export async function POST(request) {
       await db.collection('uploads').deleteOne({ _id: inserted.insertedId });
       throw new ApiError(410, 'Household deletion in progress.');
     }
+    // A receipt is a household's most private blob — who uploaded what kind,
+    // and when, belongs in the audit trail.
+    await writeAuditEvent({
+      db, householdId: household._id, user, action: 'receipt.uploaded',
+      resource: inserted.insertedId.toString(),
+    });
     return NextResponse.json({ id: inserted.insertedId.toString(), status: 'queued' }, { status: 202 });
   } catch (error) {
     return handleApiError(error);

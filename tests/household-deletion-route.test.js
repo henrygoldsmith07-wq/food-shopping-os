@@ -70,11 +70,12 @@ describe('DELETE /api/households', () => {
   it('deletes private receipt blobs before every household database record', async () => {
     const deleteOne = vi.fn().mockResolvedValue({ deletedCount: 1 });
     const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
+    const insertOne = vi.fn().mockResolvedValue({ insertedId: 'audit-1' });
     const toArray = vi.fn().mockResolvedValue([{ pathname: 'receipts/household-1/file.pdf' }]);
     const db = {
       collection: vi.fn((name) => (name === 'uploads'
         ? { find: () => ({ toArray }) }
-        : { deleteOne, updateOne })),
+        : { deleteOne, updateOne, insertOne })),
     };
     mocks.requireHousehold.mockResolvedValue({
       household: { _id: 'household-1', ownerId: 'user-1' },
@@ -101,6 +102,17 @@ describe('DELETE /api/households', () => {
       expect(deleteOne).toHaveBeenCalledWith({ _id: 'household-1', ownerId: 'user-1' });
       expect(mocks.del.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.deleteHouseholdData.mock.invocationCallOrder[0],
+      );
+      // Deletion purges the household's own audit rows, so the tombstone
+      // recording the erasure itself is written after the final cleanup.
+      expect(insertOne).toHaveBeenCalledWith(expect.objectContaining({
+        householdId: 'household-1',
+        actorId: 'user-1',
+        action: 'household.deleted',
+        resource: 'household-1',
+      }));
+      expect(insertOne.mock.invocationCallOrder[0]).toBeGreaterThan(
+        deleteOne.mock.invocationCallOrder[0],
       );
     } finally {
       if (previousToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;

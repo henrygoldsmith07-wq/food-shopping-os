@@ -2,10 +2,9 @@ import { del } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import {
   ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser,
-} from '../../../server/api.js';
-import {
-  deleteHouseholdData, ensurePersonalHousehold, publicHousehold, requireHousehold,
+} from '../../../server/api.js';import { deleteHouseholdData, ensurePersonalHousehold, publicHousehold, requireHousehold,
 } from '../../../server/households.js';
+import { writeAuditEvent } from '../../../server/audit.js';
 import { getDatabase } from '../../../server/database.js';
 import { householdSchema } from '../../../server/schemas.js';
 
@@ -56,6 +55,10 @@ export async function POST(request) {
       role: 'owner',
       permissions: ['shopping', 'pantry', 'recipes', 'health', 'admin'],
       createdAt: now,
+    });
+    await writeAuditEvent({
+      db, householdId: inserted.insertedId, user, action: 'household.created',
+      resource: inserted.insertedId.toString(),
     });
     return NextResponse.json({ id: inserted.insertedId.toString(), name: input.name, role: 'owner' }, { status: 201 });
   } catch (error) {
@@ -111,6 +114,13 @@ export async function DELETE(request) {
       ...Object.keys(deleted),
       ...Object.keys(repeated),
     ])).map((name) => [name, (deleted[name] || 0) + (repeated[name] || 0)]));
+
+    // Deletion purges the household's own audit trail as part of the erasure;
+    // this tombstone is written last so the act itself leaves a record behind.
+    await writeAuditEvent({
+      db, householdId: household._id, user, action: 'household.deleted',
+      resource: household._id.toString(), fields: Object.keys(removed),
+    });
 
     return NextResponse.json({
       deleted: true,
