@@ -12,7 +12,8 @@ import { LEFTOVER_CAT } from './mealplan.js';
  *
  *   leftover cooked   — a cooked dish that went off uneaten
  *   leftover bought   — bought stock that sat past its date
- *   never cooked      — a planned meal that was swapped out and never made
+ *   never cooked      — a planned meal that was skipped or swapped out
+ *                      and never made (status 'skipped' or 'substituted')
  *
  * Pure: takes app state (or any object shaped like it), returns numbers.
  */
@@ -45,7 +46,7 @@ export const wasteCauseBreakdown = (app = {}, { windowDays = WASTE_WINDOW_DAYS, 
     leftoverCooked: bucket((row) => row.cat === LEFTOVER_CAT),
     leftoverBought: bucket((row) => row.cat !== LEFTOVER_CAT),
     neverCooked: (app.mealPlanEvents || []).filter(
-      (event) => event?.status === 'substituted' && event?.date && event.date >= from && event.date <= day,
+      (event) => ['skipped', 'substituted'].includes(event?.status) && event?.date && event.date >= from && event.date <= day,
     ).length,
   };
 };

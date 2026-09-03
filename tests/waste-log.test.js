@@ -26,17 +26,20 @@ describe('wasteCauseBreakdown', () => {
     expect(breakdown.leftoverBought).toEqual({ count: 1, cost: 1 });
   });
 
-  it('counts planned meals that were swapped out as never cooked', () => {
+  it('counts planned meals never made — skipped, substituted, or takeaway', () => {
     const app = {
       day: '2026-08-03',
       waste: [],
       mealPlanEvents: [
         { date: '2026-07-28', status: 'substituted' },
-        { date: '2026-08-01', status: 'cooked' },
-        { date: '2026-06-01', status: 'substituted' },
+        { date: '2026-07-30', status: 'skipped', reason: 'no-time' },
+        { date: '2026-08-01', status: 'skipped', reason: 'takeaway', isTakeaway: true },
+        { date: '2026-08-02', status: 'cooked' },
+        { date: '2026-08-04', status: 'skipped' }, // future — outside the window
+        { date: '2026-06-01', status: 'skipped' }, // too old
       ],
     };
-    expect(wasteCauseBreakdown(app).neverCooked).toBe(1);
+    expect(wasteCauseBreakdown(app).neverCooked).toBe(3);
   });
 
   it('returns empty buckets when nothing is recorded or the day is missing', () => {
