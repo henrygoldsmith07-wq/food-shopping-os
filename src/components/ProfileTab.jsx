@@ -1,11 +1,10 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
-  Activity, Banknote, Bell, Dumbbell, Flame, HeartPulse, Lock,
-  NotebookPen, RotateCcw, Download, SlidersHorizontal, Sparkles, Target, Trophy, Upload, Users,
+  Activity, Banknote, Bell, Dumbbell, Flame, HeartPulse, NotebookPen,
+  Settings2, SlidersHorizontal, Sparkles, Target, Trophy, Users,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { Glyph } from './icons.jsx';
-import { DemoHouseholdEntry } from './DemoWalkthrough.jsx';
 import { formatAmount } from '../data/nutrients.js';
 import { nutrientRows, snackSummary, timingInsight } from '../lib/nutrition.js';
 import { YOUTH_COPY } from '../lib/youth.js';
@@ -19,24 +18,13 @@ import HealthPanel from './HealthPanel.jsx';
 import ExercisePanel from './ExercisePanel.jsx';
 import RemindersPanel from './RemindersPanel.jsx';
 import PreferencesPanel from './PreferencesPanel.jsx';
-import BackendPanel from './BackendPanel.jsx';
-import PrivacyPanel from './PrivacyPanel.jsx';
+import SettingsPanel from './SettingsPanel.jsx';
 import YouthNotice from './YouthNotice.jsx';
-import { Section, Card, Ring, Pill, Meter, Bars, Sheet, Toggle } from './ui.jsx';
+import { Section, Card, Ring, Pill, Meter, Bars, Sheet } from './ui.jsx';
 import { NumberField } from './FoodDetail.jsx';
-import { ACCENT_UNLOCKS } from '../data/quests.js';
-const UNLOCK_COLOURS = { sage: '#6b7f6a', clay: '#8c5a44', ink: '#2f3640' };
-const ACCENTS = [
-  ['mono', 'var(--ink)'],
-  ['forest', '#3d5c4b'],
-  ['ocean', '#3b5b73'],
-  ['wine', '#6e4550'],
-  ['honey', '#8a6a3b'],
-];
 export default function ProfileTab({ openGuidance }) {
   const app = useApp();
-  const importRef = useRef(null);
-  const [dataStatus, setDataStatus] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [nutritionOpen, setNutritionOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [familyOpen, setFamilyOpen] = useState(false);
@@ -45,9 +33,7 @@ export default function ProfileTab({ openGuidance }) {
   const [exerciseOpen, setExerciseOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
-  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [budget, setBudget] = useState(app.weeklyBudget || '');
-  const [confirmReset, setConfirmReset] = useState(false);
   const snacks = snackSummary(app.entries);
   const timing = timingInsight(app.entries);
   const highlights = nutrientRows(app.totals, app.targets)
@@ -67,23 +53,6 @@ export default function ProfileTab({ openGuidance }) {
     { key: 'fat', label: 'Fat', now: app.fatToday, goal: app.fatGoal, color: 'var(--series-2)' },
   ];
   const saveBudget = () => app.set({ weeklyBudget: Math.max(0, Number(budget) || 0) });
-  /** Your data, as the JSON it is stored as — yours to keep or move. */
-  const exportData = () => {
-    const blob = new Blob([app.exportData()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `forq-${app.day}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-  const importData = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    const result = app.restoreData(await file.text());
-    setDataStatus(result.ok ? 'Backup restored.' : result.error);
-  };
   return (
     <div className="pb-6 space-y-6">
 <div className="hero-gradient px-5 pt-2 pb-2">
@@ -360,113 +329,22 @@ export default function ProfileTab({ openGuidance }) {
           )}
         </div>
       </Section>
-<Section title="Appearance" className="rise rise-4">
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-bold text-[0.875rem]">Dark mode</p>
-              <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Follows your accent everywhere</p>
+<Section title="Settings" className="rise rise-4">
+        <Card onClick={() => setSettingsOpen(true)} label="Settings">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-extrabold text-[0.9375rem]">Settings</p>
+              <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Appearance, cloud sync, data &amp; privacy
+              </p>
             </div>
-            <Toggle label="Dark mode" on={app.theme === 'dark'} onChange={app.toggleTheme} />
-          </div>
-          <div>
-            <p className="font-bold text-[0.875rem] mb-2">Accent colour</p>
-            <div className="flex flex-wrap gap-3">
-              {ACCENTS.map(([id, hex]) => (
-                <button
-                  key={id}
-                  onClick={() => app.setAccent(id)}
-                  aria-label={`${id} accent`}
-                  aria-pressed={app.accent === id}
-                  className="tap press h-9 w-9 rounded-full border-4"
-                  style={{ background: hex, borderColor: app.accent === id ? 'var(--ink)' : 'transparent' }}
-                />
-              ))}
-              {ACCENT_UNLOCKS.map(({ id, level }) => {
-                const open = app.game.accents.includes(id);
-                return (
-                  <button
-                    key={id}
-                    onClick={() => open && app.setAccent(id)}
-                    aria-label={open ? id : `${id} — unlocks at level ${level}`}
-                    disabled={!open}
-                    className="tap press relative h-9 w-9 rounded-full border-4 flex items-center justify-center"
-                    style={{
-                      background: UNLOCK_COLOURS[id],
-                      borderColor: app.accent === id ? 'var(--ink)' : 'transparent',
-                      opacity: open ? 1 : 0.35,
-                    }}
-                  >
-                    {!open && <Lock size={12} color="#fff" />}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              Three more arrive at levels 4, 8 and 12. The five you started with never go away.
-            </p>
+            <Settings2 size={18} className="shrink-0" style={{ color: 'var(--muted)' }} />
           </div>
         </Card>
       </Section>
-      <BackendPanel />
-<Section title="Your data" className="rise rise-4">
-        <Card className="space-y-3">
-          <DemoHouseholdEntry />
-          <p className="text-[0.75rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
-            Browser storage is not encrypted. Anyone with access to this browser profile can
-            access it. Export a backup before clearing site data or changing devices.
-          </p>
-          <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            Your local copy contains {Object.keys(app.log).length} logged day{Object.keys(app.log).length === 1 ? '' : 's'},
-            {' '}{app.pantry.length} pantry item{app.pantry.length === 1 ? '' : 's'}, {app.shops.length} recorded shop{app.shops.length === 1 ? '' : 's'}, {' '}{app.cooked.length} meal{app.cooked.length === 1 ? '' : 's'} cooked.
-          </p>
-          <button
-            type="button" onClick={() => setPrivacyOpen(true)}
-            className="press w-full rounded-2xl border px-4 py-3 text-left text-[0.84375rem] font-extrabold"
-            style={{ borderColor: 'var(--line)' }}
-          >
-            Privacy, storage &amp; deletion
-          </button>
-          <div className="grid grid-cols-3 gap-2.5">
-            <button
-              onClick={exportData}
-              className="press rounded-2xl border py-3 text-[0.84375rem] font-extrabold"
-              style={{ borderColor: 'var(--line)' }}
-            >
-              <span className="inline-flex items-center gap-1.5"><Download size={15} /> Export</span>
-            </button>
-            <button
-              onClick={() => importRef.current?.click()}
-              className="press rounded-2xl border py-3 text-[0.84375rem] font-extrabold"
-              style={{ borderColor: 'var(--line)' }}
-            >
-              <span className="inline-flex items-center gap-1.5"><Upload size={15} /> Restore</span>
-            </button>
-            <input
-              ref={importRef}
-              type="file"
-              accept="application/json,.json"
-              onChange={importData}
-              className="hidden"
-              aria-label="Restore Forq backup"
-            />
-            <button
-              onClick={() => (confirmReset ? app.reset() : setConfirmReset(true))}
-              className="press rounded-2xl border py-3 text-[0.84375rem] font-extrabold"
-              style={{ borderColor: confirmReset ? 'var(--danger)' : 'var(--line)', color: confirmReset ? 'var(--danger)' : 'var(--ink)' }}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <RotateCcw size={15} /> {confirmReset ? 'Tap to confirm' : 'Reset app'}
-              </span>
-            </button>
-          </div>
-          {dataStatus && (
-            <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {dataStatus}
-            </p>
-          )}
-        </Card>
-      </Section>
+      <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Settings">
+        <SettingsPanel />
+      </Sheet>
       <Sheet open={nutritionOpen} onClose={() => setNutritionOpen(false)} title="Nutrition today">
         <NutritionPanel />
       </Sheet>
@@ -490,9 +368,6 @@ export default function ProfileTab({ openGuidance }) {
       </Sheet>
       <Sheet open={exerciseOpen} onClose={() => setExerciseOpen(false)} title="Exercise">
         <ExercisePanel />
-      </Sheet>
-      <Sheet open={privacyOpen} onClose={() => setPrivacyOpen(false)} title="Privacy & data">
-        <PrivacyPanel />
       </Sheet>
     </div>
   );

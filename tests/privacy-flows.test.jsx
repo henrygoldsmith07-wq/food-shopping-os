@@ -39,6 +39,9 @@ describe('privacy and server deletion', () => {
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Start using Forq'));
     fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
+    // Settings are separated from the dashboard scroll; the disclosure lives
+    // behind the Settings card, under Privacy & data.
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     fireEvent.click(screen.getByRole('button', { name: 'Privacy, storage & deletion' }));
 
     expect(screen.getByRole('dialog', { name: 'Privacy & data' })).toBeTruthy();

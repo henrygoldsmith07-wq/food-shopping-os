@@ -61,6 +61,7 @@ describe('the real data boundary', () => {
       '../src/components/RecipeImport.jsx',
       '../src/components/RecipeTools.jsx',
       '../src/components/ProfileTab.jsx',
+      '../src/components/SettingsPanel.jsx',
     ];
     const banned = /no backend, no account|Forq doesn’t have one|Forq has neither|hasn’t got a server|never leaves your device|there is nowhere else for them to go/i;
     for (const site of sites) expect(read(site), site).not.toMatch(banned);
