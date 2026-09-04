@@ -57,7 +57,12 @@ const openReports = async () => {
 
 const openPrefs = (tab) => {
   const sheet = openCard('Preferences');
-  if (tab) fireEvent.click(within(sheet).getByText(tab));
+  if (tab) {
+    // The view chips are buttons; plain-text lookup can collide with labels
+    // elsewhere in the sheet (e.g. the Kitchen profile pill reads 'Home').
+    const chip = within(sheet).queryByRole('button', { name: tab });
+    fireEvent.click(chip || within(sheet).getByText(tab));
+  }
   return sheet;
 };
 
@@ -166,7 +171,7 @@ describe('the Home layout', () => {
 
   it('hides a card without touching the number behind it', () => {
     onboard();
-    goTab('Home');
+    goTab('Today');
     expect(screen.getByText('Recipe of the day')).toBeTruthy();
 
     const sheet = openPrefs('Home');
@@ -174,12 +179,19 @@ describe('the Home layout', () => {
     fireEvent.click(within(row).getByRole('switch'));
     fireEvent.click(within(sheet).getByLabelText('Close'));
 
-    goTab('Home');
+    goTab('Today');
     // Scoped to the page: a closing sheet lingers for its exit animation, and
     // its own list of widget names shouldn't count as Home still showing one.
     expect(within(document.querySelector('main')).queryByText('Recipe of the day')).toBeNull();
     // The diary is untouched — hiding a panel is not hiding data.
-    goTab('Log');
+    // Log left the bar in the list-first nav; the command palette still finds it.
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    const search = screen.getByLabelText('Search Forq');
+    fireEvent.change(search, { target: { value: 'food diary' } });
+    fireEvent.keyDown(search, { key: 'Enter' });
+    const openSheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.getAttribute('aria-hidden') !== 'true');
+    if (openSheet) fireEvent.click(within(openSheet).getByRole('button', { name: 'Close' }));
     expect(screen.getAllByText(/Nothing logged/).length).toBeGreaterThan(0);
   });
 
@@ -190,7 +202,7 @@ describe('the Home layout', () => {
     fireEvent.click(within(row).getByRole('switch'));
     fireEvent.click(within(sheet).getByText(/Back to the default layout/));
     fireEvent.click(within(sheet).getByLabelText('Close'));
-    goTab('Home');
+    goTab('Today');
     expect(within(document.querySelector('main')).getAllByText('Pantry').length).toBeGreaterThan(0);
   });
 });

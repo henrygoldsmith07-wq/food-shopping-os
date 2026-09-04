@@ -108,14 +108,19 @@ describe('closing a gap with food', () => {
   });
 
   it('honours the exclusions a household has set', () => {
+    // The expanded catalogue ranks several oily fish above salmon by serving,
+    // so the subject is whatever the ranking actually returned — the contract
+    // is that an excluded row never appears, not that any one fish makes the cut.
     const withFish = foodSourcesFor('omega3', { targets: DEFAULT_TARGETS, limit: 6 });
-    expect(withFish.map((s) => s.id)).toContain('salmon-fillet');
+    expect(withFish.length).toBeGreaterThan(0);
+    const fishIds = withFish.map((s) => s.id);
+    expect(fishIds.some((id) => /salmon|tuna|trout|sardine|mackerel|herring/.test(id))).toBe(true);
     const vegan = foodSourcesFor('omega3', {
       targets: DEFAULT_TARGETS,
       limit: 6,
-      exclude: (food) => ['salmon-fillet', 'tuna-tinned'].includes(food.id),
+      exclude: (food) => [...fishIds, 'salmon-fillet', 'tuna-tinned'].includes(food.id),
     });
-    expect(vegan.map((s) => s.id)).not.toContain('salmon-fillet');
+    fishIds.forEach((id) => expect(vegan.map((s) => s.id)).not.toContain(id));
     expect(vegan.map((s) => s.id)).not.toContain('tuna-tinned');
   });
 

@@ -33,7 +33,8 @@ describe('Smart Features centre', () => {
     expect(await within(dialog).findByText('Next shopping trip')).toBeDefined();
     expect(within(dialog).getByText(/4 recorded shopping days/)).toBeDefined();
     expect(within(dialog).getByText('Budget overrun')).toBeDefined();
-    expect(within(dialog).getByText(/Milk/)).toBeDefined();
+    // Exact match: the row name, not the 'Forq: probably Milk' correction line.
+    expect(within(dialog).getByText('Milk')).toBeDefined();
     expect(within(dialog).getByText(/Foreground location reminder/)).toBeDefined();
 
     fireEvent.click(within(dialog).getByText(/Add 2 items to shopping/));

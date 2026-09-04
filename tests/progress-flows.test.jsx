@@ -145,6 +145,8 @@ describe('rewards', () => {
   it('keeps the original accents and locks the new ones behind levels', () => {
     onboard();
     openProfile();
+    // Appearance (and the accents) live in Settings, behind the profile card.
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     // The five that always existed are still there and still usable.
     for (const id of ['mono', 'forest', 'ocean', 'wine', 'honey']) {
       expect(screen.getByLabelText(`${id} accent`)).toBeDefined();

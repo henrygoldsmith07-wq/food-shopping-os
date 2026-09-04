@@ -23,8 +23,12 @@ describe('what first-run setup offers', () => {
   it('is no longer the same three dishes whatever you said', () => {
     const plain = names(starterOptions({}));
     const vegan = names(starterOptions({ diets: ['vegan'] }));
+    // The two households genuinely get different dinners…
     expect(vegan).not.toEqual(plain);
-    expect(vegan.some((name) => plain.includes(name))).toBe(true); // some overlap is fine
+    // …and the bigger catalogue makes a shared overlap data-dependent, so the
+    // real invariant is a full, varied, repeat-free offer for each of them.
+    expect(new Set(vegan).size).toBe(vegan.length);
+    expect(vegan.length).toBe(STARTER_OPTION_COUNT);
   });
 
   it('drops everything the pattern rules out, rather than showing it disabled', () => {

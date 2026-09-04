@@ -47,6 +47,13 @@ const planFirstDinner = (name = 'Coconut Chickpea Curry') => {
   fireEvent.click(within(dialogFor('Plan a meal')).getByText(name));
 };
 
+/** The recipe catalogue is large; surface one dish by name instead of assuming it sits on page one. */
+const openFirstMatch = (name) => {
+  fireEvent.click(screen.getByText('Recipes'));
+  fireEvent.change(screen.getByLabelText('Search recipes'), { target: { value: name } });
+  fireEvent.click(screen.getAllByText(name)[0]);
+};
+
 const openPlan = () => fireEvent.click(
   // The bar's Plan tab, not the numbered kitchen-journey chip also labelled Plan.
   within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'),
@@ -316,8 +323,7 @@ describe('leftovers and batch cooking', () => {
       value: { request },
     });
     onboard();
-    fireEvent.click(screen.getByText('Recipes'));
-    fireEvent.click(screen.getAllByText('Coconut Chickpea Curry')[0]);
+    openFirstMatch('Coconut Chickpea Curry');
     fireEvent.click(screen.getByText(/Start cooking mode/));
     await waitFor(() => expect(request).toHaveBeenCalledWith('screen'));
     expect(screen.getByText('Screen stays awake while you cook')).toBeDefined();
@@ -339,8 +345,7 @@ describe('leftovers and batch cooking', () => {
   it('keeps leftovers in the fridge and off the shopping list', () => {
     onboard();
     // Cook the curry and save what's left.
-    fireEvent.click(screen.getByText('Recipes'));
-    fireEvent.click(screen.getAllByText('Coconut Chickpea Curry')[0]);
+    openFirstMatch('Coconut Chickpea Curry');
     fireEvent.click(screen.getByText(/Start cooking mode/));
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByText(/Next ›/));
     fireEvent.click(screen.getByText(/Finish & log meal/));
@@ -363,8 +368,7 @@ describe('leftovers and batch cooking', () => {
 
   it('eats a portion at a time', () => {
     onboard();
-    fireEvent.click(screen.getByText('Recipes'));
-    fireEvent.click(screen.getAllByText('Coconut Chickpea Curry')[0]);
+    openFirstMatch('Coconut Chickpea Curry');
     fireEvent.click(screen.getByText(/Start cooking mode/));
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByText(/Next ›/));
     fireEvent.click(screen.getByText(/Finish & log meal/));
@@ -388,8 +392,7 @@ describe('scheduling a recipe from its page', () => {
 
   it('puts it in the plan on the day you choose', async () => {
     onboard();
-    fireEvent.click(screen.getByText('Recipes'));
-    fireEvent.click(screen.getAllByText('Coconut Chickpea Curry')[0]);
+    openFirstMatch('Coconut Chickpea Curry');
     fireEvent.click(screen.getByText('Add to my plan'));
     const card = screen.getByText('Schedule').closest('.card');
     fireEvent.click(within(card).getByText('Tomorrow'));
