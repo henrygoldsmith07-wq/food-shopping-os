@@ -5,6 +5,12 @@ import {
 import App from '../src/App.jsx';
 import { STORAGE_KEY, todayStamp } from '../src/lib/state.js';
 
+// This suite drives the whole app end to end, so individual journeys can
+// exceed vitest's 5s default under batch load without being broken. Give the
+// file a calmer ceiling: a slow machine reads as a slow machine, while a real
+// hang still blows well past it.
+vi.setConfig({ testTimeout: 15_000 });
+
 const OWN_RECIPE = {
   id: 'mine-tomato-pasta',
   name: 'Tomato Pasta',
