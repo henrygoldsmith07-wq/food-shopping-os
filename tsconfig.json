@@ -27,8 +27,11 @@
   "include": [
     "src/**/*.js",
     "src/**/*.jsx",
+    "src/domain/**/*.ts",
     "tests/**/*.js",
     "tests/**/*.jsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
     "scripts/**/*.mjs",
     ".next/types/**/*.ts"
   ],
