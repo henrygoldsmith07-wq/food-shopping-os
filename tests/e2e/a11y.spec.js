@@ -13,7 +13,7 @@ import AxeBuilder from '@axe-core/playwright';
  * reachable from Home and the header, not a tab, so it is scanned separately
  * below rather than clicked for as a tab that has never existed.
  */
-const TABS = ['Home', 'Plan', 'Shop', 'Log', 'Recipes'];
+const TABS = ['List', 'Plan', 'Cook', 'Today', 'Recipes'];
 
 /**
  * Onboarding, unconditionally and by role.
@@ -35,6 +35,8 @@ const onboard = async (page, name = 'Axe') => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start using Forq' }).click();
+  // The shopping list is the landing screen now — the greeting lives on Today.
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await expect(page.getByText(new RegExp(`Good (morning|afternoon|evening), ${name}`))).toBeVisible();
 };
 
@@ -58,7 +60,7 @@ test.describe('accessibility — primary screens', () => {
   for (const tab of TABS) {
     test(`tab "${tab}" has no automatically-detectable WCAG A/AA violations`, async ({ page }) => {
       await onboard(page);
-      if (tab !== 'Home') {
+      if (tab !== 'List') {
         const button = page.getByRole('button', { name: tab, exact: true }).first();
         // Assert the tab exists before clicking, so a missing tab reads as a
         // missing tab rather than as a 30-second timeout.

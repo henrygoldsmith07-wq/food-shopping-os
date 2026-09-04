@@ -18,6 +18,8 @@ const dialogFor = (title) => {
 
 const openQuickAdd = () => {
   render(<App />);
+  // Returning users reopen on the list; the pantry card lives on Today.
+  fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
   fireEvent.click(screen.getByText('Open pantry →'));
   const sheet = dialogFor('Smart pantry');
   fireEvent.click(within(sheet).getByText('What’s in my kitchen'));

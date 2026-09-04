@@ -253,6 +253,9 @@ select { font-size: 1rem !important; }
     border-top: 0;
     border-right: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface) 86%, transparent);
+    /* At large text the six destinations outgrow the viewport; keep them
+       reachable by scrolling the nav itself rather than clipping them. */
+    overflow-y: auto;
   }
   .app-brand {
     display: flex;

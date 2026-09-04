@@ -17,11 +17,19 @@ const dialogFor = (title) => {
   return dialog;
 };
 
-const goTab = (label) => fireEvent.click(within(document.querySelector('nav')).getByText(label));
+const goTab = (label) => fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText(label));
 
 /** Log one food through search, so a test has something real to work with. */
 const logFood = (name) => {
-  goTab('Log');
+  // Log left the bar in the list-first nav; the command palette still finds it.
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  fireEvent.change(screen.getByLabelText('Search Forq'), { target: { value: 'food diary' } });
+  fireEvent.keyDown(screen.getByLabelText('Search Forq'), { key: 'Enter' });
+  // The palette can arrive with the diary's quick-add sheet open; the capture
+  // flows below need the plain diary surface.
+  const openSheet = [...document.querySelectorAll('[role="dialog"]')]
+    .find((d) => d.getAttribute('aria-hidden') !== 'true');
+  if (openSheet) fireEvent.click(within(openSheet).getByRole('button', { name: 'Close' }));
   fireEvent.click(screen.getAllByText('+ Add food')[0]);
   const sheet = dialogFor('Add food');
   fireEvent.change(within(sheet).getByLabelText('Search foods'), { target: { value: name } });

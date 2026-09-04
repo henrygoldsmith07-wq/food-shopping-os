@@ -28,7 +28,8 @@ describe('store integrations', () => {
 
   it('shows supported retailers and keeps price claims on recorded history', () => {
     render(<App />);
-    fireEvent.click(screen.getByText('Shop'));
+    // Returning users reopen on the shopping list, where Stores lives.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('List'));
     fireEvent.click(screen.getByText('Stores'));
 
     expect(screen.getByRole('button', { name: "Sainsbury's" })).toBeDefined();
@@ -45,7 +46,8 @@ describe('store integrations', () => {
 
   it('labels retailers without direct full-basket delivery honestly', () => {
     render(<App />);
-    fireEvent.click(screen.getByText('Shop'));
+    // Returning users reopen on the shopping list, where Stores lives.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('List'));
     fireEvent.click(screen.getByText('Stores'));
     fireEvent.click(screen.getByRole('button', { name: 'Aldi' }));
 

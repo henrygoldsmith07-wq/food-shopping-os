@@ -6,6 +6,8 @@ const onboard = async (page) => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start using Forq' }).click();
+  // The shopping list is the landing screen now — the greeting lives on Today.
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible();
 };
 
@@ -31,7 +33,7 @@ test('main screens reflow at 200% text without page-level horizontal overflow', 
   await onboard(page);
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
 
-  for (const tab of ['Home', 'Plan', 'Log', 'Shop', 'Recipes']) {
+  for (const tab of ['List', 'Plan', 'Cook', 'Today', 'Recipes']) {
     await page.getByRole('button', { name: tab, exact: true }).click();
     // Lazily-loaded panels land a beat after the tab does, and one of them
     // overflowing is exactly what this test is for — so settle twice, with the

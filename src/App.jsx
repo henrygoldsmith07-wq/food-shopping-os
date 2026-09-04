@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, CalendarDays, ChefHat, ClipboardList, Download, Home, ShoppingCart, Upload,
+  AlertTriangle, CalendarDays, ChefHat, ClipboardList, Download, Home, ShoppingCart, Upload, UtensilsCrossed,
 } from 'lucide-react';
 import { AppProvider, useApp } from './lib/store.jsx';
 import Onboarding from './components/Onboarding.jsx';
@@ -9,6 +9,7 @@ import ProfileTab from './components/ProfileTab.jsx';
 import DemoWalkthrough, { DemoBanner } from './components/DemoWalkthrough.jsx';
 import { Sheet } from './components/ui.jsx';
 import AppHeader from './components/AppHeader.jsx';
+import JourneyNav from './components/JourneyNav.jsx';
 import { cx } from './lib/utils.js';
 import { distanceMetres } from './lib/smart.js';
 import { downloadFile, showNotification } from './lib/notify.js';
@@ -21,6 +22,8 @@ const deferred = (testComponent, loader) => testComponent || lazy(loader);
 const PlanTab = deferred(testScreens.PlanTab, () => import('./components/PlanTab.jsx'));
 const LogTab = deferred(testScreens.LogTab, () => import('./components/LogTab.jsx'));
 const ShopTab = deferred(testScreens.ShopTab, () => import('./components/ShopTab.jsx'));
+const CookTab = deferred(testScreens.CookTab, () => import('./components/CookTab.jsx'));
+const LearnTab = deferred(testScreens.LearnTab, () => import('./components/LearnTab.jsx'));
 const RecipesTab = deferred(testScreens.RecipesTab, () => import('./components/RecipesTab.jsx'));
 const RecipeDetail = deferred(testScreens.RecipeDetail, () => import('./components/RecipeDetail.jsx'));
 const PantryView = deferred(testScreens.PantryView, () => import('./components/PantryView.jsx'));
@@ -40,33 +43,31 @@ const ScreenFallback = () => (
 );
 
 /**
- * Closed household loop: PANTRY → PLAN → SHOP → PURCHASE → CONSUMPTION → LEFTOVERS/WASTE → LEARNING → BETTER NEXT PLAN
+ * Closed loop: PANTRY → PLAN → SHOP → PURCHASE → CONSUMPTION → LEFTOVERS/WASTE → LEARNING → BETTER NEXT PLAN
  *
- * Five tabs, not six. Profile came out, pantry stays one tap away via Home + header.
- * Order is the loop: Today (pantry + today's meals + shop progress) → Plan → Shop → then
- * secondary (Log, Recipes) behind progressive disclosure. Keeping Log/Recipes visible but
- * secondary ensures existing tests pass while the primary loop (Today/Plan/Shop/Pantry)
- * is visually dominant. Pantry is a sheet on every screen (header button + Home card) so
- * it behaves as a primary nav concept without stealing tab width.
- *
- * Reduction of visible complexity is via progressive disclosure (enabledTools / productMode),
- * not deletion — non-loop features (Log, Recipes, Health etc.) remain but are hidden by
- * default in focused modes and accessible via "Add tools" when useful.
+ * List-first navigation: the list is the home screen, Plan and Cook the
+ * primary tabs, the dashboard (Today) beside them. Log stays a destination
+ * (flows, palette, keyboard) off the bar; pantry is a sheet everywhere.
+ * Feature reduction is progressive disclosure, never deletion.
  */
 const TABS = [
-  { id: 'home', label: 'Home', Icon: Home }, // Home IS Today (SCREENS.home.title = 'Today')
+  { id: 'shop', label: 'List', Icon: ShoppingCart }, // the shopping list IS home
   { id: 'plan', label: 'Plan', Icon: CalendarDays },
-  { id: 'shop', label: 'Shop', Icon: ShoppingCart },
-  { id: 'log', label: 'Log', Icon: ClipboardList }, // secondary: food logging — behind enabledTools in core-loop modes
-  { id: 'recipes', label: 'Recipes', Icon: ChefHat }, // secondary: library — progressive disclosure
+  { id: 'cook', label: 'Cook', Icon: UtensilsCrossed },
+  { id: 'learn', label: 'Learn', Icon: ClipboardList },
+  { id: 'home', label: 'Today', Icon: Home }, // dashboard: pantry truth + plan + outcomes
+  { id: 'recipes', label: 'Recipes', Icon: ChefHat },
+  { id: 'log', label: 'Log', Icon: ClipboardList }, // diary — reachable via flows, not the bar
 ];
 
 /** What each screen is called, and the one thing it is mainly for. Primary loop is Today/Plan/Shop/Pantry. */
 export const SCREENS = {
   home: { title: 'Today' }, // Today = pantry truth + plan + shop progress + outcomes
   plan: { title: 'Meal planner' },
+  cook: { title: 'Cook' },
+  learn: { title: 'Learn' },
   log: { title: 'Food diary' },
-  shop: { title: 'Shop' },
+  shop: { title: 'Shopping list' },
   recipes: { title: 'Recipes' },
   profile: { title: 'You' },
   // pantry is a sheet, not a tab, but conceptually primary — see HomeTab pantry card + AppHeader button
@@ -168,14 +169,14 @@ function StorageRecovery() {
 
 function Shell() {
   const app = useApp();
-  const [tab, setTab] = useState('home');
-  /* Product modes take screens off the bar. Home is never one of them, so
-     there is always somewhere to be — and a mode turned off later puts the tab
-     straight back, with everything that was recorded while it was hidden. */
-  const tabs = TABS.filter((item) => app.visibleTabs(TABS.map((t) => t.id)).includes(item.id));
-  // Turning a mode on while standing on a screen it hides puts you on Home
-  // rather than on a blank one. Nothing about that screen's data changes.
-  const activeTab = tabs.some((item) => item.id === tab) ? tab : 'home';
+  // The shopping list is the home screen: this is where the app opens.
+  const [tab, setTab] = useState('shop');
+  // Modes take screens off the bar; Home is never one, so there is always
+  // somewhere to be. Log stays reachable through flows, palette, keyboard.
+  const tabs = TABS.filter((item) => item.id !== 'log' && app.visibleTabs(TABS.map((t) => t.id)).includes(item.id));
+  // A mode turned off while standing on the screen it hides lands on Home.
+  const activeTab = app.visibleTabs(TABS.map((t) => t.id)).includes(tab) ? tab : 'home';
+  const journeyActive = ['plan', 'shop', 'cook', 'learn'].includes(activeTab) ? activeTab : null;
   const [recipe, setRecipe] = useState(null);
   const [recipeStartCooking, setRecipeStartCooking] = useState(false);
   const [pantryOpen, setPantryOpen] = useState(false);
@@ -337,6 +338,7 @@ function Shell() {
           onProfile={() => setProfileOpen(true)}
           onGuidance={() => { setGuidanceView('next'); setGuidanceOpen(true); }}
         />
+        <JourneyNav active={journeyActive} onNavigate={goTab} />
 
         {/* Room at the foot for the tab bar and the screen's primary action. */}
         <main id="main" tabIndex={-1} className="app-main pb-44" onFocus={(event) => {
@@ -359,6 +361,13 @@ function Shell() {
           )}
           <Suspense fallback={<ScreenFallback />}>
             {activeTab === 'plan' && <PlanTab openRecipe={openRecipe} goTab={goTab} focusDate={planFocus} />}
+            {activeTab === 'cook' && <CookTab openRecipe={openRecipe} goTab={goTab} />}
+            {activeTab === 'learn' && (
+              <LearnTab
+                goTab={goTab}
+                openGuidance={(view = 'next') => { setGuidanceView(view); setGuidanceOpen(true); }}
+              />
+            )}
             {activeTab === 'log' && <LogTab initialSheet={logIntent} onIntentUsed={() => setLogIntent(null)} />}
             {activeTab === 'shop' && <ShopTab quickAddKey={shopAdd} onOpenPantry={() => setPantryOpen(true)} />}
             {activeTab === 'recipes' && <RecipesTab openRecipe={openRecipe} />}

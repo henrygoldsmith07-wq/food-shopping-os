@@ -9,6 +9,7 @@ const onboard = ({ budget = '60' } = {}) => {
   if (budget) fireEvent.change(screen.getByLabelText(/Weekly food budget/), { target: { value: budget } });
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => {
@@ -96,7 +97,7 @@ describe('pantry', () => {
     fireEvent.click(within(sheet).getByText(/Add 1 low items to the shopping list/));
 
     closeSheet('Smart pantry');
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     expect(screen.getAllByText('Olive oil').length).toBeGreaterThan(0);
   });
 
@@ -135,7 +136,7 @@ describe('shopping and spending', () => {
 
   it('adds items, totals them and records a shop', () => {
     onboard();
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     addListItem('Milk', '1.45');
     addListItem('Bread', '1.20');
 
@@ -161,7 +162,7 @@ describe('shopping and spending', () => {
 
   it('turns recorded shops into a price history', () => {
     onboard();
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     addListItem('Milk', '1.45');
     fireEvent.click(screen.getByLabelText('Tick Milk'));
     fireEvent.click(screen.getByText(/Finish shop/));
@@ -174,14 +175,14 @@ describe('shopping and spending', () => {
 
   it('counts recorded spending against the budget you set', () => {
     onboard({ budget: '60' });
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     addListItem('Weekly shop', '42');
     fireEvent.click(screen.getByLabelText('Tick Weekly shop'));
     fireEvent.click(screen.getByText(/Finish shop/));
     fireEvent.change(within(dialogFor('Finish shop')).getByLabelText(/Total paid/), { target: { value: '42' } });
     fireEvent.click(within(dialogFor('Finish shop')).getByText('Record this shop'));
 
-    fireEvent.click(screen.getByText('Home'));
+    fireEvent.click(screen.getByText('Today'));
     expect(screen.getAllByText('£42.00').length).toBeGreaterThan(0);
     expect(screen.getByText('£18.00 left')).toBeDefined();
   });
@@ -193,7 +194,7 @@ describe('meal plan', () => {
 
   it('starts blank and takes the meal you pick', () => {
     onboard();
-    fireEvent.click(screen.getByText('Plan'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     expect(screen.getByText(/Tap any slot to plan a meal/)).toBeDefined();
 
     fireEvent.click(screen.getAllByText('+ Dinner')[0]);
@@ -206,11 +207,12 @@ describe('meal plan', () => {
 
   it('shows what you planned on the home screen', () => {
     onboard();
-    fireEvent.click(screen.getByText('Plan'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     fireEvent.click(screen.getAllByText('+ Dinner')[0]); // Monday — today in the test clock
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Coconut Chickpea Curry'));
 
-    fireEvent.click(screen.getByText('Home'));
+    // The planner marks today's column, so the tab label is not the only match.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
     const planned = screen.queryAllByText('Coconut Chickpea Curry');
     // Only asserts when today is the first day of the week; otherwise the slot
     // belongs to another day and Home rightly shows nothing planned.
@@ -219,12 +221,12 @@ describe('meal plan', () => {
 
   it('sends a planned week’s ingredients to the shopping list', () => {
     onboard();
-    fireEvent.click(screen.getByText('Plan'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     fireEvent.click(screen.getAllByText('+ Dinner')[0]);
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Coconut Chickpea Curry'));
     fireEvent.click(screen.getByText(/Send this week's ingredients to the list/));
 
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     expect(screen.getByText('From recipes')).toBeDefined();
     expect(screen.getByText('Chickpeas (tins)')).toBeDefined();
   });

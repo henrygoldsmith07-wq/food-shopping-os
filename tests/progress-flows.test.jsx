@@ -8,6 +8,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => {
@@ -81,7 +82,7 @@ describe('earning it', () => {
     // challenge the cook completes: "Cook something new" has a target of one,
     // so the first recipe cooked finishes it. The original arithmetic here
     // counted the first two and not the third.
-    fireEvent.click(screen.getByText('Home'));
+    fireEvent.click(screen.getByText('Today'));
     expect(screen.getByText(/Level 1 · 104 XP/)).toBeDefined();
     expect(screen.getByText('1 of 5 done')).toBeDefined();
 
@@ -122,16 +123,17 @@ describe('earning it', () => {
 
   it('takes the XP back if you take the thing back', () => {
     onboard();
-    fireEvent.click(screen.getByText('Plan'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     fireEvent.click(screen.getAllByText('+ Dinner')[0]);
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Coconut Chickpea Curry'));
-    fireEvent.click(screen.getByText('Home'));
+    // The planner marks today's column, so the tab label is not the only match.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
     expect(screen.getByText(/Level 1 · 2 XP/)).toBeDefined(); // a planned meal is worth 2
 
-    fireEvent.click(screen.getByText('Plan'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     fireEvent.click(screen.getAllByText('Coconut Chickpea Curry')[0]);
     fireEvent.click(within(dialogFor('Plan a meal')).getByText(/Clear this slot/));
-    fireEvent.click(screen.getByText('Home'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
     expect(screen.queryByText(/Level 1 ·/)).toBeNull(); // back to nothing earned
   });
 });

@@ -21,7 +21,7 @@ import { DEFAULT_PERMISSIONS, householdPermission } from './household.js';
 import { dueBetween, dueNow, reminderContext } from './reminders.js';
 import { moveBefore } from './utils.js';
 import {
-  initialiseCloud, pullCloud, pushCloud, retryQueuedCloud, subscribeCloud,
+  initialiseCloud, listConflictStatus, makeCloudListAdopter, pullCloud, pushCloud, retryQueuedCloud, subscribeCloud,
 } from './cloud.js';
 import {
   createHealthVault, decryptHealth, encryptHealth, HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY,
@@ -216,6 +216,13 @@ export function AppProvider({ children }) {
   // left after it — so this one writes directly.
   const latest = useRef(state);
   latest.current = demo ?? state;
+
+  // A losing push gets the household copy back on the 409; the adopter folds
+  // it in — rows both sides changed wait for a person, not a last writer.
+  const adoptReconciledList = makeCloudListAdopter({
+    latest, cloudMeta, skipCloudPush, setState: routedSetState,
+  });
+
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') return undefined;
     let cancelled = false;
@@ -287,10 +294,24 @@ export function AppProvider({ children }) {
                 latest.current,
                 { ...result.meta, version: result.baseVersion },
               );
-              meta = localPush.status.kind === 'conflict' ? result.meta : localPush.meta;
-              status = localPush.status.kind === 'ready'
-                ? { kind: 'ready', message: 'Your offline changes are synced.' }
-                : localPush.status;
+              if (localPush.status.kind === 'conflict' && localPush.status.remoteState) {
+                // Fold the household copy in (the 409 carries it) instead of
+                // asking for a reload that would drop the local edits.
+                const applied = adoptReconciledList(localPush.status.remoteState, localPush.status.remoteVersion);
+                if (applied) {
+                  meta = cloudMeta.current;
+                  status = listConflictStatus(applied, 'Your offline changes merged with the household.');
+                } else {
+                  meta = result.meta;
+                  status = localPush.status;
+                }
+                remoteState = null;
+              } else {
+                meta = localPush.status.kind === 'conflict' ? result.meta : localPush.meta;
+                status = localPush.status.kind === 'ready'
+                  ? { kind: 'ready', message: 'Your offline changes are synced.' }
+                  : localPush.status;
+              }
             } else {
               status = {
                 kind: 'conflict',
@@ -365,11 +386,16 @@ export function AppProvider({ children }) {
       if (Number(result.meta?.version || 0) >= currentVersion || currentVersion <= requestedVersion) {
         cloudMeta.current = result.meta;
       }
-      if (result.status.kind !== 'ready') cloudReady.current = false;
+      let status = result.status;
+      if (status.kind === 'conflict' && status.remoteState) {
+        const applied = adoptReconciledList(status.remoteState, status.remoteVersion);
+        if (applied) status = listConflictStatus(applied, 'Household changes merged with yours.');
+      }
+      if (status.kind !== 'ready') cloudReady.current = false;
       setCloudStatus((current) => {
-        if (result.status.kind !== 'ready') return result.status;
+        if (status.kind !== 'ready') return status;
         if (liveConnection.current) return { kind: 'live', message: 'Live household sync connected.' };
-        return current.kind === 'reconnecting' ? current : result.status;
+        return current.kind === 'reconnecting' ? current : status;
       });
     }, 750);
     return () => clearTimeout(cloudTimer.current);

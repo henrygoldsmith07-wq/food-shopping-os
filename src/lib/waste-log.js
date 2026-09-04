@@ -1,4 +1,5 @@
 import { LEFTOVER_CAT } from './mealplan.js';
+import { byId } from '../data/recipes.js';
 
 /**
  * Why food was wasted — the three causes the product cares about.
@@ -15,7 +16,8 @@ import { LEFTOVER_CAT } from './mealplan.js';
  *   never cooked      — a planned meal that was skipped or swapped out
  *                      and never made (status 'skipped' or 'substituted')
  *
- * Pure: takes app state (or any object shaped like it), returns numbers.
+ * Pure: takes app state (or any object shaped like it), returns numbers — plus
+ * `missedMeals`, the named rows behind any silent-miss count, newest first.
  */
 export const WASTE_WINDOW_DAYS = 21;
 
@@ -34,7 +36,12 @@ export const wasteCauseBreakdown = (app = {}, { windowDays = WASTE_WINDOW_DAYS, 
   const day = today || app.day;
   const from = day ? addDays(day, -windowDays) : null;
   if (!from) {
-    return { leftoverCooked: { count: 0, cost: 0 }, leftoverBought: { count: 0, cost: 0 }, neverCooked: 0 };
+    return {
+      leftoverCooked: { count: 0, cost: 0 },
+      leftoverBought: { count: 0, cost: 0 },
+      neverCooked: 0,
+      missedMeals: [],
+    };
   }
   const rows = (app.waste || [])
     .filter((row) => row?.date && row.date >= from && row.date <= day);
@@ -42,12 +49,24 @@ export const wasteCauseBreakdown = (app = {}, { windowDays = WASTE_WINDOW_DAYS, 
     const items = rows.filter(predicate);
     return { count: items.length, cost: sumCost(items) };
   };
+  const neverCookedEvents = (app.mealPlanEvents || []).filter(
+    (event) => ['skipped', 'substituted'].includes(event?.status) && event?.date && event.date >= from && event.date <= day,
+  );
+  // Silent misses — meals the day rollover marked because nothing was ever
+  // recorded — are the cause worth reviewing: naming them is what lets a
+  // person recognise the pattern instead of staring at a count.
+  const silentMiss = (event) => event?.missed === true || event?.reason === 'missed';
   return {
     leftoverCooked: bucket((row) => row.cat === LEFTOVER_CAT),
     leftoverBought: bucket((row) => row.cat !== LEFTOVER_CAT),
-    neverCooked: (app.mealPlanEvents || []).filter(
-      (event) => ['skipped', 'substituted'].includes(event?.status) && event?.date && event.date >= from && event.date <= day,
-    ).length,
+    neverCooked: neverCookedEvents.length,
+    missedMeals: neverCookedEvents
+      .filter(silentMiss)
+      .map((event) => ({
+        date: event.date,
+        name: event?.plannedRecipeId ? byId(event.plannedRecipeId)?.name || null : null,
+      }))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date))),
   };
 };
 

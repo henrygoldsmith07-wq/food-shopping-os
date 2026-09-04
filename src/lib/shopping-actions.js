@@ -1,6 +1,8 @@
 import { householdPermission } from './household.js';
 import { shoppingNameKey } from './shopping.js';
 import { reconcilePurchase } from './pantry-intelligence.js';
+import { moveBefore } from './utils.js';
+import { applyListConflictResolution } from './household-concurrency.js';
 import { uid } from './state.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
@@ -78,6 +80,36 @@ export const shoppingActions = (set) => ({
         added: reconciled.added.length, merged: reconciled.matches.filter((match) => match.action === 'merged').length,
       }].slice(-100),
     };
+  }),
+  moveListItem: (id, beforeId) =>
+    set((s) => {
+      const shoppingList = moveBefore(s.shoppingList, id, beforeId);
+      return shoppingList === s.shoppingList ? {} : { shoppingList };
+    }),
+  removeListItem: (id) => set((s) => ({ shoppingList: s.shoppingList.filter((i) => i.id !== id) })),
+  toggleChecked: (id) =>
+    set((s) => ({
+      shoppingList: s.shoppingList.map((i) => (i.id === id
+        ? {
+          ...i,
+          checked: !i.checked,
+          checkedAt: i.checked ? null : Date.now(),
+          // Who ticked it — so a shared list reads as people's ticks,
+          // not a single anonymous checkmark. Cleared on untick.
+          checkedBy: i.checked ? null : s.activeMemberId || null,
+        }
+        : i)),
+    })),
+  clearChecked: () => set((s) => ({ shoppingList: s.shoppingList.filter((i) => !i.checked) })),
+  resolveListConflict: (conflictId, side = 'mine') => set((s) => {
+    if (!householdPermission(s, 'shopping')) return {};
+    const conflict = (s.listConflicts || [])
+      .find((entry) => entry.id === conflictId && entry.status !== 'resolved');
+    if (!conflict) return {};
+    const { rows, conflicts } = applyListConflictResolution(
+      s.shoppingList, s.listConflicts, conflictId, side,
+    );
+    return { shoppingList: rows, listConflicts: conflicts };
   }),
 });
 

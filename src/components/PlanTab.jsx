@@ -205,6 +205,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             </button>
             <button
               onClick={() => { setOffset(0); clearRangeStatus(); }}
+              aria-label={offset ? `Back to this ${view === 'week' ? 'week' : 'month'}` : rangeLabel}
               className="tap press min-w-0 rounded-full px-3 py-1.5 text-[0.78125rem] font-extrabold"
               style={{ background: offset ? 'var(--card-2)' : 'transparent', color: offset ? 'var(--ink)' : 'var(--faint)' }}
             >

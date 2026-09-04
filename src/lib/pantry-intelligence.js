@@ -45,7 +45,6 @@ const confidenceMeta = {
  */
 export const pantryConfidenceLevel = (item, today = '') => {
   const stored = rawConfidence(item);
-  const meta = confidenceMeta[stored];
   const observedAt = item?.lastConfirmedAt
     || item?.confidenceUpdatedAt
     || item?.purchaseDate
@@ -61,8 +60,8 @@ export const pantryConfidenceLevel = (item, today = '') => {
   const effective = confidenceMeta[level];
   const amount = amountConfidence(item, parsedQuantity(item));
   const decayed = level !== stored;
-  const requiresConfirmation = level !== 'definite';
   const amountNeedsConfirmation = amount === 'unknown';
+  const requiresConfirmation = level !== 'definite' || amountNeedsConfirmation;
   return {
     stored,
     level,

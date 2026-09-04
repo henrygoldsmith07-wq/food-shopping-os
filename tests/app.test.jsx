@@ -10,6 +10,16 @@ export const onboard = ({ name = 'Sam', budget = '60' } = {}) => {
   if (budget) fireEvent.change(screen.getByLabelText(/Weekly food budget/), { target: { value: budget } });
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  // The shopping list is the landing screen now; the dashboard is one tap on.
+  fireEvent.click(screen.getByText('Today'));
+};
+
+/** Diary left the bar in the list-first nav; the command palette still finds it. */
+const openDiary = () => {
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  const search = screen.getByLabelText('Search Forq');
+  fireEvent.change(search, { target: { value: 'food diary' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
 };
 
 /** Profile moved out of the tab bar; the avatar in the header opens it. */
@@ -23,17 +33,19 @@ describe('first run', () => {
     render(<App />);
     expect(screen.getByText('Welcome to Forq')).toBeDefined();
     expect(screen.getByText(/nothing is filled in for you/i)).toBeDefined();
-    expect(screen.queryByText('Home')).toBeNull(); // no app until it's set up
+    expect(screen.queryByText('List')).toBeNull(); // no app until it's set up
   });
 
   it('lets you through setup and remembers who you are', () => {
     onboard({ name: 'Ada' });
     expect(screen.getByText(/Good (morning|afternoon|evening), Ada/)).toBeDefined();
-    // Profile left the tab bar for the header avatar, so five tabs remain.
+    // Profile and Log left the tab bar (header avatar / flows & palette), so the
+    // five bar items are the list-first loop: List, Plan, Cook, Today, Recipes.
     expect(screen.getByRole('button', { name: /^You — profile/ })).toBeTruthy();
-    for (const label of ['Home', 'Plan', 'Log', 'Shop', 'Recipes']) {
-      expect(screen.getByText(label)).toBeDefined();
+    for (const label of ['List', 'Plan', 'Cook', 'Today', 'Recipes']) {
+      expect(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText(label)).toBeDefined();
     }
+    expect(within(document.querySelector('nav[aria-label="Main navigation"]')).queryByText('Log')).toBeNull();
   });
 
   it('preserves unreadable saved data and offers recovery instead of overwriting it', () => {
@@ -62,7 +74,7 @@ describe('an empty app', () => {
 
   it('has an empty diary', () => {
     onboard();
-    fireEvent.click(screen.getByText('Log'));
+    openDiary();
     expect(screen.getByText('Food diary')).toBeDefined();
     expect(screen.getAllByText(/Nothing logged — search, scan, snap or say it/).length).toBe(4);
     expect(screen.getByText(/Log something and your eating window appears here/)).toBeDefined();
@@ -70,7 +82,7 @@ describe('an empty app', () => {
 
   it('has an empty shopping list, shop history and price history', () => {
     onboard();
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     expect(screen.getByText(/Nothing on the list yet/)).toBeDefined();
     fireEvent.click(screen.getByText('Shops'));
     expect(screen.getByText('No shops recorded')).toBeDefined();
@@ -117,10 +129,11 @@ describe('goal-led first entry', () => {
     screen.getAllByText('Choose').slice(0, 2)
       .forEach((label) => fireEvent.click(label.closest('button')));
     fireEvent.click(screen.getByText('Start using Forq'));
+    fireEvent.click(screen.getByText('Today'));
 
     expect(screen.getByText('Your first meals are ready')).toBeDefined();
     expect(screen.getByText(/2 dinners planned/)).toBeDefined();
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     expect(screen.queryByText(/Nothing on the list yet/)).toBeNull();
   });
 
@@ -157,6 +170,7 @@ describe('goal-led first entry', () => {
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Start using Forq'));
+    fireEvent.click(screen.getByText('Today')); // the dashboard carries the goal CTA
 
     expect(screen.getAllByText('Add what’s in your cupboards').length).toBeGreaterThan(0);
   });
@@ -168,7 +182,7 @@ describe('logging food', () => {
 
   it('moves the day total from zero', () => {
     onboard();
-    fireEvent.click(screen.getByText('Log'));
+    openDiary();
     fireEvent.click(screen.getAllByText('+ Add food')[0]);
 
     const addSheet = [...document.querySelectorAll('[role="dialog"]')]

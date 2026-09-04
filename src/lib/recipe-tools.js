@@ -20,6 +20,7 @@ import { estimateRecipeMicros } from './foodlog.js';
 import { KCAL_PER_G } from '../data/goals.js';
 import { recipeAllowed } from './goals.js';
 import { evaluateFoodSuitability, suitabilityContextFrom } from './food-suitability.js';
+import { formatQuantity, parseQuantity, scaleQuantity } from './measure.js';
 
 const round1 = (n) => Math.round(n * 10) / 10;
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -123,14 +124,31 @@ export const applySwap = (recipe, ingredientName, option) => {
   const index = recipe.ingredients.findIndex((i) => i.name.toLowerCase() === ingredientName.toLowerCase());
   if (index < 0) return recipe;
 
+  const line = recipe.ingredients[index];
   const from = partByName(ingredientName);
   const to = partByName(option.name);
   const servings = recipe.servings || 1;
-  const grams = from ? Math.round(from.grams * (option.ratio ?? 1)) : null;
+  const ingredientQuantity = parseQuantity(line.qty, { ingredient: ingredientName });
+  const sourceAmount = ingredientQuantity?.dim === 'mass' || ingredientQuantity?.dim === 'volume'
+    ? ingredientQuantity.amount
+    : ingredientQuantity?.dim === 'count' && from
+      ? from.grams * ingredientQuantity.amount
+      : from
+        ? from.grams * servings
+        : null;
+  const grams = sourceAmount == null ? null : Math.round(sourceAmount * (option.ratio ?? 1) * 100) / 100;
+  // Unknown ingredient: copy the line as written — there is no rewrite basis.
+  const replacementQty = !from
+    ? line.qty
+    : ingredientQuantity
+      ? formatQuantity(scaleQuantity(ingredientQuantity, option.ratio ?? 1))
+      : grams
+        ? `${grams} g`
+        : line.qty;
 
-  const ingredients = recipe.ingredients.map((line, i) => (i === index
-    ? { name: option.name, qty: grams ? `${grams * servings} g` : line.qty }
-    : line));
+  const ingredients = recipe.ingredients.map((current, i) => (i === index
+    ? { name: option.name, qty: replacementQty }
+    : current));
 
   const name = rename(recipe.name, ingredientName, option.name);
   const base = {
@@ -144,15 +162,16 @@ export const applySwap = (recipe, ingredientName, option) => {
     signature: false,
   };
 
-  if (!from || !to) return { ...base, recalculated: false };
+  if (!from || !to || grams == null) return { ...base, recalculated: false };
 
-  const delta = (key) => (to.per100[key] || 0) * (grams / 100) - (from.per100[key] || 0) * (from.grams / 100);
+  const originalGrams = sourceAmount;
+  const delta = (key) => (to.per100[key] || 0) * (grams / 100) - (from.per100[key] || 0) * (originalGrams / 100);
   const kcal = Math.max(0, Math.round(recipe.kcal + delta('kcal')));
   const protein = Math.max(0, Math.round(recipe.protein + delta('protein')));
   const carbs = Math.max(0, Math.round(recipe.carbs + delta('carbs')));
   const fat = Math.max(0, Math.round(recipe.fat + delta('fat')));
   const fibre = Math.max(0, round1(recipe.fibre + delta('fibre')));
-  const costDelta = (to.price || 0) * (grams / 100) - (from.price || 0) * (from.grams / 100);
+  const costDelta = (to.price || 0) * (grams / 100) - (from.price || 0) * (originalGrams / 100);
   return {
     ...base,
     kcal,
@@ -356,8 +375,7 @@ export const recipeFromImport = (result, { text = '', url = '', provenance = {} 
   const servings = Math.max(1, Number(result.servings) || 1);
   const importedAt = new Date().toISOString();
   const unread = Array.isArray(result.unread) ? result.unread.slice(0, 30).map(String) : [];
-  // Honest about what the import actually captured: a recipe with no method
-  // line, or ingredient lines it couldn't parse, is 'partial', never full.
+  // Honest capture: no method line or unparsed ingredients make it 'partial'.
   const confidence = steps.length > 0 && (result.ingredients || []).length > 0 && !unread.length
     ? 'full'
     : 'partial';
@@ -394,9 +412,7 @@ export const recipeFromImport = (result, { text = '', url = '', provenance = {} 
     importedAt,
     confidence,
     unread,
-    // Where the import came from, when it was published, who wrote it and how
-    // it was read — off the page's own data, a video caption or a photo. Never
-    // invented, and kept so the recipe can always say which of those it was.
+    // Import origin comes off the page's own data (author, date, read-from) — never invented.
     provenance: {
       author: provenance.author || null,
       datePublished: provenance.datePublished || null,

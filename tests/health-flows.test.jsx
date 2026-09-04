@@ -21,6 +21,7 @@ const onboard = ({ cycle = false, stats = null } = {}) => {
   // The cycle page is opt-in, so tests that need it ask for it the way a user would.
   if (cycle) fireEvent.click(screen.getByRole('switch'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => {

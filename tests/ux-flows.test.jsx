@@ -8,6 +8,8 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  // The list lands first now; these flows drive the dashboard.
+  fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
 };
 
 describe('global UX controls', () => {

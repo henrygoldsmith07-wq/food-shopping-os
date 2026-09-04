@@ -9,6 +9,8 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  // The list lands first now; these flows drive the dashboard.
+  fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
 };
 
 const dialogFor = (title) => {
@@ -18,10 +20,22 @@ const dialogFor = (title) => {
   return dialog;
 };
 
-const goTab = (label) => fireEvent.click(within(document.querySelector('nav')).getByText(label));
+const goTab = (label) => fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText(label));
+
+const openDiary = () => {
+  // Log left the bar in the list-first nav; the command palette still finds it.
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  const search = screen.getByLabelText('Search Forq');
+  fireEvent.change(search, { target: { value: 'food diary' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  // The palette can arrive with the quick-add sheet open; flows need the plain diary.
+  const openSheet = [...document.querySelectorAll('[role="dialog"]')]
+    .find((d) => d.getAttribute('aria-hidden') !== 'true');
+  if (openSheet) fireEvent.click(within(openSheet).getByRole('button', { name: 'Close' }));
+};
 
 const logFood = (name) => {
-  goTab('Log');
+  openDiary();
   fireEvent.click(screen.getAllByText('+ Add food')[0]);
   const sheet = dialogFor('Add food');
   fireEvent.change(within(sheet).getByLabelText('Search foods'), { target: { value: name } });
@@ -204,7 +218,7 @@ describe('reading a receipt', () => {
 
   const openReceipt = async () => {
     await enableTool('Receipt capture');
-    goTab('Shop');
+    goTab('List');
     fireEvent.click(screen.getAllByText(/Read a receipt/)[0]);
     return dialogFor('Read a receipt');
   };
@@ -244,7 +258,7 @@ describe('reading a receipt', () => {
     fireEvent.click(within(sheet).getByText(/Read it/));
     fireEvent.click(within(sheet).getByText(/Add 5 to the pantry/));
     fireEvent.click(within(dialogFor('Smart pantry')).getByLabelText('Close'));
-    goTab('Shop');
+    goTab('List');
     fireEvent.click(screen.getByText('Shops'));
 
     expect(screen.getByText('Tesco')).toBeTruthy();
@@ -261,7 +275,7 @@ describe('reading a receipt', () => {
     fireEvent.click(within(sheet).getByText(/Read it/));
     fireEvent.click(within(sheet).getByText(/Add 2 to the pantry/));
     fireEvent.click(within(dialogFor('Smart pantry')).getByLabelText('Close'));
-    goTab('Shop');
+    goTab('List');
     fireEvent.click(screen.getByRole('button', { name: 'Repeat your last shop' }));
 
     expect(screen.getAllByLabelText('Tick ZUCCHINI')).toHaveLength(1);
@@ -276,10 +290,10 @@ describe('reading a receipt', () => {
     fireEvent.click(within(dialogFor('Smart pantry')).getByLabelText('Close'));
     fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
 
-    goTab('Shop');
+    goTab('List');
     fireEvent.click(screen.getByText('Shops'));
     expect(screen.getByText('No shops recorded')).toBeTruthy();
-    goTab('Home');
+    goTab('Today');
     fireEvent.click(screen.getByText('Open pantry →'));
     expect(within(dialogFor('Smart pantry')).getByText('Your pantry is empty')).toBeTruthy();
   });

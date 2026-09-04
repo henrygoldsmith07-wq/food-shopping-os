@@ -3,6 +3,12 @@ import { useApp } from '../lib/store.jsx';
 import { gbp } from '../lib/utils.js';
 import { wasteCauseBreakdown, wasteCauseInsight } from '../lib/waste-log.js';
 
+const shortDay = (date) => {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+
 /**
  * The waste summary as a log of causes, not just a total.
  *
@@ -48,6 +54,19 @@ export default function WasteCauseCard() {
           </div>
         ))}
       </div>
+      {breakdown.missedMeals.length > 0 && (
+        <p className="mt-2 border-t pt-2 text-[0.75rem] font-semibold leading-snug" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+          <span style={{ color: 'var(--warn)' }}>
+            {breakdown.missedMeals.length} of those slipped by with nothing recorded
+            {breakdown.missedMeals.length < breakdown.neverCooked ? ' — the rest were marked' : ''}:
+          </span>{' '}
+          {breakdown.missedMeals.slice(0, 3).map((missed) => `${missed.name || 'a planned meal'} (${shortDay(missed.date)})`).join(' · ')}
+          {breakdown.missedMeals.length > 3 && ` · +${breakdown.missedMeals.length - 3} more`}.
+          <span className="block mt-0.5" style={{ color: 'var(--faint)' }}>
+            Review the week’s plan before it repeats.
+          </span>
+        </p>
+      )}
       {insight && (
         <p className="mt-2 text-[0.78125rem] font-semibold leading-snug" style={{ color: 'var(--accent)' }}>
           {insight}

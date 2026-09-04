@@ -17,7 +17,7 @@ const onboard = () => {
 };
 
 const main = () => document.querySelector('main');
-const goTab = (label) => fireEvent.click(within(document.querySelector('nav')).getByText(label));
+const goTab = (label) => fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText(label));
 const openProfile = () => fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
 
 /** Anything a person can operate, as the accessibility tree sees it. */
@@ -58,12 +58,15 @@ describe('every screen is navigable without sight or a mouse', () => {
     expect(main().getAttribute('tabindex')).toBe('-1');
   });
 
-  it('has one main landmark, one nav, and exactly one h1 per screen', () => {
+  it('has one main landmark, one main nav, and exactly one h1 per screen', () => {
     onboard();
-    for (const tab of ['Plan', 'Log', 'Shop', 'Recipes']) {
+    for (const tab of ['List', 'Plan', 'Cook', 'Recipes']) {
       goTab(tab);
       expect(document.querySelectorAll('main').length).toBe(1);
-      expect(document.querySelectorAll('nav').length).toBe(1);
+      // The list-first nav adds the labelled Kitchen journey landmarks beside
+      // the main bar — every nav must be named, but only one is the bar.
+      expect(document.querySelectorAll('nav[aria-label="Main navigation"]').length).toBe(1);
+      expect([...document.querySelectorAll('nav')].every((nav) => nav.getAttribute('aria-label'))).toBe(true);
       expect(document.querySelectorAll('h1').length).toBe(1);
     }
   });
@@ -76,7 +79,7 @@ describe('every screen is navigable without sight or a mouse', () => {
 
   it('names every control on every tab', () => {
     onboard();
-    for (const tab of ['Plan', 'Log', 'Shop', 'Recipes']) {
+    for (const tab of ['List', 'Plan', 'Cook', 'Recipes']) {
       goTab(tab);
       const unnamed = controls(main()).filter((el) => !named(el));
       expect(unnamed.map((el) => el.outerHTML.slice(0, 120))).toEqual([]);
@@ -98,10 +101,10 @@ describe('every screen is navigable without sight or a mouse', () => {
 
   it('says which tab you are on in the tree, not only in colour', () => {
     onboard();
-    goTab('Shop');
-    const current = [...document.querySelectorAll('nav [aria-current="page"]')];
+    goTab('List');
+    const current = [...document.querySelectorAll('nav[aria-label="Main navigation"] [aria-current="page"]')];
     expect(current.length).toBe(1);
-    expect(current[0].textContent).toContain('Shop');
+    expect(current[0].textContent).toContain('List');
   });
 
   it('gives every sheet a name of its own', () => {
@@ -153,8 +156,10 @@ describe('every screen names its main action', () => {
 
   it('offers exactly one primary action per screen, and it says what it does', () => {
     onboard();
+    // The diary left the bar for the palette; the fixed-action screens on the
+    // list-first nav are List, Plan and Recipes.
     const labels = {};
-    for (const tab of ['Plan', 'Log', 'Shop', 'Recipes']) {
+    for (const tab of ['List', 'Plan', 'Recipes']) {
       goTab(tab);
       const bar = [...main().querySelectorAll('div.fixed')]
         .filter((el) => el.querySelector('button'));
@@ -163,13 +168,18 @@ describe('every screen names its main action', () => {
       expect(label.length).toBeGreaterThan(3);
       labels[tab] = label;
     }
-    // Each screen's action is its own, not the same button five times.
-    expect(new Set(Object.values(labels)).size).toBe(4);
+    // Each screen's action is its own, not the same button three times.
+    expect(new Set(Object.values(labels)).size).toBe(3);
   });
 
-  it('leads with the next setup step while there is one, then with the diary', () => {
+  it('leads with a named action on the list-first landing', () => {
     onboard();
-    expect(screen.getAllByText('Plan a meal').length).toBeGreaterThan(0);
-    expect(main().querySelector('div.fixed button')).toBeNull();
+    // The list is the landing screen now, and its fixed action names the first
+    // move (adding something) rather than leaving the screen to read as empty.
+    const bar = [...main().querySelectorAll('div.fixed')]
+      .filter((el) => el.querySelector('button'));
+    expect(bar.length).toBe(1);
+    const label = bar[0].querySelector('button').textContent.trim();
+    expect(label.length).toBeGreaterThan(3);
   });
 });

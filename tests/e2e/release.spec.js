@@ -7,6 +7,8 @@ const onboard = async (page, name = 'Ada') => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start using Forq' }).click();
+  // The shopping list is the landing screen now — the greeting lives on Today.
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await expect(page.getByText(new RegExp(`Good (morning|afternoon|evening), ${name}`))).toBeVisible({ timeout: 15000 });
 };
 
@@ -49,7 +51,10 @@ test('ships recognisable content before the client bundle boots', async ({ reque
 
 test('keeps detailed diary totals progressively disclosed', async ({ page }) => {
   await onboard(page);
-  await page.getByRole('button', { name: 'Log' }).click();
+  // Log left the bar in the list-first nav; the command palette still finds it.
+  await page.keyboard.press('Control+k');
+  await page.getByLabel('Search Forq').fill('Open food diary');
+  await page.keyboard.press('Enter');
   await expect(page.getByText('Calories remaining')).toBeVisible();
   const disclosure = page.getByText('Macros, nutrients and weekly progress');
   await expect(disclosure).toBeVisible();
@@ -73,7 +78,7 @@ test('honours increased contrast and forced system colours', async ({ page }) =>
 
   await page.emulateMedia({ contrast: 'no-preference', forcedColors: 'active' });
   expect(await page.evaluate(() => matchMedia('(forced-colors: active)').matches)).toBe(true);
-  const forced = await page.getByRole('button', { name: 'Home' }).evaluate((element) => ({
+  const forced = await page.getByRole('button', { name: 'Today' }).evaluate((element) => ({
     adjustment: getComputedStyle(element).forcedColorAdjust,
     background: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
     foreground: getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
@@ -114,8 +119,8 @@ test('preserves corrupt storage and offers recovery', async ({ page }) => {
 
 test('home, recipes and Guidance have no automatically detectable accessibility violations', async ({ page }) => {
   await onboard(page);
-  for (const screen of ['Home', 'Recipes']) {
-    if (screen !== 'Home') await page.getByRole('button', { name: screen }).click();
+  for (const screen of ['Today', 'Recipes']) {
+    if (screen !== 'Today') await page.getByRole('button', { name: screen }).click();
     await page.waitForTimeout(400);
     await page.evaluate(() => document.getAnimations()
       .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
@@ -183,6 +188,7 @@ test('exposes collaboration and calendar planning controls', async ({ page }) =>
   await onboard(page);
   // Coach access lives behind the 'coach' tool and is off for new users.
   await enableTool(page, 'coach');
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 
   await page.getByRole('button', { name: 'Plan', exact: true }).click();
@@ -206,5 +212,6 @@ test('reopens offline after the service worker is ready', async ({ page, context
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await page.reload();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 });

@@ -21,10 +21,28 @@ const onboard = ({ age = null, consent = true } = {}) => {
   if (age !== null && age < 18 && consent) {
     fireEvent.click(screen.getByLabelText('Accept the under-18 privacy terms'));
   }
-  if (!(age !== null && age < 18 && !consent)) fireEvent.click(screen.getByText('Start using Forq'));
+  if (!(age !== null && age < 18 && !consent)) {
+    fireEvent.click(screen.getByText('Start using Forq'));
+    // The list lands first now; these flows drive the dashboard.
+    const navBar = document.querySelector('nav[aria-label="Main navigation"]');
+    const today = navBar ? within(navBar).queryByText('Today') : null;
+    if (today) fireEvent.click(today);
+  }
 };
 
 const openProfile = () => fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
+
+/** Diary left the bar in the list-first nav; the command palette still finds it. */
+const openDiary = () => {
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  const search = screen.getByLabelText('Search Forq');
+  fireEvent.change(search, { target: { value: 'food diary' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  // The palette can arrive with the quick-add sheet open; the diary checks want the plain surface.
+  const openSheet = [...document.querySelectorAll('[role="dialog"]')]
+    .find((d) => d.getAttribute('aria-hidden') !== 'true');
+  if (openSheet) fireEvent.click(within(openSheet).getByRole('button', { name: 'Close' }));
+};
 
 const dialogFor = (title) => {
   const dialog = [...document.querySelectorAll('[role="dialog"]')]
@@ -114,14 +132,14 @@ describe('the app an under-18 user ends up with', () => {
 
   it('tracks caffeine against an age-appropriate figure and drops alcohol', () => {
     onboard({ age: 15 });
-    fireEvent.click(screen.getByRole('button', { name: /^Log/ }));
+    openDiary();
     expect(screen.getByText(/Caffeine 0 mg of 100 mg/)).toBeTruthy();
     expect(screen.queryByText(/^Alcohol /)).toBeNull();
   });
 
   it('still shows an adult the alcohol line and the 400 mg figure', () => {
     onboard({ age: 35 });
-    fireEvent.click(screen.getByRole('button', { name: /^Log/ }));
+    openDiary();
     expect(screen.getByText(/Caffeine 0 mg of 400 mg/)).toBeTruthy();
     expect(screen.getByText(/^Alcohol /)).toBeTruthy();
   });

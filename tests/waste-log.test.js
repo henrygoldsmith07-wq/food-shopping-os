@@ -47,8 +47,38 @@ describe('wasteCauseBreakdown', () => {
       leftoverCooked: { count: 0, cost: 0 },
       leftoverBought: { count: 0, cost: 0 },
       neverCooked: 0,
+      missedMeals: [],
     });
     expect(WASTE_WINDOW_DAYS).toBe(21);
+  });
+
+  it('names silent-miss rows newest first so the count reads as a cause', () => {
+    const breakdown = wasteCauseBreakdown({
+      day: '2026-08-03',
+      waste: [],
+      mealPlanEvents: [
+        { date: '2026-07-25', slot: 'dinner', status: 'skipped', reason: 'missed', missed: true, plannedRecipeId: 'chicken-traybake' },
+        { date: '2026-08-01', slot: 'dinner', status: 'skipped', reason: 'no-time' }, // explicit — counted, not silent
+        { date: '2026-08-02', slot: 'lunch', status: 'skipped', reason: 'missed', missed: true, plannedRecipeId: 'unknown-id' },
+      ],
+    });
+    expect(breakdown.neverCooked).toBe(3);
+    expect(breakdown.missedMeals).toEqual([
+      { date: '2026-08-02', name: null },
+      { date: '2026-07-25', name: 'Lemon Chicken Traybake' },
+    ]);
+  });
+
+  it('keeps out-of-window and pre-rollover silent rows out of the review list', () => {
+    const breakdown = wasteCauseBreakdown({
+      day: '2026-08-03',
+      waste: [],
+      mealPlanEvents: [
+        { date: '2026-06-01', status: 'skipped', reason: 'missed', missed: true },
+        { date: '2026-08-01', status: 'skipped', reason: 'missed', missed: true, plannedRecipeId: 'chickpea-curry' },
+      ],
+    });
+    expect(breakdown.missedMeals).toEqual([{ date: '2026-08-01', name: 'Coconut Chickpea Curry' }]);
   });
 });
 

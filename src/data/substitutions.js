@@ -145,8 +145,17 @@ export const SUBSTITUTIONS = [
 
 /** The swaps offered for one ingredient line. */
 export const substitutesFor = (name) => {
-  const entry = SUBSTITUTIONS.find((s) => s.match.test(String(name || '').trim()));
-  return entry ? entry.options : [];
+  const value = String(name || '').trim();
+  if (!value) return [];
+  // Several entries can describe one ingredient: a broad dietary swap and a
+  // more specific goal-driven swap. Keep both, but do not show the same product
+  // twice when those entries overlap.
+  const options = SUBSTITUTIONS
+    .filter((entry) => entry.match.test(value))
+    .flatMap((entry) => entry.options);
+  return options.filter((option, index, all) => all.findIndex((candidate) => (
+    String(candidate.name || '').toLowerCase() === String(option.name || '').toLowerCase()
+  )) === index);
 };
 
 /** Which patterns any swap in the table can satisfy. */

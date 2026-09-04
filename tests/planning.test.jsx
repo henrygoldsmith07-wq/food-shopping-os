@@ -32,6 +32,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => {
@@ -46,7 +47,10 @@ const planFirstDinner = (name = 'Coconut Chickpea Curry') => {
   fireEvent.click(within(dialogFor('Plan a meal')).getByText(name));
 };
 
-const openPlan = () => fireEvent.click(screen.getByText('Plan'));
+const openPlan = () => fireEvent.click(
+  // The bar's Plan tab, not the numbered kitchen-journey chip also labelled Plan.
+  within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'),
+);
 
 /** Profile moved out of the tab bar; the avatar in the header opens it. */
 const openProfile = () => fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
@@ -65,9 +69,9 @@ describe('the weekly planner', () => {
 
     fireEvent.click(screen.getByLabelText('Next week'));
     expect(screen.getAllByText(/^Week of /).length).toBeGreaterThan(0);
-    expect(screen.getByText('Today')).toBeDefined(); // the way back
+    expect(screen.getByRole('button', { name: 'Back to this week' })).toBeDefined(); // the way back
 
-    fireEvent.click(screen.getByText('Today'));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to this week' }));
     expect(screen.getByText('This week')).toBeDefined();
   });
 
@@ -111,7 +115,7 @@ describe('the weekly planner', () => {
     planFirstDinner();
     fireEvent.click(screen.getByLabelText('Next week'));
     planFirstDinner();
-    fireEvent.click(screen.getByText('Today'));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to this week' }));
     fireEvent.click(screen.getByText(/Send this week's ingredients to the list/));
 
     fireEvent.click(screen.getByLabelText('Next week'));
@@ -353,7 +357,7 @@ describe('leftovers and batch cooking', () => {
 
     // The list skips a dish the fridge already covers.
     fireEvent.click(screen.getByText(/Send this week's ingredients to the list/));
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     expect(screen.queryByText('Chickpeas (tins)')).toBeNull();
   });
 

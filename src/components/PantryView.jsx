@@ -23,6 +23,7 @@ import PantryChecks from './PantryChecks.jsx';
 import BarcodeAdd from './BarcodeAdd.jsx';
 import PantryShare from './PantryShare.jsx';
 import PantryEmptyState from './PantryEmptyState.jsx';
+import PantryIntelligenceCard from './PantryIntelligenceCard.jsx';
 import UndoNotice from './UndoNotice.jsx';
 
 export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan }) {
@@ -91,10 +92,14 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
   const undated = app.pantry.filter((p) => !p.expiry).length;
   const empty = app.pantry.length === 0;
   const analytics = useMemo(() => pantryAnalytics(app.pantry, app.day), [app.pantry, app.day]);
+  // The panel's one action — "Confirm stock" — settles presence, so only rows
+  // whose presence has decayed belong here. An unrecorded amount is a different
+  // ask (resolved by recording one, or checked before a purchase), and demanding
+  // it the moment an item is added name-first would contradict the add form.
   const confidenceChecks = useMemo(
     () => app.pantry
       .map((item) => ({ item, confidence: pantryConfidenceLevel(item, app.day) }))
-      .filter(({ confidence }) => confidence.requiresConfirmation && confidence.recommendationImpact),
+      .filter(({ confidence }) => confidence.level !== 'definite'),
     [app.pantry, app.day],
   );
   const conflicts = (app.pantryConflicts || []).filter((conflict) => conflict.status !== 'resolved');
@@ -130,6 +135,8 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
           </Card>
         ))}
       </div>
+
+      {!empty && <PantryIntelligenceCard />}
 
       <div className="grid grid-cols-2 gap-2.5">
         <button

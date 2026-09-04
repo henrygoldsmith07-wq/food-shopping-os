@@ -28,6 +28,7 @@ import StoreIntegrations from './StoreIntegrations.jsx';
 import ShoppingListRow from './ShoppingListRow.jsx';
 import BulkListActions from './BulkListActions.jsx';
 import RestockSection from './RestockSection.jsx';
+import ListConflictCard from './ListConflictCard.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { useShoppingSession } from '../lib/shopping-session.js';
 import ShoppingProgress from './ShoppingProgress.jsx'; import CloudSyncRow from './CloudSyncRow.jsx';
@@ -199,6 +200,8 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
 
   return (
     <div className={cx('pb-6 space-y-6', shoppingMode && largeTouch && 'shopping-large-touch')}><CloudSyncRow />
+      {/* Rows both devices changed while apart need a person, not a last writer. */}
+      <ListConflictCard app={app} />
       {/* The shared header carries the title now. Five views don't fit a
           320px phone on one line, so this scrolls rather than pushing the
           whole page sideways. */}

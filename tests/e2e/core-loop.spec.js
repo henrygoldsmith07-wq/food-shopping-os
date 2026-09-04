@@ -15,6 +15,8 @@ const onboard = async (page, name = 'Ada') => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start using Forq' }).click();
+  // The shopping list is the landing screen now — the greeting lives on Today.
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await expect(page.getByText(new RegExp(`Good (morning|afternoon|evening), ${name}`))).toBeVisible({ timeout: 15000 });
 };
 
@@ -43,7 +45,7 @@ test('plans a week, sends it to the list, shops and moves purchases into the pan
   await openProposal(page);
   await page.getByRole('button', { name: 'Shop for it' }).click();
   await page.getByRole('button', { name: 'Review shopping list' }).click();
-  await expect(page.getByText('Your list')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your list' })).toBeVisible();
 
   // A deterministic item makes the shop → pantry hand-off assertable.
   await page.getByRole('button', { name: 'Add an item' }).click();
@@ -93,9 +95,10 @@ test('applies a pasted receipt onto the list and into the pantry', async ({ page
     } catch { /* a storage-blocked browser is a different test's problem */ }
   });
   await page.reload();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 
-  await page.getByRole('button', { name: 'Shop', exact: true }).click();
+  await page.getByRole('button', { name: 'List', exact: true }).click();
   await page.getByRole('button', { name: 'Read a receipt' }).click();
 
   const sheet = page.getByRole('dialog', { name: 'Read a receipt' });

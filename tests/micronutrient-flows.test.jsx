@@ -26,8 +26,15 @@ const logFood = (name) => {
   fireEvent.click(within(portion).getByText(/Add \d+ kcal to/));
 };
 
+const openDiary = () => {
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  const search = screen.getByLabelText('Search Forq');
+  fireEvent.change(search, { target: { value: 'food diary' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+};
+
 const openMicros = () => {
-  fireEvent.click(screen.getByText('Log'));
+  openDiary();
   fireEvent.click(screen.getByText(/Vitamins & minerals/));
   return dialogFor('Vitamins & minerals');
 };
@@ -46,7 +53,7 @@ describe('vitamins and minerals', () => {
 
   it('names the gaps a logged day left, with food behind each one', () => {
     onboard();
-    fireEvent.click(screen.getByText('Log'));
+    openDiary();
     logFood('white rice');
     const sheet = openMicros();
     expect(within(sheet).getAllByText(/short/).length).toBeGreaterThan(0);
@@ -57,7 +64,7 @@ describe('vitamins and minerals', () => {
 
   it('shows the week and the full nutrient list on their own tabs', () => {
     onboard();
-    fireEvent.click(screen.getByText('Log'));
+    openDiary();
     logFood('spinach');
     const sheet = openMicros();
 

@@ -56,7 +56,14 @@ export function CommandPalette({ open, onClose, onRun }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && results[0]) onRun(results[0]);
+              if (event.key === 'Enter' && results[0]) {
+                // Closing the palette mid-keydown refocuses whatever was focused
+                // before it opened (the Sheet restores focus on unmount). Without
+                // this, the keydown's default activation then clicks that element
+                // — typically a nav button — sending the user somewhere else.
+                event.preventDefault();
+                onRun(results[0]);
+              }
             }}
             aria-label="Search Forq"
             placeholder="Search everything or type a command…"

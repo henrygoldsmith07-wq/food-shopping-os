@@ -8,6 +8,7 @@ import {
   reconcilePurchase,
   shortfallQuantity,
 } from '../src/lib/pantry-intelligence.js';
+import { pantryIntelligenceSummary } from '../src/lib/pantry-summary.js';
 import { consumePantryIngredients } from '../src/lib/kitchen.js';
 
 describe('pantry intelligence', () => {
@@ -16,6 +17,94 @@ describe('pantry intelligence', () => {
     expect(reading.level).toBe('unknown');
     expect(reading.requiresConfirmation).toBe(true);
     expect(reading.reason).toMatch(/faded/);
+  });
+
+  it('summarises empty stock without inventing a buying need', () => {
+    expect(pantryIntelligenceSummary({ today: '2026-08-19' })).toMatchObject({
+      empty: true,
+      stock: { total: 0, value: 0, dated: 0 },
+      expiring: [],
+      useFirst: [],
+      needsBuying: [],
+      checkFirst: [],
+    });
+  });
+
+  it('orders use-first items at the expiry boundary and keeps the reason visible', () => {
+    const result = pantryIntelligenceSummary({
+      today: '2026-08-19',
+      expiryWithin: 7,
+      pantry: [
+        { id: 'late', name: 'Rice', expiry: '2026-08-27' },
+        { id: 'seven', name: 'Milk', expiry: '2026-08-26' },
+        { id: 'today', name: 'Spinach', expiry: '2026-08-19' },
+        { id: 'past', name: 'Yogurt', expiry: '2026-08-18' },
+      ],
+    });
+    expect(result.expiring.map((row) => row.item.name)).toEqual(['Yogurt', 'Spinach', 'Milk']);
+    expect(result.useFirst.map((row) => row.item.name)).toEqual(['Yogurt', 'Spinach', 'Milk']);
+    expect(result.useFirst[0].reason).toMatch(/past the recorded date/i);
+    expect(result.useFirst[2].reason).toBe('Use within 7 days.');
+  });
+
+  it('turns low stock into one buying need, but does not duplicate its list row', () => {
+    const result = pantryIntelligenceSummary({
+      today: '2026-08-19',
+      pantry: [
+        { id: 'milk', name: 'Milk', qty: '250 ml', low: true },
+        { id: 'rice', name: 'Rice', qty: '1 kg', low: true },
+      ],
+      shoppingList: [
+        { id: 'existing', name: 'milk', qty: '2 pints', checked: false },
+      ],
+    });
+    expect(result.needsBuying.map((row) => row.name)).toEqual(['milk', 'Rice']);
+    expect(result.needsBuying.filter((row) => row.source === 'pantry').map((row) => row.name)).toEqual(['Rice']);
+    expect(result.needsBuying.find((row) => row.name === 'Rice').reason).toBe('Marked as running low.');
+  });
+
+  it('does not repeat a low item that is already ticked in the basket', () => {
+    const result = pantryIntelligenceSummary({
+      today: '2026-08-19',
+      pantry: [{ id: 'milk', name: 'Milk', qty: '250 ml', low: true }],
+      shoppingList: [{ id: 'bought', name: 'semi-skimmed milk', checked: true }],
+    });
+    expect(result.needsBuying).toEqual([]);
+  });
+
+  it('asks for an amount confirmation even when stock confidence is definite', () => {
+    const result = pantryIntelligenceSummary({
+      today: '2026-08-19',
+      pantry: [{ id: 'oil', name: 'Olive oil', confidence: 'definite' }],
+    });
+    expect(result.stock.counts.confirmed_sufficient).toBe(1);
+    expect(result.checkFirst).toHaveLength(1);
+    expect(result.checkFirst[0].confidence).toMatchObject({
+      level: 'definite',
+      amount: 'unknown',
+      requiresConfirmation: true,
+      amountNeedsConfirmation: true,
+    });
+    expect(result.needsBuying).toEqual([]);
+  });
+
+  it('keeps uncertain stock in check-first instead of claiming it needs buying', () => {
+    const result = pantryIntelligenceSummary({
+      today: '2026-08-19',
+      pantry: [
+        { id: 'old', name: 'Beans', qty: '2 tins', confidence: 'definite', addedAt: '2026-07-01' },
+        { id: 'maybe', name: 'Flour', qty: '1 kg', confidence: 'probable' },
+        { id: 'unknown', name: 'Oil', confidence: 'unknown' },
+      ],
+    });
+    expect(result.stock.counts).toEqual({
+      confirmed_sufficient: 0,
+      probably_available: 1,
+      running_low: 0,
+      unknown: 2,
+    });
+    expect(result.checkFirst.map((row) => row.item.name)).toEqual(['Beans', 'Flour', 'Oil']);
+    expect(result.needsBuying).toEqual([]);
   });
 
   it('normalises units without destroying the user-facing quantity', () => {

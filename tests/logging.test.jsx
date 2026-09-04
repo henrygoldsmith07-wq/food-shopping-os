@@ -12,7 +12,16 @@ const onboard = () => {
 
 const openDiary = () => {
   onboard();
-  fireEvent.click(screen.getByText('Log'));
+  // Log left the bar in the list-first nav; the command palette still finds it.
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  const search = screen.getByLabelText('Search Forq');
+  fireEvent.change(search, { target: { value: 'food diary' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  // The palette can arrive with the diary's quick-add sheet already open; the
+  // capture flows below need the plain diary surface (unique chip labels).
+  const openSheet = [...document.querySelectorAll('[role="dialog"]')]
+    .find((d) => d.getAttribute('aria-hidden') !== 'true');
+  if (openSheet) fireEvent.click(within(openSheet).getByRole('button', { name: 'Close' }));
 };
 
 /** The open sheet whose heading is `title` (labels repeat inside the sheets). */

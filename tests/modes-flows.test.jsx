@@ -8,6 +8,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => {
@@ -17,7 +18,7 @@ const dialogFor = (title) => {
   return dialog;
 };
 
-const nav = () => within(document.querySelector('nav'));
+const nav = () => within(document.querySelector('nav[aria-label="Main navigation"]'));
 const openProfile = () => fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
 
 /** Preferences → Focus, where the modes live. */
@@ -53,7 +54,8 @@ describe('product modes', () => {
 
   it('starts with every module shown', () => {
     onboard();
-    for (const label of ['Home', 'Plan', 'Log', 'Shop', 'Recipes']) {
+    // Log is reachable but off the bar in the list-first nav; Cook is a tab now.
+    for (const label of ['List', 'Plan', 'Cook', 'Today', 'Recipes']) {
       expect(nav().getByText(label)).toBeTruthy();
     }
     const sheet = openModes();
@@ -65,10 +67,10 @@ describe('product modes', () => {
     chooseMode('Track nutrition');
     closeSheets();
 
-    expect(nav().getByText('Log')).toBeTruthy();
-    expect(nav().queryByText('Shop')).toBeNull();
+    expect(nav().queryByText('List')).toBeNull(); // the shop module is hidden
     expect(nav().queryByText('Plan')).toBeNull();
-    expect(nav().getByText('Home')).toBeTruthy(); // always somewhere to be
+    expect(nav().getByText('Cook')).toBeTruthy(); // independent of the hidden modules
+    expect(nav().getByText('Today')).toBeTruthy(); // always somewhere to be
   });
 
   it('says what each hidden module is still holding', () => {
@@ -83,37 +85,37 @@ describe('product modes', () => {
     onboard();
     chooseMode('Track nutrition');
     closeSheets();
-    expect(nav().queryByText('Shop')).toBeNull();
+    expect(nav().queryByText('List')).toBeNull();
 
     chooseMode('Plan and shop');
     closeSheets();
-    expect(nav().getByText('Shop')).toBeTruthy();
-    expect(nav().getByText('Log')).toBeTruthy();
+    expect(nav().getByText('List')).toBeTruthy();
+    expect(nav().queryByText('Log')).toBeNull(); // off the bar regardless of mode
 
     const sheet = openModes();
     fireEvent.click(within(sheet).getByText('Show every module again'));
     expect(within(sheet).getByText('Everything is shown')).toBeTruthy();
     closeSheets();
-    for (const label of ['Plan', 'Log', 'Shop', 'Recipes']) {
+    for (const label of ['List', 'Plan', 'Cook', 'Today', 'Recipes']) {
       expect(nav().getByText(label)).toBeTruthy();
     }
   });
 
   it('moves you off a screen the new mode hides, and gives it back intact', () => {
     onboard();
-    fireEvent.click(nav().getByText('Shop'));
+    fireEvent.click(nav().getByText('List'));
     expect(screen.getByText(/Nothing on the list yet/)).toBeTruthy();
 
     chooseMode('Track nutrition');
     closeSheets();
-    // The Shop screen is gone, and the app is on Home rather than on a blank one.
-    expect(nav().queryByText('Shop')).toBeNull();
+    // The shop screen is gone, and the app is on Today rather than on a blank one.
+    expect(nav().queryByText('List')).toBeNull();
     expect(screen.getByText(/Good (morning|afternoon|evening), Sam/)).toBeTruthy();
 
     const sheet = openModes();
     fireEvent.click(within(sheet).getByText('Show every module again'));
     closeSheets();
-    fireEvent.click(nav().getByText('Shop'));
+    fireEvent.click(nav().getByText('List'));
     expect(screen.getByText(/Nothing on the list yet/)).toBeTruthy();
   });
 

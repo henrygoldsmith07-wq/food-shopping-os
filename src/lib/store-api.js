@@ -18,7 +18,6 @@ import { householdActions } from './household-actions.js';
 import { smartActions } from './smart-actions.js';
 import { HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY } from './health-vault.js';
 import { householdPermission } from './household.js';
-import { moveBefore } from './utils.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
 import { offerActions } from './offer-actions.js';
@@ -308,26 +307,6 @@ export function useStoreApi({
             } : item)),
           };
         }),
-      moveListItem: (id, beforeId) =>
-        set((s) => {
-          const shoppingList = moveBefore(s.shoppingList, id, beforeId);
-          return shoppingList === s.shoppingList ? {} : { shoppingList };
-        }),
-      removeListItem: (id) => set((s) => ({ shoppingList: s.shoppingList.filter((i) => i.id !== id) })),
-      toggleChecked: (id) =>
-        set((s) => ({
-          shoppingList: s.shoppingList.map((i) => (i.id === id
-            ? {
-              ...i,
-              checked: !i.checked,
-              checkedAt: i.checked ? null : Date.now(),
-              // Who ticked it — so a shared list reads as people's ticks,
-              // not a single anonymous checkmark. Cleared on untick.
-              checkedBy: i.checked ? null : s.activeMemberId || null,
-            }
-            : i)),
-        })),
-      clearChecked: () => set((s) => ({ shoppingList: s.shoppingList.filter((i) => !i.checked) })),
       recordShop: ({ store, total, toPantry = false, location = 'Cupboard', itemIds = null }) =>
         set((s) => {
           const bought = s.shoppingList.filter((i) => i.checked && (!itemIds || itemIds.includes(i.id)));

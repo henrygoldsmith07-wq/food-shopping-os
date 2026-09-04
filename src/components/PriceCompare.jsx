@@ -14,6 +14,7 @@ import { Glyph } from './icons.jsx';
 import PriceGraphs from './PriceGraphs.jsx';
 import LivePriceCheck from './LivePriceCheck.jsx';
 import ResolvedPrices from './ResolvedPrices.jsx';
+import CheapestBasket from './CheapestBasket.jsx';
 
 /**
  * Price comparison, from three sources kept deliberately apart.
@@ -183,6 +184,12 @@ export default function PriceCompare() {
       )}
 
       <ResolvedPrices items={app.shoppingList} sources={priceSources} />
+
+      <CheapestBasket
+        items={app.shoppingList}
+        liveResults={priceSources.scraped}
+        shops={app.shops}
+      />
 
       <LivePriceCheck
         items={app.shoppingList}

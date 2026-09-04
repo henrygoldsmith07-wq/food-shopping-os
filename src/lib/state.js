@@ -135,6 +135,7 @@ export const EMPTY_STATE = {
   /* kitchen */
   pantry: [], // {id,name,emoji,cat,location,qty,unit,quantityMin,quantityMax,opened,purchaseDate,expiry,low,confidence,amountConfidence,purchaseSource,cost,expectedConsumptionRate,plannedMealAllocations}
   pantryConflicts: [], // quantity/source conflicts awaiting a household decision
+  listConflicts: [], // rows a shared list changed differently on two devices, awaiting a pick
   pantryEvents: [], // purchase, confirmation and recipe-consumption evidence
   leftovers: [], // first-class cooked portions with storage and planned reuse lifecycle
   lastPantryEvent: null,

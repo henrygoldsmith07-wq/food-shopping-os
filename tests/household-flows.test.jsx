@@ -11,6 +11,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => [...document.querySelectorAll('[role="dialog"]')]
@@ -36,7 +37,7 @@ describe('household controls', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Use Alex profile' }));
     fireEvent.click(within(sheet).getByLabelText('Close'));
 
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     expect(screen.getByText(/Shopping is off for Alex/)).toBeTruthy();
   });
 
@@ -59,7 +60,7 @@ describe('household controls', () => {
     fireEvent.change(within(sheet).getByLabelText('New household member'), { target: { value: 'Alex' } });
     fireEvent.click(within(sheet).getByText('Add'));
     fireEvent.click(within(sheet).getByLabelText('Close'));
-    fireEvent.click(screen.getByText('Shop'));
+    fireEvent.click(screen.getByText('List'));
     fireEvent.click(screen.getByText('Add an item'));
     fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'Milk' } });
     fireEvent.click(screen.getByText('Add item'));

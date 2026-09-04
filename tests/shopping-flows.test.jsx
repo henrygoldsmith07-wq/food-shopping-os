@@ -9,6 +9,7 @@ const onboard = ({ budget = '60' } = {}) => {
   if (budget) fireEvent.change(screen.getByLabelText(/Weekly food budget/), { target: { value: budget } });
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => {
@@ -18,7 +19,7 @@ const dialogFor = (title) => {
   return dialog;
 };
 
-const openShop = () => fireEvent.click(screen.getByText('Shop'));
+const openShop = () => fireEvent.click(screen.getByText('List'));
 
 const addItem = (name, price, qty) => {
   if (screen.queryByText('Add an item')) fireEvent.click(screen.getByText('Add an item'));
@@ -105,7 +106,8 @@ describe('a list that learns', () => {
 
     cleanup();
     render(<App />);
-    fireEvent.click(screen.getByText('Shop'));
+    // The app reopens on the list itself, so the tab label is not unique.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('List'));
     expect(screen.getByText('Exit mode')).toBeDefined();
     expect(screen.getByText(/Everything is ticked/)).toBeDefined();
   });
@@ -122,7 +124,8 @@ describe('a list that learns', () => {
 
     cleanup();
     render(<App />);
-    fireEvent.click(screen.getByText('Shop'));
+    // The app reopens on the list itself, so the tab label is not unique.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('List'));
     expect(screen.getByText('Exit mode')).toBeDefined();
     expect(screen.getByLabelText('Tick Milk')).toBeDefined();
     expect(screen.getByLabelText('Tick Bread')).toBeDefined();
@@ -139,7 +142,7 @@ describe('a list that learns', () => {
     // Bought twice and put away — nothing to restock while you still have it.
     expect(screen.queryByText('Frequently bought')).toBeNull();
 
-    fireEvent.click(screen.getByText('Home'));
+    fireEvent.click(screen.getByText('Today'));
     fireEvent.click(screen.getByText('Open pantry →'));
     const pantry = dialogFor('Smart pantry');
     for (const button of within(pantry).getAllByLabelText('Remove Milk')) fireEvent.click(button);
@@ -163,7 +166,7 @@ describe('a list that learns', () => {
       }
     }
 
-    fireEvent.click(screen.getByText('Home'));
+    fireEvent.click(screen.getByText('Today'));
     fireEvent.click(screen.getByText('Open pantry →'));
     const pantry = dialogFor('Smart pantry');
     for (const name of ['Milk', 'Bread']) {
@@ -419,7 +422,7 @@ describe('expiry and waste', () => {
   afterEach(cleanup);
 
   const openPantry = () => {
-    fireEvent.click(screen.getByText('Home'));
+    fireEvent.click(screen.getByText('Today'));
     fireEvent.click(screen.getByText('Open pantry →'));
     return dialogFor('Smart pantry');
   };
@@ -459,7 +462,8 @@ describe('meals to shopping', () => {
 
   it('puts one line on the list for an ingredient two meals want', () => {
     onboard();
-    fireEvent.click(screen.getByText('Plan'));
+    // The budget dashboard also names the loop's next step, so use the tab.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     // The same dish on two nights still needs its ingredients bought once.
     fireEvent.click(screen.getAllByText('+ Dinner')[0]);
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Coconut Chickpea Curry'));

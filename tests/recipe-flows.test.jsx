@@ -8,6 +8,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
+  fireEvent.click(screen.getByText('Today')); // the list lands first now
 };
 
 const dialogFor = (title) => {
@@ -20,7 +21,7 @@ const dialogFor = (title) => {
 const openRecipes = () => fireEvent.click(screen.getByText('Recipes'));
 
 const addPantry = (name) => {
-  fireEvent.click(screen.getByText('Home'));
+  fireEvent.click(screen.getByText('Today'));
   fireEvent.click(screen.getByText('Open pantry →'));
   const sheet = dialogFor('Smart pantry');
   // The form stays open between adds, so only open it when it is closed.

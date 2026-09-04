@@ -62,6 +62,7 @@ import { outcomeDashboard } from './outcome-dashboard.js';
 import { optimiseShopping } from './shopping-optimisation.js';
 import { weeklyFoodLoop } from './food-loop.js';
 import { loopHealth } from './loop-learning.js';
+import { pantryIntelligenceSummary } from './pantry-summary.js';
 import { learnHouseholdPreferences, preferenceSummary } from './household-preferences.js';
 import { predictionCalibration, predictionLearningProfile } from './prediction-feedback.js';
 
@@ -134,6 +135,12 @@ export const deriveApp = (state) => {
     today: state.day,
   });
   const wasteProfile = learnWasteProfile(state.waste, { learnedAliases: state.aliasMemory });
+  const pantrySummary = pantryIntelligenceSummary({
+    pantry: state.pantry,
+    shoppingList: state.shoppingList,
+    today: state.day,
+    learnedAliases: state.aliasMemory,
+  });
   const predictionLearning = predictionLearningProfile(state.predictionCorrections || []);
   const predictionCalibrationReport = predictionCalibration(state.predictionSnapshots || []);
   const honestSavings = savingsSnapshot(state, state.day, 30);
@@ -236,6 +243,7 @@ export const deriveApp = (state) => {
          confidence: rows,
          openConflicts: (state.pantryConflicts || []).filter((conflict) => conflict.status !== 'resolved'),
          recentEvents: (state.pantryEvents || []).slice(-10).reverse(),
+         ...pantrySummary,
        };
      })(),
     spentThisWeek: spentInWeek(state.shops, state.day),

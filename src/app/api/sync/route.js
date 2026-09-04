@@ -11,6 +11,12 @@ import { writeAuditEvent } from '../../../server/audit.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 
+const conflictResponse = (document, membership) => NextResponse.json({
+  error: 'A newer household version is available.',
+  version: Number(document?.version || 0),
+  state: scopeHouseholdState(document?.state || null, membership.permissions),
+}, { status: 409 });
+
 export async function GET(request) {
   try {
     const user = await requireUser();
@@ -74,10 +80,25 @@ export async function PUT(request) {
         { upsert: payload.version === 0, returnDocument: 'after', includeResultMetadata: false },
       );
     } catch (error) {
-      if (error?.code === 11000) throw new ApiError(409, 'A newer household version is available.');
+      if (error?.code === 11000) {
+        const latestDoc = await db.collection('householdStates').findOne(
+          { householdId: household._id },
+          { projection: { state: 1, version: 1 } },
+        );
+        return conflictResponse(latestDoc, membership);
+      }
       throw error;
     }
-    if (!result) throw new ApiError(409, 'A newer household version is available.');
+    if (!result) {
+      // Hand back the current state with the conflict: the other device won
+      // the write, but the losing device can reconcile item-by-item instead
+      // of being told to reload and drop its edits.
+      const latestDoc = await db.collection('householdStates').findOne(
+        { householdId: household._id },
+        { projection: { state: 1, version: 1 } },
+      );
+      return conflictResponse(latestDoc, membership);
+    }
     await writeAuditEvent({
       db,
       householdId: household._id,
