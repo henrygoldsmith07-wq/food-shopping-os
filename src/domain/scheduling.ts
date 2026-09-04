@@ -8,7 +8,7 @@
 // Pure domain: `now` is passed in so tests and renders stay deterministic;
 // nothing here touches storage or React.
 
-import type { Card, CardDraft } from "./types";
+import type { Card, CardDraft, Id } from "./types";
 
 const DAY_MS = 86_400_000;
 /** Starting ease for every new card (SM-2 default). */
@@ -152,3 +152,24 @@ export function gradeReview(card: Card, rating: Rating, now: Date = new Date()):
  * and a graduated card becomes due once its interval has elapsed.
  */
 export const isDue = (card: Card, now: Date = new Date()): boolean => card.due <= dayStamp(now);
+
+/**
+ * The cards up for review on `now`'s day — the review queue. Ordered by due
+ * day then id, so a review screen shows the same stable queue every render
+ * and the oldest debt surfaces first.
+ */
+export const dueCards = (cards: Card[], now: Date = new Date()): Card[] =>
+  cards
+    .filter((card) => isDue(card, now))
+    .sort((a, b) =>
+      a.due === b.due ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.due < b.due ? -1 : 1,
+    );
+
+/**
+ * Grade the card with `id` and return the next deck with the graded card in
+ * its place. A card that is not in the deck leaves the deck's contents
+ * untouched — callers can treat a missing card as a no-op, not a failure.
+ */
+export function rateCard(cards: Card[], id: Id, rating: Rating, now: Date = new Date()): Card[] {
+  return cards.map((card) => (card.id === id ? gradeReview(card, rating, now) : card));
+}

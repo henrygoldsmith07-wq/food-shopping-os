@@ -3,8 +3,10 @@ import {
   createCard,
   dayStamp,
   dueAfter,
+  dueCards,
   gradeReview,
   isDue,
+  rateCard,
   INITIAL_EASE,
   MIN_EASE,
   MAX_EASE,
@@ -168,5 +170,35 @@ describe("due logic, caps and purity", () => {
     expect(dueAfter(late, 1)).toBe("2026-06-01");
     const throughYear = gradeReview(card(), "good", new Date("2026-12-31T10:00:00Z"));
     expect(throughYear.due).toBe("2027-01-01");
+  });
+});
+
+describe("the review queue helpers", () => {
+  it("collects only cards due on the day, soonest first", () => {
+    const a = card({ id: "a", due: "2026-04-30" });
+    const b = card({ id: "b", due: "2026-05-01" });
+    const c = card({ id: "c", due: "2026-05-02" });
+    expect(dueCards([c, a, b], NOW).map((x) => x.id)).toEqual(["a", "b"]);
+  });
+
+  it("breaks due-day ties by id so the queue is stable", () => {
+    const z = card({ id: "z", due: "2026-05-01" });
+    const y = card({ id: "y", due: "2026-05-01" });
+    expect(dueCards([z, y], NOW).map((x) => x.id)).toEqual(["y", "z"]);
+  });
+
+  it("rateCard replaces the graded card and leaves the rest untouched", () => {
+    const other = card({ id: "other" });
+    const target = card({ id: "target" });
+    const next = rateCard([other, target], "target", "good", NOW);
+    expect(next).toHaveLength(2);
+    expect(next[1]).toMatchObject({ id: "target", reps: 1, intervalDays: 1, due: "2026-05-02" });
+    expect(next[0]).toBe(other);
+    expect(target.reps).toBe(0); // the input card was not mutated
+  });
+
+  it("rateCard with a missing id changes nothing", () => {
+    const deck = [card()];
+    expect(rateCard(deck, "ghost", "good", NOW)).toEqual(deck);
   });
 });

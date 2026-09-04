@@ -199,6 +199,8 @@ export const EMPTY_STATE = {
   placeReminders: [], // foreground-only geofences: {id,label,latitude,longitude,radius,on}
   reminderDone: {}, // 'YYYY-MM-DD|id|HH:MM' → true, so a firing is ticked once
   lastSeenAt: 0, // when the app was last open, for catching you up
+  /* study — spaced-repetition cards: everything the SRS engine needs is on the card */
+  cards: [], // {id,userId,subjectId,topicId,front,back,origin,specPointIds,reps,lapses,ease,intervalDays,due,createdAt,lastReviewedAt}
   /* food diary */
   log: {}, // { 'YYYY-MM-DD': entry[] }
   favouriteFoods: [],

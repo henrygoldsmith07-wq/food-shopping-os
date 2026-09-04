@@ -20,6 +20,7 @@ import { HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY } from './health
 import { householdPermission } from './household.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
+import { reviewActions } from './review-actions.js';
 import { offerActions } from './offer-actions.js';
 import { planActions } from './plan-actions.js';
 import { pantryFlowActions } from './pantry-flow-actions.js';
@@ -473,6 +474,7 @@ export function useStoreApi({
       ...preferenceActions(set),
       ...advancedActions(set, uid),
       ...diaryActions(set),
+      ...reviewActions(set, latest),
     };
     // Every other input is a ref or a useState setter, so their identities are
     // stable for the component's life: naming them changes nothing at runtime
