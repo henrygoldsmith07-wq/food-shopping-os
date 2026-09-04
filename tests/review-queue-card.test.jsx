@@ -147,4 +147,97 @@ describe('the flashcard review queue on Learn', () => {
     expect(await screen.findByRole('button', { name: 'Rearrange' })).toBeDefined(); // Home rendered
     expect(screen.queryByText('Flashcards waiting')).toBeNull();
   });
+
+  it('lets an empty deck start the queue: the form is open and saving creates a due card', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, cards: [] }));
+    renderCard();
+
+    // A fresh deck shows the form straight away, under the honest empty copy.
+    expect(screen.getByText('No cards yet')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Save card' }).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Card question'), { target: { value: 'Pourquoi la nuit?' } });
+    expect(screen.getByRole('button', { name: 'Save card' }).disabled).toBe(true); // both sides needed
+    fireEvent.change(screen.getByLabelText('Card answer'), { target: { value: 'La Terre tourne.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    // The card is due the day it appears, so the queue starts immediately.
+    expect(storedDeck()).toHaveLength(1);
+    expect(storedDeck()[0]).toMatchObject({
+      front: 'Pourquoi la nuit?', back: 'La Terre tourne.', origin: 'handmade',
+      reps: 0, lapses: 0, due: DAY,
+    });
+    expect(screen.getByText('Pourquoi la nuit?')).toBeDefined();
+    expect(screen.getByText('1 to review')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Reveal answer' })).toBeDefined();
+  });
+
+  it('adds another card from the review header and the new card joins the due queue', () => {
+    renderCard(); // seeded deck: c1 + c2 due
+    fireEvent.click(screen.getByRole('button', { name: 'Add a new card' }));
+    expect(screen.getByText('New card')).toBeDefined();
+    expect(screen.queryByText('Membrane structure?')).toBeNull(); // queue set aside while adding
+
+    fireEvent.change(screen.getByLabelText('Card question'), { target: { value: 'Third due card?' } });
+    fireEvent.change(screen.getByLabelText('Card answer'), { target: { value: 'Yes, due today too.' } });
+    fireEvent.change(screen.getByLabelText('Card topic (optional)'), { target: { value: 'membranes' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    expect(storedDeck()).toHaveLength(4);
+    expect(storedDeck().find((c) => c.front === 'Third due card?')).toMatchObject({
+      topicId: 'membranes', origin: 'handmade', due: DAY,
+    });
+    // Back to the queue: the overdue card still leads, and the count grew.
+    expect(screen.getByText('Membrane structure?')).toBeDefined();
+    expect(screen.getByText('3 to review')).toBeDefined();
+  });
+
+  it('cancels out of adding without touching the deck', () => {
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a new card' }));
+    fireEvent.change(screen.getByLabelText('Card question'), { target: { value: 'Should not persist' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(storedDeck()).toHaveLength(3); // untouched
+    expect(screen.getByText('Membrane structure?')).toBeDefined(); // review resumed
+    expect(screen.queryByText('Should not persist')).toBeNull();
+  });
+
+  it('offers adding a card from the nothing-due state', () => {
+    cleanup();
+    // Only a far-future card: nothing due, but the deck is not empty.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{ ...deck[2], due: '9999-12-31' }],
+    }));
+    renderCard();
+    expect(screen.getByText('Nothing due today')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+    fireEvent.change(screen.getByLabelText('Card question'), { target: { value: 'Fresh one?' } });
+    fireEvent.change(screen.getByLabelText('Card answer'), { target: { value: 'Due as soon as saved.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    // The new card is due today, so there is something to review again.
+    expect(screen.getByText('Fresh one?')).toBeDefined();
+    expect(screen.getByText('1 to review')).toBeDefined();
+  });
+
+  it('starts the queue end to end from the Learn tab of a fresh app', async () => {
+    cleanup();
+    // Onboarded, but no cards key at all — a user who has never touched the deck.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded: true, name: 'Sam', day: DAY }));
+    render(<App />);
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
+    expect(await screen.findByText('No cards yet')).toBeDefined(); // LearnTab is lazy-loaded
+
+    fireEvent.change(screen.getByLabelText('Card question'), { target: { value: 'First ever card?' } });
+    fireEvent.change(screen.getByLabelText('Card answer'), { target: { value: 'Made from the Learn tab.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    expect(await screen.findByText('1 to review')).toBeDefined();
+    expect(screen.getByText('First ever card?')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Reveal answer' })).toBeDefined();
+  });
 });

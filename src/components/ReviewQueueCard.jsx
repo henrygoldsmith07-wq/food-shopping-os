@@ -12,23 +12,122 @@ const RATINGS = [
   { id: 'easy', label: 'Easy', hint: 'too easy', tone: 'var(--accent)' },
 ];
 
+const inputCls = 'w-full rounded-2xl border px-4 py-3 text-[0.875rem] font-semibold outline-none';
+const inputStyle = { background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' };
+
+/**
+ * The two sides of a new card, plus an optional topic tag. Both sides are
+ * required — a one-sided card is a note, not a recall — and the Save button
+ * stays inert until they are filled, so there is no error to announce.
+ * Hand-made cards carry `origin: 'handmade'` so they never impersonate a
+ * seeded or imported card.
+ */
+function AddCardForm({ onSave, onCancel, heading = true }) {
+  const [front, setFront] = useState('');
+  const [back, setBack] = useState('');
+  const [topic, setTopic] = useState('');
+  const ready = Boolean(front.trim() && back.trim());
+
+  return (
+    <div className="space-y-2.5">
+      {(heading || onCancel) && (
+        <div className="flex items-center justify-between gap-2">
+          {heading && <p className="text-[0.9375rem] font-extrabold">New card</p>}
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="press text-[0.78125rem] font-bold"
+              style={{ color: 'var(--faint)' }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
+      <input
+        aria-label="Card question"
+        value={front}
+        onChange={(e) => setFront(e.target.value)}
+        placeholder="Question — what you want to recall"
+        className={inputCls}
+        style={inputStyle}
+      />
+      <textarea
+        aria-label="Card answer"
+        rows={2}
+        value={back}
+        onChange={(e) => setBack(e.target.value)}
+        placeholder="Answer — what the card reveals"
+        className={`${inputCls} resize-none`}
+        style={inputStyle}
+      />
+      <input
+        aria-label="Card topic (optional)"
+        value={topic}
+        onChange={(e) => setTopic(e.target.value)}
+        placeholder="Topic (optional)"
+        className={inputCls}
+        style={inputStyle}
+      />
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        <button
+          type="button"
+          disabled={!ready}
+          onClick={() => onSave(front, back, topic)}
+          className="press rounded-xl px-4 py-2.5 text-[0.84375rem] font-extrabold"
+          style={ready
+            ? { background: 'var(--accent)', color: 'var(--on-accent)' }
+            : { background: 'var(--card-2)', color: 'var(--faint)' }}
+        >
+          Save card
+        </button>
+        {!ready && (
+          <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+            Question and answer are both needed.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The SRS review queue on the Learn tab. Shows the soonest-due card, flips it
  * to reveal the answer, and grades it through the store's reviewCard — which
  * persists the scheduler's next state. A card rated Again stays in the queue
  * (it is due again today, the relearning step); any other rating advances it
  * out. `now` is injectable so tests and renders stay deterministic.
+ *
+ * A card is created right here, through the store's addCard: an empty deck
+ * shows the form straight away (the queue starts the moment the first card is
+ * saved), and a deck with cards can add another from the review header.
  */
 export default function ReviewQueueCard({ now = new Date() }) {
   const app = useApp();
   const deck = Array.isArray(app.cards) ? app.cards : [];
   const queue = useMemo(() => app.reviewDueCards(now), [app.cards, now]);
   const [flipped, setFlipped] = useState(false);
+  const [adding, setAdding] = useState(false);
   const current = queue[0] ?? null;
+  const empty = !deck.length;
 
   const rate = (rating) => {
     if (!current) return;
     app.reviewCard(current.id, rating, now);
+    setFlipped(false);
+  };
+
+  const save = (front, back, topic) => {
+    app.addCard({
+      userId: 'local',
+      subjectId: 'manual',
+      topicId: topic.trim() || 'general',
+      front: front.trim(),
+      back: back.trim(),
+      origin: 'handmade',
+    }, now);
+    setAdding(false);
     setFlipped(false);
   };
 
@@ -41,13 +140,18 @@ export default function ReviewQueueCard({ now = new Date() }) {
   return (
     <Section title="Flashcard review" className="rise rise-3">
       <Card className="!p-4">
-        {!deck.length ? (
+        {empty ? (
           <>
             <p className="text-[0.9375rem] font-extrabold">No cards yet</p>
             <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
               Add a card from a question or topic you want to keep. A new card is due the day it appears, so the queue starts the moment your deck does.
             </p>
+            <div className="mt-3">
+              <AddCardForm onSave={save} heading={false} />
+            </div>
           </>
+        ) : adding ? (
+          <AddCardForm onSave={save} onCancel={() => setAdding(false)} />
         ) : !current ? (
           <>
             <p className="text-[0.9375rem] font-extrabold">Nothing due today</p>
@@ -56,6 +160,14 @@ export default function ReviewQueueCard({ now = new Date() }) {
                 ? `The next card matures on ${nextDue}. Come back then — or add another card to review sooner.`
                 : 'Every card in your deck has been reviewed. Add more to keep the queue going.'}
             </p>
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="press mt-2 inline-flex items-center gap-1.5 text-[0.78125rem] font-extrabold"
+              style={{ color: 'var(--accent)' }}
+            >
+              Add a card
+            </button>
           </>
         ) : (
           <>
@@ -63,7 +175,18 @@ export default function ReviewQueueCard({ now = new Date() }) {
               <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
                 Due now
               </p>
-              <Pill tone="muted">{queue.length} to review</Pill>
+              <div className="flex items-center gap-2">
+                <Pill tone="muted">{queue.length} to review</Pill>
+                <button
+                  type="button"
+                  aria-label="Add a new card"
+                  onClick={() => setAdding(true)}
+                  className="press text-[0.6875rem] font-extrabold uppercase tracking-wide"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  New
+                </button>
+              </div>
             </div>
 
             <div className="mt-3 rounded-2xl border px-4 py-5 text-center" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
