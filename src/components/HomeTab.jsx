@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  AlarmClock, Camera, CheckCircle2, ChevronRight, Layers, Mic, Package, Plus,
+  AlarmClock, BookOpen, Camera, CheckCircle2, ChevronRight, Layers, Mic, Package, Plus,
   ScanBarcode, Search, SlidersHorizontal,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
@@ -49,6 +49,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   const left = app.weeklyBudget - app.spentThisWeek;
   const recipeOfDay = RECIPES[new Date().getDate() % RECIPES.length];
   const listTotal = totalOf(app.shoppingList);
+  // Cards whose interval has elapsed — the queue Learn will show. Zero renders
+  // nothing, so a quiet deck never reads as a broken badge.
+  const dueReviewCount = useMemo(() => app.reviewDueCards().length, [app.cards]);
   // Rank leftovers through the central engine so expired ones drop out and
   // near-expiry ones surface first with consistent warnings.
   const leftoverItems = rankLeftovers(leftovers(app.pantry), {
@@ -424,6 +427,29 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
             </button>
           </Card>
         </div>
+      )}
+
+      {dueReviewCount > 0 && (
+        <section className="px-5 rise rise-1" aria-label="Flashcards due for review">
+          <Card onClick={() => goTab('learn')} className="press !p-4">
+            <div className="flex items-center gap-3">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+              >
+                <BookOpen size={17} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[0.9375rem] font-extrabold">Flashcards waiting</p>
+                <p className="mt-0.5 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  {dueReviewCount} card{dueReviewCount === 1 ? '' : 's'} to review — keep the memory fresh.
+                </p>
+              </div>
+              <Pill tone="accent">{dueReviewCount}</Pill>
+              <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
+            </div>
+          </Card>
+        </section>
       )}
 
       <div className="px-5"><MilestonesCard /></div>

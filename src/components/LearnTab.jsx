@@ -1,6 +1,7 @@
 import { ArrowRight, BookOpen, Check, ChefHat, Clock3, Leaf, RotateCcw, ShoppingCart } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { Card, Meter, Pill, Section } from './ui.jsx';
+import ReviewQueueCard from './ReviewQueueCard.jsx';
 
 const EMPTY_LOOP = {
   steps: [],
@@ -181,6 +182,8 @@ export default function LearnTab({ goTab, openGuidance }) {
           )}
         </Card>
       </Section>
+
+      <ReviewQueueCard />
 
       <Section className="rise rise-2">
         <div className="grid gap-2.5 sm:grid-cols-2">
