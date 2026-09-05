@@ -3,6 +3,7 @@ import { useApp } from '../lib/store.jsx';
 import NewCardSection from './NewCardSection.jsx';
 import { Card, Meter, Pill, Section } from './ui.jsx';
 import ReviewQueueCard from './ReviewQueueCard.jsx';
+import KnowledgeMapSection from './KnowledgeMapSection.jsx';
 
 const EMPTY_LOOP = {
   steps: [],
@@ -187,6 +188,8 @@ export default function LearnTab({ goTab, openGuidance }) {
       <NewCardSection />
 
       <ReviewQueueCard />
+
+      <KnowledgeMapSection />
 
       <Section className="rise rise-2">
         <div className="grid gap-2.5 sm:grid-cols-2">
