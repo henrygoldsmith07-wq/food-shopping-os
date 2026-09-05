@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../src/App.jsx';
 import { STORAGE_KEY } from '../src/lib/state.js';
+import { addDays, dayStamp, weekDates } from '../src/lib/kitchen-dates.js';
 // Full-app journeys cross the 5s default under batch load; a real hang still
 // blows well past this ceiling.
 vi.setConfig({ testTimeout: 15_000 });
@@ -129,5 +130,55 @@ describe('the prediction row can open tonight\'s picker', () => {
     // Picking put it in tonight's dinner slot and closed the sheet.
     await waitFor(() => expect(within(dialog).queryByText('Coconut Chickpea Curry')).toBeNull());
     expect(screen.getAllByText('Coconut Chickpea Curry').length).toBeGreaterThan(0);
+  });
+});
+
+describe('the prediction block respects the plan', () => {
+  // The store rolls any seeded day forward to the real clock at boot, so the
+  // week's plan dates must be the *current* real week or the meals resolve to
+  // nothing. The sibling journeys date their pantry in the past and still flag;
+  // here the coverage question depends on the meal dates landing inside the
+  // week derive actually plans against.
+  const seedCoveredHousehold = () => {
+    const [sat, sun] = [weekDates()[5], weekDates()[6]];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      onboarded: true,
+      name: 'Sam',
+      day: dayStamp(),
+      // 300 g spinach expiring on the plan's last day, fully covered by two
+      // chickpea curries (150 g each); the rice is far outside the horizon.
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '300 g', location: 'Fridge', expiry: sun },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(sun, 60) },
+      ],
+      plan: {
+        [sat]: { dinner: 'chickpea-curry' },
+        [sun]: { dinner: 'chickpea-curry' },
+      },
+    }));
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    seedCoveredHousehold();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('stays quiet when the week plan already uses the expiring stock', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    const sheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+    expect(sheet).toBeDefined();
+
+    // The spinach is genuinely on the shelf and near its date — the plan is
+    // what keeps it out of the prediction, not missing evidence: the block
+    // heading, its count pill, and the row's advice are all absent.
+    expect(within(sheet).queryByText('Likely to go unused')).toBeNull();
+    expect(within(sheet).queryByText(/Plan a meal using Spinach/)).toBeNull();
+    expect(within(sheet).queryByText(/ingredient may go unused/)).toBeNull();
   });
 });
