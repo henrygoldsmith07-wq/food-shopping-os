@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import App from '../src/App.jsx';
+import { STORAGE_KEY } from '../src/lib/state.js';
+import { deriveApp } from '../src/lib/derive.js';
 
 const onboard = ({ budget = '60' } = {}) => {
   render(<App />);
@@ -474,5 +476,48 @@ describe('meals to shopping', () => {
     openShop();
     expect(screen.getAllByText('Chickpeas (tins)')).toHaveLength(1);
     expect(screen.getAllByText(/^Rice$/)).toHaveLength(1);
+  });
+});
+
+describe('the route a shop teaches fastest mode', () => {
+  beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
+  afterEach(cleanup);
+
+  it('walks a shop aisle by aisle, learns the order, and fastest mode then uses it', async () => {
+    onboard();
+    openShop();
+    addItem('Bread', '1.10'); // Bakery
+    addItem('Apples', '2.00'); // Fruit & veg
+    addItem('Milk', '1.30'); // Dairy & eggs
+
+    // Walked deliberately against the standard taxonomy: dairy first,
+    // fruit & veg second, bakery last. The tick order is recovered from
+    // checkedAt stamps, so space the ticks a few ms apart.
+    fireEvent.click(screen.getByLabelText('Tick Milk'));
+    await new Promise((resolve) => { setTimeout(resolve, 5); });
+    fireEvent.click(screen.getByLabelText('Tick Apples'));
+    await new Promise((resolve) => { setTimeout(resolve, 5); });
+    fireEvent.click(screen.getByLabelText('Tick Bread'));
+
+    recordShop('Aldi', '4.40');
+
+    // The walk itself became the store's learned route, persisted.
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(saved.storeRoutes.Aldi).toEqual(['Dairy & eggs', 'Fruit & veg', 'Bakery']);
+
+    // Next trip, fastest mode orders the list the way the household
+    // actually walks — not the standard taxonomy order.
+    const app = deriveApp({
+      ...saved,
+      shoppingList: [
+        { id: 'n1', name: 'Bread', qty: '1 loaf', price: 1, aisle: 'Bakery', checked: false, note: '', priority: 'normal' },
+        { id: 'n2', name: 'Apples', qty: '6', price: 2, aisle: 'Fruit & veg', checked: false, note: '', priority: 'normal' },
+        { id: 'n3', name: 'Milk', qty: '1 l', price: 1.2, aisle: 'Dairy & eggs', checked: false, note: '', priority: 'normal' },
+      ],
+    });
+    const fastest = app.shoppingOptimisation('fastest');
+    expect(fastest.assignment.map((row) => row.name)).toEqual(['Milk', 'Apples', 'Bread']);
+    expect(fastest.assignment[0].reason).toMatch(/Aisle 1 at Aldi/);
+    expect(fastest.explanation).toMatch(/Fastest: 3 aisle stops/);
   });
 });
