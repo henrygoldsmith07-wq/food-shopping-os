@@ -324,6 +324,10 @@ export const deriveApp = (state) => {
     dashboard,
     shoppingOptimisation: (mode = 'balanced') => optimiseShopping(state.shoppingList, {
       shops: state.shops, pantry: state.pantry, mode, today: state.day, learnedAliases: state.aliasMemory,
+      // Fastest mode walks the aisles the way this household actually does:
+      // the learned store routes and the item→aisle memory steer the trip.
+      routes: state.storeRoutes || {},
+      memory: state.aisleMemory || {},
     }),
     stats: kitchenStats({ ...state, xp: progress.xp }, state.day),
     personaTier,

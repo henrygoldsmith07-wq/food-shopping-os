@@ -360,6 +360,38 @@ describe('shopping optimisation', () => {
     expect(optimiseShopping(items, { shops, mode: 'balanced' }).explanation).toMatch(/Balanced/i);
     expect(optimiseShopping(items, { shops, mode: 'fastest' }).explanation).toBeTruthy();
   });
+
+  it('fastest mode walks the learned store route when one exists', () => {
+    // Both items cheapest at Aldi, so the trip is one shop and the Aldi
+    // route applies. The learned order here is dairy first — the opposite
+    // of the standard taxonomy, which puts Bakery before Dairy & eggs.
+    const aldiWeek = [
+      { store: 'Aldi', date: '2026-08-01', items: [{ name: 'Milk', price: 1.1 }, { name: 'Bread', price: 0.8 }] },
+      { store: 'Tesco', date: '2026-08-01', items: [{ name: 'Milk', price: 1.5 }, { name: 'Bread', price: 0.9 }] },
+    ];
+    const list = [
+      { name: 'Milk', price: 1.2, qty: '1l', aisle: 'Dairy & eggs' },
+      { name: 'Bread', price: 1, qty: '1 loaf', aisle: 'Bakery' },
+    ];
+    const res = optimiseShopping(list, {
+      shops: aldiWeek, mode: 'fastest', routes: { Aldi: ['Dairy & eggs', 'Bakery'] },
+    });
+    expect(res.assignment.map((i) => i.name)).toEqual(['Milk', 'Bread']); // learned order wins
+    expect(res.assignment[0].reason).toMatch(/Aisle 1 at Aldi/);
+  });
+
+  it('fastest mode falls back to standard order without a learned route', () => {
+    const aldiWeek = [
+      { store: 'Aldi', date: '2026-08-01', items: [{ name: 'Milk', price: 1.1 }, { name: 'Bread', price: 0.8 }] },
+    ];
+    const list = [
+      { name: 'Milk', price: 1.2, qty: '1l', aisle: 'Dairy & eggs' },
+      { name: 'Bread', price: 1, qty: '1 loaf', aisle: 'Bakery' },
+    ];
+    const res = optimiseShopping(list, { shops: aldiWeek, mode: 'fastest' });
+    // Standard taxonomy: Bakery before Dairy & eggs — routes were never guessed.
+    expect(res.assignment.map((i) => i.name)).toEqual(['Bread', 'Milk']);
+  });
 });
 
 // ---------- outcome dashboard ----------
