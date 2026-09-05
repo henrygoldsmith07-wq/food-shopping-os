@@ -33,9 +33,29 @@ export async function POST(request) {
     await rateLimit(`scrape-prices:${user.id}`, 60, 3600000);
     const body = await request.json().catch(() => { throw new ApiError(400, 'Expected a JSON body.'); });
     if (Array.isArray(body?.items)) {
-      const input = scrapeListRequestSchema.parse(body); const deadline = Date.now() + BATCH_BUDGET_MS; const checks = []; const remaining = [];
-      for (const item of input.items) { if (Date.now() > deadline) { remaining.push(item); continue; } checks.push(await scrapePrices(item, { retailerIds: input.retailerIds || [], allowMonid: false })); }
-      let monidBatch = null; const nowIso = new Date().toISOString();
+      const input = scrapeListRequestSchema.parse(body);
+      const deadline = Date.now() + BATCH_BUDGET_MS;
+      const checks = [];
+      const remaining = [];
+      for (const item of input.items) {
+        // Sequential per item: one item already fans out across every shop,
+        // and stacking whole items on top of that is what gets an IP blocked.
+        // Each item also gets what is left of the budget, so a slow shop
+        // inside one item cannot push the response past the function limit.
+        if (Date.now() > deadline) {
+          remaining.push(item);
+          continue;
+        }
+        checks.push(await scrapePrices(item, {
+          retailerIds: input.retailerIds || [],
+          budgetMs: deadline - Date.now(),
+          // Monid is deferred to one batched lookup below rather than paid
+          // once per item.
+          allowMonid: false,
+        }));
+      }
+      let monidBatch = null;
+      const nowIso = new Date().toISOString();
       if (monidOnPath() && checks.length) {
         const gaps = [...new Set(checks.filter((check) => !(check.rows || []).some((row) => row.price > 0)).map((check) => check.query))];
         if (gaps.length) {
@@ -43,13 +63,30 @@ export async function POST(request) {
             const batch = await monidBatchPrices(gaps);
             if (batch.ok) {
               monidBatch = { provider: batch.provider, endpoint: batch.endpoint, items: gaps.length };
-              for (const check of checks) { if ((check.rows || []).some((row) => row.price > 0)) continue; const matched = batch.byQuery.get(check.query) || []; if (matched.length) { check.rows = matched; check.status = 'ok'; check.note = null; check.source = 'monid'; } else check.monid = { status: 'no-match', provider: batch.provider, rows: 0 }; }
+              for (const check of checks) {
+                if ((check.rows || []).some((row) => row.price > 0)) continue;
+                const matched = batch.byQuery.get(check.query) || [];
+                if (matched.length) {
+                  check.rows = matched;
+                  check.status = 'ok';
+                  check.note = null;
+                  check.source = 'monid';
+                } else check.monid = { status: 'no-match', provider: batch.provider, rows: 0 };
+              }
             } else monidBatch = { status: batch.status, items: gaps.length };
           } catch { monidBatch = { status: 'error', items: gaps.length }; }
         }
       }
       return NextResponse.json({ checks, remaining, monidBatch, checkedAt: nowIso });
     }
-    const input = scrapeRequestSchema.parse(body); return NextResponse.json(await scrapePrices(input.query, { retailerIds: input.retailerIds || [] }));
-  } catch (error) { return handleApiError(error); }
+
+    const input = scrapeRequestSchema.parse(body);
+    const result = await scrapePrices(input.query, {
+      retailerIds: input.retailerIds || [],
+      budgetMs: BATCH_BUDGET_MS,
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    return handleApiError(error);
+  }
 }

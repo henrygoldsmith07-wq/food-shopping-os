@@ -332,6 +332,8 @@ function Shell() {
         </div>
       )}
 
+      <DemoBanner />
+
       <div className="app-workspace">
         <AppHeader
           tab={activeTab}

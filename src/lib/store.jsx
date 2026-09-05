@@ -77,6 +77,9 @@ export function AppProvider({ children }) {
   const cloudInitialising = useRef(false);
   const liveConnection = useRef(false);
   const undoHistory = useRef([]);
+  // While an import is in flight its writes share one undo step — reverting a
+  // 12-trip CSV import should not take 12 presses of Ctrl+Z.
+  const undoBatch = useRef(null);
   const applyingRemote = useRef(false);
   const vaultKey = useRef(null);
   const vaultSalt = useRef(null);
@@ -203,6 +206,7 @@ export function AppProvider({ children }) {
       try {
         applyingRemote.current = true;
         undoHistory.current = [];
+        undoBatch.current = null;
         setState(parseBackup(event.newValue));
       } catch {
         // Ignore incomplete writes from another tab.
@@ -433,8 +437,31 @@ export function AppProvider({ children }) {
 
   const api = useStoreApi({
     blockPersistence, cloudStatus, latest, setState: routedSetState, setStorageIssue, storageIssue,
-    undoHistory, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
+    undoHistory, undoBatch, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
   });
+
+  /* An import records one undo step for all its writes. Begin/end go through
+     the same state queue as the writes themselves, so they run in order even
+     though React defers every updater: begin opens the batch, the writes
+     checkpoint against it, end promotes the checkpoint to one undo step. */
+  const beginImportBatch = useCallback(() => {
+    routedSetState((s) => {
+      undoBatch.current = 'open';
+      return s;
+    });
+  }, [routedSetState]);
+  const endImportBatch = useCallback(() => {
+    routedSetState((s) => {
+      const checkpoint = undoBatch.current;
+      undoBatch.current = null;
+      // The pre-import state becomes exactly one undo step — but only if the
+      // import actually wrote something.
+      if (checkpoint && checkpoint !== 'open') {
+        undoHistory.current = [...undoHistory.current.slice(-29), checkpoint];
+      }
+      return s;
+    });
+  }, [routedSetState, undoHistory]);
 
   /* Everything below is derived — the app never stores a number twice. */
   const effectiveState = demo ?? state;
@@ -469,6 +496,7 @@ export function AppProvider({ children }) {
     demoRef.current = null;
     undoHistory.current = realUndoStack.current ?? [];
     realUndoStack.current = null;
+    undoBatch.current = null;
     setDemoState(null);
   }, [undoHistory]);
 
@@ -479,6 +507,8 @@ export function AppProvider({ children }) {
     isDemoMode: Boolean(demo),
     enterDemoMode,
     exitDemoMode,
+    beginImportBatch,
+    endImportBatch,
     reminderLine: (kind) => reminderContext(kind, { ...effectiveState, ...derived }),
     healthVault: {
       enabled: state.healthVaultEnabled,

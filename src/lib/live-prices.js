@@ -29,6 +29,7 @@ export const methodLabel = (method) => ({
   microdata: 'from the shop’s page markup',
   text: 'read off the page text',
   'ai-extracted': 'read by AI — check before relying on it',
+  'google-shopping': 'from the store’s listing on Google Shopping',
 }[method] || 'read from the shop’s page');
 
 /**
@@ -39,6 +40,7 @@ export const methodLabel = (method) => ({
 export const viaLabel = (via) => ({
   firecrawl: 'page rendered to load prices',
   jina: 'page rendered to load prices',
+  monid: 'page fetched through Monid',
 }[via] || null);
 
 export const methodTone = (method) => ({
@@ -46,6 +48,7 @@ export const methodTone = (method) => ({
   microdata: 'good',
   text: 'warn',
   'ai-extracted': 'warn',
+  'google-shopping': 'warn',
 }[method] || 'muted');
 
 export { monidLabel, monidTone, splitMonidRows } from './monid-provenance.js';

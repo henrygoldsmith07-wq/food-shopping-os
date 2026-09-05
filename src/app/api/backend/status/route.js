@@ -60,6 +60,7 @@ export async function GET() {
       google: auth.google.ready,
       apple: auth.apple.ready,
       microsoft: auth.microsoft.ready,
+      dev: process.env.AUTH_DEV_LOGIN === 'true',
     },
     capabilities: {
       ai: ai.ready,

@@ -1,6 +1,7 @@
 import AppleProviderPackage from 'next-auth/providers/apple';
 import GoogleProviderPackage from 'next-auth/providers/google';
 import AzureADProviderPackage from 'next-auth/providers/azure-ad';
+import CredentialsProviderPackage from 'next-auth/providers/credentials';
 import NextAuthPackage from 'next-auth';
 import { ForqAdapter } from './auth-adapter.js';
 import { databaseConfigured } from './database.js';
@@ -8,6 +9,7 @@ import { databaseConfigured } from './database.js';
 const AppleProvider = AppleProviderPackage.default || AppleProviderPackage;
 const GoogleProvider = GoogleProviderPackage.default || GoogleProviderPackage;
 const AzureADProvider = AzureADProviderPackage.default || AzureADProviderPackage;
+const CredentialsProvider = CredentialsProviderPackage.default || CredentialsProviderPackage;
 const { getServerSession } = NextAuthPackage;
 const providers = [];
 
@@ -38,6 +40,22 @@ if (process.env.AUTH_MICROSOFT_ID && process.env.AUTH_MICROSOFT_SECRET) {
     clientSecret: process.env.AUTH_MICROSOFT_SECRET,
     tenantId: process.env.AUTH_MICROSOFT_TENANT_ID || 'common',
     authorization: { params: { scope: 'openid email profile offline_access Calendars.ReadWrite' } },
+  }));
+}
+
+// A preview-only sign-in for deployments without OAuth credentials. It is
+// opt-in per environment (AUTH_DEV_LOGIN) and must never be set in production:
+// it accepts any name and issues a session with no external check.
+if (process.env.AUTH_DEV_LOGIN === 'true') {
+  providers.push(CredentialsProvider({
+    id: 'dev',
+    name: 'Preview sign-in',
+    credentials: { name: { label: 'Name' } },
+    authorize(credentials) {
+      const name = String(credentials?.name || '').trim().slice(0, 80);
+      if (!name) return null;
+      return { id: `dev-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name, email: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '.')}@preview.local` };
+    },
   }));
 }
 

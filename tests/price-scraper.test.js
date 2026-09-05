@@ -7,6 +7,7 @@ import {
 import {
   clearRobotsCache, groupFor, isScrapeAllowed, parseRobots, pathAllowed,
 } from '../src/server/robots.js';
+import { rankedFreeModels } from '../src/server/openrouter.js';
 import {
   cheapestAcross, extractWithModel, parseModelJson, scrapePrices, scrapeRetailer,
   scrapeableRetailers, verifyAgainstPage,
@@ -419,5 +420,83 @@ describe('checking a product across shops', () => {
     expect(out.results[0]).toMatchObject({ retailer: 'Tesco', status: 'unreachable' });
     expect(out.results[1]).toMatchObject({ retailer: 'Asda', status: 'ok' });
     expect(out.best.retailer).toBe('Asda');
+  });
+
+  it('returns on the budget even with shops still in flight', async () => {
+    vi.stubEnv('PRICE_SCRAPER_MARKET', 'off');
+    const fetchImpl = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.endsWith('/robots.txt')) return res(allowAllRobots, { type: 'text/plain' });
+      // Far longer than the budget: the check must come back on time with the
+      // shop reported honestly, not wait for the straggler.
+      await new Promise((resolve) => { setTimeout(resolve, 5000); });
+      return res(page);
+    });
+    const started = Date.now();
+    const out = await scrapePrices('milk', {
+      retailerIds: ['tesco', 'asda'], fetchImpl, allowModel: false, gapMs: 0,
+      budgetMs: 150,
+    });
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(out.shopsChecked).toBe(2);
+    // The budget cut both shops off mid-request — each is reported as
+    // aborted, with the market fallback having answered for neither.
+    expect(out.results.every((result) => result.status === 'aborted')).toBe(true);
+    expect(out.marketUsed).toBe(false);
+  });
+
+  it('stops the model ladder too when the budget is already spent', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+    // Seed the model ranking first, in the same process, so the scrape's
+    // ladder definitely walks into the stalling completion endpoint instead
+    // of silently skipping the model when the catalog call itself is slow.
+    await rankedFreeModels(vi.fn(async () => res(
+      JSON.stringify({ data: [{ id: 'nvidia/nemotron-3-ultra:free' }] }),
+      { type: 'application/json' },
+    )));
+    // A page the parsers cannot answer — no matching product — so the model
+    // is genuinely the next reader, and its endpoint stalls far past its own
+    // per-attempt deadline while ignoring any signal. The deterministic
+    // answer must stand, and the stall must be cut loose, not waited out.
+    const blankPage = html('', '<p>no products here</p>');
+    const fetchImpl = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.endsWith('/robots.txt')) return res(allowAllRobots, { type: 'text/plain' });
+      if (target.includes('/chat/completions')) {
+        await new Promise((resolve) => { setTimeout(resolve, 5000); });
+        return res(JSON.stringify({ choices: [{ message: { content: '{"products":[]}' } }] }), { type: 'application/json' });
+      }
+      return res(blankPage);
+    });
+    vi.stubEnv('SCRAPER_MODEL_TIMEOUT_MS', '120');
+    const started = Date.now();
+    const out = await scrapePrices('milk', {
+      retailerIds: ['tesco', 'asda'], fetchImpl, allowModel: true, gapMs: 0,
+    });
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(out.shopsChecked).toBe(2);
+    // Each shop lands on its deterministic answer ('no-match') — or, if the
+    // budget (none here) would have fired first, the honest 'aborted'. What
+    // it must never be is a hang or a made-up answer from the model.
+    expect(out.results.every((result) => result.status === 'no-match' || result.status === 'aborted')).toBe(true);
+  });
+
+  it('a budget also stops the query ladder inside a shop', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.endsWith('/robots.txt')) return res(allowAllRobots, { type: 'text/plain' });
+      await new Promise((resolve) => { setTimeout(resolve, 120); });
+      return res(page);
+    });
+    const out = await scrapeRetailer({
+      id: 'tesco', name: 'Tesco',
+      search: (q) => `https://www.tesco.com/groceries/en-GB/search?query=${encodeURIComponent(q)}`,
+    }, 'milk', { fetchImpl, allowModel: false, deadline: Date.now() + 60 });
+    // Rung one ran; the budget spent itself during it, so the broader rungs
+    // were never asked.
+    expect(out.query).toBe('milk');
+    const pageFetches = fetchImpl.mock.calls
+      .filter(([url]) => !String(url).endsWith('/robots.txt'));
+    expect(pageFetches).toHaveLength(1);
   });
 });

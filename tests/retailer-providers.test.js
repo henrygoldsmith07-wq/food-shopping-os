@@ -77,4 +77,46 @@ describe('open product and price data adapters', () => {
       sourceLabel: 'Open Prices (community observed)',
     });
   });
+
+  it('resolves a shopping-list phrase to barcodes before pricing it', async () => {
+    // `product_name=milk` is an exact-title filter on Open Prices and matches
+    // nothing, so a phrase has to be turned into barcodes via Open Food
+    // Facts first. Each barcode is then priced on its own request.
+    const fetchMock = vi.fn(async (url) => {
+      const target = String(url);
+      if (target.includes('/cgi/search.pl')) {
+        expect(target).toContain('search_terms=semi+skimmed+milk');
+        return new Response(JSON.stringify({
+          products: [{ code: '5012345678901' }, { code: '5012345678902' }, { code: 'not-a-barcode' }],
+        }), { status: 200 });
+      }
+      const code = target.match(/product_code=(\d+)/)?.[1];
+      return new Response(JSON.stringify({
+        items: [{
+          product_code: code, product_name: `Semi skimmed milk ${code}`,
+          price: 1.2, currency: 'GBP', date: '2026-07-30',
+          location: { osm_brand: 'Tesco' },
+        }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await lookupOpenPrices({ query: 'semi skimmed milk' });
+    const priced = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.includes('/api/v1/prices'));
+    expect(priced).toHaveLength(2);
+    expect(priced[0]).toContain('product_code=5012345678901');
+    expect(priced[1]).toContain('product_code=5012345678902');
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ price: 1.2, store: 'Tesco' });
+  });
+
+  it('answers an empty search with an empty price list, not an error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ products: [] }),
+      { status: 200 },
+    )));
+    await expect(lookupOpenPrices({ query: 'xyzzy plugh' })).resolves.toEqual([]);
+  });
 });

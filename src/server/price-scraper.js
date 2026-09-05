@@ -32,6 +32,7 @@ import {
 import { isMatch, matchScore, searchQueries } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
 import { monidPrices, monidOnPath } from './monid-prices.js';
+import { marketFallback } from './monid-market.js';
 
 const MAX_ROWS_PER_RETAILER = 8;
 /**
@@ -89,9 +90,11 @@ export const parseModelJson = (text = '') => {
  * Ask the model ladder to read a page the parsers could not.
  *
  * `freeChat` walks the ranking itself, so a rate-limited Nemotron Ultra costs
- * one retry into DeepSeek rather than the whole lookup.
+ * one retry into DeepSeek rather than the whole lookup. The caller's signal
+ * rides along: a budget that has expired stops the ladder mid-walk instead of
+ * letting it keep spending a dead request's time.
  */
-export const extractWithModel = async (text, query, { fetchImpl = fetch } = {}) => {
+export const extractWithModel = async (text, query, { fetchImpl = fetch, signal } = {}) => {
   if (!isOpenRouterConfigured() || !text.trim()) return { rows: [], model: null };
   const { text: reply, model } = await freeChat({
     system: SYSTEM_PROMPT,
@@ -100,6 +103,8 @@ export const extractWithModel = async (text, query, { fetchImpl = fetch } = {}) 
     temperature: 0,
     maxAttempts: 8,
     fetchImpl,
+    signal,
+    timeoutMs: Number(process.env.SCRAPER_MODEL_TIMEOUT_MS || 12000),
   });
   const parsed = parseModelJson(reply);
   const products = Array.isArray(parsed?.products) ? parsed.products : [];
@@ -232,12 +237,17 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
       ...base,
       url,
       attempts: crawl.attempts,
-      status: code === 'rate-limited' ? 'rate-limited' : code === 'blocked' ? 'blocked' : 'unreachable',
+      status: code === 'rate-limited' ? 'rate-limited'
+        : code === 'blocked' ? 'blocked'
+        : code === 'aborted' ? 'aborted'
+        : 'unreachable',
       note: code === 'rate-limited'
         ? 'This shop rate-limited the request. Try again in a few minutes.'
         : code === 'blocked'
           ? 'This shop blocked an automated request. Open its search page directly.'
-          : `Could not reach this shop (${code}).`,
+          : code === 'aborted'
+            ? 'The time budget ran out before this shop answered — cut off, not refused.'
+            : `Could not reach this shop (${code}).`,
     };
   }
 
@@ -254,7 +264,7 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
   const nothingRelevant = !rows.some((row) => isMatch(row.name, wanted));
   if (nothingRelevant && allowModel && isOpenRouterConfigured() && pageText.trim()) {
     try {
-      const extracted = await extractWithModel(priceRelevantText(pageText), wanted, { fetchImpl });
+      const extracted = await extractWithModel(priceRelevantText(pageText), wanted, { fetchImpl, signal });
       model = extracted.model;
       const verified = mergeCandidates([verifyAgainstPage(extracted.rows, pageText)]);
       // Keep whatever the parsers found as well. The model is a second reader
@@ -327,6 +337,10 @@ export const scrapeRetailer = async (retailer, query, options = {}) => {
   let strategies = options.strategies || null;
   for (const rung of ladder.length ? ladder : [wanted]) {
     if (options.signal?.aborted) break;
+    // A budget is a promise about response time: once it is spent, the shop
+    // keeps whatever the first rungs found and the market fallback answers
+    // for it, instead of the request hanging on rung three.
+    if (options.deadline && Date.now() > options.deadline) break;
     if (tried.length) {
       await new Promise((resolve) => { setTimeout(resolve, options.retryGapMs ?? RETRY_GAP_MS); });
     }
@@ -388,7 +402,8 @@ const SHOP_CONCURRENCY = Math.max(1, Number(process.env.PRICE_SCRAPER_CONCURRENC
 
 export const scrapePrices = async (query, {
   retailerIds = [], fetchImpl = fetch, allowModel = true, signal, gapMs = 250,
-  strategies = null, concurrency = SHOP_CONCURRENCY, allowMonid = true,
+  strategies = null, concurrency = SHOP_CONCURRENCY, budgetMs = null,
+  allowMonid = true,
 } = {}) => {
   const trimmed = String(query || '').trim();
   const checkedAt = new Date().toISOString();
@@ -396,6 +411,17 @@ export const scrapePrices = async (query, {
     return { query: trimmed, results: [], cheapest: [], checkedAt, status: 'disabled' };
   }
   const shops = scrapeableRetailers(retailerIds);
+  // A budget is a promise about response time, so shops still in flight when
+  // it expires are aborted, not just deserted — a check returns at the budget
+  // and the market fallback answers for whatever was cut. The market itself
+  // runs on the caller's signal: the abort exists to bound the shop loop, not
+  // to take the fallback down with it.
+  const budgetController = new AbortController();
+  const abortBudget = () => budgetController.abort();
+  if (signal?.aborted) budgetController.abort();
+  else signal?.addEventListener('abort', abortBudget);
+  const deadline = budgetMs ? Date.now() + budgetMs : null;
+  const budgetTimer = deadline ? setTimeout(abortBudget, Math.max(0, deadline - Date.now())) : null;
   // Indexed so results keep retailer order however the workers interleave.
   const results = new Array(shops.length);
   let next = 0;
@@ -403,21 +429,29 @@ export const scrapePrices = async (query, {
     for (;;) {
       const index = next;
       next += 1;
-      if (index >= shops.length || signal?.aborted) return;
+      if (index >= shops.length || budgetController.signal.aborted) return;
       results[index] = await scrapeRetailer(shops[index], trimmed, {
-        fetchImpl, allowModel, signal, strategies,
+        fetchImpl, allowModel, signal: budgetController.signal, strategies, deadline,
       });
       if (gapMs) await new Promise((resolve) => { setTimeout(resolve, gapMs); });
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
-  );
-  // Monid is the last rung of the whole ladder, not of any one shop: one
-  // hosted lookup per product, appended after the local shops have had their
-  // say. Opt-in — off unless the CLI and key are present, and off entirely
-  // with MONID_DISABLED=true.
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(Math.max(1, concurrency), shops.length || 1) }, worker),
+    );
+  } finally {
+    if (budgetTimer) clearTimeout(budgetTimer);
+    signal?.removeEventListener('abort', abortBudget);
+  }
   const settled = results.filter(Boolean);
+  // A shop that would not answer may still have a listing on the market:
+  // one Google Shopping run fills the silence instead of ending in nothing.
+  const market = await marketFallback(trimmed, settled, { fetchImpl, signal });
+  // Monid is the last rung of the whole ladder, not of any one shop: one
+  // hosted lookup per product, appended after the local shops and the market
+  // have had their say. Opt-in — off unless the CLI and key are present, and
+  // off entirely with MONID_DISABLED=true.
   let monid = null;
   if (allowMonid !== false && monidOnPath()) {
     try {
@@ -426,23 +460,28 @@ export const scrapePrices = async (query, {
       monid = null;
     }
   }
-  const withMonid = monid && monid.rows?.length ? [...settled, monid] : settled;
-  const cheapest = cheapestAcross(withMonid);
+  const answered = [
+    ...settled,
+    ...(market.group ? [market.group] : []),
+    ...(monid && monid.rows?.length ? [monid] : []),
+  ];
+  const cheapest = cheapestAcross(answered);
   return {
     query: trimmed,
-    results: settled,
+    results: answered,
     cheapest,
     best: cheapest[0] || null,
     checkedAt,
     shopsChecked: settled.length,
     shopsAnswered: settled.filter((result) => result.status === 'ok').length,
     monid: monid ? { status: monid.status, provider: monid.provider || null, rows: monid.rows.length } : null,
-    aiUsed: withMonid.some((result) => result.rows.some((row) => row.method === 'ai-extracted')),
+    aiUsed: answered.some((result) => result.rows.some((row) => row.method === 'ai-extracted')),
     // Which fetch strategies were available, and which actually answered.
     // Worth surfacing: "eight shops, all answered by the renderer" and "eight
     // shops, all answered directly" are very different cost profiles.
     strategiesAvailable: strategies || availableStrategies(),
     strategiesUsed: [...new Set(settled.map((result) => result.via).filter(Boolean))],
+    marketUsed: market.used,
     status: 'ok',
   };
 };
