@@ -33,6 +33,19 @@ export default function SettingsPanel() {
   const [dataStatus, setDataStatus] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  // Kitchen flashcards as a preference: the same clear-out the Learn queue
+  // offers, reachable from Settings without hunting through the deck first.
+  const autoCards = (Array.isArray(app.cards) ? app.cards : []).filter((c) => c.origin === 'auto').length;
+  const [confirmKitchenOff, setConfirmKitchenOff] = useState(false);
+  const toggleKitchenCards = () => {
+    if (app.kitchenCardsForgotten) {
+      app.set({ kitchenCardsForgotten: false });
+      return;
+    }
+    // Turning off with cards to remove needs the same confirm the Learn tab shows.
+    if (autoCards > 0) setConfirmKitchenOff(true);
+    else app.set({ kitchenCardsForgotten: true });
+  };
 
   /** Your data, as the JSON it is stored as — yours to keep or move. */
   const exportData = () => {
@@ -100,6 +113,50 @@ export default function SettingsPanel() {
               Three more arrive at levels 4, 8 and 12. The five you started with never go away.
             </p>
           </div>
+        </Card>
+      </Section>
+
+      <Section title="Kitchen cards" className="rise rise-2">
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold text-[0.875rem]">Kitchen flashcards</p>
+              <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Cards the app builds from what you buy, cook and log. Turning them off clears those cards — your own stay.
+              </p>
+            </div>
+            <Toggle label="Kitchen flashcards" on={!app.kitchenCardsForgotten} onChange={toggleKitchenCards} />
+          </div>
+          {confirmKitchenOff && (
+            <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 6%, transparent)' }}>
+              <p className="text-[0.8125rem] font-extrabold">
+                Remove {autoCards} kitchen card{autoCards === 1 ? '' : 's'}? Your own cards stay.
+              </p>
+              <p className="mt-0.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                You can turn them back on here any time.
+              </p>
+              <div className="mt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Confirm removing kitchen cards"
+                  onClick={() => { app.forgetKitchenCards(); setConfirmKitchenOff(false); }}
+                  className="press rounded-xl border px-3 py-2 text-[0.78125rem] font-extrabold"
+                  style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
+                  aria-label="Keep kitchen cards"
+                  onClick={() => setConfirmKitchenOff(false)}
+                  className="press text-[0.78125rem] font-bold"
+                  style={{ color: 'var(--faint)' }}
+                >
+                  Keep
+                </button>
+              </div>
+            </div>
+          )}
         </Card>
       </Section>
 
