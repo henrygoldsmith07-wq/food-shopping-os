@@ -1,6 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../src/App.jsx';
+// Full-app journeys are synchronous and drive the whole App: under batch
+// load they can legitimately cross the 5s default, while a real hang still
+// blows well past this ceiling.
+vi.setConfig({ testTimeout: 15_000 });
 
 const onboard = () => {
   render(<App />);
