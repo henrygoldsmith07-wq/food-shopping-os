@@ -1,5 +1,6 @@
 import { ArrowRight, BookOpen, Check, ChefHat, Clock3, Leaf, RotateCcw, ShoppingCart } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
+import NewCardSection from './NewCardSection.jsx';
 import { Card, Meter, Pill, Section } from './ui.jsx';
 import ReviewQueueCard from './ReviewQueueCard.jsx';
 
@@ -182,6 +183,8 @@ export default function LearnTab({ goTab, openGuidance }) {
           )}
         </Card>
       </Section>
+
+      <NewCardSection />
 
       <ReviewQueueCard />
 

@@ -10,7 +10,7 @@
  */
 
 import { canonicalName } from './aliases.js';
-import { compareStores } from './shopping.js';
+import { compareStores, groupForStore, routeFor } from './shopping.js';
 import { pantryAvailability } from './kitchen.js';
 import { scoreWastePlan } from './waste-planner.js';
 
@@ -24,7 +24,93 @@ const totalFor = (assignment) => round2(assignment.reduce((s, row) => s + (Numbe
  * Assign each list item to a store where its price is known; fallback to manual price.
  * Returns per-mode assignments with explicit trade-offs.
  */
-export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = 'balanced', packageSizes = {}, wasteHistory = [], today = '', learnedAliases = {} } = {}) => {
+const cleanStore = (value) => String(value || '').trim();
+
+const storeRouteKey = (store, routes = {}) => Object.keys(routes || {})
+  .find((candidate) => candidate.toLowerCase() === store.toLowerCase()) || store;
+
+const tripBucket = (store, items, { routes = {}, memory = {} } = {}) => {
+  const routeKey = store ? storeRouteKey(store, routes) : null;
+  const grouped = groupForStore(items, {
+    store: routeKey,
+    routes,
+    memory,
+  });
+  const learned = Boolean(routeKey && Array.isArray(routes?.[routeKey]) && routes[routeKey].length);
+  return {
+    store: store || null,
+    items: grouped.flatMap(([, rows]) => rows),
+    groups: grouped.map(([aisle, rows]) => ({ aisle, items: rows })),
+    route: grouped.map(([aisle]) => aisle),
+    routeSource: learned ? 'learned' : 'standard',
+    itemCount: items.length,
+    aisleStops: grouped.length,
+  };
+};
+
+/**
+ * Turn the current list into a practical walking plan. The route is deliberately
+ * limited to evidence the household has: learned aisle order when available,
+ * otherwise the standard taxonomy. A missing store remains unassigned rather
+ * than being silently attributed to a retailer or given an invented distance.
+ */
+export const planShoppingTrip = (items = [], {
+  routes = {}, memory = {}, includeChecked = false,
+} = {}) => {
+  const source = Array.isArray(items) ? items : [];
+  const checkedCount = source.filter((item) => item?.checked).length;
+  const active = source.filter((item) => includeChecked || !item?.checked);
+  if (!active.length) {
+    return {
+      status: 'empty', stores: [], unassigned: null, orderedItems: [],
+      itemCount: 0, checkedCount, shopStops: 0, aisleStops: 0,
+      explanation: checkedCount ? 'Everything on the list is already ticked.' : 'The shopping list is empty.',
+    };
+  }
+
+  const buckets = new Map();
+  const unassigned = [];
+  for (const item of active) {
+    const store = cleanStore(item?.store);
+    if (!store) {
+      unassigned.push(item);
+      continue;
+    }
+    const key = store.toLowerCase();
+    if (!buckets.has(key)) buckets.set(key, { store, items: [] });
+    buckets.get(key).items.push(item);
+  }
+
+  const stores = [...buckets.values()].map(({ store, items: rows }) =>
+    tripBucket(store, rows, { routes, memory }));
+  const unassignedPlan = unassigned.length
+    ? tripBucket('', unassigned, { routes, memory })
+    : null;
+  const aisleStops = stores.reduce((sum, store) => sum + store.aisleStops, 0)
+    + (unassignedPlan?.aisleStops || 0);
+  const status = stores.length && unassignedPlan ? 'partial' : stores.length ? 'ready' : 'unassigned';
+  const shopDescription = stores.length === 1 ? '1 shop' : `${stores.length} shops`;
+  const routeDescription = stores.length
+    ? `${shopDescription}, ${aisleStops} aisle stop${aisleStops === 1 ? '' : 's'} in learned order where available.`
+    : 'No shop is assigned yet, so the items stay in standard aisle order.';
+  const unassignedDescription = unassignedPlan
+    ? ` ${unassigned.length} item${unassigned.length === 1 ? '' : 's'} still need a shop assignment; no retailer or distance is guessed.`
+    : '';
+
+  return {
+    status,
+    stores,
+    unassigned: unassignedPlan,
+    orderedItems: [...stores.flatMap((store) => store.items), ...(unassignedPlan?.items || [])],
+    itemCount: active.length,
+    checkedCount,
+    shopStops: stores.length,
+    aisleStops,
+    explanation: `${routeDescription}${unassignedDescription}`,
+  };
+};
+
+export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = 'balanced', packageSizes = {}, wasteHistory = [], today = '', learnedAliases = {}, routes = {}, memory = {} } = {}) => {
   if (!items.length) return { mode, assignment: [], total: 0, stores: 0, explanation: 'List is empty — nothing to optimise.' };
 
   const history = (() => {
@@ -93,9 +179,16 @@ export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = '
       return aExp.localeCompare(bExp);
     });
   } else if (mode === 'fastest') {
-    // Fewest aisles: sort by aisle order and collapse
-    assignment = [...baseline].sort((a, b) => String(a.aisle || 'Other').localeCompare(String(b.aisle || 'Other')));
-    explanation = 'Fastest: aisle order consolidated, pantry-covered items skipped where possible.';
+    const trip = planShoppingTrip(baseline, { routes, memory });
+    assignment = trip.orderedItems.map((item) => ({
+      ...item,
+      reason: trip.status === 'unassigned'
+        ? 'No shop assigned — standard aisle order.'
+        : item.store
+          ? `Aisle ${trip.stores.find((store) => store.store?.toLowerCase() === item.store?.toLowerCase())?.route.indexOf(item.aisle) + 1 || 'order'} at ${item.store}.`
+          : 'No shop assigned — standard aisle order.',
+    }));
+    explanation = `Fastest: ${trip.aisleStops} aisle stop${trip.aisleStops === 1 ? '' : 's'}${trip.shopStops ? ` across ${trip.shopStops} shop${trip.shopStops === 1 ? '' : 's'}` : ''}; learned aisle routes used where available.`;
   } else {
     // balanced — cost + store penalty
     const stores = compareStores(items, shops);

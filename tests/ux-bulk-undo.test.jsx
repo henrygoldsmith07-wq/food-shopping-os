@@ -122,6 +122,109 @@ describe('bulk shopping actions are atomic and undoable', () => {
   });
 });
 
+describe('confirmed purchases update the pantry automatically', () => {
+  beforeEach(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded)));
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('stocks checked purchases by default and records the reconciliation', () => {
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return (
+            <div>
+              <button onClick={() => app.toggleChecked('i1')}>tick</button>
+              <button onClick={() => app.recordShop({ store: 'Aldi', total: 1.3 })}>record</button>
+            </div>
+          );
+        }} />
+      </AppProvider>,
+    );
+
+    fireEvent.click(screen.getByText('tick'));
+    fireEvent.click(screen.getByText('record'));
+    // A second tap after the first state transition must not create a second
+    // receipt or add the same stock twice.
+    fireEvent.click(screen.getByText('record'));
+
+    expect(snap.shoppingList).toHaveLength(2);
+    expect(snap.shops).toHaveLength(1);
+    expect(snap.shops[0]).toMatchObject({ store: 'Aldi', pantryReconciled: true });
+    expect(snap.pantry.find((entry) => entry.name === 'Milk')).toMatchObject({
+      qty: '1 pint',
+      store: 'Aldi',
+      purchaseDate: snap.day,
+      purchaseSource: 'purchase',
+    });
+    expect(snap.pantryEvents.at(-1)).toMatchObject({
+      type: 'purchase_reconciliation',
+      store: 'Aldi',
+      added: 1,
+      merged: 0,
+      conflicts: 0,
+    });
+  });
+
+  it('honours an explicit opt-out without pretending the pantry was updated', () => {
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return (
+            <div>
+              <button onClick={() => app.toggleChecked('i1')}>tick</button>
+              <button onClick={() => app.recordShop({ store: 'Aldi', total: 1.3, toPantry: false })}>record</button>
+            </div>
+          );
+        }} />
+      </AppProvider>,
+    );
+
+    fireEvent.click(screen.getByText('tick'));
+    fireEvent.click(screen.getByText('record'));
+
+    expect(snap.pantry).toHaveLength(1);
+    expect(snap.shops[0]).toMatchObject({ pantryReconciled: false });
+    expect(snap.pantryEvents).toEqual([]);
+  });
+
+  it('merges a purchase into existing stock instead of creating a duplicate row', () => {
+    const current = {
+      ...seeded,
+      shoppingList: [{ ...seeded.shoppingList[0], price: 1.3, qty: '500 ml' }],
+      pantry: [{ id: 'p1', name: 'Milk', qty: '500 ml', cost: 1.1, location: 'Fridge' }],
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return (
+            <div>
+              <button onClick={() => app.toggleChecked('i1')}>tick</button>
+              <button onClick={() => app.recordShop({ store: 'Aldi' })}>record</button>
+            </div>
+          );
+        }} />
+      </AppProvider>,
+    );
+
+    fireEvent.click(screen.getByText('tick'));
+    fireEvent.click(screen.getByText('record'));
+
+    expect(snap.pantry).toHaveLength(1);
+    expect(snap.pantry[0]).toMatchObject({ name: 'Milk', qty: '1 l', cost: 2.4, location: 'Fridge' });
+    expect(snap.pantryEvents.at(-1)).toMatchObject({ added: 0, merged: 1, conflicts: 0 });
+  });
+});
+
 describe('quick quantity editing on a shopping row', () => {
   beforeEach(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded)));
   afterEach(() => {

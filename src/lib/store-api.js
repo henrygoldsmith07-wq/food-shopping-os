@@ -308,8 +308,12 @@ export function useStoreApi({
             } : item)),
           };
         }),
-      recordShop: ({ store, total, toPantry = false, location = 'Cupboard', itemIds = null }) =>
+      // A confirmed purchase stocks the pantry by default. The UI still passes
+      // `toPantry: false` when the shopper explicitly declines, but callers that
+      // only record the purchase get the safe, expected inventory hand-off too.
+      recordShop: ({ store, total, toPantry = true, location = 'Cupboard', itemIds = null }) =>
         set((s) => {
+          if (!householdPermission(s, 'shopping')) return {};
           const bought = s.shoppingList.filter((i) => i.checked && (!itemIds || itemIds.includes(i.id)));
           if (!bought.length) return {};
           const shopStore = store || 'Unnamed shop';

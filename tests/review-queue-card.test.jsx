@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import App from '../src/App.jsx';
 import { AppProvider } from '../src/lib/store.jsx';
 import { STORAGE_KEY } from '../src/lib/state.js';
+import NewCardSection from '../src/components/NewCardSection.jsx';
 import ReviewQueueCard from '../src/components/ReviewQueueCard.jsx';
 
 /**
@@ -44,6 +45,139 @@ const renderCard = () => render(
 
 const storedDeck = () => JSON.parse(localStorage.getItem(STORAGE_KEY)).cards;
 
+describe('focusing the review queue one topic at a time', () => {
+  const twoTopicDeck = [
+    { ...deck[0], id: 'm1', topicId: 'membranes', due: '2026-07-26' },
+    { ...deck[0], id: 'm2', topicId: 'membranes', due: '2026-07-27', front: 'Second membrane card?' },
+    { ...deck[0], id: 'e1', topicId: 'enzymes', due: '2026-07-27', front: 'Enzyme card?' },
+  ];
+
+  beforeEach(() => localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, cards: twoTopicDeck })));
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('shows per-topic counts, focuses a topic, and keeps All honest', () => {
+    renderCard();
+    const bar = screen.getByLabelText('Review one topic at a time');
+    expect(within(bar).getByText('Membranes · 2')).toBeDefined();
+    expect(within(bar).getByText('Enzymes · 1')).toBeDefined();
+    expect(within(bar).getByText('All')).toBeDefined();
+
+    fireEvent.click(within(bar).getByText('Enzymes · 1'));
+    expect(screen.getByText('Enzyme card?')).toBeDefined();
+    expect(screen.getByText('1 to review')); // filtered count, not 3
+    expect(screen.queryByText('Membrane structure?')).toBeNull();
+  });
+
+  it('a rating inside a focus advances within the topic', () => {
+    renderCard();
+    const bar = screen.getByLabelText('Review one topic at a time');
+    fireEvent.click(within(bar).getByText('Membranes · 2'));
+    expect(screen.getByText('Membrane structure?')).toBeDefined();
+    fireEvent.click(screen.getByLabelText('Reveal answer'));
+    fireEvent.click(screen.getByLabelText('Rate Good — knew it'));
+    // Next due membrane card surfaces; the enzyme card does not leak in.
+    expect(screen.getByText('Second membrane card?')).toBeDefined();
+    expect(screen.queryByText('Enzyme card?')).toBeNull();
+  });
+
+  it('exhausting a focus falls back to All instead of a dead end', () => {
+    renderCard();
+    const bar = screen.getByLabelText('Review one topic at a time');
+    fireEvent.click(within(bar).getByText('Enzymes · 1'));
+    fireEvent.click(screen.getByLabelText('Reveal answer'));
+    fireEvent.click(screen.getByLabelText('Rate Good — knew it'));
+    expect(within(bar).getByText('All')).toBeDefined();
+    expect(screen.getByText('Membrane structure?')).toBeDefined(); // queue continues
+  });
+
+  it('toggling focus off returns to the full queue', () => {
+    renderCard();
+    const bar = screen.getByLabelText('Review one topic at a time');
+    fireEvent.click(within(bar).getByText('Membranes · 2'));
+    fireEvent.click(within(bar).getByText('Membranes · 2'));
+    expect(screen.getByText('3 to review')).toBeDefined(); // full queue restored
+    expect(screen.getByText('Membrane structure?')).toBeDefined(); // soonest across all
+  });
+
+  it('retagging a card moves it between topics without touching its schedule', () => {
+    renderCard();
+    fireEvent.click(screen.getByLabelText("Retag this card's topic"));
+    fireEvent.change(screen.getByLabelText('Card topic'), { target: { value: 'organelles' } });
+    fireEvent.click(screen.getByLabelText('Save topic'));
+
+    const stored = storedDeck();
+    const card = stored.find((c) => c.id === 'm1');
+    expect(card.topicId).toBe('organelles'); // retagged
+    expect(card.intervalDays).toBe(6); // schedule untouched
+    expect(card.reps).toBe(2);
+    expect(screen.getByText('Organelles')).toBeDefined(); // pill updates
+  });
+
+  it('a blank retag falls back to General and shows no pill', () => {
+    renderCard();
+    fireEvent.click(screen.getByLabelText("Retag this card's topic"));
+    fireEvent.change(screen.getByLabelText('Card topic'), { target: { value: '  ' } });
+    fireEvent.click(screen.getByLabelText('Save topic'));
+    expect(storedDeck().find((c) => c.id === 'm1').topicId).toBe('general');
+    expect(screen.queryByText('Membranes')).toBeNull(); // general default hides the pill
+  });
+
+  it('cancelling a retag leaves the card as it was', () => {
+    renderCard();
+    fireEvent.click(screen.getByLabelText("Retag this card's topic"));
+    fireEvent.change(screen.getByLabelText('Card topic'), { target: { value: 'nope' } });
+    fireEvent.click(screen.getByLabelText('Cancel topic edit'));
+    expect(storedDeck().find((c) => c.id === 'm1').topicId).toBe('membranes');
+  });
+
+  it('the tag pill on the card itself focuses that topic too', () => {
+    renderCard();
+    // The soonest card is a Membranes card, so its tag is the one on screen.
+    fireEvent.click(screen.getByLabelText('Filter the queue to Membranes'));
+    expect(screen.getByText('2 to review')).toBeDefined();
+    expect(screen.getByText('Membrane structure?')).toBeDefined();
+    expect(screen.queryByText('Enzyme card?')).toBeNull();
+    // It is a toggle: tapping the active pill restores the full queue.
+    fireEvent.click(screen.getByLabelText('Filter the queue to Membranes'));
+    expect(screen.getByText('3 to review')).toBeDefined();
+  });
+
+  it('no topic bar when every due card shares one topic', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+    renderCard();
+    expect(screen.getByText('2 to review')).toBeDefined();
+    expect(screen.queryByLabelText('Review one topic at a time')).toBeNull();
+  });
+});
+
+describe('the week-ahead forecast strip on Learn', () => {
+  beforeEach(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded)));
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('shows the coming week with Today first and per-day counts', () => {
+    renderCard();
+    const strip = screen.getByLabelText('Week-ahead forecast');
+    const days = within(strip).getAllByLabelText(/cards due on/);
+    expect(days).toHaveLength(7);
+    expect(within(strip).getByText('Today')).toBeDefined();
+    expect(days[0].getAttribute('aria-label')).toBe('2 cards due on 2026-07-28');
+    expect(days[2].getAttribute('aria-label')).toBe('1 cards due on 2026-07-30');
+  });
+
+  it('stays hidden for an empty deck', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded: true, name: 'Sam', day: DAY }));
+    renderCard();
+    expect(screen.getByText('No cards yet')).toBeDefined();
+    expect(screen.queryByLabelText('Week-ahead forecast')).toBeNull();
+  });
+});
+
 describe('the flashcard review queue on Learn', () => {
   beforeEach(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded)));
   afterEach(() => {
@@ -58,6 +192,28 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.getByText('2 to review')).toBeDefined();
     expect(screen.queryByText('Phospholipid bilayer.')).toBeNull(); // answer stays hidden
     expect(screen.getByRole('button', { name: 'Reveal answer' })).toBeDefined();
+  });
+
+  it('tags the card with its topic under the front', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{ ...deck[1], topicId: 'membranes' }],
+    }));
+    renderCard();
+    expect(screen.getByText('SA:V ratio?')).toBeDefined();
+    expect(screen.getByText('Membranes')).toBeDefined();
+  });
+
+  it('shows no topic pill for untagged cards', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{ ...deck[1], topicId: 'general' }],
+    }));
+    renderCard();
+    expect(screen.getByText('SA:V ratio?')).toBeDefined();
+    expect(screen.queryByText('general')).toBeNull();
   });
 
   it('reveals the answer and the four ratings on flip', () => {
@@ -148,6 +304,37 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.queryByText('Flashcards waiting')).toBeNull();
   });
 
+  it('offers building a deck from the kitchen when there is activity', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded, cards: [],
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', total: 12.4, items: [{ name: 'Milk' }] }],
+      pantry: [{ id: 'p1', name: 'Salmon', expiry: '2026-07-30' }],
+    }));
+    renderCard();
+    const build = screen.getByRole('button', { name: 'Build a deck from your kitchen' });
+    expect(build).toBeDefined();
+
+    fireEvent.click(build);
+    // Seeded: shop-most, shop-total, pantry-expiring — all origin 'auto'.
+    const seededDeck = storedDeck();
+    expect(seededDeck).toHaveLength(3);
+    expect(seededDeck.every((c) => c.origin === 'auto')).toBe(true);
+    expect(seededDeck.map((c) => c.front)).toContain('Which food did you buy most of this week?');
+    expect(seededDeck.map((c) => c.back)).toContain('Co-op — £12.40');
+    expect(screen.getByText('3 to review')).toBeDefined();
+    // The deck is no longer empty, so the offer is gone — nothing to double-seed.
+    expect(screen.queryByRole('button', { name: 'Build a deck from your kitchen' })).toBeNull();
+  });
+
+  it('shows no kitchen-seed button when there is no activity', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, cards: [] }));
+    renderCard();
+    expect(screen.getByText('No cards yet')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Build a deck from your kitchen' })).toBeNull();
+  });
+
   it('lets an empty deck start the queue: the form is open and saving creates a due card', () => {
     cleanup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, cards: [] }));
@@ -222,6 +409,49 @@ describe('the flashcard review queue on Learn', () => {
     // The new card is due today, so there is something to review again.
     expect(screen.getByText('Fresh one?')).toBeDefined();
     expect(screen.getByText('1 to review')).toBeDefined();
+  });
+
+  it('shows the standing New card form above the queue when the deck has cards', async () => {
+    cleanup();
+    render(<App />);
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
+    expect(await screen.findByText('New card')).toBeDefined(); // LearnTab is lazy-loaded
+    // The persistent form and the review queue both render. The full app runs
+    // on the real clock, so all three July cards are overdue by now.
+    expect(screen.getByLabelText('Card question')).toBeDefined();
+    expect(screen.getByText('3 to review')).toBeDefined();
+
+    // Saving through the standing form adds a card without touching the queue.
+    fireEvent.change(screen.getByLabelText('Card question'), { target: { value: 'Fourth card?' } });
+    fireEvent.change(screen.getByLabelText('Card answer'), { target: { value: 'Added from the tab-level form.' } });
+    fireEvent.change(screen.getByLabelText('Card topic (optional)'), { target: { value: 't1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    expect(storedDeck()).toHaveLength(4);
+    expect(storedDeck().find((c) => c.front === 'Fourth card?')).toMatchObject({
+      topicId: 't1', origin: 'handmade',
+    }); // due = today (the real clock), pinned deterministically in the unit tests
+    expect(await screen.findByText('Card saved — it is in the queue below.')).toBeDefined();
+    expect(screen.getByText('4 to review')).toBeDefined(); // the new card joined the queue
+    // The form cleared itself after saving.
+    expect(screen.getByLabelText('Card question').value).toBe('');
+  });
+
+  it('steps aside on an empty deck so only one form ever shows', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, cards: [] }));
+    render(
+      <AppProvider>
+        <>
+          <NewCardSection now={NOW} />
+          <ReviewQueueCard now={NOW} />
+        </>
+      </AppProvider>,
+    );
+    // The queue's own empty state owns creation; the standing section is absent.
+    expect(screen.getByText('No cards yet')).toBeDefined();
+    expect(screen.getAllByLabelText('Card question')).toHaveLength(1);
+    expect(screen.queryByText('A new card is due the day you add it — the queue below picks it up right away.')).toBeNull();
   });
 
   it('starts the queue end to end from the Learn tab of a fresh app', async () => {

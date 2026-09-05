@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Eye } from 'lucide-react';
+import { Eye, Pencil } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
+import AddCardForm from './AddCardForm.jsx';
 import { Card, Pill, Section } from './ui.jsx';
-import { dayStamp } from '../domain/scheduling';
+import { dayStamp, dueTopicGroups, forecastDueCounts } from '../domain/scheduling';
+import { topicLabel } from '../domain/topic-labels';
 
 /** The four ratings, in the order the scheduler's ease curve expects. */
 const RATINGS = [
@@ -11,86 +13,6 @@ const RATINGS = [
   { id: 'good', label: 'Good', hint: 'knew it', tone: 'var(--good)' },
   { id: 'easy', label: 'Easy', hint: 'too easy', tone: 'var(--accent)' },
 ];
-
-const inputCls = 'w-full rounded-2xl border px-4 py-3 text-[0.875rem] font-semibold outline-none';
-const inputStyle = { background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' };
-
-/**
- * The two sides of a new card, plus an optional topic tag. Both sides are
- * required — a one-sided card is a note, not a recall — and the Save button
- * stays inert until they are filled, so there is no error to announce.
- * Hand-made cards carry `origin: 'handmade'` so they never impersonate a
- * seeded or imported card.
- */
-function AddCardForm({ onSave, onCancel, heading = true }) {
-  const [front, setFront] = useState('');
-  const [back, setBack] = useState('');
-  const [topic, setTopic] = useState('');
-  const ready = Boolean(front.trim() && back.trim());
-
-  return (
-    <div className="space-y-2.5">
-      {(heading || onCancel) && (
-        <div className="flex items-center justify-between gap-2">
-          {heading && <p className="text-[0.9375rem] font-extrabold">New card</p>}
-          {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="press text-[0.78125rem] font-bold"
-              style={{ color: 'var(--faint)' }}
-            >
-              Cancel
-            </button>
-          )}
-        </div>
-      )}
-      <input
-        aria-label="Card question"
-        value={front}
-        onChange={(e) => setFront(e.target.value)}
-        placeholder="Question — what you want to recall"
-        className={inputCls}
-        style={inputStyle}
-      />
-      <textarea
-        aria-label="Card answer"
-        rows={2}
-        value={back}
-        onChange={(e) => setBack(e.target.value)}
-        placeholder="Answer — what the card reveals"
-        className={`${inputCls} resize-none`}
-        style={inputStyle}
-      />
-      <input
-        aria-label="Card topic (optional)"
-        value={topic}
-        onChange={(e) => setTopic(e.target.value)}
-        placeholder="Topic (optional)"
-        className={inputCls}
-        style={inputStyle}
-      />
-      <div className="flex items-center justify-between gap-2 pt-0.5">
-        <button
-          type="button"
-          disabled={!ready}
-          onClick={() => onSave(front, back, topic)}
-          className="press rounded-xl px-4 py-2.5 text-[0.84375rem] font-extrabold"
-          style={ready
-            ? { background: 'var(--accent)', color: 'var(--on-accent)' }
-            : { background: 'var(--card-2)', color: 'var(--faint)' }}
-        >
-          Save card
-        </button>
-        {!ready && (
-          <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-            Question and answer are both needed.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The SRS review queue on the Learn tab. Shows the soonest-due card, flips it
@@ -106,15 +28,43 @@ function AddCardForm({ onSave, onCancel, heading = true }) {
 export default function ReviewQueueCard({ now = new Date() }) {
   const app = useApp();
   const deck = Array.isArray(app.cards) ? app.cards : [];
-  const queue = useMemo(() => app.reviewDueCards(now), [app.cards, now]);
+  const allQueue = useMemo(() => app.reviewDueCards(now), [app.cards, now]);
+  // One topic at a time: the due queue grouped by topic, biggest debt first.
+  // Focusing filters the session to that topic — the bar shows every topic's
+  // count either way, so the rest of the debt stays visible and honest.
+  const topicGroups = useMemo(() => dueTopicGroups(deck, now), [deck, now]);
+  const [focusedTopic, setFocusedTopic] = useState(null);
+  const queue = useMemo(
+    () => (focusedTopic ? allQueue.filter((c) => c.topicId === focusedTopic) : allQueue),
+    [allQueue, focusedTopic],
+  );
   const [flipped, setFlipped] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [editingTopic, setEditingTopic] = useState(false);
+  const [topicDraft, setTopicDraft] = useState('');
   const current = queue[0] ?? null;
   const empty = !deck.length;
+  const focusable = topicGroups.length > 1;
 
   const rate = (rating) => {
     if (!current) return;
     app.reviewCard(current.id, rating, now);
+    setFlipped(false);
+    setEditingTopic(false);
+    // A focused topic's last card just left the queue — fall back to All so
+    // the session continues into the next topic instead of hitting a wall.
+    if (focusedTopic && queue.length <= 1) setFocusedTopic(null);
+  };
+
+  const startRetag = () => {
+    setTopicDraft(current.topicId && current.topicId !== 'general' ? current.topicId : '');
+    setEditingTopic(true);
+    setFlipped(false);
+  };
+
+  const saveTopic = () => {
+    app.retagCard(current.id, topicDraft);
+    setEditingTopic(false);
     setFlipped(false);
   };
 
@@ -131,21 +81,77 @@ export default function ReviewQueueCard({ now = new Date() }) {
     setFlipped(false);
   };
 
+  const pickTopic = (topicId) => {
+    setFocusedTopic((prev) => (prev === topicId ? null : topicId));
+    setFlipped(false);
+  };
+
   const nextDue = useMemo(() => {
     const today = dayStamp(now);
     const later = deck.filter((c) => c.due > today).sort((a, b) => (a.due < b.due ? -1 : 1));
     return later[0]?.due ?? null;
   }, [deck, now]);
+  // The week ahead: cards landing on each of the next 7 days, so a user can
+  // see the workload coming instead of meeting it one morning at a time.
+  const forecast = useMemo(() => forecastDueCounts(deck, now, 7), [deck, now]);
+  const peak = Math.max(...forecast.map((d) => d.count), 1);
+  // Questions your own activity would seed — count only, so the empty state
+  // can offer the deck honestly (and hide it when there is nothing to build).
+  const seedable = useMemo(() => app.kitchenSeedCount(now), [app, app.cards, now]);
 
   return (
     <Section title="Flashcard review" className="rise rise-3">
       <Card className="!p-4">
+        {!empty && !adding && (
+          <div className="mb-3" aria-label="Week-ahead forecast">
+            <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
+              Coming up
+            </p>
+            <div className="mt-1.5 flex items-end justify-between gap-1">
+              {forecast.map((day) => {
+                const isToday = day.date === dayStamp(now);
+                return (
+                  <div
+                    key={day.date}
+                    aria-label={`${day.count} cards due on ${day.date}`}
+                    className="flex flex-1 flex-col items-center gap-1"
+                  >
+                    <div
+                      className="w-full rounded-md"
+                      style={{
+                        height: day.count > 0 ? `${6 + (day.count / peak) * 18}px` : '2px',
+                        background: day.count > 0 ? 'var(--accent)' : 'var(--line)',
+                        opacity: isToday || day.count > 0 ? 1 : 0.45,
+                      }}
+                    />
+                    <span
+                      className="text-[0.5625rem] font-bold"
+                      style={{ color: isToday ? 'var(--accent)' : 'var(--faint)' }}
+                    >
+                      {isToday ? 'Today' : day.date.slice(8)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {empty ? (
           <>
             <p className="text-[0.9375rem] font-extrabold">No cards yet</p>
             <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Add a card from a question or topic you want to keep. A new card is due the day it appears, so the queue starts the moment your deck does.
+              Build cards from your real kitchen — what you bought, what's next to expire — or add one by hand. A new card is due the day it appears, so the queue starts the moment your deck does.
             </p>
+            {seedable > 0 && (
+              <button
+                type="button"
+                onClick={() => app.seedCardsFromActivity(now)}
+                className="press mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[0.84375rem] font-extrabold"
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+              >
+                Build a deck from your kitchen
+              </button>
+            )}
             <div className="mt-3">
               <AddCardForm onSave={save} heading={false} />
             </div>
@@ -168,6 +174,16 @@ export default function ReviewQueueCard({ now = new Date() }) {
             >
               Add a card
             </button>
+            {seedable > 0 && (
+              <button
+                type="button"
+                onClick={() => app.seedCardsFromActivity(now)}
+                className="press mt-1 block text-[0.78125rem] font-extrabold"
+                style={{ color: 'var(--accent)' }}
+              >
+                Refresh {seedable} kitchen card{seedable === 1 ? '' : 's'}
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -177,6 +193,17 @@ export default function ReviewQueueCard({ now = new Date() }) {
               </p>
               <div className="flex items-center gap-2">
                 <Pill tone="muted">{queue.length} to review</Pill>
+                {seedable > 0 && (
+                  <button
+                    type="button"
+                    aria-label={`Refresh ${seedable} kitchen card${seedable === 1 ? '' : 's'}`}
+                    onClick={() => app.seedCardsFromActivity(now)}
+                    className="press text-[0.6875rem] font-extrabold uppercase tracking-wide"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    Refresh
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label="Add a new card"
@@ -189,8 +216,93 @@ export default function ReviewQueueCard({ now = new Date() }) {
               </div>
             </div>
 
+            {focusable && (
+              <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Review one topic at a time">
+                <button
+                  type="button"
+                  aria-pressed={!focusedTopic}
+                  onClick={() => focusedTopic && pickTopic(focusedTopic)}
+                  className="press"
+                >
+                  <Pill tone={!focusedTopic ? 'accent' : 'muted'}>All</Pill>
+                </button>
+                {topicGroups.map((group) => (
+                  <button
+                    key={group.topicId}
+                    type="button"
+                    aria-pressed={focusedTopic === group.topicId}
+                    onClick={() => pickTopic(group.topicId)}
+                    className="press"
+                  >
+                    <Pill tone={focusedTopic === group.topicId ? 'accent' : 'muted'}>
+                      {topicLabel(group.topicId)} · {group.count}
+                    </Pill>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="mt-3 rounded-2xl border px-4 py-5 text-center" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
               <p className="text-[1.0625rem] font-extrabold leading-snug">{current.front}</p>
+              {editingTopic ? (
+                <div className="mx-auto mt-2 flex max-w-xs items-center gap-2">
+                  <input
+                    aria-label="Card topic"
+                    value={topicDraft}
+                    onChange={(e) => setTopicDraft(e.target.value)}
+                    placeholder="Topic (blank = General)"
+                    className="w-full rounded-xl border px-3 py-2 text-[0.8125rem] font-semibold outline-none"
+                    style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Save topic"
+                    onClick={saveTopic}
+                    className="press rounded-xl px-3 py-2 text-[0.75rem] font-extrabold"
+                    style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Cancel topic edit"
+                    onClick={() => setEditingTopic(false)}
+                    className="press text-[0.75rem] font-bold"
+                    style={{ color: 'var(--faint)' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-1.5 flex items-center justify-center gap-2">
+                  {current.topicId && current.topicId !== 'general' && (
+                    focusable ? (
+                      <button
+                        type="button"
+                        className="press inline-flex"
+                        aria-pressed={focusedTopic === current.topicId}
+                        aria-label={`Filter the queue to ${topicLabel(current.topicId)}`}
+                        onClick={() => pickTopic(current.topicId)}
+                      >
+                        <Pill tone="accent">{topicLabel(current.topicId)}</Pill>
+                      </button>
+                    ) : (
+                      <span className="inline-flex">
+                        <Pill tone="accent">{topicLabel(current.topicId)}</Pill>
+                      </span>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Retag this card's topic"
+                    onClick={startRetag}
+                    className="press inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wide"
+                    style={{ color: 'var(--faint)' }}
+                  >
+                    <Pencil size={11} /> Retag
+                  </button>
+                </div>
+              )}
               <p className="mt-1.5 text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
                 {flipped ? 'Answer' : 'Question'}
               </p>
