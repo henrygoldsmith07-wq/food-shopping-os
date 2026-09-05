@@ -29,10 +29,20 @@ const requiredEquipment = (meal) => [...new Set([
   ...(meal?.tags || []).filter((tag) => EQUIPMENT_TAGS.has(key(tag))),
 ].map(key).filter(Boolean))];
 
-const mealNutrients = (meals = []) => meals.reduce((totals, meal) => {
-  for (const nutrient of NUTRIENT_KEYS) totals[nutrient] += Number(meal?.[nutrient]) || 0;
-  return totals;
-}, Object.fromEntries(NUTRIENT_KEYS.map((nutrient) => [nutrient, 0])));
+const mealNutrients = (meals = []) => {
+  const rows = (meals || []).filter(Boolean);
+  const totals = Object.fromEntries(NUTRIENT_KEYS.map((nutrient) => [nutrient, 0]));
+  const known = Object.fromEntries(NUTRIENT_KEYS.map((nutrient) => [nutrient, 0]));
+  for (const meal of rows) {
+    for (const nutrient of NUTRIENT_KEYS) {
+      const value = Number(meal?.[nutrient]);
+      if (!Number.isFinite(value)) continue;
+      totals[nutrient] += value;
+      known[nutrient] += 1;
+    }
+  }
+  return { ...totals, known, count: rows.length };
+};
 
 const recipeCost = (meals = [], people = 1, priceTable = null, learnedAliases = {}) => {
   let cost = 0;
@@ -65,12 +75,18 @@ const recipeCost = (meals = [], people = 1, priceTable = null, learnedAliases = 
 const nutritionFitOf = (meals, targets, { days = 1, share = 1 } = {}) => {
   if (!targets || typeof targets !== 'object') return null;
   const totals = mealNutrients(meals);
-  const scale = Math.max(0.01, (Number(days) || 1) * (Number(share) || 1));
+  if (!totals.count) return null;
+  const periodDays = Math.max(0.01, Number(days) || 1);
+  const targetShare = Math.min(1, Math.max(0.01, Number(share) || 1));
+  const scale = periodDays * targetShare;
   const scores = {};
   const targetValues = {};
+  const coverage = {};
   for (const nutrient of NUTRIENT_KEYS) {
     const target = Number(targets[nutrient]) * scale;
-    if (!Number.isFinite(target) || target <= 0) continue;
+    const known = totals.known[nutrient] === totals.count;
+    coverage[nutrient] = Math.round((totals.known[nutrient] / totals.count) * 100);
+    if (!known || !Number.isFinite(target) || target <= 0) continue;
     targetValues[nutrient] = round1(target);
     scores[nutrient] = ['protein', 'fibre'].includes(nutrient)
       ? clamp((totals[nutrient] / target) * 100)
@@ -80,9 +96,15 @@ const nutritionFitOf = (meals, targets, { days = 1, share = 1 } = {}) => {
   if (!values.length) return null;
   return {
     score: round1(values.reduce((sum, value) => sum + value, 0) / values.length),
-    actual: Object.fromEntries(NUTRIENT_KEYS.map((nutrient) => [nutrient, round1(totals[nutrient])])),
+    actual: Object.fromEntries(NUTRIENT_KEYS.map((nutrient) => [
+      nutrient,
+      totals.known[nutrient] === totals.count ? round1(totals[nutrient]) : null,
+    ])),
     target: targetValues,
     scores,
+    coverage,
+    days: periodDays,
+    share: targetShare,
   };
 };
 
@@ -211,7 +233,7 @@ const DEFAULT_WEIGHTS = {
   wasteScore: 0.22,
   expiryCoverage: 0.18,
   budgetFit: 0.16,
-  nutritionFit: 0.0,
+  nutritionFit: 0.18,
   preferenceFit: 0.0,
   supermarketFit: 0.0,
   timeFit: 0.1,
