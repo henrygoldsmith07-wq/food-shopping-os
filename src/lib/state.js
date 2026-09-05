@@ -201,6 +201,7 @@ export const EMPTY_STATE = {
   lastSeenAt: 0, // when the app was last open, for catching you up
   /* study — spaced-repetition cards: everything the SRS engine needs is on the card */
   cards: [], // {id,userId,subjectId,topicId,front,back,origin,specPointIds,reps,lapses,ease,intervalDays,due,createdAt,lastReviewedAt}
+  kitchenCardsForgotten: false, // user cleared all kitchen-seeded cards — seed offers stand down until a re-seed
   /* food diary */
   log: {}, // { 'YYYY-MM-DD': entry[] }
   favouriteFoods: [],

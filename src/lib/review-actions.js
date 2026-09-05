@@ -78,7 +78,24 @@ export const reviewActions = (set, latest) => {
             ...deck.map((c) => (updateById.has(c.id) ? { ...c, back: updateById.get(c.id) } : c)),
             ...plan.additions.map(({ seedKey, ...draft }) => createCard({ ...draft, id: uid('c') }, now)),
           ],
+          // An explicit re-seed lifts the forget opt-out.
+          kitchenCardsForgotten: false,
         };
+      }),
+    /**
+     * Clear every kitchen-seeded card at once — for users who simply don't
+     * want auto cards. Only `origin: 'auto'` cards go; handmade, seed, and
+     * imported cards stay untouched. The write goes through the store's
+     * normal undo history, so the UI can offer one-tap undo. Also sets the
+     * `kitchenCardsForgotten` opt-out so the seed offers stand down until
+     * the user explicitly re-seeds.
+     */
+    forgetKitchenCards: () =>
+      set((s) => {
+        const deck = Array.isArray(s.cards) ? s.cards : [];
+        const kept = deck.filter((c) => c.origin !== 'auto');
+        if (kept.length === deck.length) return {}; // nothing to forget — not a failure
+        return { cards: kept, kitchenCardsForgotten: true };
       }),
   };
 };

@@ -145,6 +145,27 @@ describe('focusing the review queue one topic at a time', () => {
     expect(screen.getByText('3 to review')).toBeDefined();
   });
 
+  it('the forget flow removes only kitchen cards and can bring them back', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [
+        ...deck,
+        {
+          id: 'c-auto', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+          front: 'Which food did you buy most of this week?', back: 'Bread',
+          origin: 'auto', reps: 0, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+          createdAt: '2026-07-28T00:00:00Z', lastReviewedAt: null,
+        },
+      ],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByText('Turn off kitchen cards'));
+    fireEvent.click(screen.getByLabelText('Confirm removing kitchen cards'));
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.cards.map((c) => c.id)).toEqual(['c1', 'c2', 'c3']); // auto card gone
+    expect(stored.kitchenCardsForgotten).toBe(true);
+  });
+
   it('no topic bar when every due card shares one topic', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
     renderCard();

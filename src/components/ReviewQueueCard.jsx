@@ -98,6 +98,47 @@ export default function ReviewQueueCard({ now = new Date() }) {
   // Questions your own activity would seed — count only, so the empty state
   // can offer the deck honestly (and hide it when there is nothing to build).
   const seedable = useMemo(() => app.kitchenSeedCount(now), [app, app.cards, now]);
+  // The forget opt-out: how many kitchen cards would go, and whether the user
+  // is mid-confirmation. Only origin:'auto' cards ever leave.
+  const autoCount = useMemo(() => deck.filter((c) => c.origin === 'auto').length, [deck]);
+  const [confirmingForget, setConfirmingForget] = useState(false);
+  const forgotten = Boolean(app.kitchenCardsForgotten);
+  const confirmForget = confirmingForget && autoCount > 0 && (
+    <div className="mb-3 rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+      <p className="text-[0.78125rem] font-bold">
+        Remove {autoCount} kitchen card{autoCount === 1 ? '' : 's'}? Your own cards stay.
+      </p>
+      <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+        Undo works right after — and kitchen cards can be brought back any time.
+      </p>
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          type="button"
+          aria-label="Confirm removing kitchen cards"
+          onClick={() => {
+            app.forgetKitchenCards();
+            setConfirmingForget(false);
+            setFocusedTopic(null);
+            setFlipped(false);
+            setEditingTopic(false);
+          }}
+          className="press rounded-xl border px-3 py-2 text-[0.78125rem] font-extrabold"
+          style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+        >
+          Remove
+        </button>
+        <button
+          type="button"
+          aria-label="Keep kitchen cards"
+          onClick={() => setConfirmingForget(false)}
+          className="press text-[0.78125rem] font-bold"
+          style={{ color: 'var(--faint)' }}
+        >
+          Keep
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <Section title="Flashcard review" className="rise rise-3">
@@ -136,13 +177,19 @@ export default function ReviewQueueCard({ now = new Date() }) {
             </div>
           </div>
         )}
+        {confirmForget}
         {empty ? (
           <>
             <p className="text-[0.9375rem] font-extrabold">No cards yet</p>
             <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
               Build cards from your real kitchen — what you bought, what's next to expire — or add one by hand. A new card is due the day it appears, so the queue starts the moment your deck does.
             </p>
-            {seedable > 0 && (
+            {forgotten && (
+              <p className="mt-2 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Kitchen cards are turned off — bring them back whenever you like.
+              </p>
+            )}
+            {seedable > 0 && !forgotten && (
               <button
                 type="button"
                 onClick={() => app.seedCardsFromActivity(now)}
@@ -150,6 +197,16 @@ export default function ReviewQueueCard({ now = new Date() }) {
                 style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
               >
                 Build a deck from your kitchen
+              </button>
+            )}
+            {forgotten && (
+              <button
+                type="button"
+                onClick={() => app.seedCardsFromActivity(now)}
+                className="press mt-3 inline-flex w-full items-center justify-center rounded-xl border px-4 py-2.5 text-[0.84375rem] font-extrabold"
+                style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+              >
+                Bring kitchen cards back
               </button>
             )}
             <div className="mt-3">
@@ -174,7 +231,7 @@ export default function ReviewQueueCard({ now = new Date() }) {
             >
               Add a card
             </button>
-            {seedable > 0 && (
+            {!forgotten && seedable > 0 && (
               <button
                 type="button"
                 onClick={() => app.seedCardsFromActivity(now)}
@@ -182,6 +239,16 @@ export default function ReviewQueueCard({ now = new Date() }) {
                 style={{ color: 'var(--accent)' }}
               >
                 Refresh {seedable} kitchen card{seedable === 1 ? '' : 's'}
+              </button>
+            )}
+            {autoCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setConfirmingForget(true)}
+                className="press mt-1 block text-[0.78125rem] font-bold"
+                style={{ color: 'var(--faint)' }}
+              >
+                Turn off kitchen cards
               </button>
             )}
           </>
@@ -193,7 +260,7 @@ export default function ReviewQueueCard({ now = new Date() }) {
               </p>
               <div className="flex items-center gap-2">
                 <Pill tone="muted">{queue.length} to review</Pill>
-                {seedable > 0 && (
+                {seedable > 0 && !forgotten && (
                   <button
                     type="button"
                     aria-label={`Refresh ${seedable} kitchen card${seedable === 1 ? '' : 's'}`}
@@ -215,6 +282,17 @@ export default function ReviewQueueCard({ now = new Date() }) {
                 </button>
               </div>
             </div>
+
+            {!forgotten && autoCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setConfirmingForget(true)}
+                className="press mt-2 text-[0.6875rem] font-bold uppercase tracking-wide"
+                style={{ color: 'var(--faint)' }}
+              >
+                Turn off kitchen cards
+              </button>
+            )}
 
             {focusable && (
               <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Review one topic at a time">

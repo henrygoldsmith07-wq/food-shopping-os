@@ -233,6 +233,65 @@ describe('the review queue through the store', () => {
     expect(snap.cards[0].back).toBe('My own note'); // the user owns their words
   });
 
+  it('forgetKitchenCards clears only auto cards and stands the offers down', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [
+        ...seededCards,
+        {
+          id: 'c-auto', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+          front: 'Which food did you buy most of this week?', back: 'Bread',
+          origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 2, due: '2026-07-30',
+          createdAt: '2026-07-26T00:00:00Z', lastReviewedAt: '2026-07-27T00:00:00Z',
+        },
+      ],
+    }));
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return <button onClick={() => app.forgetKitchenCards()}>forget</button>;
+        }} />
+      </AppProvider>,
+    );
+    fireEvent.click(screen.getByText('forget'));
+    expect(snap.cards.map((c) => c.id)).toEqual(['c-overdue', 'c-today', 'c-future']); // handmade/seed stay
+    expect(snap.kitchenCardsForgotten).toBe(true);
+    // The write went through the real persistence path.
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).kitchenCardsForgotten).toBe(true);
+  });
+
+  it('forgetting with no auto cards is a no-op, and a re-seed lifts the opt-out', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      kitchenCardsForgotten: true,
+      cards: seededCards.filter(() => false),
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', total: 5, items: [{ name: 'Milk' }] }],
+    }));
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return (
+            <div>
+              <button onClick={() => app.forgetKitchenCards()}>forget</button>
+              <button onClick={() => app.seedCardsFromActivity(NOW)}>seed</button>
+            </div>
+          );
+        }} />
+      </AppProvider>,
+    );
+    fireEvent.click(screen.getByText('forget'));
+    expect(snap.kitchenCardsForgotten).toBe(true); // nothing to forget — flag stays
+    fireEvent.click(screen.getByText('seed'));
+    expect(snap.kitchenCardsForgotten).toBe(false); // an explicit re-seed lifts it
+    expect(snap.cards).toHaveLength(2); // shop-most + shop-total
+  });
+
   it('seeds a missed-meal card from a skipped plan slot, refreshing when the skip changes', () => {
     cleanup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
