@@ -73,6 +73,40 @@ describe('rankPlans — the composite engine', () => {
     expect(best.reasons.join(' ')).toMatch(/Inside budget at £4/);
   });
 
+  it('subtracts what was already spent from the weekly headroom', () => {
+    const priceTable = { chicken: 2 };
+    const frugal = [meal('small', 'Small roast', [{ name: 'chicken', qty: '2' }])]; // £4
+    const lavish = [meal('big', 'Big roast', [{ name: 'chicken', qty: '4' }])]; // £8
+    // £30 budget, £26 spent: only £4 left, so the £8 plan overshoots hard.
+    const best = chooseOptimalPlan([lavish, frugal], {
+      priceTable, weeklyBudget: 30, budgetSpent: 26,
+    });
+    expect(best.candidateIndex).toBe(1);
+    expect(best.metrics.budgetSpent).toBe(26);
+    expect(best.metrics.budgetLeft).toBe(4);
+    expect(best.metrics.budgetFit).toBe(100);
+    expect(best.reasons.join(' ')).toMatch(/£4 left this week|Inside budget at £4/);
+  });
+
+  it('spend past the budget leaves nothing left and overshoots every plan', () => {
+    const priceTable = { chicken: 2 };
+    const tiny = [meal('tiny', 'Tiny roast', [{ name: 'chicken', qty: '1' }])]; // £2
+    const best = chooseOptimalPlan([tiny], {
+      priceTable, weeklyBudget: 10, budgetSpent: 14,
+    });
+    expect(best.metrics.budgetLeft).toBe(0); // clamped — spend never creates debt
+    expect(best.metrics.budgetFit).toBe(0);
+    expect(best.reasons.join(' ')).toMatch(/Over the £0 left this week/);
+  });
+
+  it('no budget means no headroom maths at all, spent or not', () => {
+    const priceTable = { chicken: 2 };
+    const small = [meal('s', 'Small roast', [{ name: 'chicken', qty: '2' }])];
+    const best = chooseOptimalPlan([small], { priceTable, budgetSpent: 12 });
+    expect(best.metrics.budgetFit).toBeNull();
+    expect(best.metrics.budgetLeft).toBeUndefined();
+  });
+
   it('can hard-fail plans needing equipment you do not own', () => {
     const airFried = [meal('fries', 'Fries', [{ name: 'Potato', qty: '3' }], { equipment: ['Air fryer'] })];
     const pan = [meal('chips', 'Chips', [{ name: 'Potato', qty: '3' }], { equipment: [] })];

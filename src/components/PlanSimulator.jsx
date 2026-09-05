@@ -24,11 +24,14 @@ export default function PlanSimulator() {
   const simulation = useMemo(() => simulatePlan(candidates, {
     pantryItems: app.pantry,
     weeklyBudget: budget,
+    // Plans compete with what the week still has, not the whole budget —
+    // derive's spentThisWeek is what the shops have already taken.
+    budgetSpent: app.spentThisWeek,
     maxTimeMins: maxTime,
     strictEquipment,
     equipmentOwned: app.equipment || [],
     today: app.day,
-  }), [candidates, app.pantry, app.equipment, app.day, budget, maxTime, strictEquipment]);
+  }), [candidates, app.pantry, app.equipment, app.day, budget, app.spentThisWeek, maxTime, strictEquipment]);
   const best = simulation.best;
 
   return (

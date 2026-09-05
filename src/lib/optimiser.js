@@ -249,7 +249,7 @@ const DEFAULT_WEIGHTS = {
 export const rankPlans = (candidates = [], context = {}) => {
   const {
     pantryItems = [], today = new Date().toISOString().slice(0, 10),
-    weeklyBudget = null, maxTimeMins = null, preferredTimeMins = null, strictEquipment = false,
+    weeklyBudget = null, budgetSpent = 0, maxTimeMins = null, preferredTimeMins = null, strictEquipment = false,
     equipmentOwned = [], packageSizes = {}, wasteScores = {},
     weights = {}, priceTable = null, people = 1, nutritionTargets = null,
     nutritionDays = 1, nutritionShare = 1, preferenceScores = {},
@@ -287,13 +287,18 @@ export const rankPlans = (candidates = [], context = {}) => {
 
     const estimatedCost = recipeCost(meals, people, priceTable, learnedAliases);
     metrics.estimatedCost = estimatedCost;
-    if (estimatedCost != null && weeklyBudget != null && weeklyBudget > 0) {
-      const est = { cost: estimatedCost };
-      const overshoot = est.cost - weeklyBudget;
-      metrics.budgetFit = clamp(100 - Math.max(0, overshoot / weeklyBudget) * 200);
-      metrics.estimatedCost = est.cost;
-      if (overshoot > 0) reasons.push(`Over budget by £${round1(overshoot)}.`);
-      else reasons.push(`Inside budget at £${round1(est.cost)}.`);
+    // The plan's cost competes with what the week has left, not the whole
+    // budget: spent already spent is gone, so the headroom subtracts it.
+    const budgetLeft = weeklyBudget != null && weeklyBudget > 0
+      ? Math.max(0, Number(weeklyBudget) - Math.max(0, Number(budgetSpent) || 0))
+      : null;
+    if (estimatedCost != null && budgetLeft != null) {
+      const overshoot = estimatedCost - budgetLeft;
+      metrics.budgetSpent = round1(Math.max(0, Number(budgetSpent) || 0));
+      metrics.budgetLeft = round1(budgetLeft);
+      metrics.budgetFit = clamp(100 - Math.max(0, overshoot / budgetLeft) * 200);
+      if (overshoot > 0) reasons.push(`Over the £${round1(budgetLeft)} left this week by £${round1(overshoot)}.`);
+      else reasons.push(`Inside budget at £${round1(estimatedCost)} with £${round1(budgetLeft - estimatedCost)} left.`);
     } else metrics.budgetFit = null;
 
     const times = meals.map((m) => Number(m?.time) || 0);
