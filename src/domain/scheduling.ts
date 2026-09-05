@@ -165,6 +165,37 @@ export const dueCards = (cards: Card[], now: Date = new Date()): Card[] =>
       a.due === b.due ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.due < b.due ? -1 : 1,
     );
 
+/** One topic's slice of the due queue. */
+export interface DueTopicGroup {
+  topicId: Id;
+  count: number;
+  /** The topic's due cards, in the queue's soonest-first order. */
+  cards: Card[];
+}
+
+/**
+ * The due queue, grouped by topic, so a session can be focused one topic at
+ * a time. Groups are ordered most-cards-first with the topic id as tiebreak —
+ * the biggest debt surfaces first and the order is stable render to render.
+ * Cards keep the queue's soonest-first order inside their group; topics with
+ * nothing due get no group at all.
+ */
+export function dueTopicGroups(cards: Card[], now: Date = new Date()): DueTopicGroup[] {
+  const byTopic = new Map<Id, Card[]>();
+  for (const card of dueCards(cards, now)) {
+    const list = byTopic.get(card.topicId);
+    if (list) list.push(card);
+    else byTopic.set(card.topicId, [card]);
+  }
+  return Array.from(byTopic.entries(), ([topicId, groupCards]) => ({
+    topicId,
+    count: groupCards.length,
+    cards: groupCards,
+  })).sort((a, b) =>
+    a.count === b.count ? (a.topicId < b.topicId ? -1 : a.topicId > b.topicId ? 1 : 0) : b.count - a.count,
+  );
+}
+
 /**
  * Grade the card with `id` and return the next deck with the graded card in
  * its place. A card that is not in the deck leaves the deck's contents
@@ -172,4 +203,36 @@ export const dueCards = (cards: Card[], now: Date = new Date()): Card[] =>
  */
 export function rateCard(cards: Card[], id: Id, rating: Rating, now: Date = new Date()): Card[] {
   return cards.map((card) => (card.id === id ? gradeReview(card, rating, now) : card));
+}
+
+// ---------------------------------------------------------------------------
+// Forecasting
+// ---------------------------------------------------------------------------
+
+/** One day of the week-ahead strip: its date key and how many cards land. */
+export interface ForecastDay {
+  date: string;
+  count: number;
+}
+
+/**
+ * How many cards come due on each of the next `days` days, starting today.
+ *
+ * Every card's interval is already on it (`due`), so the forecast just tallies
+ * the deck — no simulation, no drift from the real schedule. Overdue cards
+ * count under today: they are due now, not on the day they matured. Cards due
+ * past the window are simply not shown; the strip is a week-ahead glance, not
+ * a census.
+ */
+export function forecastDueCounts(cards: Card[], now: Date = new Date(), days = 7): ForecastDay[] {
+  const today = dayStamp(now);
+  const byDate = new Map<string, number>();
+  for (const card of cards) {
+    if (card.due <= today) byDate.set(today, (byDate.get(today) ?? 0) + 1);
+    else byDate.set(card.due, (byDate.get(card.due) ?? 0) + 1);
+  }
+  return Array.from({ length: days }, (_, i) => {
+    const date = dayStamp(new Date(now.getTime() + i * DAY_MS));
+    return { date, count: byDate.get(date) ?? 0 };
+  });
 }

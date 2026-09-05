@@ -4,6 +4,8 @@ import {
   dayStamp,
   dueAfter,
   dueCards,
+  dueTopicGroups,
+  forecastDueCounts,
   gradeReview,
   isDue,
   rateCard,
@@ -200,5 +202,67 @@ describe("the review queue helpers", () => {
   it("rateCard with a missing id changes nothing", () => {
     const deck = [card()];
     expect(rateCard(deck, "ghost", "good", NOW)).toEqual(deck);
+  });
+});
+
+describe("the week-ahead forecast", () => {
+  it("tallies cards by due day across the window, overdue under today", () => {
+    const deck = [
+      card({ id: "a", due: "2026-04-30" }), // overdue → counted today
+      card({ id: "b", due: "2026-05-01" }), // today
+      card({ id: "c", due: "2026-05-01" }), // today
+      card({ id: "d", due: "2026-05-03" }), // +2 days
+      card({ id: "e", due: "2026-09-01" }), // beyond the window
+    ];
+    const days = forecastDueCounts(deck, NOW, 7);
+    expect(days.map((d) => d.date)).toEqual([
+      "2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04",
+      "2026-05-05", "2026-05-06", "2026-05-07",
+    ]);
+    expect(days.map((d) => d.count)).toEqual([3, 0, 1, 0, 0, 0, 0]);
+  });
+
+  it("defaults to a 7-day window and is empty-safe", () => {
+    const days = forecastDueCounts([], NOW);
+    expect(days).toHaveLength(7);
+    expect(days.every((d) => d.count === 0)).toBe(true);
+    expect(days[0].date).toBe("2026-05-01");
+    expect(days[6].date).toBe("2026-05-07");
+  });
+});
+
+describe("grouping the due queue by topic", () => {
+  it("groups due cards per topic, biggest first, queue order inside", () => {
+    const deck = [
+      card({ id: "a", topicId: "membranes", due: "2026-04-30" }),
+      card({ id: "b", topicId: "enzymes", due: "2026-05-01" }),
+      card({ id: "c", topicId: "membranes", due: "2026-05-01" }),
+      card({ id: "d", topicId: "membranes", due: "2026-05-01" }),
+      card({ id: "e", topicId: "enzymes", due: "2026-06-01" }), // not due
+    ];
+    const groups = dueTopicGroups(deck, NOW);
+    expect(groups.map((g) => [g.topicId, g.count])).toEqual([
+      ["membranes", 3],
+      ["enzymes", 1],
+    ]);
+    expect(groups[0].cards.map((c) => c.id)).toEqual(["a", "c", "d"]); // soonest first
+  });
+
+  it("breaks count ties by topic id and skips topics with nothing due", () => {
+    const deck = [
+      card({ id: "a", topicId: "zebra", due: "2026-05-01" }),
+      card({ id: "b", topicId: "alpha", due: "2026-04-30" }),
+      card({ id: "c", topicId: "empty", due: "2026-09-01" }),
+    ];
+    const groups = dueTopicGroups(deck, NOW);
+    expect(groups.map((g) => g.topicId)).toEqual(["alpha", "zebra"]);
+  });
+
+  it("is empty-safe and never mutates the deck", () => {
+    expect(dueTopicGroups([], NOW)).toEqual([]);
+    const deck = [card({ topicId: "t", due: "2026-05-01" })];
+    dueTopicGroups(deck, NOW);
+    expect(deck).toHaveLength(1);
+    expect(deck[0].reps).toBe(0);
   });
 });

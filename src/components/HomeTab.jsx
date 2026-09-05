@@ -27,6 +27,7 @@ import LoopCheck from './LoopCheck.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
 import KitchenAdventure from './KitchenAdventure.jsx';
 import MilestonesCard from './MilestonesCard.jsx';
+import KitchenSeedStrip from './KitchenSeedStrip.jsx';
 
 /** Capture routes that open straight into the diary's matching sheet. */
 const LOG_SHORTCUTS = [
@@ -451,6 +452,8 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           </Card>
         </section>
       )}
+
+      <KitchenSeedStrip goTab={goTab} />
 
       <div className="px-5"><MilestonesCard /></div>
 

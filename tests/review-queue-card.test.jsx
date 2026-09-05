@@ -313,6 +313,44 @@ describe('the flashcard review queue on Learn', () => {
     expect(await screen.findByText('Flashcard review')).toBeDefined(); // the strip leads into the queue
   });
 
+  it('offers the kitchen deck on Today when a returning user has no cards', async () => {
+    cleanup();
+    // The strip counts against the real clock, so the activity must be
+    // clock-relative: a shop this week and a pantry item expiring soon.
+    const iso = (d) => new Date(d).toISOString().slice(0, 10);
+    const inWeek = iso(Date.now() - 2 * 86_400_000);
+    const soon = iso(Date.now() + 3 * 86_400_000);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded, cards: [],
+      shops: [{ id: 's1', date: inWeek, store: 'Co-op', total: 12.4, items: [{ name: 'Milk' }] }],
+      pantry: [{ id: 'p1', name: 'Salmon', expiry: soon }],
+    }));
+    render(<App />);
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+
+    const strip = await screen.findByLabelText('Start a deck from your kitchen');
+    expect(within(strip).getByText(/3 questions from what you buy/)).toBeDefined();
+
+    // One tap builds the deck right there — no trip to Learn first.
+    fireEvent.click(within(strip).getByText('Start a deck from your kitchen'));
+    expect(await screen.findByText('Deck started')).toBeDefined();
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.cards).toHaveLength(3);
+    expect(stored.cards.every((c) => c.origin === 'auto')).toBe(true);
+
+    // The confirmation leads into the review queue.
+    fireEvent.click(screen.getByText('Review'));
+    expect(await screen.findByText('Flashcard review')).toBeDefined();
+  });
+
+  it('the kitchen-seed strip stays off the dashboard once a deck exists', async () => {
+    cleanup();
+    render(<App />); // seeded deck: 3 cards, nothing to seed
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+    expect(await screen.findByRole('button', { name: 'Rearrange' })).toBeDefined();
+    expect(screen.queryByLabelText('Start a deck from your kitchen')).toBeNull();
+  });
+
   it('stays quiet on Today when nothing is due', async () => {
     cleanup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
