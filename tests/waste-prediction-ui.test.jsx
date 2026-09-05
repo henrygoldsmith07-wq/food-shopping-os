@@ -73,4 +73,20 @@ describe('the likely-to-go-unused block on the pantry card', () => {
     expect(onPlanItem).toHaveBeenCalledTimes(1);
     expect(onPlanItem).toHaveBeenCalledWith('Spinach');
   });
+
+  it('a row also offers tonight, carrying the intent to the planner', () => {
+    const onPlanItem = vi.fn();
+    render(
+      <AppProvider>
+        <PantryIntelligenceCard onPlanItem={onPlanItem} />
+      </AppProvider>,
+    );
+    // The second affordance skips the generator and asks for tonight's slot,
+    // so the intent reaches the planner alongside the item.
+    fireEvent.click(screen.getByRole('button', { name: 'Cook Spinach tonight' }));
+    expect(onPlanItem).toHaveBeenCalledTimes(1);
+    expect(onPlanItem).toHaveBeenCalledWith('Spinach', 'tonight');
+    // The week-plan affordance is untouched beside it.
+    expect(screen.getByRole('button', { name: 'Plan a meal using Spinach' })).toBeDefined();
+  });
 });

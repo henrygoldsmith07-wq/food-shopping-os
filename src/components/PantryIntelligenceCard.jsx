@@ -54,6 +54,12 @@ export default function PantryIntelligenceCard({ onPlanItem } = {}) {
                 // The row's advice is "plan a meal using this item" — with a
                 // planner in reach it becomes the action: a tap hands the item
                 // over so the generator can favour dishes that use it.
+                const key = `${row.key}-${row.date || 'pack'}`;
+                // A tap hands the item to the week planner, which favours
+                // dishes that use it; when a planner is in reach a second
+                // affordance skips the generator and opens tonight's picker
+                // with the item already searched, for the user who just wants
+                // dinner sorted.
                 const inner = (
                   <>
                     <span className="min-w-0 truncate">{row.name} · {row.qty}</span>
@@ -62,24 +68,36 @@ export default function PantryIntelligenceCard({ onPlanItem } = {}) {
                     </span>
                   </>
                 );
-                return onPlanItem
-                  ? (
-                    <button
-                      key={`${row.key}-${row.date || 'pack'}`}
-                      type="button"
-                      onClick={() => onPlanItem(row.name)}
-                      aria-label={`Plan a meal using ${row.name}`}
-                      className="press flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left text-[0.75rem] font-bold"
-                      style={{ borderColor: 'var(--line)' }}
-                    >
-                      {inner}
-                    </button>
-                  )
-                  : (
-                    <div key={`${row.key}-${row.date || 'pack'}`} className="flex items-center justify-between gap-2 text-[0.75rem] font-bold">
+                if (!onPlanItem) {
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-2 text-[0.75rem] font-bold">
                       {inner}
                     </div>
                   );
+                }
+                return (
+                  <div key={key} className="press flex items-stretch overflow-hidden rounded-xl border" style={{ borderColor: 'var(--line)' }}>
+                    <button
+                      type="button"
+                      onClick={() => onPlanItem(row.name)}
+                      aria-label={`Plan a meal using ${row.name}`}
+                      className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-2 text-left text-[0.75rem] font-bold"
+                    >
+                      {inner}
+                    </button>
+                    <div className="w-px shrink-0 self-stretch" style={{ background: 'var(--line)' }} />
+                    <button
+                      type="button"
+                      onClick={() => onPlanItem(row.name, 'tonight')}
+                      aria-label={`Cook ${row.name} tonight`}
+                      title={`Cook ${row.name} tonight`}
+                      className="press px-2.5 text-[0.75rem] font-extrabold"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      Tonight
+                    </button>
+                  </div>
+                );
               })}
             </div>
             <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--accent)' }}>{predictedWaste[0].action}</p>

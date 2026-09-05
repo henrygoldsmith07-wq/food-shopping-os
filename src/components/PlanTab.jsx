@@ -32,9 +32,9 @@ const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-G
  * a breakfast slot — filtered by everyone's dietary patterns, favourites first,
  * with what's in season and what your pantry covers called out.
  */
-function RecipePicker({ slot, onPick, onClear, hasMeal }) {
+function RecipePicker({ slot, onPick, onClear, hasMeal, initialQuery = '' }) {
   const app = useApp();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [anyMeal, setAnyMeal] = useState(false);
   const [inSeason, setInSeason] = useState(false);
   const month = monthOf(app.day);
@@ -111,11 +111,11 @@ function RecipePicker({ slot, onPick, onClear, hasMeal }) {
     </div>
   );
 }
-export default function PlanTab({ openRecipe, goTab, focusDate, focusItem }) {
+export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonightItem }) {
   const app = useApp();
   const [view, setView] = useState('week');
   const [offset, setOffset] = useState(0); // weeks or months from today
-  const [picking, setPicking] = useState(null); // {date, slot}
+  const [picking, setPicking] = useState(null); // {date, slot, query?}
   const [openDay, setOpenDay] = useState(null); // month view → a day's slots
   const [moving, setMoving] = useState(null); // meal picked up by tap
   const [dragging, setDragging] = useState(null); // meal picked up by drag
@@ -123,7 +123,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem }) {
   const [addedToList, setAddedToList] = useState(false);
   const [calendarStatus, setCalendarStatus] = useState('');
   const [prepDone, setPrepDone] = useState([]);
-  useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); } }, [focusDate, focusItem, app.day]);
+  useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); }
+    if (tonightItem) { setView('week'); setOffset(0); setPicking({ date: app.day, slot: 'dinner', query: tonightItem }); } }, [focusDate, focusItem, tonightItem, app.day]);
 
   const anchorWeek = shiftWeek(app.day, offset);
   const anchorMonth = shiftMonth(app.day, offset);
@@ -452,9 +453,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem }) {
       <Sheet open={!!picking} onClose={() => setPicking(null)} title="Plan a meal">
         {picking && (
           <RecipePicker
-            slot={picking.slot}
-            hasMeal={!!(app.plan[picking.date] || {})[picking.slot]}
-            onPick={(id) => { app.setPlanSlot(picking.date, picking.slot, id); setPicking(null); setAddedToList(false); }}
+            slot={picking.slot} initialQuery={picking.query || ''}
+            hasMeal={!!(app.plan[picking.date] || {})[picking.slot]} onPick={(id) => { app.setPlanSlot(picking.date, picking.slot, id); setPicking(null); setAddedToList(false); }}
             onClear={() => { app.setPlanSlot(picking.date, picking.slot, null); setPicking(null); }}
           />
         )}

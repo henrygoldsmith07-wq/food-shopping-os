@@ -87,3 +87,42 @@ describe('the prediction block in the app shell', () => {
     expect(within(sheet).getByText(/1 ingredient may go unused/)).toBeDefined();
   });
 });
+
+describe('the prediction row can open tonight\'s picker', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    seedReturningUser();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('skips the generator and opens tonight\'s dinner picker pre-searched on the item', async () => {
+    render(<App />);
+    // Returning users land on the list; the basket opens the same sheet.
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    const sheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Cook Spinach tonight' }));
+
+    // The planner opened on tonight's picker, not the generator.
+    const nav = document.querySelector('nav[aria-label="Main navigation"]');
+    expect(within(nav).getByRole('button', { name: 'Plan' }).getAttribute('aria-current')).toBe('page');
+    const dialog = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Plan a meal');
+    expect(dialog).toBeDefined();
+    expect(screen.queryByText('Close generator')).toBeNull();
+
+    // The ingredient arrived pre-searched: only spinach dishes are listed.
+    const search = within(dialog).getByLabelText('Search recipes');
+    expect(search.value).toBe('Spinach');
+    const dish = within(dialog).getByRole('button', { name: /Coconut Chickpea Curry/ });
+    fireEvent.click(dish);
+
+    // Picking put it in tonight's dinner slot and closed the sheet.
+    await waitFor(() => expect(within(dialog).queryByText('Coconut Chickpea Curry')).toBeNull());
+    expect(screen.getAllByText('Coconut Chickpea Curry').length).toBeGreaterThan(0);
+  });
+});

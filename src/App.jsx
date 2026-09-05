@@ -190,6 +190,7 @@ function Shell() {
   const [pantryQuery, setPantryQuery] = useState('');
   const [planFocus, setPlanFocus] = useState(null);
   const [planItem, setPlanItem] = useState(null); // a pantry item the planner should favour
+  const [tonightItem, setTonightItem] = useState(null); // a pantry item → tonight's dinner picker
   const noticeTimer = useRef(null);
   const completedGoals = useRef(null);
   const analyticsOpened = useRef(false);
@@ -311,7 +312,7 @@ function Shell() {
      it had to learn where it went. */
   const goTab = (id, context = null) => {
     if (id === 'profile') return setProfileOpen(true);
-    if (id === 'plan') { setPlanFocus(context?.date || null); setPlanItem(context?.item || null); }
+    if (id === 'plan') { setPlanFocus(context?.date || null); setPlanItem(context?.tonight ? null : (context?.item || null)); setTonightItem(context?.tonight && context?.item ? context.item : null); }
     setTab(id);
     recordProductEvent('screen_viewed', { screen: id });
     window.scrollTo({ top: 0 });
@@ -361,7 +362,7 @@ function Shell() {
             />
           )}
           <Suspense fallback={<ScreenFallback />}>
-            {activeTab === 'plan' && <PlanTab openRecipe={openRecipe} goTab={goTab} focusDate={planFocus} focusItem={planItem} />}
+            {activeTab === 'plan' && <PlanTab openRecipe={openRecipe} goTab={goTab} focusDate={planFocus} focusItem={planItem} tonightItem={tonightItem} />}
             {activeTab === 'cook' && <CookTab openRecipe={openRecipe} goTab={goTab} />}
             {activeTab === 'learn' && (
               <LearnTab
@@ -429,11 +430,10 @@ function Shell() {
           <PantryView
             quickAddKey={pantryAdd}
             initialQuery={pantryQuery}
-            onPlan={(item) => {
-              setPantryOpen(false);
-              setPantryQuery('');
-              // A prediction row passes its item (a string); header clicks pass an event.
-              goTab('plan', typeof item === 'string' && item ? { item } : null);
+            onPlan={(item, intent) => {
+              setPantryOpen(false); setPantryQuery('');
+              // Rows pass the item (a string) + intent; header clicks pass an event.
+              goTab('plan', typeof item === 'string' && item ? { item, tonight: intent === 'tonight' } : null);
             }}
           />
         </Suspense>
