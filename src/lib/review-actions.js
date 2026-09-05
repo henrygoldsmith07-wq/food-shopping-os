@@ -15,6 +15,23 @@ import { uid } from './state.js';
 
 const RATINGS = new Set(['again', 'hard', 'good', 'easy']);
 
+/** Apply a seed plan to a deck: stale auto answers patch in place (reason
+ * included), new candidates become fresh cards. Shared by the explicit seed
+ * and the boot auto-refresh so both write the deck exactly the same way.
+ * `liftForget` is true only for an explicit re-seed — the opt-out is a
+ * person's choice, never a background side effect. */
+const applySeedPlan = (s, now, plan, liftForget) => {
+  if (!plan.additions.length && !plan.updates.length) return {}; // nothing to do — not a failure
+  const patches = new Map(plan.updates.map((u) => [u.id, u]));
+  return {
+    cards: [
+      ...(Array.isArray(s.cards) ? s.cards : []).map((c) => (patches.has(c.id) ? { ...c, ...patches.get(c.id) } : c)),
+      ...plan.additions.map(({ seedKey, ...draft }) => createCard({ ...draft, id: uid('c') }, now)),
+    ],
+    ...(liftForget ? { kitchenCardsForgotten: false } : {}),
+  };
+};
+
 export const reviewActions = (set, latest) => {
   const reviewCard = (id, rating, now = new Date()) =>
     set((s) => {
@@ -87,20 +104,36 @@ export const reviewActions = (set, latest) => {
      * a card whose question is already in the deck is never added twice.
      */
     seedCardsFromActivity: (now = new Date()) =>
+      set((s) =>
+        applySeedPlan(
+          s,
+          now,
+          planSeedMerge(
+            kitchenCardCandidates(s, now, recipeNameOf(s)),
+            Array.isArray(s.cards) ? s.cards : [],
+          ),
+          true,
+        ),
+      ),
+    /**
+     * Keep an adopted kitchen deck current without the tap: opening the app
+     * with a deck that already holds kitchen cards refreshes its stale auto
+     * answers and admits newly supported templates — the same merge the
+     * Refresh button runs, on its own. Gated so a boot write never creates a
+     * deck from nothing (only decks that adopted kitchen cards), and never
+     * resurrects one (the forget opt-out is honoured, not lifted).
+     */
+    autoRefreshSeededCards: (now = new Date()) =>
       set((s) => {
+        if (s.kitchenCardsForgotten) return {};
         const deck = Array.isArray(s.cards) ? s.cards : [];
-        const plan = planSeedMerge(kitchenCardCandidates(s, now, recipeNameOf(s)), deck);
-        if (!plan.additions.length && !plan.updates.length) return {}; // nothing to do — not a failure
-        const updateById = new Map(plan.updates.map((u) => [u.id, u.back]));
-        return {
-          cards: [
-            // Stale auto answers refresh in place — schedule and history stay.
-            ...deck.map((c) => (updateById.has(c.id) ? { ...c, back: updateById.get(c.id) } : c)),
-            ...plan.additions.map(({ seedKey, ...draft }) => createCard({ ...draft, id: uid('c') }, now)),
-          ],
-          // An explicit re-seed lifts the forget opt-out.
-          kitchenCardsForgotten: false,
-        };
+        if (!deck.some((c) => c.origin === 'auto')) return {};
+        return applySeedPlan(
+          s,
+          now,
+          planSeedMerge(kitchenCardCandidates(s, now, recipeNameOf(s)), deck),
+          false,
+        );
       }),
     /**
      * Clear every kitchen-seeded card at once — for users who simply don't

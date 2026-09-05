@@ -383,3 +383,92 @@ describe('the refresh preview (what a seed run would change)', () => {
     }]);
   });
 });
+
+describe('the boot auto-refresh of adopted kitchen decks', () => {
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  const autoCard = {
+    id: 'c-auto', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+    front: 'Which food did you buy most of this week?', back: 'Milk — on 2 trips',
+    origin: 'auto', reps: 2, lapses: 0, ease: 2.5, intervalDays: 4, due: '2026-08-01',
+    createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: '2026-07-24T00:00:00Z',
+  };
+  const handmade = {
+    id: 'c-hand', userId: 'local', subjectId: 'manual', topicId: 'general',
+    front: 'My own?', back: 'My note.', origin: 'handmade',
+    reps: 1, lapses: 0, ease: 2.5, intervalDays: 2, due: '2026-08-02',
+    createdAt: '2026-07-21T00:00:00Z', lastReviewedAt: '2026-07-28T00:00:00Z',
+  };
+
+  const runAuto = (over) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded, ...over,
+      shops: over.shops || [{ id: 's1', date: DAY, store: 'Co-op', items: [{ name: 'Bread' }] }],
+    }));
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return (
+            <div>
+              <button onClick={() => app.autoRefreshSeededCards(NOW)}>auto</button>
+              <span data-testid="deck">{app.cards.length}</span>
+              <span data-testid="seedable">{app.kitchenSeedCount(NOW)}</span>
+            </div>
+          );
+        }} />
+      </AppProvider>,
+    );
+    fireEvent.click(screen.getByText('auto'));
+    return snap;
+  };
+
+  it('patches a stale auto answer in place, leaving the schedule and handmade cards alone', () => {
+    cleanup();
+    const snap = runAuto({ cards: [autoCard, handmade] });
+    expect(screen.getByTestId('deck').textContent).toBe('2'); // no duplicate
+    expect(screen.getByTestId('seedable').textContent).toBe('0'); // nothing left to refresh
+    const auto = snap.cards.find((c) => c.id === 'c-auto');
+    expect(auto.back).toBe('Bread'); // the week's most-bought changed
+    expect(auto).toMatchObject({ reps: 2, intervalDays: 4, due: '2026-08-01', origin: 'auto' });
+    expect(snap.cards.find((c) => c.id === 'c-hand')).toMatchObject({ front: 'My own?', back: 'My note.' });
+  });
+
+  it('admits a newly supported template into a deck that adopted kitchen cards', () => {
+    cleanup();
+    const snap = runAuto({
+      cards: [autoCard],
+      shops: [],
+      myRecipes: [{ id: 'r1', name: 'Pasta with tomato sauce' }],
+      mealPlanEvents: [{ id: 'mpe1', date: '2026-07-27', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'no-time' }],
+    });
+    expect(screen.getByTestId('deck').textContent).toBe('2');
+    expect(snap.cards.some((c) => c.front === 'Which planned meal did you skip this week?'
+      && c.back === 'Pasta with tomato sauce — 2026-07-27' && c.origin === 'auto')).toBe(true);
+  });
+
+  it('never creates a deck from nothing', () => {
+    cleanup();
+    const snap = runAuto({ cards: [] });
+    expect(snap.cards).toHaveLength(0);
+  });
+
+  it('leaves a purely handmade deck alone', () => {
+    cleanup();
+    const snap = runAuto({ cards: [handmade] });
+    expect(snap.cards).toHaveLength(1);
+    expect(snap.cards[0]).toMatchObject({ front: 'My own?', back: 'My note.' });
+  });
+
+  it('honours the forget opt-out: no refresh, no resurrection', () => {
+    cleanup();
+    const snap = runAuto({ cards: [autoCard], kitchenCardsForgotten: true });
+    const auto = snap.cards.find((c) => c.id === 'c-auto');
+    expect(auto.back).toBe('Milk — on 2 trips'); // untouched
+    expect(snap.kitchenCardsForgotten).toBe(true);
+  });
+});
