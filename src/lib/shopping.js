@@ -156,11 +156,17 @@ export const refile = (items = [], memory = {}) =>
 
 /**
  * The order to walk the aisles in: the route you actually took last time you
- * shopped here, then anything new, in the standard order.
+ * shopped here, then anything new, in the standard order. Old or hand-edited
+ * route data is de-duplicated here so one bad save cannot create a repeated
+ * aisle stop.
  */
 export const routeFor = (store, routes = {}) => {
-  const learned = routes[store] || [];
-  return [...learned, ...AISLE_ORDER.filter((a) => !learned.includes(a))];
+  const learned = Array.isArray(routes?.[store]) ? routes[store] : [];
+  const seen = new Set();
+  const clean = learned
+    .map((aisle) => String(aisle || '').trim())
+    .filter((aisle) => aisle && !seen.has(aisle) && (seen.add(aisle), true));
+  return [...clean, ...AISLE_ORDER.filter((aisle) => !seen.has(aisle))];
 };
 
 /** Group a list by aisle, in the route order for the store you're going to. */
