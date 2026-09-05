@@ -64,6 +64,7 @@ import { weeklyFoodLoop } from './food-loop.js';
 import { loopHealth } from './loop-learning.js';
 import { pantryIntelligenceSummary } from './pantry-summary.js';
 import { learnHouseholdPreferences, preferenceSummary } from './household-preferences.js';
+import { predictUnusedIngredients } from './waste-prediction.js';
 import { predictionCalibration, predictionLearningProfile } from './prediction-feedback.js';
 
 export const deriveApp = (state) => {
@@ -135,6 +136,15 @@ export const deriveApp = (state) => {
     today: state.day,
   });
   const wasteProfile = learnWasteProfile(state.waste, { learnedAliases: state.aliasMemory });
+  const wastePrediction = predictUnusedIngredients({
+    pantry: state.pantry,
+    plan: state.plan,
+    dates: planningDates,
+    recipes: recipeBook,
+    today: state.day,
+    wasteProfile,
+    learnedAliases: state.aliasMemory,
+  });
   const pantrySummary = pantryIntelligenceSummary({
     pantry: state.pantry,
     shoppingList: state.shoppingList,
@@ -207,6 +217,7 @@ export const deriveApp = (state) => {
     learnedHouseholdPreferences,
     preferenceSummary: preferenceSummary(learnedHouseholdPreferences),
     wasteProfile,
+    wastePrediction,
     predictionLearning,
     predictionCalibration: predictionCalibrationReport,
     body_: bodySummary(state, state.day),

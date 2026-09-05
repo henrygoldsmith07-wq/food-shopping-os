@@ -1,5 +1,5 @@
 import { useApp } from '../lib/store.jsx';
-import { Card, Section } from './ui.jsx';
+import { Card, Pill, Section } from './ui.jsx';
 
 /**
  * The pantry's explainable position: what to use first, what needs buying, and
@@ -14,6 +14,8 @@ export default function PantryIntelligenceCard() {
   const useFirst = intelligence.useFirst || [];
   const buyingNeeds = intelligence.needsBuying || [];
   const pantryRestockNeeds = buyingNeeds.filter((row) => row.source === 'pantry');
+  const wastePrediction = app.wastePrediction || {};
+  const predictedWaste = wastePrediction.items || [];
 
   return (
     <Section title="Pantry intelligence" className="!px-0" aria-label="Pantry intelligence">
@@ -36,6 +38,26 @@ export default function PantryIntelligenceCard() {
             <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
               {useFirst.slice(0, 4).map((row) => row.item.name).join(' · ')}{useFirst.length > 4 ? ' · …' : ''}
             </p>
+          </div>
+        )}
+        {predictedWaste.length > 0 && (
+          <div className="border-t pt-3 space-y-2" style={{ borderColor: 'var(--line)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[0.71875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>Likely to go unused</p>
+              <Pill tone={wastePrediction.highRisk > 0 ? 'warn' : 'muted'}>{predictedWaste.length}</Pill>
+            </div>
+            <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>{wastePrediction.summary}</p>
+            <div className="space-y-1">
+              {predictedWaste.slice(0, 3).map((row) => (
+                <div key={`${row.key}-${row.date || 'pack'}`} className="flex items-center justify-between gap-2 text-[0.75rem] font-bold">
+                  <span className="min-w-0 truncate">{row.name} · {row.qty}</span>
+                  <span className="shrink-0" style={{ color: row.likelihood === 'high' ? 'var(--warn)' : 'var(--muted)' }}>
+                    {row.likelihood === 'high' ? 'High risk' : 'Watch'}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--accent)' }}>{predictedWaste[0].action}</p>
           </div>
         )}
         {buyingNeeds.length > 0 && (
