@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AppProvider } from '../src/lib/store.jsx';
 import { STORAGE_KEY } from '../src/lib/state.js';
 import PantryIntelligenceCard from '../src/components/PantryIntelligenceCard.jsx';
@@ -59,5 +59,18 @@ describe('the likely-to-go-unused block on the pantry card', () => {
     renderCard();
     expect(screen.getByText('Pantry intelligence')).toBeDefined(); // the card itself is there
     expect(screen.queryByText('Likely to go unused')).toBeNull();
+  });
+
+  it('a tap on a risk row hands the item to the planner', () => {
+    const onPlanItem = vi.fn();
+    render(
+      <AppProvider>
+        <PantryIntelligenceCard onPlanItem={onPlanItem} />
+      </AppProvider>,
+    );
+    // Each row is its own action: plan a meal around that exact item.
+    fireEvent.click(screen.getByRole('button', { name: 'Plan a meal using Spinach' }));
+    expect(onPlanItem).toHaveBeenCalledTimes(1);
+    expect(onPlanItem).toHaveBeenCalledWith('Spinach');
   });
 });

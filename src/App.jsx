@@ -189,6 +189,7 @@ function Shell() {
   const [pantryAdd, setPantryAdd] = useState(0);
   const [pantryQuery, setPantryQuery] = useState('');
   const [planFocus, setPlanFocus] = useState(null);
+  const [planItem, setPlanItem] = useState(null); // a pantry item the planner should favour
   const noticeTimer = useRef(null);
   const completedGoals = useRef(null);
   const analyticsOpened = useRef(false);
@@ -310,7 +311,7 @@ function Shell() {
      it had to learn where it went. */
   const goTab = (id, context = null) => {
     if (id === 'profile') return setProfileOpen(true);
-    setPlanFocus(id === 'plan' ? context?.date || null : null);
+    if (id === 'plan') { setPlanFocus(context?.date || null); setPlanItem(context?.item || null); }
     setTab(id);
     recordProductEvent('screen_viewed', { screen: id });
     window.scrollTo({ top: 0 });
@@ -331,8 +332,6 @@ function Shell() {
           Offline mode — your changes stay on this device and will sync when you reconnect.
         </div>
       )}
-
-      <DemoBanner />
 
       <div className="app-workspace">
         <AppHeader
@@ -362,7 +361,7 @@ function Shell() {
             />
           )}
           <Suspense fallback={<ScreenFallback />}>
-            {activeTab === 'plan' && <PlanTab openRecipe={openRecipe} goTab={goTab} focusDate={planFocus} />}
+            {activeTab === 'plan' && <PlanTab openRecipe={openRecipe} goTab={goTab} focusDate={planFocus} focusItem={planItem} />}
             {activeTab === 'cook' && <CookTab openRecipe={openRecipe} goTab={goTab} />}
             {activeTab === 'learn' && (
               <LearnTab
@@ -430,10 +429,11 @@ function Shell() {
           <PantryView
             quickAddKey={pantryAdd}
             initialQuery={pantryQuery}
-            onPlan={() => {
+            onPlan={(item) => {
               setPantryOpen(false);
               setPantryQuery('');
-              goTab('plan');
+              // A prediction row passes its item (a string); header clicks pass an event.
+              goTab('plan', typeof item === 'string' && item ? { item } : null);
             }}
           />
         </Suspense>

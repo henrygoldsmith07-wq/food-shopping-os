@@ -136,7 +136,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
         ))}
       </div>
 
-      {!empty && <PantryIntelligenceCard />}
+      {!empty && <PantryIntelligenceCard onPlanItem={onPlan} />}
 
       <div className="grid grid-cols-2 gap-2.5">
         <button

@@ -111,7 +111,7 @@ function RecipePicker({ slot, onPick, onClear, hasMeal }) {
     </div>
   );
 }
-export default function PlanTab({ openRecipe, goTab, focusDate }) {
+export default function PlanTab({ openRecipe, goTab, focusDate, focusItem }) {
   const app = useApp();
   const [view, setView] = useState('week');
   const [offset, setOffset] = useState(0); // weeks or months from today
@@ -123,7 +123,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
   const [addedToList, setAddedToList] = useState(false);
   const [calendarStatus, setCalendarStatus] = useState('');
   const [prepDone, setPrepDone] = useState([]);
-  useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } }, [focusDate, app.day]);
+  useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); } }, [focusDate, focusItem, app.day]);
 
   const anchorWeek = shiftWeek(app.day, offset);
   const anchorMonth = shiftMonth(app.day, offset);
@@ -445,7 +445,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate }) {
             monthDates={month}
             openRecipe={openRecipe}
             goTab={goTab}
-            onApplied={() => { setShowGenerator(false); setAddedToList(false); }}
+            onApplied={() => { setShowGenerator(false); setAddedToList(false); }} focusItems={focusItem ? [focusItem] : []}
           />
         </Section>
       )}

@@ -25,7 +25,7 @@ const SCOPES = ['1 meal', 'A day', 'A week', 'A month'];
  * lean towards what you already have and what's at its best right now. Applying
  * it writes real dates into the plan.
  */
-export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApplied, goTab }) {
+export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApplied, goTab, focusItems = [] }) {
   const app = useApp();
   const [scope, setScope] = useState('A week');
   const [people, setPeople] = useState(Math.max(1, Math.round(app.portions)));
@@ -57,9 +57,14 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const weeklyBudget = headroomScope ? Number(app.weeklyBudget) : null;
   const budgetSpent = headroomScope ? Number(app.spentThisWeek) || 0 : 0;
   const pantryNames = app.pantry.map((p) => p.name);
-  const expiringNames = (app.useSoonIngredients?.length
-    ? app.useSoonIngredients.map((row) => row.item.name)
-    : expiringSoon(app.pantry, 3, app.day).map((p) => p.name));
+  const focusList = (Array.isArray(focusItems) ? focusItems : focusItems ? [focusItems] : []).map((n) => String(n || '').trim()).filter(Boolean);
+  // A prediction tap's item joins the use-soon list so the generator favours it.
+  const expiringNames = [...new Set([
+    ...(app.useSoonIngredients?.length
+      ? app.useSoonIngredients.map((row) => row.item.name)
+      : expiringSoon(app.pantry, 3, app.day).map((p) => p.name)),
+    ...focusList,
+  ])];
   const ownRecipeIds = new Set(app.myRecipes.map((recipe) => recipe.id));
   const ownCandidates = app.safeRecipes.filter((recipe) => ownRecipeIds.has(recipe.id)).length;
   const recipeKey = app.safeRecipes.map((recipe) => recipe.id).join(',');
@@ -113,7 +118,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
     );
     // pantryNames is rebuilt every render; its content is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent]);
+  }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent, focusList.join(',')]);
 
   const generated = plan?.meals ?? null;
 
