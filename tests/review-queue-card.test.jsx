@@ -247,6 +247,34 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.getByRole('button', { name: 'Rate Easy — too easy' })).toBeDefined();
   });
 
+  it('previews what a refresh changes and applies only on confirm', () => {
+    cleanup();
+    const staleAuto = {
+      id: 'c-auto', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+      front: 'Which food did you buy most of this week?', back: 'Milk — on 2 trips',
+      origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+      createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [staleAuto],
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', items: [{ name: 'Bread' }] }],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 1 kitchen card' }));
+    // The preview names the change before anything is written.
+    expect(screen.getByText('What refreshing would change')).toBeDefined();
+    expect(document.body.textContent).toMatch(/Milk — on 2 trips.*→.*Bread/);
+    expect(storedDeck()[0].back).toBe('Milk — on 2 trips'); // untouched while previewing
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel refresh' }));
+    expect(storedDeck()[0].back).toBe('Milk — on 2 trips');
+    // Reopening and confirming applies the refresh.
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 1 kitchen card' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply refresh changes' }));
+    expect(storedDeck()[0].back).toBe('Bread');
+    expect(screen.queryByRole('button', { name: /Refresh \d kitchen card/ })).toBeNull();
+  });
+
   it('grades through the store and advances the queue', () => {
     renderCard();
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));

@@ -323,3 +323,63 @@ describe('the review queue through the store', () => {
     });
   });
 });
+describe('the refresh preview (what a seed run would change)', () => {
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  const staleAuto = {
+    id: 'c-auto', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+    front: 'Which food did you buy most of this week?', back: 'Milk — on 2 trips',
+    origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+    createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+  };
+
+  const previewOf = (over) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, ...over }));
+    let preview;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          preview = app.kitchenSeedPreview(NOW);
+          return null;
+        }} />
+      </AppProvider>,
+    );
+    return preview;
+  };
+
+  it('reports stale answers as old → new pairs, and writes nothing', () => {
+    cleanup();
+    const preview = previewOf({
+      cards: [staleAuto],
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', items: [{ name: 'Bread' }] }], // Bread is the most-bought now
+    });
+    expect(preview.total).toBe(1);
+    expect(preview.additions).toEqual([]);
+    expect(preview.updates).toEqual([{
+      front: 'Which food did you buy most of this week?',
+      oldBack: 'Milk — on 2 trips',
+      newBack: 'Bread',
+    }]);
+    // A preview is a read: the stored deck is untouched.
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).cards[0].back).toBe('Milk — on 2 trips');
+  });
+
+  it('lists new questions separately from stale-answer refreshes', () => {
+    cleanup();
+    const preview = previewOf({
+      cards: [staleAuto],
+      shops: [],
+      myRecipes: [{ id: 'r1', name: 'Pasta with tomato sauce' }],
+      mealPlanEvents: [{ id: 'mpe1', date: '2026-07-27', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'no-time' }],
+    });
+    expect(preview.total).toBe(1);
+    expect(preview.updates).toEqual([]);
+    expect(preview.additions).toEqual([{
+      front: 'Which planned meal did you skip this week?',
+      topicId: 'cooking',
+    }]);
+  });
+});

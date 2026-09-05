@@ -34,6 +34,11 @@ export default function ReviewQueueCard({ now = new Date() }) {
   // count either way, so the rest of the debt stays visible and honest.
   const topicGroups = useMemo(() => dueTopicGroups(deck, now), [deck, now]);
   const [focusedTopic, setFocusedTopic] = useState(null);
+  // What a refresh would change, shown before it is applied — stale answers
+  // as old → new plus any new questions — so the tap confirms rather than
+  // surprises.
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPlan, setPreviewPlan] = useState(null);
   const queue = useMemo(
     () => (focusedTopic ? allQueue.filter((c) => c.topicId === focusedTopic) : allQueue),
     [allQueue, focusedTopic],
@@ -54,6 +59,11 @@ export default function ReviewQueueCard({ now = new Date() }) {
     // A focused topic's last card just left the queue — fall back to All so
     // the session continues into the next topic instead of hitting a wall.
     if (focusedTopic && queue.length <= 1) setFocusedTopic(null);
+  };
+
+  const openRefreshPreview = () => {
+    setPreviewPlan(app.kitchenSeedPreview(now));
+    setPreviewOpen(true);
   };
 
   const startRetag = () => {
@@ -177,6 +187,55 @@ export default function ReviewQueueCard({ now = new Date() }) {
             </div>
           </div>
         )}
+        {previewOpen && previewPlan && (
+          <div className="mb-3 rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+            <p className="text-[0.78125rem] font-bold">What refreshing would change</p>
+            {previewPlan.total === 0 ? (
+              <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Everything is already current — nothing to refresh.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {previewPlan.updates.map((u) => (
+                  <li key={u.front} className="text-[0.6875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
+                    <span className="font-extrabold" style={{ color: 'var(--ink)' }}>{u.front}</span>
+                    <span className="block">{u.oldBack} <span aria-hidden="true" style={{ color: 'var(--faint)' }}>→</span> {u.newBack}</span>
+                  </li>
+                ))}
+                {previewPlan.additions.map((a) => (
+                  <li key={a.front} className="text-[0.6875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
+                    <span className="font-extrabold" style={{ color: 'var(--ink)' }}>New question</span>
+                    <span className="block">{a.front}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2.5 flex items-center gap-3">
+              <button
+                type="button"
+                aria-label="Apply refresh changes"
+                onClick={() => {
+                  app.seedCardsFromActivity(now);
+                  setPreviewOpen(false);
+                  setFlipped(false);
+                }}
+                className="press rounded-xl px-3 py-2 text-[0.78125rem] font-extrabold"
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+              >
+                Apply
+              </button>
+              <button
+                type="button"
+                aria-label="Cancel refresh"
+                onClick={() => setPreviewOpen(false)}
+                className="press text-[0.78125rem] font-bold"
+                style={{ color: 'var(--faint)' }}
+              >
+                Keep as is
+              </button>
+            </div>
+          </div>
+        )}
         {confirmForget}
         {empty ? (
           <>
@@ -234,7 +293,7 @@ export default function ReviewQueueCard({ now = new Date() }) {
             {!forgotten && seedable > 0 && (
               <button
                 type="button"
-                onClick={() => app.seedCardsFromActivity(now)}
+                onClick={openRefreshPreview}
                 className="press mt-1 block text-[0.78125rem] font-extrabold"
                 style={{ color: 'var(--accent)' }}
               >
@@ -264,7 +323,7 @@ export default function ReviewQueueCard({ now = new Date() }) {
                   <button
                     type="button"
                     aria-label={`Refresh ${seedable} kitchen card${seedable === 1 ? '' : 's'}`}
-                    onClick={() => app.seedCardsFromActivity(now)}
+                    onClick={openRefreshPreview}
                     className="press text-[0.6875rem] font-extrabold uppercase tracking-wide"
                     style={{ color: 'var(--accent)' }}
                   >

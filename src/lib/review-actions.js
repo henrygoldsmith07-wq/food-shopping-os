@@ -62,6 +62,26 @@ export const reviewActions = (set, latest) => {
       return plan.additions.length + plan.updates.length;
     },
     /**
+     * What a seed run would change, for a confirm-before-apply preview:
+     * stale auto answers as `old → new` pairs and new questions by front.
+     * Pure read of the current state — no writes.
+     */
+    kitchenSeedPreview: (now = new Date()) => {
+      const s = latest.current;
+      const deck = Array.isArray(s.cards) ? s.cards : [];
+      const plan = planSeedMerge(kitchenCardCandidates(s, now, recipeNameOf(s)), deck);
+      const byId = new Map(deck.map((c) => [c.id, c]));
+      return {
+        total: plan.additions.length + plan.updates.length,
+        additions: plan.additions.map(({ seedKey, ...draft }) => ({ front: draft.front, topicId: draft.topicId })),
+        updates: plan.updates.map((u) => ({
+          front: byId.get(u.id)?.front || '',
+          oldBack: byId.get(u.id)?.back || '',
+          newBack: u.back,
+        })),
+      };
+    },
+    /**
      * Seed the deck from what the user actually logged or bought: shop
      * habits, the next pantry expiry, the last thing cooked. Idempotent —
      * a card whose question is already in the deck is never added twice.
