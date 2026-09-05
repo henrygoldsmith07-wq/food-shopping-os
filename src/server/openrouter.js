@@ -153,6 +153,8 @@ export async function rankedFreeModels(fetchImpl = fetch, options = {}) {
  * a stalled transport or a caller whose time budget expired must not keep
  * stepping through the ladder (or hang on one await) — abort means stop now.
  */
+const TIMEOUT_ERROR = (ms) => Object.assign(new Error('AI provider timed out.'), { status: 504 });
+
 export async function freeChat({
   system, user, maxTokens = 1200, temperature = 0.4, maxAttempts = 6, fetchImpl = fetch,
   signal, timeoutMs = 20000,
@@ -203,7 +205,9 @@ export async function freeChat({
       // An abort is the caller giving up, not a model failing — stop the
       // whole walk rather than spending the next slot on a dead request.
       if (error?.name === 'AbortError') throw abortError('Model request aborted');
-      lastError = error;
+      // A per-attempt timeout is that model failing, not the caller: surface
+      // it as a 504 and give the next rung its own full budget.
+      lastError = error?.name === 'TimeoutError' ? TIMEOUT_ERROR(timeoutMs) : error;
       if (error?.status === 401) break;
     }
   }

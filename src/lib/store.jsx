@@ -23,6 +23,7 @@ import { moveBefore } from './utils.js';
 import {
   initialiseCloud, listConflictStatus, makeCloudListAdopter, pullCloud, pushCloud, retryQueuedCloud, subscribeCloud,
 } from './cloud.js';
+import { startCloudRetryLoop } from './cloud-retry.js';
 import {
   createHealthVault, decryptHealth, encryptHealth, HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY,
   healthSnapshot, platformUnlockAvailable, registerPlatformUnlock, verifyPlatformUnlock, withoutHealth,
@@ -104,55 +105,9 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') return undefined;
-    const BASE_DELAY = 30000;
-    const MAX_DELAY = 5 * 60 * 1000;
-    let retrying = false;
-    let timer = null;
-    let backoff = BASE_DELAY;
-    const settle = (result) => {
-      // A confirmed sync resets the clock; a failed attempt backs off so a
-      // dead network isn't hammered every thirty seconds forever.
-      if (result?.status?.kind === 'ready') backoff = BASE_DELAY;
-      else if (result) backoff = Math.min(backoff * 2, MAX_DELAY);
-    };
-    const retry = async () => {
-      if (retrying || cloudInitialising.current) return;
-      retrying = true;
-      try {
-        if (!cloudMeta.current) {
-          window.dispatchEvent(new Event('forq-cloud-refresh'));
-          return;
-        }
-        const result = await retryQueuedCloud();
-        if (result) {
-          cloudMeta.current = result.meta || cloudMeta.current;
-          cloudReady.current = result.status.kind === 'ready';
-          setCloudStatus((current) => {
-            if (result.status.kind !== 'ready') return result.status;
-            if (liveConnection.current) return { kind: 'live', message: 'Live household sync connected.' };
-            return current.kind === 'reconnecting' ? current : result.status;
-          });
-        }
-        settle(result);
-      } finally {
-        retrying = false;
-        schedule();
-      }
-    };
-    const schedule = () => {
-      clearTimeout(timer);
-      timer = setTimeout(retry, backoff);
-    };
-    const onOnline = () => {
-      backoff = BASE_DELAY; // a fresh connection deserves an immediate honest try
-      retry();
-    };
-    window.addEventListener('online', onOnline);
-    schedule();
-    return () => {
-      window.removeEventListener('online', onOnline);
-      clearTimeout(timer);
-    };
+    return startCloudRetryLoop({
+      cloudInitialising, cloudMeta, cloudReady, retryQueuedCloud, setCloudStatus, liveConnection,
+    });
   }, []);
 
   /* Every write stamps the moment the app was last in front of you, which is
