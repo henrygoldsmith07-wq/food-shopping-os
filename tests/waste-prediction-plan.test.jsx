@@ -54,6 +54,11 @@ describe('the prediction row routes to the planner', () => {
     expect(screen.getByText(/Spinach — use soon; the generator will favour dishes that use them/)).toBeDefined();
     // The pantry sheet slides away (its DOM lingers for the exit animation).
     await waitFor(() => expect(screen.queryByText('Smart pantry')).toBeNull());
+    // The focus is a guarantee, not a wish: generating pins a spinach dish
+    // into the week and says so by name.
+    fireEvent.click(screen.getByRole('button', { name: /^Generate$/ }));
+    await waitFor(() => expect(screen.getByText(/is pinned in — it uses Spinach before it goes off/)).toBeDefined());
+
   });
 });
 

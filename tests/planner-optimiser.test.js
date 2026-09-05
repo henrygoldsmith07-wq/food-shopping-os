@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chooseCandidate, buildPlan, windowBudget } from '../src/lib/planner.js';
+import { buildPlan, chooseCandidate, pantryHits, windowBudget } from '../src/lib/planner.js';
 
 const meal = (id, ingredients) => ({ id, title: id, ingredients });
 const ricey = meal('rice-bowl', [{ name: 'Rice', qty: '400 g' }]);
@@ -96,5 +96,47 @@ describe('windowBudget — the weekly allowance scaled to a plan window', () => 
     expect(windowBudget(0, 7)).toBeNull();
     expect(windowBudget(null, 31)).toBeNull();
     expect(windowBudget(10, 0)).toBeNull(); // a day or single meal has no window
+  });
+});
+
+describe('a focused pantry tap is pinned into the plan', () => {
+  const base = { scope: 'A week', people: 2, today: '2026-08-22', budget: 4, goal: 'maintain' };
+  const usesSpinach = (meals) => meals.some((m) => pantryHits(m, ['Spinach']) >= 1);
+
+  it('guarantees the item lands in the week whatever the seed', () => {
+    for (let seed = 0; seed < 25; seed += 1) {
+      const plan = buildPlan({ ...base, focus: ['Spinach'] }, seed);
+      expect(plan.meals.length).toBe(7);
+      expect(usesSpinach(plan.meals), `seed ${seed}`).toBe(true);
+      // The plan says what it promised, naming the dish that uses the item.
+      expect(plan.note).toMatch(/is pinned in — it uses Spinach before it goes off\./);
+    }
+  });
+
+  it('pins a dish in when the same seed would otherwise skip the item', () => {
+    // Seed 2's unfocused week contains no spinach dish at all — the focused
+    // run must change the outcome, not just talk about favouring it.
+    const without = buildPlan({ ...base }, 2);
+    expect(usesSpinach(without.meals)).toBe(false);
+    const withFocus = buildPlan({ ...base, focus: ['Spinach'] }, 2);
+    expect(usesSpinach(withFocus.meals)).toBe(true);
+    expect(withFocus.note).toMatch(/uses Spinach before it goes off\./);
+  });
+
+  it('covers a single-meal scope too', () => {
+    for (let seed = 0; seed < 25; seed += 1) {
+      const plan = buildPlan({ ...base, scope: '1 meal', focus: ['Spinach'] }, seed);
+      expect(plan.meals).toHaveLength(1);
+      expect(usesSpinach(plan.meals), `seed ${seed}`).toBe(true);
+    }
+  });
+
+  it('stays honest when no dish can use the focused item', () => {
+    // A focused item nothing in the book cooks: the plan is unchanged and no
+    // pin is claimed — a silent false promise is worse than no promise.
+    const plain = buildPlan({ ...base }, 5);
+    const impossible = buildPlan({ ...base, focus: ['Foobar unicorn spice'] }, 5);
+    expect(impossible.meals.map((m) => m.id)).toEqual(plain.meals.map((m) => m.id));
+    expect(impossible.note).toBeNull();
   });
 });

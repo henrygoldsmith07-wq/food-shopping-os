@@ -100,6 +100,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
         pantryItems: app.pantry,
         availableOnly: availabilityOnly,
         expiry: usePantry ? expiringNames : [],
+        focus: focusList,
         variety,
         wasteOptimisation: minimiseWaste,
         multiObjective: true,

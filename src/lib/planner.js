@@ -161,6 +161,25 @@ const finishPlan = (meals, note, wasteOptions) => {
   return { meals, note, wasteScore: wastePlan.score, wastePlan };
 };
 
+/**
+ * A pantry tap that names an ingredient wants it cooked, so `focus` earns a
+ * slot rather than a preference: when the assembled plan would otherwise
+ * ignore every focused item, the lowest-ranked meal swaps for a dish that
+ * uses one. Returns the dish that uses the item (its name, or null when no
+ * focused dish is possible) so the plan can say what it promised — the dish
+ * is named whether it was already chosen or had to be pinned in.
+ */
+const focusSwap = (meals, pool, focus, seed) => {
+  if (!focus.length) return null;
+  const already = meals.find((m) => pantryHits(m, focus) >= 1);
+  if (already) return already.name;
+  const hitters = pool.filter((r) => pantryHits(r, focus) >= 1);
+  if (!hitters.length) return null;
+  const pinned = seededPick(hitters, 1, seed + 101)[0];
+  meals[meals.length - 1] = pinned;
+  return pinned.name;
+};
+
 export const chooseCandidate = (candidates, wasteOptions, optimise, multiObjective = false) => {
   if (!candidates.length) return { meals: [], wastePlan: scoreWastePlan([], wasteOptions) };
   if (!optimise || candidates.length === 1) {
@@ -235,7 +254,7 @@ export function buildPlan(
   {
     scope = 'A week', diets = [], goal, budget, maxTime, occasion = 'Everyday', people = 2,
     pantry = [], month = null, batch = false, days = null, recipes = RECIPES, taste = null,
-    leftovers = [], equipment = null, expiry = [], variety = false, pantryItems = null,
+    leftovers = [], equipment = null, expiry = [], focus = [], variety = false, pantryItems = null,
     availableOnly = false, wasteOptimisation = true, multiObjective = false, wasteHistory = [], wasteProfile = null,
     packageSizes = {}, dates = [], today = '', learnedAliases = {},
     // The week's headroom travels with the plan: candidates are ranked against
@@ -301,16 +320,28 @@ export function buildPlan(
       if (!mealPool.length || (availableOnly && !strictPool.length)) relaxedDay = true;
       return mealPool.length ? narrow(mealPool, 1) : forSlot;
     });
+    // A focused ingredient is guaranteed one of the day's slots: its meal pool
+    // narrows to a single dish that uses it, so every candidate carries it.
+    let pinnedNote = null;
+    if (focus.length) {
+      const slotIndex = pools.findIndex((mealPool) => mealPool.some((r) => pantryHits(r, focus) >= 1));
+      if (slotIndex >= 0) {
+        const pinned = seededPick(pools[slotIndex].filter((r) => pantryHits(r, focus) >= 1), 1, seed + 101)[0];
+        pools[slotIndex] = [pinned];
+        pinnedNote = `${pinned.name} is pinned in — it uses ${focus.join(', ')} before it goes off.`;
+      }
+    }
     const dayCandidates = Array.from({ length: candidates }, (_, candidateIndex) => pools
       .map((pool, i) => seededPick(pool, 1, seed + i * 17 + candidateIndex * 7919)[0])
       .filter(Boolean));
     const selected = chooseCandidate(dayCandidates, wasteOptions, wasteOptimisation, multiObjective);
     const picks = selected.meals;
+    const note = relaxedDay || picks.length < slots.length
+      ? 'Nothing matched every filter — showing the closest fits instead.'
+      : null;
     return finishPlan(
       picks,
-      relaxedDay || picks.length < slots.length
-        ? 'Nothing matched every filter — showing the closest fits instead.'
-        : null,
+      pinnedNote ? [pinnedNote, note].filter(Boolean).join(' ') : note,
       wasteOptions,
     );
   }
@@ -351,9 +382,12 @@ export function buildPlan(
       dates: dates.slice(leftoverMeals.length),
     }, wasteOptimisation, multiObjective);
     const meals = [...leftoverMeals, ...selectedFill.meals];
+    // Leftovers keep their slots — a focus dish only takes an open one.
+    const pinned = remaining > 0 ? focusSwap(meals, fillPool, focus, seed) : null;
+    const base = `Leftover-first plan: ${leftoverMeals.length} meal${leftoverMeals.length === 1 ? '' : 's'} use portions already in the fridge; the rest favour seasonal, lower-cost dishes.`;
     return finishPlan(
       meals,
-      `Leftover-first plan: ${leftoverMeals.length} meal${leftoverMeals.length === 1 ? '' : 's'} use portions already in the fridge; the rest favour seasonal, lower-cost dishes.`,
+      pinned ? `${pinned} is pinned in — it uses ${focus.join(', ')} before it goes off. ${base}` : base,
       wasteOptions,
     );
   }
@@ -372,11 +406,13 @@ export function buildPlan(
       const meals = selected.meals;
       const distinct = new Set(meals.map((meal) => meal.id)).size;
       const each = Math.round(count / Math.max(1, distinct));
+      const pinned = focusSwap(meals, batchPool, focus, seed);
+      const base = relaxed
+        ? 'Nothing matched every filter — showing the closest fits instead.'
+        : `Batch plan: cook ${distinct} dish${distinct === 1 ? '' : 'es'}, each covering about ${each} meal${each === 1 ? '' : 's'}.`;
       return finishPlan(
         meals,
-        relaxed
-          ? 'Nothing matched every filter — showing the closest fits instead.'
-          : `Batch plan: cook ${distinct} dish${distinct === 1 ? '' : 'es'}, each covering about ${each} meal${each === 1 ? '' : 's'}.`,
+        pinned ? `${pinned} is pinned in — it uses ${focus.join(', ')} before it goes off. ${base}` : base,
         wasteOptions,
       );
     }
@@ -387,9 +423,10 @@ export function buildPlan(
   const rankedCandidates = candidatePlans(pool, count, seed, variety, candidates);
   const selected = chooseCandidate(rankedCandidates, wasteOptions, wasteOptimisation, multiObjective);
   const meals = selected.meals;
+  const pinned = focusSwap(meals, pool, focus, seed);
   const unique = seededPick(pool, Math.min(count, pool.length), seed);
 
-  const note = relaxed
+  const base = relaxed
     ? availableOnly
       ? 'No complete pantry-only match was available — showing the closest fits instead.'
       : 'Nothing matched every filter — showing the closest fits instead.'
@@ -398,5 +435,8 @@ export function buildPlan(
       : variety && new Set(meals.map((m) => m.id)).size < count
         ? 'Variety on: dishes repeat only once the kitchen runs out of distinct options.'
         : null;
+  const note = pinned
+    ? `${pinned} is pinned in — it uses ${focus.join(', ')} before it goes off.${base ? ` ${base}` : ''}`
+    : base;
   return finishPlan(meals, note, wasteOptions);
 }
