@@ -3,7 +3,7 @@ import {
   Check, ChevronRight, Info, Leaf, Package, ShoppingCart, Snowflake, Sparkles, Zap,
 } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
-import { buildPlan, EQUIPMENT_TAGS, scopeMeals } from '../lib/planner.js';
+import { buildPlan, EQUIPMENT_TAGS, scopeMeals, windowBudget } from '../lib/planner.js';
 import { useApp } from '../lib/store.jsx';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
 import { itemsFromRecipes } from '../data/stores.js';
@@ -50,12 +50,10 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const busyInScope = [...busyDates].filter((date) => dates.includes(date)).length;
   const planDates = dates.filter((date) => !busyDates.has(date));
   const noOpenDates = ['A week', 'A month'].includes(scope) && planDates.length === 0;
-  // Only a week-scope plan is directly comparable to the weekly budget; a day
-  // or single meal is a fraction of it and a month covers several weeks, so
-  // judging those against one week's headroom would mislead the ranking.
-  const headroomScope = scope === 'A week' && Number(app.weeklyBudget) > 0;
-  const weeklyBudget = headroomScope ? Number(app.weeklyBudget) : null;
-  const budgetSpent = headroomScope ? Number(app.spentThisWeek) || 0 : 0;
+  // Meals rank against this window's budget: weekly allowance scaled to the scope, minus what its shops already took. Days and single meals have no window.
+  const windowDays = scope === 'A month' ? monthDates.length : scope === 'A week' ? weekDates.length : 0;
+  const weeklyBudget = windowDays ? windowBudget(app.weeklyBudget, windowDays) : null;
+  const budgetSpent = scope === 'A month' ? Number(app.spentThisMonth) || 0 : scope === 'A week' ? Number(app.spentThisWeek) || 0 : 0;
   const pantryNames = app.pantry.map((p) => p.name);
   const focusList = (Array.isArray(focusItems) ? focusItems : focusItems ? [focusItems] : []).map((n) => String(n || '').trim()).filter(Boolean);
   // A prediction tap's item joins the use-soon list so the generator favours it.
@@ -353,6 +351,10 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           </div>
         )}
 
+        {weeklyBudget !== null && (
+          <p className="mb-3 rounded-2xl border px-3 py-2 text-center text-[0.75rem] font-bold" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+            {weeklyBudget <= budgetSpent ? `This ${scope === 'A month' ? 'month' : 'week'} is over budget by ${gbp(budgetSpent - weeklyBudget, { always: true })}.` : `${gbp(budgetSpent, { always: true })} spent of ${gbp(weeklyBudget, { always: true })} this ${scope === 'A month' ? 'month' : 'week'} — ${gbp(weeklyBudget - budgetSpent, { always: true })} left to rank against.`}
+          </p>)}
         <button
           onClick={generate}
           disabled={generating || noOpenDates}
@@ -494,5 +496,3 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
     </>
   );
 }
-
-

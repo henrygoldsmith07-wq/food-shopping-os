@@ -209,6 +209,21 @@ export const scopeMeals = (scope) =>
   (scope === 'A day' ? ['breakfast', 'lunch', 'dinner'] : ['dinner']);
 
 /**
+ * The budget a plan window gets to spend, from a weekly allowance: the week
+ * scaled by the weeks the window spans (days ÷ 7, exact, so a 7-day window
+ * scales ×1 and a month scales to its real length). A month of meals must
+ * never be judged against a single week's headroom — that misranks every
+ * dish over a week's worth by ~4×. No budget or no window yields null, so
+ * the cost dimension stays off entirely.
+ */
+export const windowBudget = (weeklyBudget, dayCount) => {
+  const budget = Number(weeklyBudget) || 0;
+  const days = Number(dayCount) || 0;
+  if (budget <= 0 || days <= 0) return null;
+  return Math.round(budget * (days / 7) * 100) / 100;
+};
+
+/**
  * Build a plan of exactly `count` dishes. Returns { meals, note } where note
  * explains any compromise (relaxed constraints, repeated recipes, or a
  * deliberate batch-cooking repeat).

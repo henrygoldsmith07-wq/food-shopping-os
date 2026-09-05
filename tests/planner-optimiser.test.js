@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chooseCandidate, buildPlan } from '../src/lib/planner.js';
+import { chooseCandidate, buildPlan, windowBudget } from '../src/lib/planner.js';
 
 const meal = (id, ingredients) => ({ id, title: id, ingredients });
 const ricey = meal('rice-bowl', [{ name: 'Rice', qty: '400 g' }]);
@@ -72,5 +72,29 @@ describe('multi-objective budget headroom', () => {
     // (£4 for four) fits. A people-less ranking would flatter the lavish meal.
     const out = chooseCandidate([[lavish], [frugal]], { ...base, people: 4, weeklyBudget: 10, budgetSpent: 0 }, true, true);
     expect(out.meals[0].id).toBe('f1');
+  });
+
+  it('a month plan competes against its scaled budget and the month spend', () => {
+    // The caller scales the weekly allowance to the window — here £10 × a
+    // 28-day month (4 weeks) = £40. With £36 of that month already spent, £4
+    // is left: lavish (£8 for two) is over, frugal (£2) fits and its reason
+    // says so in the same language the week scope uses.
+    const out = chooseCandidate([[lavish], [frugal]], { ...base, weeklyBudget: 40, budgetSpent: 36 }, true, true);
+    expect(out.meals[0].id).toBe('f1');
+    expect(out.optimiserReasons.join(' ')).toMatch(/£2 left\./);
+  });
+});
+
+describe('windowBudget — the weekly allowance scaled to a plan window', () => {
+  it('a 7-day window scales ×1 and longer windows scale by their weeks', () => {
+    expect(windowBudget(10, 7)).toBe(10); // one week is unchanged
+    expect(windowBudget(10, 14)).toBe(20); // two weeks
+    expect(windowBudget(10, 31)).toBeCloseTo(44.29, 2); // 31/7 weeks, exact not rounded up
+  });
+
+  it('no budget or no window keeps the cost dimension off', () => {
+    expect(windowBudget(0, 7)).toBeNull();
+    expect(windowBudget(null, 31)).toBeNull();
+    expect(windowBudget(10, 0)).toBeNull(); // a day or single meal has no window
   });
 });
