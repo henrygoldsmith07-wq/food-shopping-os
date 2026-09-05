@@ -50,6 +50,12 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const busyInScope = [...busyDates].filter((date) => dates.includes(date)).length;
   const planDates = dates.filter((date) => !busyDates.has(date));
   const noOpenDates = ['A week', 'A month'].includes(scope) && planDates.length === 0;
+  // Only a week-scope plan is directly comparable to the weekly budget; a day
+  // or single meal is a fraction of it and a month covers several weeks, so
+  // judging those against one week's headroom would mislead the ranking.
+  const headroomScope = scope === 'A week' && Number(app.weeklyBudget) > 0;
+  const weeklyBudget = headroomScope ? Number(app.weeklyBudget) : null;
+  const budgetSpent = headroomScope ? Number(app.spentThisWeek) || 0 : 0;
   const pantryNames = app.pantry.map((p) => p.name);
   const expiringNames = (app.useSoonIngredients?.length
     ? app.useSoonIngredients.map((row) => row.item.name)
@@ -100,12 +106,14 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           : scope === '1 meal' ? [app.day] : planDates,
         today: app.day,
         learnedAliases: app.aliasMemory || {},
+        weeklyBudget,
+        budgetSpent,
       },
       seed,
     );
     // pantryNames is rebuilt every render; its content is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(',')]);
+  }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent]);
 
   const generated = plan?.meals ?? null;
 
