@@ -20,6 +20,13 @@ export const portionsFromCooked = (cooked = []) => (Array.isArray(cooked) ? cook
  * evidence is strong enough. Reads the derived preference profile when the
  * caller has one, and falls back to raw cooked events otherwise, so a
  * plain-state caller gets the same answer as the app.
+ *
+ * The household can override: `portionsOverride` set to `"auto"` (or unset)
+ * follows the decision above; a number is what the household says, period —
+ * learned appetite never moves the list against an explicit choice. The
+ * result carries the appetite evidence and what automatic would say
+ * (`autoPortions`, `autoLearned`) either way, so a UI can show how far the
+ * learning has got and what is being overridden.
  */
 export const householdPortionsFor = (app = {}) => {
   const configured = Math.max(1, Number(app.portions) || Number(app.household) || 1);
@@ -31,12 +38,21 @@ export const householdPortionsFor = (app = {}) => {
     observations = patterns.length;
     typical = patterns.length ? patterns.reduce((sum, n) => sum + n, 0) / patterns.length : NaN;
   }
-  if (observations >= 3 && Number.isFinite(typical) && typical > 0
-    && Math.abs(typical - configured) >= 0.5) {
-    const rounded = Math.max(1, Math.round(typical * 2) / 2);
-    if (rounded !== configured) return { portions: rounded, source: 'learned', configured };
+  const evidence = { observations, typical: Number.isFinite(typical) ? typical : null };
+  const learnedApplies = observations >= 3 && evidence.typical > 0
+    && Math.abs(evidence.typical - configured) >= 0.5;
+  const autoPortions = learnedApplies ? Math.max(1, Math.round(evidence.typical * 2) / 2) : configured;
+  const autoLearned = learnedApplies && autoPortions !== configured;
+  const override = app.portionsOverride === 'auto' || app.portionsOverride == null
+    ? 'auto'
+    : Math.max(1, Math.round(Number(app.portionsOverride)));
+  if (override !== 'auto') {
+    return { portions: override, source: 'configured', configured, override, evidence, autoPortions, autoLearned };
   }
-  return { portions: configured, source: 'configured', configured };
+  if (autoLearned) {
+    return { portions: autoPortions, source: 'learned', configured, override, evidence, autoPortions, autoLearned };
+  }
+  return { portions: configured, source: 'configured', configured, override, evidence, autoPortions, autoLearned };
 };
 
 /** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */

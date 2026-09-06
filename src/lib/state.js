@@ -109,6 +109,7 @@ export const EMPTY_STATE = {
   weeklyBudget: 0,
   monthlyBudget: 0,
   household: 1,
+  portionsOverride: 'auto', // 'auto' follows the learned-appetite decision; a number is what the household says
   householdName: '',
   activeMemberId: null,
   members: [], // {id,name,portions,diets,role,permissions,notifications}

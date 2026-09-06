@@ -71,7 +71,10 @@ describe('week loop workflow', () => {
       portions: 2,
     };
     const configured = shoppingForWeekLoop(base, [day]);
-    expect(configured.portions).toEqual({ portions: 2, source: 'configured', configured: 2 });
+    expect(configured.portions).toEqual({
+      portions: 2, source: 'configured', configured: 2, override: 'auto', autoPortions: 2, autoLearned: false,
+      evidence: { observations: 0, typical: null },
+    });
     const thighs = (name) => configured.items.find((item) => item.name === name)?.qty;
     expect(thighs('Chicken thighs')).toBe('4');
 
@@ -91,15 +94,30 @@ describe('week loop workflow', () => {
     }, [day]);
     expect(rawLearned.portions.source).toBe('learned');
     expect(rawLearned.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('6');
+
+    // An explicit override beats the learning: the household said 5, the list
+    // is scaled for 5, even though the appetite says 3.
+    const overridden = shoppingForWeekLoop({
+      ...learnedApp,
+      portionsOverride: 5,
+    }, [day]);
+    expect(overridden.portions.source).toBe('configured');
+    expect(overridden.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('10');
   });
 
   it('keeps the configured portions until the appetite evidence is strong', () => {
     // Fewer than 3 observations, or a gap under half a portion: the
     // household's own setting still wins.
     const weak = { portions: 2, householdPreferences: { portions: { typical: 3, observations: 2 } } };
-    expect(householdPortionsFor(weak)).toEqual({ portions: 2, source: 'configured', configured: 2 });
+    expect(householdPortionsFor(weak)).toEqual({
+      portions: 2, source: 'configured', configured: 2, override: 'auto', autoPortions: 2, autoLearned: false,
+      evidence: { observations: 2, typical: 3 },
+    });
     const close = { portions: 2, householdPreferences: { portions: { typical: 2.25, observations: 9 } } };
-    expect(householdPortionsFor(close)).toEqual({ portions: 2, source: 'configured', configured: 2 });
+    expect(householdPortionsFor(close)).toEqual({
+      portions: 2, source: 'configured', configured: 2, override: 'auto', autoPortions: 2, autoLearned: false,
+      evidence: { observations: 9, typical: 2.25 },
+    });
     const strong = { portions: 2, householdPreferences: { portions: { typical: 3, observations: 3 } } };
     expect(householdPortionsFor(strong).source).toBe('learned');
     expect(householdPortionsFor(strong).portions).toBe(3);

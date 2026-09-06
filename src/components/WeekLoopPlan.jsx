@@ -1,5 +1,6 @@
 import { ClipboardList } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
+import { useApp } from '../lib/store.jsx';
 import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
 
 /**
@@ -11,12 +12,18 @@ import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
  * flow that also does shopping and cooking.
  */
 export default function WeekLoopPlan({
-  app, byId, dates, dayShort, dinnerRecipes, expiringNames, generateList, pantry,
+  byId, dates, dayShort, dinnerRecipes, expiringNames, generateList, pantry,
   pickerDate, setDinner, setPickerDate, snap, stepId, usesExpiring, variety, weekList,
   portionSource,
 }) {
+  // The week loop passes its store down, but the step must also stand alone
+  // (the portions suite renders it with no app prop) — so the store comes
+  // from context, and the prop-era call sites simply stop passing it.
+  const app = useApp();
   return (
     <>
+      {stepId === 'plan' && (
+        <>
           <Card>
             <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
               This week’s dinners
@@ -110,20 +117,54 @@ export default function WeekLoopPlan({
               </p>
             </div>
             <Stepper
-              value={app.household || 1}
+              value={portionSource.portions}
               min={1}
               max={12}
-              onChange={(n) => app.set({ household: n })}
+              onChange={(n) => app.set({ portionsOverride: n })}
             />
           </div>
-          <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            Currently cooking for <strong>{app.portions || app.household || 1}</strong> portion
-            {(app.portions || app.household || 1) === 1 ? '' : 's'} a meal
-            {app.members?.length
-              ? ` (${app.members.length} household profile${app.members.length === 1 ? '' : 's'})`
-              : ''}
-            .
-          </p>
+          {portionSource.override !== 'auto' ? (
+            <>
+              <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Currently cooking for <strong>{portionSource.portions}</strong> portion
+                {portionSource.portions === 1 ? '' : 's'} a meal — set by you.
+              </p>
+              <div className="flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+                <p className="text-[0.75rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+                  {portionSource.autoLearned
+                    ? `Automatic would be ${portionSource.autoPortions} — ${portionSource.evidence.observations} recorded cooks average ${portionSource.evidence.typical}.`
+                    : 'The automatic setting is not applied while this is set by you.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => app.set({ portionsOverride: 'auto' })}
+                  className="press shrink-0 rounded-xl border px-3 py-1.5 text-[0.75rem] font-extrabold"
+                  style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                >
+                  Back to automatic
+                </button>
+              </div>
+            </>
+          ) : portionSource.source === 'learned' ? (
+            <p className="text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Automatic — currently <strong>{portionSource.portions}</strong> portions, from{' '}
+              {portionSource.evidence.observations} recorded cook{portionSource.evidence.observations === 1 ? '' : 's'}
+              {' '}averaging {portionSource.evidence.typical}. Your profile says {portionSource.configured};
+              the recorded cooks win while this stays automatic.
+            </p>
+          ) : portionSource.evidence.observations > 0 ? (
+            <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Currently cooking for <strong>{portionSource.portions}</strong> portion
+              {portionSource.portions === 1 ? '' : 's'} a meal — {portionSource.evidence.observations} recorded
+              cook{portionSource.evidence.observations === 1 ? '' : 's'} so far; the list follows them once they
+              disagree with your profile for 3 cooks.
+            </p>
+          ) : (
+            <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Currently cooking for <strong>{portionSource.portions}</strong> portion
+              {portionSource.portions === 1 ? '' : 's'} a meal.
+            </p>
+          )}
         </Card>
       )}
 
@@ -230,6 +271,8 @@ export default function WeekLoopPlan({
               <Pill tone="good">save {gbp(s.saving, { always: true })} at {s.store}</Pill>
             </Card>
           ))}
+        </>
+      )}
     </>
   );
 }
