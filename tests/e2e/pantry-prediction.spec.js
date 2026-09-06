@@ -57,3 +57,45 @@ test('the Shop-tab pantry sheet shows the prediction block in the built app', as
   // The long-dated rice is on the shelf but never a prediction.
   await expect(sheet.getByRole('button', { name: 'Plan a meal using Rice' })).toHaveCount(0);
 });
+
+test('the tonight affordance opens the dinner picker pre-searched in the built app', async ({ page }) => {
+  // Same returning household: spinach dated for tomorrow is the at-risk row
+  // whose second affordance skips the week generator and asks for tonight.
+  await page.addInitScript(() => {
+    const stamp = (offset) => {
+      const d = new Date(Date.now() + offset * 86400000);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
+    const state = {
+      onboarded: true,
+      name: 'Sam',
+      day: stamp(0),
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: stamp(1) },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: stamp(60) },
+      ],
+    };
+    localStorage.setItem('forq-state-v2', JSON.stringify(state));
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /Check pantry before buying/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
+  await expect(sheet).toBeVisible();
+
+  // The row's second affordance asks for tonight's dinner slot.
+  await sheet.getByRole('button', { name: 'Cook Spinach tonight' }).click();
+
+  // The Plan tab opens the dinner picker already searched on the ingredient:
+  // the query is typed, only spinach-matching dishes are listed, and the
+  // pantry sheet has slid away behind the app's navigation.
+  const picker = page.getByRole('dialog', { name: 'Plan a meal' });
+  await expect(picker).toBeVisible();
+  await expect(picker.getByLabel('Search recipes')).toHaveValue('Spinach');
+  const dish = picker.getByRole('button', { name: /Coconut Chickpea Curry/ });
+  await expect(dish).toBeVisible();
+  await expect(sheet).toBeHidden();
+  // The generator is not part of this path — the picker came up instead.
+  await expect(page.getByRole('button', { name: 'Close generator' })).toHaveCount(0);
+});
