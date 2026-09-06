@@ -140,6 +140,29 @@ const GOAL_PREFS = {
   gain: (r) => r.kcal >= 550,
 };
 
+/**
+ * Skip reasons the review loop can confirm still apply express a standing
+ * household preference, so the plan honours them: repeated "no time" wants
+ * quicker dinners, "plan too complex" simpler ones, "missing ingredients"
+ * dishes you can already mostly cook. Reasons about a particular evening
+ * ("plans changed", "not in the mood") describe a day, not the household,
+ * so they earn no preference. Each pref is soft — it narrows only while the
+ * pool stays usable, like every other preference here.
+ */
+const skipReasonPref = (reasonId, pantryNames) => {
+  if (reasonId === 'no-time' || reasonId === 'plan-too-complex') return (r) => r.time <= 30;
+  if (reasonId === 'missing-ingredients') return (r) => r.ingredients.length > 0
+    && pantryHits(r, pantryNames) * 2 >= r.ingredients.length;
+  return null;
+};
+
+/** What leaning on each pref sounds like in the plan's note. */
+const SKIP_PHRASES = {
+  'no-time': 'quicker, 30-minute dishes',
+  'plan-too-complex': 'simpler dishes',
+  'missing-ingredients': 'dishes you can mostly make from what you already have',
+};
+
 /** Dishes worth cooking in bulk: they scale, keep, or reheat well. */
 export const BATCH_TAGS = ['batch', 'freezer', 'one-pot', 'meal-prep'];
 const batchable = (r) => r.servings >= 4 || r.tags.some((t) => BATCH_TAGS.includes(t));
@@ -268,6 +291,9 @@ export function buildPlan(
     // allowance and `weekChunks` the window's per-week meal counts, so a month
     // plan is ranked against each week, not just its total.
     weeklyCap = null, weekChunks = null,
+    // What the household said still applies in review reflections: a reason
+    // confirmed twice (latest still true) shapes what gets planned.
+    skipProfile = null,
   },
   seed,
 ) {
@@ -289,6 +315,16 @@ export function buildPlan(
   };
   const candidates = candidateCount(wasteOptimisation);
 
+  // The skip reasons the review loop confirmed still apply — strongest
+  // first — become a soft preference, exactly like taste or occasion.
+  const confirmedReasons = Object.entries(skipProfile || {})
+    .filter(([, entry]) => (entry?.applies || 0) >= 2 && entry?.lastStillApplies)
+    .sort((a, b) => ((b[1].applies || 0) + (b[1].changed || 0)) - ((a[1].applies || 0) + (a[1].changed || 0)))
+    .map(([reasonId]) => reasonId);
+  const skipPrefs = confirmedReasons
+    .map((reasonId) => skipReasonPref(reasonId, pantryItems || pantry))
+    .filter(Boolean);
+
   /** Preferences applied in order, each kept only while the pool stays usable. */
   const narrow = (pool, wanted) => {
     const prefs = [
@@ -300,6 +336,7 @@ export function buildPlan(
       // Dishes that use something about to go off are worth cooking first.
       expiry.length ? (r) => pantryHits(r, expiry) >= 1 : null,
       month ? (r) => seasonScore(r, month) >= 1 : null,
+      ...skipPrefs,
     ].filter(Boolean);
     let out = pool;
     for (const pref of prefs) {
@@ -435,6 +472,13 @@ export function buildPlan(
   const pinned = focusSwap(meals, pool, focus, seed);
   const unique = seededPick(pool, Math.min(count, pool.length), seed);
 
+  // When the finished plan holds a confirmed reason's preference, say so —
+  // the household hears that its review answers shaped this plan.
+  const skipLeaning = confirmedReasons
+    .map((reasonId) => ({ reasonId, pref: skipReasonPref(reasonId, pantryItems || pantry) }))
+    .filter((row) => row.pref && meals.every(row.pref))
+    .map((row) => SKIP_PHRASES[row.reasonId])[0] || null;
+
   const base = relaxed
     ? availableOnly
       ? 'No complete pantry-only match was available — showing the closest fits instead.'
@@ -443,7 +487,9 @@ export function buildPlan(
       ? `Only ${unique.length} recipe${unique.length === 1 ? '' : 's'} match your filters, so the plan repeats them.`
       : variety && new Set(meals.map((m) => m.id)).size < count
         ? 'Variety on: dishes repeat only once the kitchen runs out of distinct options.'
-        : null;
+        : skipLeaning
+          ? `Planned around what you said still applies: leaning on ${skipLeaning}.`
+          : null;
   const note = pinned
     ? `${pinned} is pinned in — it uses ${focus.join(', ')} before it goes off.${base ? ` ${base}` : ''}`
     : base;

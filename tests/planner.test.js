@@ -168,3 +168,27 @@ describe('itemsFromRecipes', () => {
     expect(withPantry).toHaveLength(recipe.ingredients.length - 2);
   });
 });
+
+describe('plans learn from confirmed skip reasons', () => {
+  const CONFIRMED_NO_TIME = { 'no-time': { applies: 2, changed: 0, lastStillApplies: true, lastAt: 0 } };
+
+  it('leans on quicker dishes when the household confirmed “no time” still applies', () => {
+    const { meals, note } = buildPlan({ scope: 'A week', budget: 4, skipProfile: CONFIRMED_NO_TIME }, 3);
+    expect(meals.length).toBeGreaterThan(0);
+    expect(meals.every((m) => m.time <= 30)).toBe(true);
+    expect(note).toMatch(/leaning on quicker, 30-minute dishes/);
+  });
+
+  it('ignores a reason said to no longer apply, and one reflected on once', () => {
+    const changed = { 'no-time': { applies: 1, changed: 2, lastStillApplies: false, lastAt: 0 } };
+    expect(buildPlan({ scope: 'A week', budget: 4, skipProfile: changed }, 3).note).toBeNull();
+    const once = { 'no-time': { applies: 1, changed: 0, lastStillApplies: true, lastAt: 0 } };
+    expect(buildPlan({ scope: 'A week', budget: 4, skipProfile: once }, 3).note).toBeNull();
+  });
+
+  it('gives no preference to reasons about a particular evening', () => {
+    const evening = { 'plans-changed': { applies: 5, changed: 0, lastStillApplies: true, lastAt: 0 } };
+    const { note } = buildPlan({ scope: 'A week', budget: 4, skipProfile: evening }, 3);
+    expect(note).toBeNull();
+  });
+});

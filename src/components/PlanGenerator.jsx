@@ -116,6 +116,8 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
         budgetSpent,
         weeklyCap,
         weekChunks,
+        // Review reflections the household confirmed still apply shape the plan.
+        skipProfile: app.skipReasonProfile,
       },
       seed,
     );
