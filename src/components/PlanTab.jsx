@@ -113,7 +113,7 @@ function RecipePicker({ slot, onPick, onClear, hasMeal, initialQuery = '' }) {
     </div>
   );
 }
-export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonightItem }) {
+export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonightItem, onOpenWeekLoop = null }) {
   const app = useApp();
   const [view, setView] = useState('week');
   const [offset, setOffset] = useState(0); // weeks or months from today
@@ -357,6 +357,17 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
                     : "Send this month's ingredients to the list"}
               </span>
             </button>
+            {onOpenWeekLoop && (
+              <button
+                onClick={() => onOpenWeekLoop(view === 'month' ? 'plan' : 'list')}
+                className="press w-full rounded-2xl border py-3 text-[0.875rem] font-extrabold"
+                style={{ borderColor: 'var(--line)', color: 'var(--accent)' }}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <CalendarDays size={15} /> Walk through this week step by step
+                </span>
+              </button>
+            )}
             <button
               onClick={exportCalendar}
               aria-label={`Add ${view} to calendar`}
@@ -447,10 +458,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       {showGenerator && (
         <Section className="rise">
           <PlanGenerator
-            weekDates={view === 'week' ? week : thisWeekDates}
-            monthDates={month}
-            openRecipe={openRecipe}
-            goTab={goTab}
+            weekDates={view === 'week' ? week : thisWeekDates} monthDates={month}
+            openRecipe={openRecipe} goTab={goTab}
             onApplied={() => { setShowGenerator(false); setAddedToList(false); }} focusItems={focusItem ? [focusItem] : []}
           />
         </Section>

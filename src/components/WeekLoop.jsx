@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
-import { WEEK_LOOP_PROMISE, WEEK_LOOP_STEPS } from '../data/weekLoop.js';
+import { WEEK_LOOP_IDS, WEEK_LOOP_PROMISE, WEEK_LOOP_STEPS } from '../data/weekLoop.js';
 import { expiringSoon, weekDates } from '../lib/kitchen.js';
 import { planEntries, planVariety } from '../lib/mealplan.js';
 import {
@@ -162,7 +162,9 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
       </div>
 
       <div className="px-5 pt-4 space-y-3">
-        {stepId === 'plan' && (
+        {/* WeekLoopPlan owns the loop's first five steps — plan, portions,
+            pantry, list, prices — not just the plan step. */}
+        {WEEK_LOOP_IDS.slice(0, 5).includes(stepId) && (
           <WeekLoopPlan
             app={app}
             byId={byId}

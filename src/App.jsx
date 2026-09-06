@@ -27,6 +27,7 @@ const LearnTab = deferred(testScreens.LearnTab, () => import('./components/Learn
 const RecipesTab = deferred(testScreens.RecipesTab, () => import('./components/RecipesTab.jsx'));
 const RecipeDetail = deferred(testScreens.RecipeDetail, () => import('./components/RecipeDetail.jsx'));
 const PantryView = deferred(testScreens.PantryView, () => import('./components/PantryView.jsx'));
+const WeekLoop = deferred(testScreens.WeekLoop, () => import('./components/WeekLoop.jsx'));
 const GuidancePanel = deferred(testScreens.GuidancePanel, () => import('./components/GuidancePanel.jsx'));
 const launcherPart = (name) => deferred(testScreens[name], () => import('./components/GlobalLauncher.jsx')
   .then((module) => ({ default: module[name] })));
@@ -180,6 +181,11 @@ function Shell() {
   const [recipe, setRecipe] = useState(null);
   const [recipeStartCooking, setRecipeStartCooking] = useState(false);
   const [pantryOpen, setPantryOpen] = useState(false);
+  // The guided week loop — the sheet the plan guidance's "Run the week loop"
+  // opens. `weekLoopStep` remembers which step sent you away to cook, so
+  // returning from the cook screen lands back in the journey.
+  const [weekLoopOpen, setWeekLoopOpen] = useState(false);
+  const [weekLoopStep, setWeekLoopStep] = useState(null);
   const [guidanceOpen, setGuidanceOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [guidanceView, setGuidanceView] = useState('next');
@@ -362,7 +368,7 @@ function Shell() {
             />
           )}
           <Suspense fallback={<ScreenFallback />}>
-            {activeTab === 'plan' && <PlanTab openRecipe={openRecipe} goTab={goTab} focusDate={planFocus} focusItem={planItem} tonightItem={tonightItem} />}
+            {activeTab === 'plan' && <PlanTab openRecipe={openRecipe} goTab={goTab} focusDate={planFocus} focusItem={planItem} tonightItem={tonightItem} onOpenWeekLoop={(step) => { setWeekLoopStep(step || null); setWeekLoopOpen(true); }} />}
             {activeTab === 'cook' && <CookTab openRecipe={openRecipe} goTab={goTab} />}
             {activeTab === 'learn' && (
               <LearnTab
@@ -438,6 +444,21 @@ function Shell() {
           />
         </Suspense>
       </Sheet>
+      <Sheet open={weekLoopOpen} onClose={() => { setWeekLoopOpen(false); setWeekLoopStep(null); }} title="Week loop">
+        <Suspense fallback={<ScreenFallback />}>
+          <WeekLoop
+            initialStep={weekLoopStep}
+            onClose={() => { setWeekLoopOpen(false); setWeekLoopStep(null); }}
+            onCook={(recipe) => {
+              // Hand the dish to the cook screen, remembering which loop step
+              // sent us — coming back lands in the journey, not at the start.
+              setWeekLoopStep('cook');
+              setWeekLoopOpen(false);
+              openRecipe(recipe, { startCooking: true });
+            }}
+          />
+        </Suspense>
+      </Sheet>
       <Sheet open={profileOpen} onClose={() => setProfileOpen(false)} title="You">
         <ProfileTab openGuidance={() => {
           setProfileOpen(false);
@@ -454,6 +475,11 @@ function Shell() {
               setGuidanceOpen(false);
               if (target === 'log') goLog(intent || null);
               else goTab(target);
+            }}
+            onOpenWeekLoop={(step) => {
+              setGuidanceOpen(false);
+              setWeekLoopStep(step || null);
+              setWeekLoopOpen(true);
             }}
             onOpenPantry={() => {
               setGuidanceOpen(false);

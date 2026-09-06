@@ -26,7 +26,10 @@ const TABS = [
   ['ask', 'Ask', MessageCircle],
 ];
 
-export default function GuidancePanel({ initialView = 'next', onNavigate, onOpenPantry, onOpenProfile }) {
+export default function GuidancePanel({
+  initialView = 'next', onNavigate, onOpenPantry, onOpenProfile,
+  onOpenWeekLoop = () => onNavigate('plan'),
+}) {
   const app = useApp();
   const [view, setView] = useState(initialView);
   const [reviewMode, setReviewMode] = useState('dashboards');
@@ -40,6 +43,7 @@ export default function GuidancePanel({ initialView = 'next', onNavigate, onOpen
     if (action.kind === 'pantry') return onOpenPantry();
     if (action.kind === 'profile') return onOpenProfile();
     if (action.kind === 'log') return onNavigate('log', 'add');
+    if (action.kind === 'weekLoop') return onOpenWeekLoop(action.target);
     return onNavigate(action.target);
   };
 
