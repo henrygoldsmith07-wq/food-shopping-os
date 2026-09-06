@@ -1,0 +1,54 @@
+import { describe, it, expect } from 'vitest';
+import {
+  householdPortionsFor, recipePortionFactors, scaleListToPortions, portionsFromCooked,
+} from '../src/lib/portions.js';
+
+describe('the household portions decision', () => {
+  it('stays configured until the appetite evidence is strong', () => {
+    expect(householdPortionsFor({ portions: 2 })).toEqual({ portions: 2, source: 'configured', configured: 2 });
+    // Two observations is a coincidence, not an appetite.
+    expect(householdPortionsFor({ portions: 2, cooked: [{ portions: 3 }, { portions: 3 }] }).source).toBe('configured');
+    // A gap under half a portion is noise.
+    expect(householdPortionsFor({ portions: 2, cooked: [{ portions: 2 }, { portions: 2 }, { portions: 2.25 }] }).source).toBe('configured');
+  });
+
+  it('learns from raw cooked events when no derived profile exists', () => {
+    const app = { portions: 2, cooked: [{ portions: 3 }, { portions: 3 }, { portionsEaten: 4 }] };
+    // Mean 3.33 → rounded to the half portion: 3.5.
+    expect(householdPortionsFor(app)).toEqual({ portions: 3.5, source: 'learned', configured: 2 });
+  });
+
+  it('prefers the derived profile over raw events, and never breaks on junk', () => {
+    const app = {
+      portions: 2,
+      cooked: [{ portions: 4 }, { portions: 4 }, { portions: 4 }],
+      householdPreferences: { portions: { typical: 1, observations: 5 } },
+    };
+    expect(householdPortionsFor(app)).toEqual({ portions: 1, source: 'learned', configured: 2 });
+    expect(householdPortionsFor({ portions: 2, cooked: 'junk' }).source).toBe('configured');
+    expect(householdPortionsFor({}).portions).toBe(1);
+    expect(portionsFromCooked([{ portions: 0 }, { portions: -1 }, null]).length).toBe(0);
+  });
+});
+
+describe('scaling a plan list to those portions', () => {
+  it('scales plan rows by the recipe factor and leaves non-plan rows alone', () => {
+    const factors = recipePortionFactors(
+      [{ recipe: { name: 'Traybake', servings: 4 } }, { recipe: { name: 'Curry', servings: 2 } }],
+      3,
+    );
+    expect(factors.get('Traybake')).toBe(0.75);
+    expect(factors.get('Curry')).toBe(1.5);
+    const items = [
+      { name: 'Chicken thighs', qty: '8', fromRecipe: 'Traybake' },
+      { name: 'Chickpeas', qty: '2 tins', fromRecipe: 'Curry' },
+      { name: 'Bin bags', qty: '1' }, // manually requested — already the amount meant
+      { name: 'Mystery', qty: '2', fromRecipe: 'Unplanned' }, // treated as written for one serving
+    ];
+    const scaled = scaleListToPortions(items, 3, factors);
+    expect(scaled[0].qty).toBe('6');
+    expect(scaled[1].qty).toBe('3 tins');
+    expect(scaled[2].qty).toBe('1');
+    expect(scaled[3].qty).toBe('6');
+  });
+});

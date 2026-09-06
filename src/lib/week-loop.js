@@ -14,31 +14,14 @@ import { wasteAwareList } from './loop-learning.js';
 import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
 import { emojiFor, uid } from './state.js';
+import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from './portions.js';
 
 /**
- * How many portions to plan and buy for.
- *
- * The configured household size is the baseline. When recorded outcomes say
- * the household consistently eats a different amount — at least three cooks
- * with portions recorded, and at least half a portion away from the setting
- * — the learned appetite wins, so quantities follow what actually gets
- * eaten rather than what the profile says. Returns both numbers so the UI
- * can say which one it used and why.
+ * The week loop's portions and list scaling live in `portions.js` — one
+ * decision shared with every other plan-to-list path, so the loop cannot
+ * disagree with the plan generator about how much to buy.
  */
-export const householdPortionsFor = (app = {}) => {
-  const configured = Math.max(1, Number(app.portions) || Number(app.household) || 1);
-  const learned = app.householdPreferences?.portions;
-  const observations = Number(learned?.observations) || 0;
-  const typical = Number(learned?.typical);
-  if (observations >= 3 && Number.isFinite(typical) && typical > 0
-    && Math.abs(typical - configured) >= 0.5) {
-    const rounded = Math.max(1, Math.round(typical * 2) / 2);
-    if (rounded !== configured) {
-      return { portions: rounded, source: 'learned', configured };
-    }
-  }
-  return { portions: configured, source: 'configured', configured };
-};
+export { householdPortionsFor } from './portions.js';
 
 /** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */
 export const scaleQty = (qty, factor = 1) => {
@@ -68,20 +51,8 @@ export const shoppingForWeekLoop = (app, dates = weekDates(app.day)) => {
   // shoppingForPlan uses recipe ingredient lines as written (usually 1 batch).
   // Scale each line toward household portions using the recipe's stated servings.
   const entries = planEntries(app.plan || {}, dates);
-  const recipeFactor = new Map();
-  for (const entry of entries) {
-    if (!entry.recipe) continue;
-    const servings = Number(entry.recipe.servings) || 1;
-    recipeFactor.set(entry.recipe.name, people / servings);
-  }
-  const items = raw.map((item) => {
-    const factor = recipeFactor.get(item.fromRecipe) || people;
-    return {
-      ...item,
-      qty: scaleQty(item.qty, factor),
-      people,
-    };
-  });
+  const factors = recipePortionFactors(entries, people);
+  const items = scaleListToPortions(raw, people, factors).map((item) => ({ ...item, people }));
   return { items, portions: household };
 };
 

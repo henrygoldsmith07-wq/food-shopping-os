@@ -11,6 +11,8 @@
 import { canonicalName } from './aliases.js';
 import { daysUntil } from './kitchen.js';
 import { shoppingForPlan } from './mealplan.js';
+import { planEntries } from './mealplan.js';
+import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from './portions.js';
 
 /** How far back "you keep binning this" looks. */
 export const WASTE_LOOKBACK_DAYS = 28;
@@ -91,17 +93,21 @@ export const wasteAwareList = (items = [], { waste = [], today, learnedAliases =
 /**
  * Plan → list in one call, the way the loop promises it: only the
  * ingredients the plan actually needs minus what the pantry and the fridge
- * already cover, with an ingredient the household keeps binning arriving one
- * unit lighter and labelled why.
+ * already cover, scaled to the household's portions (learned appetite when
+ * recorded cooks disagree with the profile), with an ingredient the
+ * household keeps binning arriving one unit lighter and labelled why.
  */
 export const shoppingListForPlan = (
   plan,
   dates,
-  { pantry = [], waste = [], today, learnedAliases = {} } = {},
-) => wasteAwareList(
-  shoppingForPlan(plan, dates, { pantry, today, learnedAliases }),
-  { waste, today, learnedAliases },
-);
+  { pantry = [], waste = [], today, learnedAliases = {}, app = null } = {},
+) => {
+  const household = app ? householdPortionsFor(app) : { portions: 1, source: 'configured' };
+  const raw = shoppingForPlan(plan, dates, { pantry, today, learnedAliases });
+  const entries = planEntries(plan, dates);
+  const scaled = scaleListToPortions(raw, household.portions, recipePortionFactors(entries, household.portions));
+  return wasteAwareList(scaled, { waste, today, learnedAliases });
+};
 
 /**
  * What cooking should save by default: what the dish made minus the people

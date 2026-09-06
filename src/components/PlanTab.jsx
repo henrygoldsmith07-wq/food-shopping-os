@@ -24,6 +24,8 @@ import CalendarAvailability from './CalendarAvailability.jsx';
 import MonthMealRow from './MonthMealRow.jsx';
 import PlanningSignals from './PlanningSignals.jsx';
 import PlanSimulator from './PlanSimulator.jsx';
+import TonightSlotGuard from './TonightSlotGuard.jsx';
+import JustPlannedOffer from './JustPlannedOffer.jsx';
 
 const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -123,8 +125,9 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const [addedToList, setAddedToList] = useState(false);
   const [calendarStatus, setCalendarStatus] = useState('');
   const [prepDone, setPrepDone] = useState([]);
+  const [justPlanned, setJustPlanned] = useState(null); // a just-picked tonight dinner → shopping offer {id, rows}
   useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); }
-    if (tonightItem) { setView('week'); setOffset(0); setPicking({ date: app.day, slot: 'dinner', query: tonightItem }); } }, [focusDate, focusItem, tonightItem, app.day]);
+    if (tonightItem) { setView('week'); setOffset(0); const planned = byId((app.plan[app.day] || {}).dinner)?.name || null; setPicking({ date: app.day, slot: 'dinner', query: tonightItem, guard: planned }); } }, [focusDate, focusItem, tonightItem, app.day]);
 
   const anchorWeek = shiftWeek(app.day, offset);
   const anchorMonth = shiftMonth(app.day, offset);
@@ -161,6 +164,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       waste: app.waste,
       today: app.day,
       learnedAliases: app.aliasMemory || {},
+      app, // portions follow the same learned-appetite decision as the week loop
     }));
     setAddedToList(true);
   };
@@ -226,6 +230,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           <p className="mb-2 text-[0.78125rem] font-bold" style={{ color: 'var(--muted)' }}>{rangeLabel}</p>
         )}
         <PlanRepeatLastWeek dates={week} />
+        {justPlanned && <JustPlannedOffer key={justPlanned.id} meal={byId(justPlanned.id)?.name} missing={justPlanned.rows.length} onAdd={() => app.addToList(justPlanned.rows)} onGo={() => goTab?.('shop')} onDismiss={() => setJustPlanned(null)} />}
         {moving && (
           <Card className="!p-3 mb-2.5 flex items-center justify-between gap-2" style={{ borderColor: 'var(--accent)' }}>
             <p className="text-[0.78125rem] font-bold inline-flex items-center gap-1.5">
@@ -451,13 +456,9 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
         </Section>
       )}
       <Sheet open={!!picking} onClose={() => setPicking(null)} title="Plan a meal">
-        {picking && (
-          <RecipePicker
-            slot={picking.slot} initialQuery={picking.query || ''}
-            hasMeal={!!(app.plan[picking.date] || {})[picking.slot]} onPick={(id) => { app.setPlanSlot(picking.date, picking.slot, id); setPicking(null); setAddedToList(false); }}
-            onClear={() => { app.setPlanSlot(picking.date, picking.slot, null); setPicking(null); }}
-          />
-        )}
+        {picking && (picking.guard
+          ? <TonightSlotGuard existing={picking.guard} item={picking.query} onReplace={() => setPicking({ ...picking, guard: null })} onKeep={() => setPicking(null)} />
+          : <RecipePicker slot={picking.slot} initialQuery={picking.query || ''} hasMeal={!!(app.plan[picking.date] || {})[picking.slot]} onPick={(id) => { const rows = picking.date === app.day && picking.slot === 'dinner' ? shoppingListForPlan({ [picking.date]: { [picking.slot]: id } }, [picking.date], { pantry: app.pantry, waste: app.waste, today: app.day, learnedAliases: app.aliasMemory || {} }) : []; app.setPlanSlot(picking.date, picking.slot, id); setJustPlanned(rows.length ? { id, rows } : null); setPicking(null); setAddedToList(false); }} onClear={() => { app.setPlanSlot(picking.date, picking.slot, null); setPicking(null); }} />)}
       </Sheet>
       <Sheet open={!!openDay} onClose={() => setOpenDay(null)} title={openDay ? dayLabel(openDay) : ''}>
         {openDay && (

@@ -82,6 +82,15 @@ describe('week loop workflow', () => {
     const learned = shoppingForWeekLoop(learnedApp, [day]);
     expect(learned.portions.source).toBe('learned');
     expect(learned.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('6');
+
+    // A raw-state household with no derived profile learns from cooked
+    // events too — the same decision, not a second one.
+    const rawLearned = shoppingForWeekLoop({
+      ...base,
+      cooked: [{ portions: 3 }, { portions: 3 }, { portions: 3 }],
+    }, [day]);
+    expect(rawLearned.portions.source).toBe('learned');
+    expect(rawLearned.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('6');
   });
 
   it('keeps the configured portions until the appetite evidence is strong', () => {

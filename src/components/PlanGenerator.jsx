@@ -3,7 +3,8 @@ import {
   Check, ChevronRight, Info, Leaf, Package, ShoppingCart, Snowflake, Sparkles, Zap,
 } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
-import { buildPlan, EQUIPMENT_TAGS, scopeMeals, windowBudget } from '../lib/planner.js';
+import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from '../lib/planner.js';
+import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from '../lib/portions.js';
 import { useApp } from '../lib/store.jsx';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
 import { itemsFromRecipes } from '../data/stores.js';
@@ -14,7 +15,6 @@ import { explainRecommendation } from '../lib/recommend.js';
 import { Card, Chip, Pill, Stepper, FoodArt } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
-
 const SCOPES = ['1 meal', 'A day', 'A week', 'A month'];
 
 /**
@@ -28,7 +28,9 @@ const SCOPES = ['1 meal', 'A day', 'A week', 'A month'];
 export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApplied, goTab, focusItems = [] }) {
   const app = useApp();
   const [scope, setScope] = useState('A week');
-  const [people, setPeople] = useState(Math.max(1, Math.round(app.portions)));
+  // The stepper opens on what recorded cooks say the household eats when
+  // that disagrees with the profile — the same decision the list paths use.
+  const [people, setPeople] = useState(() => Math.round(householdPortionsFor(app).portions));
   const [budget, setBudget] = useState(2.5);
   const [occasion, setOccasion] = useState('Everyday');
   const [quick, setQuick] = useState(false);
@@ -58,7 +60,8 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const weeklyCap = weekChunks ? Number(app.weeklyBudget) || 0 : null;
   const pantryNames = app.pantry.map((p) => p.name);
   const focusList = (Array.isArray(focusItems) ? focusItems : focusItems ? [focusItems] : []).map((n) => String(n || '').trim()).filter(Boolean);
-  // A prediction tap's item joins the use-soon list so the generator favours it.
+  // Nothing to favour when no dish in the book cooks the focused item — say so.
+  const focusUnusable = focusList.length > 0 && !app.safeRecipes.some((r) => pantryHits(r, focusList) >= 1);
   const expiringNames = [...new Set([
     ...(app.useSoonIngredients?.length
       ? app.useSoonIngredients.map((row) => row.item.name)
@@ -116,8 +119,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
         budgetSpent,
         weeklyCap,
         weekChunks,
-        // Review reflections the household confirmed still apply shape the plan.
-        skipProfile: app.skipReasonProfile,
+        skipProfile: app.skipReasonProfile, // reflections the household confirmed still apply
       },
       seed,
     );
@@ -126,7 +128,6 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent, weeklyCap, weekChunks ? weekChunks.join(',') : null, focusList.join(',')]);
 
   const generated = plan?.meals ?? null;
-
   const generate = () => {
     if (noOpenDates) return;
     setAddedToList(false);
@@ -163,15 +164,21 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       goTab?.('shop');
       return;
     }
-    // Binned-ingredient memory ships those items lighter, with the reason shown.
-    app.addToList(wasteAwareList(
+    // Quantities scale to the chosen portions (what recorded cooks say the
+    // household eats, when they disagree with the profile), then
+    // binned-ingredient memory ships those items lighter, with the reason shown.
+    const chosen = householdPortionsFor(app);
+    const scaled = scaleListToPortions(
       itemsFromRecipes([...new Set(generated)], pantryNames),
+      chosen.portions,
+      recipePortionFactors((generated || []).map((recipe) => ({ recipe })), chosen.portions),
+    );
+    app.addToList(wasteAwareList(
+      scaled,
       { waste: app.waste, today: app.day, learnedAliases: app.aliasMemory || {} },
     ));
     setAddedToList(true);
-  };
-
-  const cost = generated ? generated.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
+  };  const cost = generated ? generated.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
   const kcal = generated ? Math.round(generated.reduce((s, r) => s + r.kcal, 0) / generated.length) : 0;
   const distinct = generated ? new Set(generated.map((r) => r.id)).size : 0;
   const wastePlan = plan?.wastePlan || null;
@@ -340,6 +347,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
             {expiringNames.slice(0, 4).join(', ')}{expiringNames.length > 4 ? '…' : ''} — use soon; the generator will favour dishes that use them.
           </p>
         )}
+        {focusUnusable && <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--warn, #a55a12)' }}>{focusList.join(', ')} — use soon, but nothing in your recipe book cooks with it, so no dish can be pinned to use it.</p>}
 
         {seasonal && (
           <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
@@ -467,6 +475,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
                         {r.time} min · {gbp(r.costPerServing, { always: true })}/serving
                       </p>
                     </div>
+                    {focusList.length > 0 && pantryHits(r, focusList) >= 1 && <span className="shrink-0 rounded-full px-2 py-1 text-[0.625rem] font-extrabold uppercase tracking-wide" style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>Pinned</span>}
                     <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
                   </div>
                   <div className="px-3 pb-3">
