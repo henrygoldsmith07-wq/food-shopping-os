@@ -43,7 +43,6 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const [seed, setSeed] = useState(() => (app.calendarBusy?.length ? Date.now() % 100000 : 0));
   const [generating, setGenerating] = useState(false);
   const [addedToList, setAddedToList] = useState(false);
-
   const month = monthOf(app.day);
   const dates = scope === 'A month' ? monthDates : weekDates;
   const busyDates = new Set((app.calendarBusy || []).map((item) => item.date));
@@ -54,6 +53,9 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const windowDays = scope === 'A month' ? monthDates.length : scope === 'A week' ? weekDates.length : 0;
   const weeklyBudget = windowDays ? windowBudget(app.weeklyBudget, windowDays) : null;
   const budgetSpent = scope === 'A month' ? Number(app.spentThisMonth) || 0 : scope === 'A week' ? Number(app.spentThisWeek) || 0 : 0;
+  // Each 7-meal chunk is held to the true weekly allowance, so spend can't pool into one week.
+  const weekChunks = (scope === 'A month' && planDates.length > 7) ? Array.from({ length: Math.ceil(planDates.length / 7) }, (_, i) => Math.min(7, planDates.length - i * 7)) : null;
+  const weeklyCap = weekChunks ? Number(app.weeklyBudget) || 0 : null;
   const pantryNames = app.pantry.map((p) => p.name);
   const focusList = (Array.isArray(focusItems) ? focusItems : focusItems ? [focusItems] : []).map((n) => String(n || '').trim()).filter(Boolean);
   // A prediction tap's item joins the use-soon list so the generator favours it.
@@ -112,12 +114,14 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
         learnedAliases: app.aliasMemory || {},
         weeklyBudget,
         budgetSpent,
+        weeklyCap,
+        weekChunks,
       },
       seed,
     );
     // pantryNames is rebuilt every render; its content is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent, focusList.join(',')]);
+  }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent, weeklyCap, weekChunks ? weekChunks.join(',') : null, focusList.join(',')]);
 
   const generated = plan?.meals ?? null;
 
@@ -157,8 +161,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       goTab?.('shop');
       return;
     }
-    // Same learning pass as the plan screen's send-to-list: ingredients this
-    // household keeps binning go on the list lighter, with the reason shown.
+    // Binned-ingredient memory ships those items lighter, with the reason shown.
     app.addToList(wasteAwareList(
       itemsFromRecipes([...new Set(generated)], pantryNames),
       { waste: app.waste, today: app.day, learnedAliases: app.aliasMemory || {} },
@@ -205,6 +208,11 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
             {SCOPES.map((s) => <Chip key={s} active={scope === s} onClick={() => setScope(s)}>{s}</Chip>)}
           </div>
         </div>
+
+        {weeklyBudget !== null && (
+          <p className="rounded-2xl border px-3 py-2 text-center text-[0.75rem] font-bold" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+            {weeklyBudget <= budgetSpent ? `This ${scope === 'A month' ? 'month' : 'week'} is over budget by ${gbp(budgetSpent - weeklyBudget, { always: true })}.` : `${gbp(budgetSpent, { always: true })} spent of ${gbp(weeklyBudget, { always: true })} this ${scope === 'A month' ? 'month' : 'week'} — ${gbp(weeklyBudget - budgetSpent, { always: true })} left to rank against.`}
+          </p>)}
 
         <div className="flex items-center justify-between">
           <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
@@ -352,10 +360,6 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           </div>
         )}
 
-        {weeklyBudget !== null && (
-          <p className="mb-3 rounded-2xl border px-3 py-2 text-center text-[0.75rem] font-bold" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-            {weeklyBudget <= budgetSpent ? `This ${scope === 'A month' ? 'month' : 'week'} is over budget by ${gbp(budgetSpent - weeklyBudget, { always: true })}.` : `${gbp(budgetSpent, { always: true })} spent of ${gbp(weeklyBudget, { always: true })} this ${scope === 'A month' ? 'month' : 'week'} — ${gbp(weeklyBudget - budgetSpent, { always: true })} left to rank against.`}
-          </p>)}
         <button
           onClick={generate}
           disabled={generating || noOpenDates}
@@ -369,11 +373,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
         </button>
       </Card>
 
-      {generating && (
-        <div className="mt-3 space-y-2.5">
-          {[0, 1, 2].map((i) => <div key={i} className="skeleton h-[72px] rounded-2xl" />)}
-        </div>
-      )}
+      {generating && <div className="mt-3 space-y-2.5">{[0, 1, 2].map((i) => <div key={i} className="skeleton h-[72px] rounded-2xl" />)}</div>}
 
       {generated && !generating && (
         <div className="mt-3 space-y-3">

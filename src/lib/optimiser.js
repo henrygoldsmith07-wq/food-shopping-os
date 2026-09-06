@@ -44,32 +44,39 @@ const mealNutrients = (meals = []) => {
   return { ...totals, known, count: rows.length };
 };
 
-const recipeCost = (meals = [], people = 1, priceTable = null, learnedAliases = {}) => {
-  let cost = 0;
-  let known = 0;
-  const eaters = Math.max(1, Number(people) || 1);
-  for (const meal of meals) {
-    const ingredients = meal?.ingredients || [];
-    const servings = Number(meal?.servings);
-    const factor = Number.isFinite(servings) && servings > 0 ? eaters / servings : 1;
-    const priced = ingredients.map((ingredient) => {
-      const price = priceTable && (priceTable[ingredientKey(ingredient?.name, learnedAliases)]
-        ?? priceTable[key(ingredient?.name)]);
-      return price != null && Number.isFinite(Number(price))
-        ? Number(price) * readQty(ingredient?.qty).amount * factor
-        : null;
-    });
-    if (priced.length > 0 && priced.every((price) => price != null)) {
-      cost += priced.reduce((sum, price) => sum + price, 0);
-      known += 1;
-    } else if (Number.isFinite(Number(meal?.costPerServing))) {
-      // Ingredient prices are often incomplete; the recipe's per-serving cost
-      // is the safer estimate than silently counting only part of the meal.
-      cost += Math.max(0, Number(meal.costPerServing)) * eaters;
-      known += 1;
-    }
+/** One meal's estimated cost, for the household size. */
+const mealCost = (meal, eaters, priceTable, learnedAliases) => {
+  const ingredients = meal?.ingredients || [];
+  const servings = Number(meal?.servings);
+  const factor = Number.isFinite(servings) && servings > 0 ? eaters / servings : 1;
+  const priced = ingredients.map((ingredient) => {
+    const price = priceTable && (priceTable[ingredientKey(ingredient?.name, learnedAliases)]
+      ?? priceTable[key(ingredient?.name)]);
+    return price != null && Number.isFinite(Number(price))
+      ? Number(price) * readQty(ingredient?.qty).amount * factor
+      : null;
+  });
+  if (priced.length > 0 && priced.every((price) => price != null)) {
+    return priced.reduce((sum, price) => sum + price, 0);
   }
-  return known === meals.filter(Boolean).length && known ? round1(cost) : null;
+  if (Number.isFinite(Number(meal?.costPerServing))) {
+    // Ingredient prices are often incomplete; the recipe's per-serving cost
+    // is the safer estimate than silently counting only part of the meal.
+    return Math.max(0, Number(meal.costPerServing)) * eaters;
+  }
+  return null;
+};
+
+/** Every meal's cost in order — the weekly split needs per-meal figures. */
+const mealCosts = (meals = [], people = 1, priceTable = null, learnedAliases = {}) => {
+  const eaters = Math.max(1, Number(people) || 1);
+  return meals.filter(Boolean).map((meal) => mealCost(meal, eaters, priceTable, learnedAliases));
+};
+
+const recipeCost = (meals = [], people = 1, priceTable = null, learnedAliases = {}) => {
+  const costs = mealCosts(meals, people, priceTable, learnedAliases);
+  if (!costs.length || costs.some((cost) => cost == null)) return null;
+  return round1(costs.reduce((sum, cost) => sum + cost, 0));
 };
 
 const nutritionFitOf = (meals, targets, { days = 1, share = 1 } = {}) => {
@@ -254,6 +261,11 @@ export const rankPlans = (candidates = [], context = {}) => {
     weights = {}, priceTable = null, people = 1, nutritionTargets = null,
     nutritionDays = 1, nutritionShare = 1, preferenceScores = {},
     shops = [], preferredStore = null, learnedAliases = {},
+    // Multi-week plans (the month): `weeklyCap` is the true one-week allowance
+    // and `weekChunks` says how many meals each week of the window holds. With
+    // both, a week that outspends its allowance benches the plan even when the
+    // whole window fits.
+    weeklyCap = null, weekChunks = null,
   } = context;
   const W = { ...DEFAULT_WEIGHTS, ...normaliseWeightMap(weights) };
 
@@ -285,9 +297,12 @@ export const rankPlans = (candidates = [], context = {}) => {
       : null;
     metrics.supermarket = supermarket;
 
-    const estimatedCost = recipeCost(meals, people, priceTable, learnedAliases);
+    const perMealCosts = mealCosts(meals, people, priceTable, learnedAliases);
+    const estimatedCost = perMealCosts.length && perMealCosts.some((cost) => cost == null)
+      ? null
+      : round1(perMealCosts.reduce((sum, cost) => sum + cost, 0));
     metrics.estimatedCost = estimatedCost;
-    // The plan's cost competes with what the week has left, not the whole
+    // The plan's cost competes with what the window has left, not the whole
     // budget: spent already spent is gone, so the headroom subtracts it.
     const budgetLeft = weeklyBudget != null && weeklyBudget > 0
       ? Math.max(0, Number(weeklyBudget) - Math.max(0, Number(budgetSpent) || 0))
@@ -300,6 +315,44 @@ export const rankPlans = (candidates = [], context = {}) => {
       if (overshoot > 0) reasons.push(`Over the £${round1(budgetLeft)} left this week by £${round1(overshoot)}.`);
       else reasons.push(`Inside budget at £${round1(estimatedCost)} with £${round1(budgetLeft - estimatedCost)} left.`);
     } else metrics.budgetFit = null;
+    // Weekly guard: a month plan that fits overall can still front-load or
+    // back-load its spend. When the caller names the weeks and the true weekly
+    // allowance, the worst week's fit joins the whole-window fit — the two
+    // together keep cost even, not just within the month's total.
+    const weeks = Array.isArray(weekChunks) && weekChunks.length > 1 && Number(weeklyCap) > 0
+      ? weekChunks
+      : null;
+    if (weeks && perMealCosts.every((cost) => cost != null)) {
+      const weekCosts = [];
+      let offset = 0;
+      for (const size of weeks) {
+        const slice = perMealCosts.slice(offset, offset + Math.max(1, Number(size) || 0));
+        if (!slice.length) break;
+        weekCosts.push(round1(slice.reduce((sum, cost) => sum + cost, 0)));
+        offset += slice.length;
+      }
+      if (weekCosts.length === weeks.length) {
+        const cap = Number(weeklyCap);
+        let worstOver = 0;
+        let worstIndex = -1;
+        weekCosts.forEach((cost, index) => {
+          const over = cost - cap;
+          if (over > worstOver) {
+            worstOver = over;
+            worstIndex = index;
+          }
+        });
+        const weekFit = clamp(100 - (worstOver / cap) * 200);
+        metrics.weekCosts = weekCosts;
+        metrics.weeklyCap = round1(cap);
+        metrics.budgetFit = metrics.budgetFit == null ? weekFit : Math.round(Math.min(metrics.budgetFit, weekFit));
+        if (worstOver > 0) {
+          reasons.push(`Week ${worstIndex + 1} of ${weeks.length} would need £${round1(weekCosts[worstIndex])} — £${round1(worstOver)} over its £${round1(cap)} weekly allowance.`);
+        } else {
+          reasons.push(`Even across ${weeks.length} weeks: the priciest week costs £${round1(Math.max(...weekCosts))} of the £${round1(cap)} allowance.`);
+        }
+      }
+    }
 
     const times = meals.map((m) => Number(m?.time) || 0);
     const longest = Math.max(0, ...times);

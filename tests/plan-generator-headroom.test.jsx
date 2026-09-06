@@ -64,4 +64,21 @@ describe('the spent/left headroom above Generate', () => {
     fireEvent.click(screen.getByText('1 meal'));
     expect(document.body.textContent).not.toMatch(/left to rank against|over budget by/);
   });
+
+  it('sits beside the scope toggle, ahead of the plan options, in both scopes', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(seed(26)));
+    renderGenerator();
+    // DOM order: Generate header → scope chips → headroom line → plan options.
+    const headroomBeforeOptions = () => {
+      const body = document.body.textContent;
+      const spentAt = body.indexOf('spent of');
+      const optionsAt = body.indexOf('Budget per serving');
+      expect(spentAt).toBeGreaterThan(body.indexOf('Generate'));
+      expect(optionsAt).toBeGreaterThan(spentAt);
+    };
+    headroomBeforeOptions();
+    fireEvent.click(screen.getByText('A month'));
+    expect(document.body.textContent).toMatch(/£26\.00 spent of £240\.00 this month — £214\.00 left to rank against\./);
+    headroomBeforeOptions();
+  });
 });

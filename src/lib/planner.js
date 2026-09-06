@@ -203,11 +203,14 @@ export const chooseCandidate = (candidates, wasteOptions, optimise, multiObjecti
       wasteScores: Object.fromEntries(ranked.ranked.map((r) => [r.candidateIndex, r.score])),
       maxTimeMins: wasteOptions.maxTimeMins ?? null,
       equipmentOwned: wasteOptions.equipmentOwned ?? [],
-      // Same headroom maths the simulator uses: cost competes with the week
-      // minus what the shops already took, scaled to the household size.
+      // Same headroom maths the simulator uses: cost competes with the window
+      // minus what the shops already took, scaled to the household size — and
+      // a multi-week window also answers to each week's own allowance.
       weeklyBudget: wasteOptions.weeklyBudget ?? null,
       budgetSpent: Number(wasteOptions.budgetSpent) || 0,
       people: Number(wasteOptions.people) || 1,
+      weeklyCap: wasteOptions.weeklyCap ?? null,
+      weekChunks: Array.isArray(wasteOptions.weekChunks) ? wasteOptions.weekChunks : null,
     });
     if (optimised?.meals?.length) {
       return {
@@ -261,6 +264,10 @@ export function buildPlan(
     // what the budget has left after this week's recorded shops, so a generated
     // plan and the simulator compete on the same number.
     weeklyBudget = null, budgetSpent = 0,
+    // The week inside a multi-week window: `weeklyCap` is the true one-week
+    // allowance and `weekChunks` the window's per-week meal counts, so a month
+    // plan is ranked against each week, not just its total.
+    weeklyCap = null, weekChunks = null,
   },
   seed,
 ) {
@@ -277,6 +284,8 @@ export function buildPlan(
     learnedAliases,
     weeklyBudget,
     budgetSpent,
+    weeklyCap,
+    weekChunks,
   };
   const candidates = candidateCount(wasteOptimisation);
 

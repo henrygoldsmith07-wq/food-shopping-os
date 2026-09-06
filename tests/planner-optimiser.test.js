@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPlan, chooseCandidate, pantryHits, windowBudget } from '../src/lib/planner.js';
+import { rankPlans } from '../src/lib/optimiser.js';
 
 const meal = (id, ingredients) => ({ id, title: id, ingredients });
 const ricey = meal('rice-bowl', [{ name: 'Rice', qty: '400 g' }]);
@@ -82,6 +83,81 @@ describe('multi-objective budget headroom', () => {
     const out = chooseCandidate([[lavish], [frugal]], { ...base, weeklyBudget: 40, budgetSpent: 36 }, true, true);
     expect(out.meals[0].id).toBe('f1');
     expect(out.optimiserReasons.join(' ')).toMatch(/£2 left\./);
+  });
+});
+
+describe('a month plan answers to each week, not just its total', () => {
+  // Two meals only: lavish (£8 for two) and frugal (£2 for two).
+  const lavish = { id: 'l1', title: 'l1', cuisine: 'fancy', costPerServing: 4, ingredients: [] };
+  const frugal = { id: 'f1', title: 'f1', cuisine: 'plain', costPerServing: 1, ingredients: [] };
+  const base = { people: 2, today: '2026-08-22' };
+  const mealCount = (spend) => Array.from({ length: spend }, () => ({}));
+  // Two candidate months of 14 dinners: A front-loads (week 1 = £56, week 2
+  // = £14 — £70 total); B spends evenly (£20 each week — £40 total). Against
+  // a £80 two-week window both fit, but against a £40 weekly allowance A's
+  // first week is £16 over.
+  const A = [...mealCount(7).map(() => lavish), ...mealCount(7).map(() => frugal)];
+  const B = [lavish, ...mealCount(6).map(() => frugal), lavish, ...mealCount(6).map(() => frugal)];
+
+  it('an evenly-spread month outranks a front-loaded one on the same total', () => {
+    const out = chooseCandidate([A, B], {
+      ...base,
+      weeklyBudget: 80, budgetSpent: 0,
+      weeklyCap: 40, weekChunks: [7, 7],
+    }, true, true);
+    expect(out.meals[1].id).toBe('f1'); // B's second meal is frugal — A's is lavish
+    // B's own week story is the even one; A's front-load warning is why B won.
+    expect(out.optimiserReasons.join(' ')).toMatch(/Even across 2 weeks: the priciest week costs £20 of the £40 allowance\./);
+    expect(out.optimiserReasons.join(' ')).not.toMatch(/Week 1 of 2 would need £56/);
+    const { best } = rankPlans([A, B], {
+      ...base,
+      weeklyBudget: 80, budgetSpent: 0,
+      weeklyCap: 40, weekChunks: [7, 7],
+    });
+    expect(best.candidateIndex).toBe(1); // A's week-1 overage lost it the pick
+  });
+
+  it('the worst week decides budgetFit, and the metrics say the split plainly', () => {
+    const { best } = rankPlans([A, B], {
+      ...base,
+      weeklyBudget: 80, budgetSpent: 0,
+      weeklyCap: 40, weekChunks: [7, 7],
+    });
+    // A: week fit = 100 − (16 / 40) × 200 = 20, whole fit 100 → 20.
+    expect(best.candidateIndex).toBe(1);
+    expect(best.metrics.weekCosts).toEqual([20, 20]);
+    expect(best.metrics.weeklyCap).toBe(40);
+    expect(best.metrics.budgetFit).toBe(100);
+    const worst = rankPlans([A], {
+      ...base,
+      weeklyBudget: 80, budgetSpent: 0,
+      weeklyCap: 40, weekChunks: [7, 7],
+    }).best;
+    expect(worst.metrics.weekCosts).toEqual([56, 14]);
+    expect(worst.metrics.budgetFit).toBe(20);
+  });
+
+  it('without a weekly cap the whole-window fit still rules the ranking', () => {
+    // Same candidates, same £80 window — but no per-week allowance: A fits the
+    // window too, so the tie keeps candidate 0 and no week is accused.
+    const out = chooseCandidate([A, B], {
+      ...base,
+      weeklyBudget: 80, budgetSpent: 0,
+      weekChunks: [7, 7], // chunks alone change nothing
+    }, true, true);
+    expect(out.meals[1].id).toBe('l1'); // A (all lavish first) won the whole-fit tie as before
+    expect(out.optimiserReasons.join(' ')).toMatch(/Inside budget at £70/);
+    expect(out.optimiserReasons.join(' ')).not.toMatch(/weekly allowance|Even across/);
+  });
+
+  it('an evenly-spread month that exceeds no week keeps the whole window honest', () => {
+    const out = chooseCandidate([A, B], {
+      ...base,
+      weeklyBudget: 80, budgetSpent: 0,
+      weeklyCap: 40, weekChunks: [7, 7],
+    }, true, true);
+    expect(out.meals[1].id).toBe('f1');
+    expect(out.optimiserReasons.join(' ')).toMatch(/Even across 2 weeks: the priciest week costs £20 of the £40 allowance\./);
   });
 });
 
