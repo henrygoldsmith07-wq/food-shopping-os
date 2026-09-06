@@ -220,6 +220,49 @@ export const basketProjection = (items = [], {
   };
 };
 
+/* ---------- What the week's headroom can buy ---------- */
+
+/**
+ * What this basket can afford, row by row.
+ *
+ * The headroom is the week's budget minus what has already been spent; the
+ * basket is re-ranked cheapest-first so the answer to "what can I afford now"
+ * is a prefix of priced items, not a guess. Items with no recorded price are
+ * never counted as fitting — an unknown cost cannot claim a place inside the
+ * cap — and stay visible at the tail of the ranked order.
+ */
+export const affordableCap = (items = [], { budget = 0, spent = 0 } = {}) => {
+  const weekly = Number(budget) || 0;
+  if (weekly <= 0) return null;
+  const spentSoFar = round2(Math.max(0, Number(spent) || 0));
+  const headroom = round2(Math.max(0, weekly - spentSoFar));
+  const ranked = (Array.isArray(items) ? items : [])
+    .map((item, index) => ({ item, index, price: Math.max(0, Number(item.price) || 0) }))
+    .sort((a, b) => (a.price > 0 ? a.price : Number.MAX_SAFE_INTEGER) - (b.price > 0 ? b.price : Number.MAX_SAFE_INTEGER) || a.index - b.index);
+  const fitIndexes = new Set();
+  let used = 0;
+  let fitsCost = 0;
+  for (const row of ranked) {
+    if (Number(row.item.price) <= 0) continue; // unpriced cannot be promised
+    if (used + row.price > headroom) continue;
+    used = round2(used + row.price);
+    fitsCost = round2(fitsCost + row.price);
+    fitIndexes.add(row.index);
+  }
+  const outside = (Array.isArray(items) ? items : [])
+    .filter((item, index) => Number(item.price) > 0 && !fitIndexes.has(index));
+  return {
+    headroom,
+    ordered: ranked.map((row) => row.item),
+    fitCount: fitIndexes.size,
+    fitsCost,
+    outside: outside.map((item) => item.name),
+    outsideCount: outside.length,
+    outsideCost: round2(outside.reduce((sum, item) => sum + (Number(item.price) || 0), 0)),
+    unpriced: (Array.isArray(items) ? items : []).filter((item) => Number(item.price) <= 0).length,
+  };
+};
+
 /* ---------- Pantry: what's going off, what ran out ---------- */
 
 export const EXPIRY_BUCKETS = [

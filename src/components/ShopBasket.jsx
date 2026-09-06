@@ -14,6 +14,7 @@ import { Card, Chip, Meter, Section } from './ui.jsx';
  */
 export default function ShopBasket({
   app, basket, ticked, visibleList, shoppingMode, shoppingSession, isOnline, setSheet, onOpenPantry,
+  cap = null, reRanked = false, onReRank = null,
 }) {
   // What has actually been ticked off, which is the running total once a shop
   // is under way; derived here because it is only ever read here.
@@ -91,6 +92,30 @@ export default function ShopBasket({
                   : `${gbp(basket.left, { always: true })} headroom`}
               </span>
             </div>
+            {cap && basket.over && !shoppingMode && (
+              <div className="mt-2 rounded-2xl border p-2.5 space-y-2" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+                <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--warn)' }}>
+                  <span className="font-extrabold">What you can afford now:</span> the cheapest{' '}
+                  {cap.fitCount} priced item{cap.fitCount === 1 ? '' : 's'} ({gbp(cap.fitsCost, { always: true })})
+                  {' '}fit your {gbp(cap.headroom, { always: true })} headroom
+                  {cap.outsideCount > 0
+                    ? ` — ${cap.outsideCount} priced item${cap.outsideCount === 1 ? '' : 's'} (${gbp(cap.outsideCost, { always: true })}) sit past it`
+                    : ''}
+                  {cap.unpriced > 0 ? `, plus ${cap.unpriced} unpriced` : ''}.
+                </p>
+                {onReRank && (
+                  <button
+                    type="button"
+                    onClick={onReRank}
+                    aria-label={reRanked ? 'Back to my order' : 'Rank by what I can afford'}
+                    className="press rounded-xl px-3 py-2 text-[0.71875rem] font-extrabold"
+                    style={reRanked ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { background: 'var(--accent)', color: 'var(--on-accent)' }}
+                  >
+                    {reRanked ? 'Back to my order' : 'Rank by what I can afford'}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>

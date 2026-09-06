@@ -110,7 +110,7 @@ export const planShoppingTrip = (items = [], {
   };
 };
 
-export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = 'balanced', packageSizes = {}, wasteHistory = [], today = '', learnedAliases = {}, routes = {}, memory = {} } = {}) => {
+export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = 'balanced', packageSizes = {}, wasteHistory = [], today = '', learnedAliases = {}, routes = {}, memory = {}, weeklyBudget = null, budgetSpent = 0 } = {}) => {
   if (!items.length) return { mode, assignment: [], total: 0, stores: 0, explanation: 'List is empty — nothing to optimise.' };
 
   const history = (() => {
@@ -199,6 +199,30 @@ export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = '
     explanation = `Balanced: £${total.toFixed(2)} across ${count} store${count === 1 ? '' : 's'} using recorded prices where available.`;
   }
 
+  // The week's budget is a real guard, not a label: when a weekly budget is
+  // set, the headroom left after recorded spend caps the basket. Every row
+  // that crosses that headroom is flagged, and the mode's explanation says
+  // plainly what the numbers mean before anyone stands in a checkout queue.
+  let budget = null;
+  if (weeklyBudget != null && Number(weeklyBudget) > 0) {
+    const weekly = round2(Number(weeklyBudget) || 0);
+    const spent = round2(Math.max(0, Number(budgetSpent) || 0));
+    const left = round2(Math.max(0, weekly - spent));
+    let running = 0;
+    let over = false;
+    for (const row of assignment) {
+      running = round2(running + (Number(row.price) || 0));
+      if (!over && running > left) over = true;
+      row.overBudget = over;
+    }
+    const total = totalFor(assignment);
+    const overBy = round2(Math.max(0, total - left));
+    budget = { weekly, spent, left, total, overBy, over: overBy > 0 };
+    explanation = overBy > 0
+      ? `${explanation} This basket is £${overBy.toFixed(2)} over the £${left.toFixed(2)} left of your £${weekly.toFixed(2)} budget — £${spent.toFixed(2)} is already spent.`
+      : `${explanation} Within budget: £${left.toFixed(2)} remains after £${spent.toFixed(2)} spent of £${weekly.toFixed(2)}.`;
+  }
+
   // Account for package sizes, price freshness, pantry stock, availability confidence in explanation
   const stale = assignment.filter((a) => a.source === 'historical').length;
   const freshnessNote = stale
@@ -213,6 +237,7 @@ export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = '
     itemCount: assignment.length,
     explanation,
     freshnessNote,
+    budget,
     assumptions: [
       'Prices use receipt-backed history only; no live retailer feed is assumed.',
       'Package sizes use shared measure engine; mismatched scales are reported, not guessed.',

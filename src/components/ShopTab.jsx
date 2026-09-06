@@ -8,7 +8,7 @@ import { Glyph } from './icons.jsx';
 import { gbp, cx, prettyDate } from '../lib/utils.js';
 import { AISLE_ORDER, COMMON_STORES, checkedTotalOf } from '../data/stores.js';
 import {
-  basketProjection, dealQuality, groupForStore, parseVoiceShopping, recurringStaples, shoppingNameKey,
+  affordableCap, basketProjection, dealQuality, groupForStore, parseVoiceShopping, recurringStaples, shoppingNameKey,
 } from '../lib/shopping.js';
 import { AISLE_ORDER as ALL_AISLES } from '../data/stores.js';
 import { clearObservedPriceCache, fetchObservedForList } from '../lib/observed-prices.js';
@@ -57,6 +57,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   const [observedBusy, setObservedBusy] = useState(false);
   const [observedError, setObservedError] = useState('');
   const [observedMeta, setObservedMeta] = useState(null); // { checkedAt, fromCache, fetched }
+  const [reRanked, setReRanked] = useState(false); // basket rows cheapest-first while over budget
   const shoppingMode = shoppingSession.active;
   const largeTouch = Boolean(app.shoppingPreferences?.largeTouch);
   const offlineMode = Boolean(app.shoppingPreferences?.offlineMode);
@@ -88,10 +89,8 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   ])], [app.shops, list]);
   const storeChoices = useMemo(() => [...new Set([...stores, ...COMMON_STORES])].slice(0, 8), [stores]);
   const visibleList = useMemo(() => (store ? list.filter((item) => item.store === store) : list), [list, store]);
-  const grouped = useMemo(
-    () => groupForStore(visibleList, { store, routes: app.storeRoutes, memory: app.aisleMemory }),
-    [visibleList, store, app.storeRoutes, app.aisleMemory],
-  );
+  const cap = useMemo(() => affordableCap(visibleList, { budget: app.weeklyBudget, spent: app.spentThisWeek }), [visibleList, app.weeklyBudget, app.spentThisWeek]);
+  const grouped = useMemo(() => groupForStore(reRanked && cap ? cap.ordered : visibleList, { store, routes: app.storeRoutes, memory: app.aisleMemory }), [visibleList, cap, reRanked, store, app.storeRoutes, app.aisleMemory]);
 
   const basket = useMemo(() => (store
     ? basketProjection(visibleList, {
@@ -229,7 +228,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             shoppingSession={shoppingSession}
             isOnline={isOnline}
             setSheet={setSheet}
-            onOpenPantry={onOpenPantry}
+            onOpenPantry={onOpenPantry} cap={cap} reRanked={reRanked} onReRank={() => setReRanked((value) => !value)}
           />
 
           {/* Which shop you're walking round: its aisles, in your order */}

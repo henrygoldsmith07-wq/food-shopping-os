@@ -328,6 +328,8 @@ export const deriveApp = (state) => {
       // the learned store routes and the item→aisle memory steer the trip.
       routes: state.storeRoutes || {},
       memory: state.aisleMemory || {},
+      // The same headroom the plan generator ranks against caps the basket.
+      weeklyBudget: state.weeklyBudget, budgetSpent: spentInWeek(state.shops, state.day),
     }),
     stats: kitchenStats({ ...state, xp: progress.xp }, state.day),
     personaTier,

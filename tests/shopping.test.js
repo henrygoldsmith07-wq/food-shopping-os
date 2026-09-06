@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  aisleFor, applyOffers, basketProjection, cheapestFor, compareStores, expiryBuckets,
+  affordableCap, aisleFor, applyOffers, basketProjection, cheapestFor, compareStores, expiryBuckets,
   groupForStore, mergeItems, refile, rememberAisle, restockSuggestions, routeFor,
   findShoppingDuplicate, parseVoiceShopping, priceAlertMatches, quantitySuggestion, routeFromTicks,
   savingsAvailable, wasteSummary,
@@ -333,5 +333,40 @@ describe('meals to shopping', () => {
     expect(parseQtyAmount('1 ½ lemons')?.amount).toBeCloseTo(1.5, 5);
     expect(parseQtyAmount('1½ lemons')?.amount).toBeCloseTo(1.5, 5);
     expect(parseQtyAmount('2.5 tins')?.amount).toBeCloseTo(1000, 5); // 2.5 * 400g normalised
+  });
+});
+
+// ---------- what the week's headroom can buy ----------
+describe('affordableCap — the basket against what\'s left of the week', () => {
+  it('ranks priced items cheapest-first and caps at the headroom', () => {
+    // £30 budget, nothing spent — the £5, £8, £12 and £20 items leave £5 of
+    // headroom unused; the cap fits the first three and flags the £20.
+    const items = [item('Wine', 20), item('Milk', 5), item('Bread', 8), item('Cheese', 12)];
+    const cap = affordableCap(items, { budget: 30 });
+    expect(cap.headroom).toBe(30);
+    expect(cap.ordered.map((row) => row.name)).toEqual(['Milk', 'Bread', 'Cheese', 'Wine']);
+    expect(cap).toMatchObject({ fitCount: 3, fitsCost: 25, outsideCount: 1, outsideCost: 20, unpriced: 0 });
+    expect(cap.outside).toEqual(['Wine']);
+  });
+
+  it('measures headroom after what the week already spent', () => {
+    // £25 spent of £30 leaves £5 — only the £3 item fits inside it.
+    const items = [item('Milk', 5), item('Tea', 3)];
+    const cap = affordableCap(items, { budget: 30, spent: 25 });
+    expect(cap).toMatchObject({ headroom: 5, fitCount: 1, fitsCost: 3, outsideCount: 1, outsideCost: 5 });
+  });
+
+  it('never counts an unpriced item as affordable', () => {
+    const items = [item('Mystery', 0), item('Butter', 2), item('Cream', 4)];
+    const cap = affordableCap(items, { budget: 10 });
+    expect(cap).toMatchObject({ fitCount: 2, fitsCost: 6, unpriced: 1 });
+    // The unpriced item trails the ranked order rather than being dropped.
+    expect(cap.ordered.map((row) => row.name)).toEqual(['Butter', 'Cream', 'Mystery']);
+    expect(cap.outsideCount).toBe(0);
+  });
+
+  it('stays silent without a weekly budget', () => {
+    expect(affordableCap([item('Milk', 2)], { budget: 0 })).toBeNull();
+    expect(affordableCap([item('Milk', 2)], {})).toBeNull();
   });
 });

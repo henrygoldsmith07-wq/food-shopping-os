@@ -394,6 +394,48 @@ describe('shopping optimisation', () => {
   });
 });
 
+// ---------- the week's budget guards the basket ----------
+describe('the shopping budget guard', () => {
+  // Milk is cheapest at Aldi (£1.10), Bread only recorded at Tesco (£0.90) —
+  // a deterministic £2.00 lowest-cost basket to test headroom against.
+  const items = [{ name: 'Milk', price: 1.2, qty: '1l' }, { name: 'Bread', price: 1, qty: '1 loaf' }];
+  const shops = [
+    { store: 'Aldi', date: '2026-08-01', items: [{ name: 'Milk', price: 1.1 }] },
+    { store: 'Tesco', date: '2026-08-01', items: [{ name: 'Milk', price: 1.5 }, { name: 'Bread', price: 0.9 }] },
+  ];
+
+  it('flags an assignment that exceeds the remaining headroom', () => {
+    const res = optimiseShopping(items, { shops, mode: 'lowest_cost', weeklyBudget: 1.2 });
+    expect(res.budget).toMatchObject({ weekly: 1.2, spent: 0, left: 1.2, total: 2, overBy: 0.8, over: true });
+    // Every row from the point the running total crosses the headroom is flagged.
+    expect(res.assignment.filter((row) => row.overBudget).length).toBeGreaterThan(0);
+    expect(res.explanation).toMatch(/This basket is £0\.80 over the £1\.20 left of your £1\.20 budget/);
+  });
+
+  it('records spent spend against the weekly budget in the headroom', () => {
+    // £25 already spent of a £30 week leaves £5; the £2 basket fits inside it.
+    const res = optimiseShopping(items, { shops, mode: 'lowest_cost', weeklyBudget: 30, budgetSpent: 25 });
+    expect(res.budget).toMatchObject({ weekly: 30, spent: 25, left: 5, over: false, overBy: 0 });
+    expect(res.assignment.every((row) => !row.overBudget)).toBe(true);
+    expect(res.explanation).toMatch(/Within budget: £5\.00 remains after £25\.00 spent of £30\.00\./);
+  });
+
+  it('reasons about the headroom in every mode\'s explanation', () => {
+    for (const mode of ['lowest_cost', 'fewest_shops', 'balanced', 'lowest_waste', 'fastest']) {
+      const res = optimiseShopping(items, { shops, mode, weeklyBudget: 1.2 });
+      expect(res.budget.over, mode).toBe(true);
+      expect(res.explanation, mode).toMatch(/over the £1\.20 left/);
+    }
+  });
+
+  it('stays silent when no weekly budget is set', () => {
+    const res = optimiseShopping(items, { shops, mode: 'balanced' });
+    expect(res.budget).toBeNull();
+    expect(res.assignment.some((row) => row.overBudget)).toBe(false);
+    expect(res.explanation).not.toMatch(/budget/i);
+  });
+});
+
 // ---------- outcome dashboard ----------
 describe('real outcome dashboard', () => {
   it('measures over time with explicit assumptions', () => {
