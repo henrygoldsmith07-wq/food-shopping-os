@@ -3,6 +3,7 @@ import { WEEK_LOOP_STEPS, WEEK_LOOP_IDS, WEEK_LOOP_PROMISE } from '../src/data/w
 import {
   scaleQty,
   shoppingForWeekLoop,
+  householdPortionsFor,
   pantryCheckForPlan,
   nextWeekLoopStep,
   prevWeekLoopStep,
@@ -49,7 +50,7 @@ describe('week loop workflow', () => {
       portions: 2,
     };
     // derive not required; shoppingForWeekLoop reads plan/pantry/portions
-    const list = shoppingForWeekLoop({
+    const { items: list } = shoppingForWeekLoop({
       ...state,
       portions: 2,
       household: 2,
@@ -58,6 +59,44 @@ describe('week loop workflow', () => {
     expect(names.some((n) => n.includes('olive'))).toBe(false); // pantry covered if recipe uses olive oil name match
     // Dedup: one row per ingredient name
     expect(new Set(list.map((i) => i.name.toLowerCase())).size).toBe(list.length);
+  });
+
+  it('scales quantities for the learned appetite when recorded cooks disagree with the profile', () => {
+    // Chicken Traybake serves 4 and asks for 8 thighs. Two configured
+    // portions want 4 thighs; a learned appetite of 3 wants 6.
+    const base = {
+      day,
+      plan: { [day]: { dinner: 'chicken-traybake' } },
+      pantry: [],
+      portions: 2,
+    };
+    const configured = shoppingForWeekLoop(base, [day]);
+    expect(configured.portions).toEqual({ portions: 2, source: 'configured', configured: 2 });
+    const thighs = (name) => configured.items.find((item) => item.name === name)?.qty;
+    expect(thighs('Chicken thighs')).toBe('4');
+
+    const learnedApp = {
+      ...base,
+      householdPreferences: { portions: { typical: 3, observations: 4 } },
+    };
+    const learned = shoppingForWeekLoop(learnedApp, [day]);
+    expect(learned.portions.source).toBe('learned');
+    expect(learned.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('6');
+  });
+
+  it('keeps the configured portions until the appetite evidence is strong', () => {
+    // Fewer than 3 observations, or a gap under half a portion: the
+    // household's own setting still wins.
+    const weak = { portions: 2, householdPreferences: { portions: { typical: 3, observations: 2 } } };
+    expect(householdPortionsFor(weak)).toEqual({ portions: 2, source: 'configured', configured: 2 });
+    const close = { portions: 2, householdPreferences: { portions: { typical: 2.25, observations: 9 } } };
+    expect(householdPortionsFor(close)).toEqual({ portions: 2, source: 'configured', configured: 2 });
+    const strong = { portions: 2, householdPreferences: { portions: { typical: 3, observations: 3 } } };
+    expect(householdPortionsFor(strong).source).toBe('learned');
+    expect(householdPortionsFor(strong).portions).toBe(3);
+    // A broken or absent profile never breaks the list.
+    expect(householdPortionsFor({ portions: 2, householdPreferences: null }).source).toBe('configured');
+    expect(householdPortionsFor({}).portions).toBe(1);
   });
 
   it('pantry check reports planned vs missing', () => {

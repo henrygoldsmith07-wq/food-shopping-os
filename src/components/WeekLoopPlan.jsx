@@ -13,6 +13,7 @@ import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
 export default function WeekLoopPlan({
   app, byId, dates, dayShort, dinnerRecipes, expiringNames, generateList, pantry,
   pickerDate, setDinner, setPickerDate, snap, stepId, usesExpiring, variety, weekList,
+  portionSource,
 }) {
   return (
     <>
@@ -171,6 +172,11 @@ export default function WeekLoopPlan({
                 ? `${weekList.length} unique item${weekList.length === 1 ? '' : 's'} after pantry + leftovers`
                 : 'Nothing missing — generate still works if you restock later'}
             </p>
+            {weekList.length > 0 && portionSource.source === 'learned' && (
+              <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--accent)' }}>
+                Quantities are scaled for {portionSource.portions} portions — what your recorded cooks say you actually eat, not the {portionSource.configured} in your profile.
+              </p>
+            )}
             <button
               type="button"
               onClick={generateList}

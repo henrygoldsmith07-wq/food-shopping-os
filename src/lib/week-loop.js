@@ -15,6 +15,31 @@ import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
 import { emojiFor, uid } from './state.js';
 
+/**
+ * How many portions to plan and buy for.
+ *
+ * The configured household size is the baseline. When recorded outcomes say
+ * the household consistently eats a different amount — at least three cooks
+ * with portions recorded, and at least half a portion away from the setting
+ * — the learned appetite wins, so quantities follow what actually gets
+ * eaten rather than what the profile says. Returns both numbers so the UI
+ * can say which one it used and why.
+ */
+export const householdPortionsFor = (app = {}) => {
+  const configured = Math.max(1, Number(app.portions) || Number(app.household) || 1);
+  const learned = app.householdPreferences?.portions;
+  const observations = Number(learned?.observations) || 0;
+  const typical = Number(learned?.typical);
+  if (observations >= 3 && Number.isFinite(typical) && typical > 0
+    && Math.abs(typical - configured) >= 0.5) {
+    const rounded = Math.max(1, Math.round(typical * 2) / 2);
+    if (rounded !== configured) {
+      return { portions: rounded, source: 'learned', configured };
+    }
+  }
+  return { portions: configured, source: 'configured', configured };
+};
+
 /** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */
 export const scaleQty = (qty, factor = 1) => {
   if (!qty || !(factor > 0) || Math.abs(factor - 1) < 0.05) return qty || '';
@@ -31,12 +56,17 @@ export const scaleQty = (qty, factor = 1) => {
 /**
  * Shopping list for the week plan, scaled to household portions and
  * reduced by pantry + leftover-covered meals.
+ *
+ * Portions follow `householdPortionsFor` — the configured household size,
+ * or the learned appetite when recorded cooks consistently disagree with
+ * it — and the result says which one it used.
  */
 export const shoppingForWeekLoop = (app, dates = weekDates(app.day)) => {
-  const people = Math.max(1, Number(app.portions) || Number(app.household) || 1);
+  const household = householdPortionsFor(app);
+  const people = household.portions;
   const raw = shoppingForPlan(app.plan || {}, dates, { pantry: app.pantry || [] });
   // shoppingForPlan uses recipe ingredient lines as written (usually 1 batch).
-  // Scale each line toward household portions using the recipe’s stated servings.
+  // Scale each line toward household portions using the recipe's stated servings.
   const entries = planEntries(app.plan || {}, dates);
   const recipeFactor = new Map();
   for (const entry of entries) {
@@ -44,7 +74,7 @@ export const shoppingForWeekLoop = (app, dates = weekDates(app.day)) => {
     const servings = Number(entry.recipe.servings) || 1;
     recipeFactor.set(entry.recipe.name, people / servings);
   }
-  return raw.map((item) => {
+  const items = raw.map((item) => {
     const factor = recipeFactor.get(item.fromRecipe) || people;
     return {
       ...item,
@@ -52,6 +82,7 @@ export const shoppingForWeekLoop = (app, dates = weekDates(app.day)) => {
       people,
     };
   });
+  return { items, portions: household };
 };
 
 /** Ingredients the plan needs vs what the pantry already covers (name match). */
@@ -165,7 +196,7 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   // What this week's plan needs, after the pantry, the leftovers and the
   // household's own waste pattern have had their say.
   const dynamic = deriveDynamicShoppingList(state, { dates });
-  const derived = wasteAwareList(dynamic.length ? dynamic : shoppingForWeekLoop(state, dates), {
+  const derived = wasteAwareList(dynamic.length ? dynamic : shoppingForWeekLoop(state, dates).items, {
     waste: state.waste || [],
     today: state.day,
     learnedAliases: aliasMemory,

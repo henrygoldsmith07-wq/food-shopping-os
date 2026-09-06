@@ -81,7 +81,7 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
   };
 
   const generateList = () => {
-    const items = shoppingForWeekLoop(app, dates);
+    const { items } = shoppingForWeekLoop(app, dates);
     if (!items.length) {
       setStatus('Nothing to buy — pantry and leftovers already cover this plan.');
       return;
@@ -127,7 +127,7 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
   };
 
   const pantry = pantryCheckForPlan(app, dates);
-  const weekList = shoppingForWeekLoop(app, dates);
+  const { items: weekList, portions: portionSource } = shoppingForWeekLoop(app, dates);
 
   return (
     <div className="pb-10">
@@ -180,6 +180,7 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
             usesExpiring={usesExpiring}
             variety={variety}
             weekList={weekList}
+            portionSource={portionSource}
           />
         )}
 
