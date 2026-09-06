@@ -82,3 +82,26 @@ describe('the spent/left headroom above Generate', () => {
     headroomBeforeOptions();
   });
 });
+
+describe('the generator is honest when no dish can use the focus', () => {
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('says nothing in the book cooks the item, and claims no pin', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(seed(26)));
+    render(
+      <AppProvider>
+        <PlanGenerator weekDates={weekDates(DAY)} monthDates={monthKeys} focusItems={['Kohlrabi']} />
+      </AppProvider>,
+    );
+    // No dish in the catalogue uses kohlrabi — the generator says so plainly
+    // instead of quietly printing a favour-them promise it cannot keep.
+    expect(screen.getByText(/Kohlrabi — use soon, but nothing in your recipe book cooks with it, so no dish can be pinned to use it\./)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Generate$/ }));
+    expect(screen.queryByText('Pinned', { exact: true })).toBeNull();
+    expect(screen.queryByText(/is pinned in — it uses Kohlrabi/)).toBeNull();
+  });
+});

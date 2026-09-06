@@ -216,3 +216,62 @@ describe('a focused pantry tap is pinned into the plan', () => {
     expect(impossible.note).toBeNull();
   });
 });
+
+describe('the focus pin holds under leftover-first and batch weeks', () => {
+  const dish = (id, extra = {}) => ({
+    id, name: id, emoji: '🍽', meal: 'dinner', cuisine: 'Test', tags: [], time: 20, prep: 5,
+    difficulty: 'Easy', servings: 2, kcal: 400, protein: 20, carbs: 50, fat: 10, fibre: 5,
+    costPerServing: 2, ingredients: [{ name: 'Rice', qty: '100 g' }], steps: [], ...extra,
+  });
+  const SPINACH_DAHL = dish('spinach-dahl', {
+    name: 'Spinach Dahl',
+    ingredients: [{ name: 'Spinach', qty: '150 g' }],
+  });
+  const LEFTOVER_BOWL = dish('leftover-bowl', { name: 'Leftover Bowl' });
+  const BIG = ['k1', 'k2', 'k3'].map((id) => dish(id, { name: `Big ${id}`, servings: 6 }));
+  const usesSpinach = (meals) => meals.some((m) => pantryHits(m, ['Spinach']) >= 1);
+
+  it('pins a non-batchable focused dish into a batch week, cooked once', () => {
+    // Three dishes worth batching and no spinach among them; the only
+    // spinach dish is single-cook. Batching relaxes for exactly that dish.
+    const plan = buildPlan({
+      scope: 'A week', batch: true, focus: ['Spinach'],
+      recipes: [SPINACH_DAHL, ...BIG],
+    }, 7);
+    expect(plan.meals).toHaveLength(7);
+    expect(usesSpinach(plan.meals)).toBe(true);
+    expect(plan.meals.filter((m) => m.id === 'spinach-dahl')).toHaveLength(1);
+    expect(plan.note).toMatch(/Spinach Dahl is pinned in — it uses Spinach before it goes off\./);
+  });
+
+  it('pins a focused dish when leftovers already fill the whole week', () => {
+    const plan = buildPlan({
+      scope: 'A week', focus: ['Spinach'],
+      recipes: [SPINACH_DAHL, LEFTOVER_BOWL],
+      leftovers: [{ recipeId: 'leftover-bowl', portions: 7 }],
+    }, 7);
+    expect(plan.meals).toHaveLength(7);
+    expect(usesSpinach(plan.meals)).toBe(true);
+    // One leftover portion steps aside (it keeps for later) to make room.
+    expect(plan.meals.filter((m) => m.id === 'spinach-dahl')).toHaveLength(1);
+    expect(plan.meals.filter((m) => m.id === 'leftover-bowl')).toHaveLength(6);
+    expect(plan.note).toMatch(/Spinach Dahl is pinned in/);
+    expect(plan.note).toMatch(/one portion waits for later/);
+  });
+
+  it('a full-leftover week stays untouched when no dish can use the focus', () => {
+    const plain = buildPlan({
+      scope: 'A week',
+      recipes: [SPINACH_DAHL, LEFTOVER_BOWL],
+      leftovers: [{ recipeId: 'leftover-bowl', portions: 7 }],
+    }, 7);
+    const impossible = buildPlan({
+      scope: 'A week', focus: ['Foobar unicorn spice'],
+      recipes: [SPINACH_DAHL, LEFTOVER_BOWL],
+      leftovers: [{ recipeId: 'leftover-bowl', portions: 7 }],
+    }, 7);
+    expect(impossible.meals.map((m) => m.id)).toEqual(plain.meals.map((m) => m.id));
+    expect(impossible.meals.every((m) => m.id === 'leftover-bowl')).toBe(true);
+    expect(impossible.note).not.toMatch(/pinned in/);
+  });
+});

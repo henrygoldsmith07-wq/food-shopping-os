@@ -428,9 +428,12 @@ export function buildPlan(
       dates: dates.slice(leftoverMeals.length),
     }, wasteOptimisation, multiObjective);
     const meals = [...leftoverMeals, ...selectedFill.meals];
-    // Leftovers keep their slots — a focus dish only takes an open one.
-    const pinned = remaining > 0 ? focusSwap(meals, fillPool, focus, seed) : null;
-    const base = `Leftover-first plan: ${leftoverMeals.length} meal${leftoverMeals.length === 1 ? '' : 's'} use portions already in the fridge; the rest favour seasonal, lower-cost dishes.`;
+    // A focused item still earns a slot — an open fill slot, or (when
+    // leftovers already fill the week) one portion steps aside to make room.
+    let pinned = null;
+    if (focus.length) pinned = focusSwap(meals, fillPool, focus, seed) || (remaining === 0 ? focusSwap(meals, pool, focus, seed) : null);
+    const keptLeftovers = meals.filter((recipe) => leftoverMeals.some((item) => item.id === recipe.id)).length;
+    const base = `Leftover-first plan: ${keptLeftovers} meal${keptLeftovers === 1 ? '' : 's'} use portions already in the fridge${keptLeftovers < leftoverMeals.length ? '; one portion waits for later so the focused dish can be cooked' : keptLeftovers < count ? '; the rest favour seasonal, lower-cost dishes' : ''}.`;
     return finishPlan(
       meals,
       pinned ? `${pinned} is pinned in — it uses ${focus.join(', ')} before it goes off. ${base}` : base,
@@ -442,6 +445,11 @@ export function buildPlan(
   if (batch && count > 2) {
     const keepers = pool.filter(batchable);
     const batchPool = narrow(keepers.length >= 3 ? keepers : pool, 3);
+    // The only cook for a focused item may not be batchable: the plan stays
+    // as built, then one slot swaps to it — the rule relaxes for one dish.
+    const pinPool = (!batchPool.some((r) => pantryHits(r, focus) >= 1) && focus.length)
+      ? [...new Set([...batchPool, ...pool.filter((r) => pantryHits(r, focus) >= 1)])]
+      : batchPool;
     const cooks = Math.max(2, Math.round(count / 3));
     const batchCandidates = Array.from({ length: candidates }, (_, candidateIndex) => {
       const unique = seededPick(batchPool, Math.min(cooks, batchPool.length), seed + candidateIndex * 7919);
@@ -452,7 +460,7 @@ export function buildPlan(
       const meals = selected.meals;
       const distinct = new Set(meals.map((meal) => meal.id)).size;
       const each = Math.round(count / Math.max(1, distinct));
-      const pinned = focusSwap(meals, batchPool, focus, seed);
+      const pinned = focusSwap(meals, pinPool, focus, seed);
       const base = relaxed
         ? 'Nothing matched every filter — showing the closest fits instead.'
         : `Batch plan: cook ${distinct} dish${distinct === 1 ? '' : 'es'}, each covering about ${each} meal${each === 1 ? '' : 's'}.`;

@@ -56,9 +56,10 @@ describe('the prediction row routes to the planner', () => {
     // The pantry sheet slides away (its DOM lingers for the exit animation).
     await waitFor(() => expect(screen.queryByText('Smart pantry')).toBeNull());
     // The focus is a guarantee, not a wish: generating pins a spinach dish
-    // into the week and says so by name.
+    // into the week, says so by name, and badges the slot that carries it.
     fireEvent.click(screen.getByRole('button', { name: /^Generate$/ }));
     await waitFor(() => expect(screen.getByText(/is pinned in — it uses Spinach before it goes off/)).toBeDefined());
+    expect(screen.getAllByText('Pinned').length).toBeGreaterThan(0);
 
   });
 });
@@ -235,5 +236,155 @@ describe('the prediction block names partial coverage', () => {
     expect(within(sheet).getByText('No planned meal uses all of this dated stock.')).toBeDefined();
     // It must not simultaneously read as fully covered.
     expect(within(sheet).queryByText('Covered by the plan')).toBeNull();
+  });
+});
+
+describe('the tonight picker surfaces an already-planned dinner first', () => {
+  // When tonight's slot is already full, the tonight flow must not silently
+  // overwrite it: the picker opens on the existing dinner and the user chooses
+  // to replace it or keep it.
+  const seedBusyTonight = () => {
+    const today = dayStamp();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      onboarded: true,
+      name: 'Sam',
+      day: today,
+      // Spinach inside the expiry horizon with no planned meal using it, so
+      // the prediction row offers the tonight flow at all.
+      pantry: [{ id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: addDays(today, 2) }],
+      plan: { [today]: { dinner: 'mushroom-risotto' } },
+    }));
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    seedBusyTonight();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('opens on the planned dinner with Keep, leaving the plan untouched', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    const sheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Cook Spinach tonight' }));
+
+    // The guard names the dinner that is already in tonight's slot — no picker,
+    // no way to overwrite it by a casual tap.
+    const dialog = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Plan a meal');
+    expect(dialog).toBeDefined();
+    expect(within(dialog).getByText("Tonight's dinner is already set")).toBeDefined();
+    expect(within(dialog).getByText('Garlic Mushroom Risotto')).toBeDefined();
+    expect(within(dialog).queryByLabelText('Search recipes')).toBeNull();
+
+    // Keeping backs out with the plan untouched: the risotto is still tonight.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep Garlic Mushroom Risotto' }));
+    await waitFor(() => expect(screen.queryByText('Plan a meal')).toBeNull());
+    expect(screen.getAllByText('Garlic Mushroom Risotto').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Coconut Chickpea Curry')).toBeNull();
+  });
+
+  it('replaces the planned dinner only after the explicit choice', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    const sheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Cook Spinach tonight' }));
+    const dialog = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Plan a meal');
+    expect(within(dialog).getByText('Garlic Mushroom Risotto')).toBeDefined();
+
+    // Choosing to replace opens the picker on the pre-searched ingredient.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Replace with something else' }));
+    const search = within(dialog).getByLabelText('Search recipes');
+    expect(search.value).toBe('Spinach');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Coconut Chickpea Curry/ }));
+
+    // Tonight's slot now holds the spinach dish, not the risotto.
+    await waitFor(() => expect(screen.queryByText('Plan a meal')).toBeNull());
+    expect(screen.getAllByText('Coconut Chickpea Curry').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Garlic Mushroom Risotto')).toBeNull();
+  });
+});
+
+describe('the just-picked dinner offers the missing shop', () => {
+  const seedSpinachOnly = () => {
+    const today = dayStamp();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      onboarded: true,
+      name: 'Sam',
+      day: today,
+      // Only the expiring spinach: the curry that uses it needs everything
+      // else, so picking it should offer exactly those missing items.
+      pantry: [{ id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: addDays(today, 2) }],
+    }));
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    seedSpinachOnly();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('offers to add the missing ingredients after tonight\'s dinner is picked', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    const sheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Cook Spinach tonight' }));
+    const dialog = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Plan a meal');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Coconut Chickpea Curry/ }));
+
+    // The offer names the meal and how many ingredients the pantry lacks.
+    await waitFor(() => expect(screen.queryByText('Plan a meal')).toBeNull());
+    expect(screen.getByText(/Tonight's Coconut Chickpea Curry needs 6 ingredients that are not in your pantry yet/)).toBeDefined();
+
+    // Adding sends the missing items and the card flips to its done state.
+    fireEvent.click(screen.getByRole('button', { name: 'Add 6 to your shopping list' }));
+    expect(screen.getByText(/Tonight's items are on your shopping list/)).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Go to your list' }));
+    const nav = document.querySelector('nav[aria-label="Main navigation"]');
+    expect(within(nav).getByRole('button', { name: 'List' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('counts only what the pantry genuinely lacks', async () => {
+    const today = dayStamp();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      onboarded: true,
+      name: 'Sam',
+      day: today,
+      // The curry's measurable basket is already on the shelf (spinach
+      // over-stocked so the prediction row still offers the tonight flow);
+      // only the chickpeas and onion tins are missing.
+      pantry: [
+        { id: 'p2', name: 'Coconut milk', qty: '2 tins', location: 'Cupboard' },
+        { id: 'p3', name: 'Chopped tomatoes', qty: '2 tins', location: 'Cupboard' },
+        { id: 'p5', name: 'Curry paste', qty: '6 tbsp', location: 'Cupboard' },
+        { id: 'p6', name: 'Spinach', qty: '250 g', location: 'Fridge', expiry: addDays(today, 2) },
+        { id: 'p7', name: 'Rice', qty: '600 g', location: 'Cupboard' },
+      ],
+    }));
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    const sheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Cook Spinach tonight' }));
+    const dialog = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Plan a meal');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Coconut Chickpea Curry/ }));
+    await waitFor(() => expect(screen.queryByText('Plan a meal')).toBeNull());
+
+    // The pantry covered the mass and volume lines, so the offer names only
+    // the two genuinely missing items — not the whole seven-line dish.
+    expect(screen.getByText(/Tonight's Coconut Chickpea Curry needs 2 ingredients that are not in your pantry yet/)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Add 2 to your shopping list' })).toBeDefined();
   });
 });
