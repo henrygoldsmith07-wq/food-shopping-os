@@ -94,6 +94,50 @@ describe('ingredient waste prediction', () => {
     expect(result.evidence.learnedRisks).toBe(1);
   });
 
+  it('names dated stock the plan finishes before its date as covered, not predicted', () => {
+    const result = predictUnusedIngredients({
+      today: TODAY,
+      meals: [
+        meal('spinach-meal', [{ name: 'Spinach', qty: '150 g' }]),
+        meal('spinach-meal', [{ name: 'Spinach', qty: '150 g' }]),
+      ],
+      dates: ['2026-08-20', '2026-08-27'],
+      // The whole bag is used on or before its date, so no waste row fires —
+      // but the item was genuinely at risk and the plan is what saved it.
+      pantry: [{ name: 'Spinach', qty: '300 g', cat: 'Fresh', expiry: '2026-08-27' }],
+    });
+
+    expect(result.items).toEqual([]);
+    expect(result.coveredCount).toBe(1);
+    expect(result.covered[0]).toMatchObject({
+      name: 'Spinach',
+      qty: '300 g',
+      date: '2026-08-27',
+      daysLeft: 7,
+      mealCount: 2,
+    });
+  });
+
+  it('only calls stock covered, never stock the plan partly leaves behind', () => {
+    const result = predictUnusedIngredients({
+      today: TODAY,
+      meals: [
+        meal('spinach-meal', [{ name: 'Spinach', qty: '150 g' }]),
+        meal('spinach-meal', [{ name: 'Spinach', qty: '150 g' }]),
+      ],
+      dates: ['2026-08-20', '2026-08-27'],
+      // 400 g on hand against 300 g planned: the leftover 100 g is predicted,
+      // and the same item must not read as simultaneously covered.
+      pantry: [{ name: 'Spinach', qty: '400 g', cat: 'Fresh', expiry: '2026-08-27' }],
+    });
+
+    expect(result.covered).toEqual([]);
+    expect(result.items[0]).toMatchObject({ name: 'Spinach', amount: 100, qty: '100 g' });
+    // The cause travels with the prediction: the plan saw the spinach and
+    // used some of it — what is left is the remainder, not an oversight.
+    expect(result.items[0].reasons.join(' ')).toMatch(/No planned meal uses all of this dated stock/);
+  });
+
   it('resolves a stored plan and leaves undated cupboard stock out of spoilage predictions', () => {
     const result = predictUnusedIngredients({
       today: TODAY,

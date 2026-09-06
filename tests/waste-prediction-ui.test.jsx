@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AppProvider } from '../src/lib/store.jsx';
 import { STORAGE_KEY } from '../src/lib/state.js';
+import { addDays, dayStamp, weekDates } from '../src/lib/kitchen-dates.js';
 import PantryIntelligenceCard from '../src/components/PantryIntelligenceCard.jsx';
 
 /**
@@ -88,5 +89,46 @@ describe('the likely-to-go-unused block on the pantry card', () => {
     expect(onPlanItem).toHaveBeenCalledWith('Spinach', 'tonight');
     // The week-plan affordance is untouched beside it.
     expect(screen.getByRole('button', { name: 'Plan a meal using Spinach' })).toBeDefined();
+  });
+});
+
+describe('the covered-by-the-plan line on the pantry card', () => {
+  // The store rolls any seeded day forward to the real clock, so the plan's
+  // meal dates must be the current real week for the coverage to resolve.
+  const seedCoveredHousehold = () => {
+    const [sat, sun] = [weekDates()[5], weekDates()[6]];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      onboarded: true,
+      name: 'Sam',
+      day: dayStamp(),
+      // 300 g expiring on the plan's last day, fully used by two curries
+      // (150 g each); the rice sits far outside the expiry horizon.
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '300 g', location: 'Fridge', expiry: sun },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(sun, 60) },
+      ],
+      plan: {
+        [sat]: { dinner: 'chickpea-curry' },
+        [sun]: { dinner: 'chickpea-curry' },
+      },
+    }));
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    seedCoveredHousehold();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('shows a near-expiry item the plan uses as covered, not as a silent absence', () => {
+    renderCard();
+    // No warning fires — the plan already handles the spinach — yet the item
+    // does not read as ignored: the card names it as covered instead.
+    expect(screen.queryByText('Likely to go unused')).toBeNull();
+    expect(screen.getByText('Covered by the plan')).toBeDefined();
+    expect(screen.getByText((_, el) => el?.textContent === 'Spinach · 300 g — used by 2 planned meals before its date')).toBeDefined();
   });
 });

@@ -515,6 +515,7 @@ describe('the refresh preview (what a seed run would change)', () => {
     expect(preview.total).toBe(1);
     expect(preview.updates).toEqual([]);
     expect(preview.additions).toEqual([{
+      seedKey: 'missed-meal', // the template identity, so offers can name the card
       front: 'Which planned meal did you skip this week?',
       topicId: 'cooking',
     }]);
@@ -617,5 +618,170 @@ describe('the refresh preview decides one row at a time', () => {
     expect(snap.kitchenSeedCount(NOW)).toBe(1); // the offer is back
     expect(snap.kitchenSeedPreview(NOW).updates[0].oldBack).toBe('Milk — on 2 trips');
     expect(snap.kitchenSeedPreview(NOW).updates[0].newBack).toBe('Bread');
+  });
+});
+
+describe('the skip-reason learning profile through the store', () => {
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  const fold = (over = {}) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, ...over }));
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return (
+            <div>
+              <button onClick={() => app.answerSkipReflection('no-time', true, NOW)}>no-time applies</button>
+              <button onClick={() => app.answerSkipReflection('no-time', false, NOW)}>no-time changed</button>
+              <button onClick={() => app.answerSkipReflection('missing-ingredients', true, NOW)}>missing applies</button>
+              <button onClick={() => app.answerSkipReflection('  ', true, NOW)}>blank reason</button>
+              <span data-testid="applies">{app.skipReasonProfile?.['no-time']?.applies ?? 0}</span>
+              <span data-testid="changed">{app.skipReasonProfile?.['no-time']?.changed ?? 0}</span>
+            </div>
+          );
+        }} />
+      </AppProvider>,
+    );
+    return () => snap;
+  };
+
+  it('a still-applies answer folds into the profile and persists with the state', () => {
+    cleanup();
+    const getSnap = fold();
+    fireEvent.click(screen.getByText('no-time applies'));
+    const snap = getSnap();
+    expect(snap.skipReasonProfile['no-time']).toEqual({
+      applies: 1, changed: 0, lastStillApplies: true, lastAt: NOW.getTime(),
+    });
+    // The fold rides the same write as everything else — it is on disk.
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).skipReasonProfile['no-time'].applies).toBe(1);
+  });
+
+  it('repeated answers count their own side, and reasons never bleed into each other', () => {
+    cleanup();
+    const getSnap = fold();
+    fireEvent.click(screen.getByText('no-time changed'));
+    fireEvent.click(screen.getByText('no-time changed'));
+    fireEvent.click(screen.getByText('missing applies'));
+    const snap = getSnap();
+    expect(snap.skipReasonProfile['no-time']).toEqual({
+      applies: 0, changed: 2, lastStillApplies: false, lastAt: NOW.getTime(),
+    });
+    expect(snap.skipReasonProfile['missing-ingredients'].applies).toBe(1);
+    expect(snap.skipReasonProfile['missing-ingredients'].changed).toBe(0);
+  });
+
+  it('a blank reason id is a no-op, never a failure', () => {
+    cleanup();
+    const getSnap = fold();
+    fireEvent.click(screen.getByText('blank reason'));
+    expect(getSnap().skipReasonProfile).toEqual({});
+  });
+
+  it('a pre-existing profile keeps folding — older answers are never lost', () => {
+    cleanup();
+    const getSnap = fold({
+      skipReasonProfile: { 'no-time': { applies: 3, changed: 0, lastStillApplies: true, lastAt: 1 } },
+    });
+    fireEvent.click(screen.getByText('no-time changed'));
+    const snap = getSnap();
+    expect(snap.skipReasonProfile['no-time']).toEqual({
+      applies: 3, changed: 1, lastStillApplies: false, lastAt: NOW.getTime(),
+    });
+  });
+});
+
+describe('plan cards retire when the plan moves on', () => {
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  const TONIGHT = "What's planned for dinner tonight?";
+  const tonightCard = {
+    id: 'c-tonight', userId: 'local', subjectId: 'kitchen', topicId: 'cooking',
+    front: TONIGHT, back: 'Pasta with tomato sauce', origin: 'auto',
+    reps: 2, lapses: 0, ease: 2.5, intervalDays: 4, due: '9999-12-31',
+    createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: '2026-07-26T00:00:00Z',
+  };
+
+  const mount = (over = {}) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seeded, ...over }));
+    let snap;
+    render(
+      <AppProvider>
+        <Probe render={(app) => {
+          snap = app;
+          return (
+            <div>
+              <button onClick={() => app.autoRefreshSeededCards(NOW)}>auto</button>
+              <button onClick={() => app.applySeedRows(NOW, [TONIGHT])}>remove tonight</button>
+              <button onClick={() => app.keepSeedFronts([TONIGHT])}>keep tonight</button>
+              <span data-testid="count">{app.kitchenSeedCount(NOW)}</span>
+            </div>
+          );
+        }} />
+      </AppProvider>,
+    );
+    return () => snap;
+  };
+
+  it('a tonight card whose plan no longer names a dinner is retired by the merge', () => {
+    cleanup();
+    // No plan for today — the template is silent, so the card is a leftover
+    // answer to a question the data no longer asks.
+    const getSnap = mount({ cards: [tonightCard], plan: {}, mealPlanEvents: [] });
+    let snap = getSnap();
+    const preview = snap.kitchenSeedPreview(NOW);
+    expect(preview.total).toBe(1);
+    expect(preview.additions).toEqual([]);
+    expect(preview.removals).toEqual([{ front: TONIGHT, back: 'Pasta with tomato sauce' }]);
+    expect(snap.cards).toHaveLength(1); // a preview is a read
+    fireEvent.click(screen.getByText('remove tonight'));
+    snap = getSnap();
+    expect(snap.cards).toEqual([]);
+    expect(snap.kitchenSeedCount(NOW)).toBe(0);
+  });
+
+  it('the boot auto-refresh retires an outlived plan card in the same merge', () => {
+    cleanup();
+    const getSnap = mount({ cards: [tonightCard], plan: {}, mealPlanEvents: [] });
+    fireEvent.click(screen.getByText('auto'));
+    const snap = getSnap();
+    expect(snap.cards).toEqual([]);
+  });
+
+  it('a kept stale card stays put: no offer, no boot retirement', () => {
+    cleanup();
+    const getSnap = mount({ cards: [tonightCard], plan: {}, mealPlanEvents: [] });
+    let snap = getSnap();
+    expect(screen.getByTestId('count').textContent).toBe('1');
+    fireEvent.click(screen.getByText('keep tonight'));
+    snap = getSnap();
+    expect(snap.kitchenKeptFronts).toEqual([TONIGHT]);
+    expect(snap.cards).toHaveLength(1); // kept, not removed
+    expect(snap.kitchenSeedCount(NOW)).toBe(0); // and no longer offered
+    fireEvent.click(screen.getByText('auto'));
+    snap = getSnap();
+    expect(snap.cards).toHaveLength(1); // the boot merge honours the keep
+  });
+
+  it('a live tonight plan refreshes in place instead of retiring', () => {
+    cleanup();
+    const getSnap = mount({
+      cards: [tonightCard],
+      myRecipes: [{ id: 'r1', name: 'Lentil soup' }],
+      plan: { [DAY]: { dinner: 'r1' } },
+      mealPlanEvents: [],
+    });
+    const snap = getSnap();
+    const preview = snap.kitchenSeedPreview(NOW);
+    expect(preview.removals).toEqual([]);
+    expect(preview.updates).toEqual([{ front: TONIGHT, oldBack: 'Pasta with tomato sauce', newBack: 'Lentil soup' }]);
   });
 });

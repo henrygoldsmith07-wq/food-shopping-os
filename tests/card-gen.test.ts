@@ -325,4 +325,64 @@ describe('planSeedMerge', () => {
     expect(plan.updates).toEqual([]);
     expect(plan.additions).toEqual([]);
   });
+
+  it('retires a tonight card whose plan no longer names a dinner', () => {
+    // Seeded Monday for Monday's dinner; Tuesday the plan has no dinner.
+    const deck = [
+      mkDeckCard({
+        id: 't', topicId: 'cooking', origin: 'auto',
+        front: "What's planned for dinner tonight?", back: 'Pasta with tomato sauce',
+      }),
+      mkDeckCard({ id: 's', front: 'Which food did you buy most of this week?', back: 'Milk' }),
+    ];
+    const plan = planSeedMerge(kitchenCardCandidates({}, NOW), deck);
+    expect(plan.removals).toEqual([{ id: 't', front: "What's planned for dinner tonight?" }]);
+    // The generic shop card is not time-scoped — no candidate, but never retired.
+    expect(plan.removals.map((r) => r.front)).not.toContain('Which food did you buy most of this week?');
+  });
+
+  it('retires each plan-family card only while its template is silent', () => {
+    const fronts = [
+      "What's planned for dinner tonight?",
+      'Which planned meal did you swap this week?',
+      'Which planned meal did you skip this week?',
+      'Which planned meal did leftovers cover this week?',
+    ];
+    const deck = fronts.map((front, i) => mkDeckCard({
+      id: `p${i}`, topicId: 'cooking', origin: 'auto', front, back: `old — ${i}`,
+    }));
+    // A still-live missed meal and a still-live swap stop those two retiring.
+    const candidates = kitchenCardCandidates({
+      myRecipes: [
+        { id: 'r1', name: 'Lentil soup' },
+        { id: 'r2', name: 'Pasta with tomato sauce' },
+      ],
+      mealPlanEvents: [
+        { date: '2026-07-26', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'no-time' },
+        { date: '2026-07-27', slot: 'dinner', plannedRecipeId: 'r1', actualRecipeId: 'r2', status: 'substituted' },
+      ],
+    }, NOW);
+    const plan = planSeedMerge(candidates, deck);
+    const retired = plan.removals.map((r) => r.front);
+    // Tonight (no plan) and leftovers (no leftovers skip) move on; the
+    // missed-meal and swap cards still have live data and are refreshed.
+    expect(retired).toEqual([
+      "What's planned for dinner tonight?",
+      'Which planned meal did leftovers cover this week?',
+    ]);
+    expect(plan.updates.length).toBe(2);
+  });
+
+  it('never retires a handmade card, even one bearing a plan front', () => {
+    const deck = [
+      mkDeckCard({
+        id: 'h', origin: 'handmade',
+        front: "What's planned for dinner tonight?", back: 'My own question',
+      }),
+    ];
+    const plan = planSeedMerge([], deck);
+    expect(plan.removals).toEqual([]);
+    expect(plan.additions).toEqual([]);
+    expect(plan.updates).toEqual([]);
+  });
 });

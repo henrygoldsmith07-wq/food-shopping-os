@@ -180,5 +180,60 @@ describe('the prediction block respects the plan', () => {
     expect(within(sheet).queryByText('Likely to go unused')).toBeNull();
     expect(within(sheet).queryByText(/Plan a meal using Spinach/)).toBeNull();
     expect(within(sheet).queryByText(/ingredient may go unused/)).toBeNull();
+    // Seen-but-covered reads as covered, not ignored: the same spinach the
+    // plan saves is named on the card's positive line.
+    expect(within(sheet).getByText('Covered by the plan')).toBeDefined();
+    expect(within(sheet).getByText((_, el) => el?.textContent === 'Spinach · 300 g — used by 2 planned meals before its date')).toBeDefined();
+  });
+});
+
+describe('the prediction block names partial coverage', () => {
+  // The sibling of the quiet journey: a plan that only half-uses the expiring
+  // item must still surface it — the sheet says what remains and why, instead
+  // of letting the covered line claim the item is handled.
+  const seedHalfCoveredHousehold = () => {
+    const [sat, sun] = [weekDates()[5], weekDates()[6]];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      onboarded: true,
+      name: 'Sam',
+      day: dayStamp(),
+      // 400 g expiring on the plan's last day against 300 g planned: 100 g is
+      // left over even though the plan genuinely uses the item.
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '400 g', location: 'Fridge', expiry: sun },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(sun, 60) },
+      ],
+      plan: {
+        [sat]: { dinner: 'chickpea-curry' },
+        [sun]: { dinner: 'chickpea-curry' },
+      },
+    }));
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    seedHalfCoveredHousehold();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it('flags the leftover with its partly-covered reason, not silence', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    const sheet = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+    expect(sheet).toBeDefined();
+
+    // The item is still on the warning list — coverage was only partial.
+    expect(within(sheet).getByText('Likely to go unused')).toBeDefined();
+    expect(within(sheet).getByText(/1 ingredient may go unused/)).toBeDefined();
+    // Only the remainder is at risk, and the row says so by quantity…
+    expect(within(sheet).getByText((_, el) => el?.textContent === 'Spinach · 100 g')).toBeDefined();
+    // …and by cause: the plan used some of it — what is left is the rest.
+    expect(within(sheet).getByText('No planned meal uses all of this dated stock.')).toBeDefined();
+    // It must not simultaneously read as fully covered.
+    expect(within(sheet).queryByText('Covered by the plan')).toBeNull();
   });
 });

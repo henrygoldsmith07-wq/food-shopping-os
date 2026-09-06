@@ -75,6 +75,9 @@ export const scoreWastePlan = (
   const stock = stockGroups(pantry, learnedAliases);
   const wasteByKey = profileByKey(wasteProfile || wasteHistory, learnedAliases);
   const expectedUnusedIngredients = [];
+  // Dated stock the plan finishes on or before its date: seen, at risk, and
+  // already handled — the positive counterpart to expectedUnusedIngredients.
+  const coveredDatedStock = [];
   const fragmentationRisks = [];
   const purchaseRows = [];
   let pantryNeeded = 0;
@@ -239,6 +242,22 @@ export const scoreWastePlan = (
         if (urgent) urgentUsed += usedBefore;
       }
       if (usedAfter > 0) expiryMisses += 1;
+      // A within-horizon dated item whose whole amount the plan consumes on or
+      // before its date is covered, not ignored: it never reaches the unused
+      // list, and the UI can say so instead of reading as overlooked.
+      if (urgent && daysLeft !== null && daysLeft >= 0 && usedBefore >= rowAmount - 0.01) {
+        coveredDatedStock.push({
+          key: requirement.key,
+          name: pantryRow.item.name,
+          amount: round(rowAmount),
+          dim: parsed.dim,
+          unit: parsed.unit,
+          date: pantryRow.item.expiry,
+          daysLeft,
+          recipes: requirement.recipes,
+          occurrences: requirement.occurrences,
+        });
+      }
       if (rowAmount - used > 0.01 && (daysLeft === null || daysLeft <= expiryHorizon)) {
         expectedUnusedIngredients.push(unusedRow({
           key: requirement.key,
@@ -359,6 +378,7 @@ export const scoreWastePlan = (
     leftoversGenerated,
     expectedUnusedIngredients: uniqueUnused,
     expectedUnusedCount: uniqueUnused.length,
+    coveredDatedStock,
     fragmentationRisks: fragmentationRisks.sort((a, b) => b.remainder - a.remainder),
     expiryMisses,
     expiryPriority: expiryScore,

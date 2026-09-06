@@ -48,6 +48,7 @@ describe('wasteCauseBreakdown', () => {
       leftoverBought: { count: 0, cost: 0 },
       neverCooked: 0,
       missedMeals: [],
+      topSkipReason: null,
     });
     expect(WASTE_WINDOW_DAYS).toBe(21);
   });
@@ -79,6 +80,50 @@ describe('wasteCauseBreakdown', () => {
       ],
     });
     expect(breakdown.missedMeals).toEqual([{ date: '2026-08-01', name: 'Coconut Chickpea Curry' }]);
+  });
+
+  it("names the dominant recorded reason behind last week's misses", () => {
+    const breakdown = wasteCauseBreakdown({
+      day: '2026-08-03',
+      waste: [],
+      mealPlanEvents: [
+        { date: '2026-07-20', status: 'skipped', reason: 'no-time' }, // too old for the week
+        { date: '2026-07-28', status: 'skipped', reason: 'no-time' },
+        { date: '2026-07-30', status: 'skipped', reason: 'no-time' },
+        { date: '2026-08-01', status: 'skipped', reason: 'changed-preference' },
+        { date: '2026-08-02', status: 'substituted' }, // a swap carries no reason
+        { date: '2026-08-02', status: 'skipped', reason: 'missed', missed: true }, // silent — names nothing
+      ],
+    });
+    expect(breakdown.neverCooked).toBe(6); // the old skip still counts in the 21-day window
+    expect(breakdown.topSkipReason).toEqual({ reason: 'no-time', count: 2 });
+  });
+
+  it('breaks a tie for the top reason by the most recent miss', () => {
+    const breakdown = wasteCauseBreakdown({
+      day: '2026-08-03',
+      waste: [],
+      mealPlanEvents: [
+        { date: '2026-08-01', status: 'skipped', reason: 'no-time' },
+        { date: '2026-08-02', status: 'skipped', reason: 'changed-preference' },
+      ],
+    });
+    expect(breakdown.topSkipReason).toEqual({ reason: 'changed-preference', count: 1 });
+  });
+
+  it("stays silent when last week's misses carry no recorded reason", () => {
+    const breakdown = wasteCauseBreakdown({
+      day: '2026-08-03',
+      waste: [],
+      mealPlanEvents: [
+        { date: '2026-08-01', status: 'skipped', reason: 'missed', missed: true },
+        { date: '2026-08-02', status: 'skipped', reason: 'takeaway', isTakeaway: true },
+        { date: '2026-08-02', status: 'skipped', reason: 'leftovers-available' },
+        { date: '2026-07-28', status: 'substituted' },
+      ],
+    });
+    expect(breakdown.neverCooked).toBe(4);
+    expect(breakdown.topSkipReason).toBeNull();
   });
 });
 

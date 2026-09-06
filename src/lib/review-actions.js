@@ -10,22 +10,27 @@
 
 import { kitchenCardCandidates, planSeedMerge } from '../domain/card-gen';
 import { createCard, dueCards as collectDue, gradeReview } from '../domain/scheduling';
+import { foldSkipReflection } from '../domain/skip-profile';
 import { RECIPES } from '../data/recipes.js';
 import { uid } from './state.js';
 
 const RATINGS = new Set(['again', 'hard', 'good', 'easy']);
 
 /** Apply a seed plan to a deck: stale auto answers patch in place (reason
- * included), new candidates become fresh cards. Shared by the explicit seed
- * and the boot auto-refresh so both write the deck exactly the same way.
+ * included), stale plan questions leave, and new candidates become fresh
+ * cards. Shared by the explicit seed, the per-row apply and the boot
+ * auto-refresh so every path writes the deck exactly the same way.
  * `liftForget` is true only for an explicit re-seed — the opt-out is a
  * person's choice, never a background side effect. */
 const applySeedPlan = (s, now, plan, liftForget) => {
-  if (!plan.additions.length && !plan.updates.length) return {}; // nothing to do — not a failure
+  if (!plan.additions.length && !plan.updates.length && !(plan.removals || []).length) return {}; // nothing to do — not a failure
   const patches = new Map(plan.updates.map((u) => [u.id, u]));
+  const removed = new Set((plan.removals || []).map((r) => r.id));
   return {
     cards: [
-      ...(Array.isArray(s.cards) ? s.cards : []).map((c) => (patches.has(c.id) ? { ...c, ...patches.get(c.id) } : c)),
+      ...(Array.isArray(s.cards) ? s.cards : [])
+        .filter((c) => !removed.has(c.id))
+        .map((c) => (patches.has(c.id) ? { ...c, ...patches.get(c.id) } : c)),
       ...plan.additions.map(({ seedKey, ...draft }) => createCard({ ...draft, id: uid('c') }, now)),
     ],
     ...(liftForget ? { kitchenCardsForgotten: false } : {}),
@@ -40,6 +45,17 @@ const applySeedPlan = (s, now, plan, liftForget) => {
 const seedCandidates = (s, now) => {
   const kept = new Set(Array.isArray(s.kitchenKeptFronts) ? s.kitchenKeptFronts : []);
   return kitchenCardCandidates(s, now, recipeNameOf(s)).filter((c) => !kept.has(c.front));
+};
+
+/** One seed plan for the current state: fresh candidates merged against the
+ * deck, with removals the user kept as-is filtered out — a kept stale plan
+ * card stays put, exactly like a kept refresh answer. Every flow reads one
+ * plan, so the count, the preview and what a tap applies cannot drift. */
+const seedPlan = (s, now) => {
+  const deck = Array.isArray(s.cards) ? s.cards : [];
+  const plan = planSeedMerge(seedCandidates(s, now), deck);
+  const kept = new Set(Array.isArray(s.kitchenKeptFronts) ? s.kitchenKeptFronts : []);
+  return { ...plan, removals: plan.removals.filter((r) => !kept.has(r.front)) };
 };
 
 export const reviewActions = (set, latest) => {
@@ -81,12 +97,11 @@ export const reviewActions = (set, latest) => {
      * writes, so the UI can offer "build a deck" without committing to it.
      */
     kitchenSeedCount: (now = new Date()) => {
-      const s = latest.current;
-      const deck = Array.isArray(s.cards) ? s.cards : [];
-      const plan = planSeedMerge(seedCandidates(s, now), deck);
+      const plan = seedPlan(latest.current, now);
       // Anything the run would change counts: new questions to add, stale
-      // answers to refresh — so the offer never understates the work.
-      return plan.additions.length + plan.updates.length;
+      // answers to refresh, outlived plan questions to retire — so the offer
+      // never understates the work.
+      return plan.additions.length + plan.updates.length + plan.removals.length;
     },
     /**
      * What a seed run would change, for a confirm-before-apply preview:
@@ -96,16 +111,17 @@ export const reviewActions = (set, latest) => {
     kitchenSeedPreview: (now = new Date()) => {
       const s = latest.current;
       const deck = Array.isArray(s.cards) ? s.cards : [];
-      const plan = planSeedMerge(seedCandidates(s, now), deck);
+      const plan = seedPlan(s, now);
       const byId = new Map(deck.map((c) => [c.id, c]));
       return {
-        total: plan.additions.length + plan.updates.length,
-        additions: plan.additions.map(({ seedKey, ...draft }) => ({ front: draft.front, topicId: draft.topicId })),
+        total: plan.additions.length + plan.updates.length + plan.removals.length,
+        additions: plan.additions.map(({ seedKey, ...draft }) => ({ seedKey, front: draft.front, topicId: draft.topicId })),
         updates: plan.updates.map((u) => ({
           front: byId.get(u.id)?.front || '',
           oldBack: byId.get(u.id)?.back || '',
           newBack: u.back,
         })),
+        removals: plan.removals.map((r) => ({ front: r.front, back: byId.get(r.id)?.back || '' })),
       };
     },
     /**
@@ -115,12 +131,7 @@ export const reviewActions = (set, latest) => {
      */
     seedCardsFromActivity: (now = new Date()) =>
       set((s) => {
-        const changed = applySeedPlan(
-          s,
-          now,
-          planSeedMerge(seedCandidates(s, now), Array.isArray(s.cards) ? s.cards : []),
-          true,
-        );
+        const changed = applySeedPlan(s, now, seedPlan(s, now), true);
         // An explicit re-seed always lifts the forget opt-out — even when
         // there is nothing to build yet, the person asked for kitchen cards.
         return { ...changed, kitchenCardsForgotten: false };
@@ -133,14 +144,14 @@ export const reviewActions = (set, latest) => {
      */
     applySeedRows: (now = new Date(), fronts = []) =>
       set((s) => {
-        const deck = Array.isArray(s.cards) ? s.cards : [];
-        const plan = planSeedMerge(seedCandidates(s, now), deck);
+        const plan = seedPlan(s, now);
         const wanted = new Set(fronts);
-        const frontById = new Map(deck.map((c) => [c.id, c.front]));
+        const frontById = new Map((Array.isArray(s.cards) ? s.cards : []).map((c) => [c.id, c.front]));
         const additions = plan.additions.filter((a) => wanted.has(a.front));
         const updates = plan.updates.filter((u) => wanted.has(frontById.get(u.id)));
-        if (!additions.length && !updates.length) return {}; // nothing chosen is pending — not a failure
-        return applySeedPlan(s, now, { additions, updates }, true);
+        const removals = plan.removals.filter((r) => wanted.has(r.front));
+        if (!additions.length && !updates.length && !removals.length) return {}; // nothing chosen is pending — not a failure
+        return applySeedPlan(s, now, { additions, updates, removals }, true);
       }),
     /**
      * Remember that the user deliberately kept these questions as-is. Kept
@@ -154,6 +165,23 @@ export const reviewActions = (set, latest) => {
         const next = [...new Set([...kept, ...fronts])];
         if (next.length === kept.length) return {}; // already kept — nothing new
         return { kitchenKeptFronts: next };
+      }),
+    /**
+     * Fold one review-time reflection on a skip reason into the learning
+     * profile. Asked after a missed-meal card is rated: does the recorded
+     * reason still describe why meals get skipped? The answer rides the same
+     * write as everything else, so it syncs, backs up and undoes — and a
+     * reason the household has never reflected on starts from zero.
+     */
+    answerSkipReflection: (reasonId, stillApplies, now = new Date()) =>
+      set((s) => {
+        const reason = (reasonId || '').trim();
+        if (!reason) return {}; // no reason id — nothing to learn, not a failure
+        const profile = s.skipReasonProfile && typeof s.skipReasonProfile === 'object' && !Array.isArray(s.skipReasonProfile)
+          ? s.skipReasonProfile
+          : {};
+        const at = now instanceof Date && !Number.isNaN(now.getTime()) ? now.getTime() : Date.now();
+        return { skipReasonProfile: foldSkipReflection(profile, reason, Boolean(stillApplies), at) };
       }),
     /** Clear every kept front, so refresh offers (and the boot auto-refresh) return. */
     clearKeptSeedFronts: () =>
@@ -175,7 +203,7 @@ export const reviewActions = (set, latest) => {
         if (s.kitchenCardsForgotten) return {};
         const deck = Array.isArray(s.cards) ? s.cards : [];
         if (!deck.some((c) => c.origin === 'auto')) return {};
-        return applySeedPlan(s, now, planSeedMerge(seedCandidates(s, now), deck), false);
+        return applySeedPlan(s, now, seedPlan(s, now), false);
       }),
     /**
      * Clear every kitchen-seeded card at once — for users who simply don't

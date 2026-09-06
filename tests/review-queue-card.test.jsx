@@ -269,6 +269,137 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.getByRole('button', { name: 'Rate Good — knew it' })).toBeDefined();
   });
 
+  it('rating a missed-meal card holds the review on the reason question, then grades and folds', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{
+        ...deck[1], topicId: 'cooking',
+        front: 'Which planned meal did you skip this week?',
+        back: 'Pasta with tomato sauce — 2026-07-27',
+        skippedReason: 'no-time',
+      }],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rate Good — knew it' }));
+    // The review holds: the reflection question replaces the ratings grid, and
+    // the grade is not committed until it is answered.
+    expect(document.body.textContent).toMatch(/Does “No time” still describe why planned meals get skipped/);
+    expect(storedDeck()[0].lastReviewedAt).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Still applies — No time remains a real reason' }));
+    // The answer folded into the profile and the grade landed in the same pass.
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.skipReasonProfile['no-time']).toEqual({
+      applies: 1, changed: 0, lastStillApplies: true, lastAt: NOW.getTime(),
+    });
+    expect(storedDeck()[0].lastReviewedAt).toBe('2026-07-28T10:00:00.000Z');
+    expect(screen.getByText('Nothing due today')).toBeDefined(); // the review advanced
+  });
+
+  it('dismissing the reflection grades the card without folding anything', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{
+        ...deck[1], topicId: 'cooking',
+        front: 'Which planned meal did you skip this week?',
+        back: 'Pasta with tomato sauce — 2026-07-27',
+        skippedReason: 'no-time',
+      }],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rate Good — knew it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip the reflection and grade the card' }));
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.skipReasonProfile['no-time']).toBeUndefined(); // nothing folded
+    expect(storedDeck()[0].lastReviewedAt).toBe('2026-07-28T10:00:00.000Z'); // but it was graded
+    expect(screen.getByText('Nothing due today')).toBeDefined();
+  });
+
+  it('an Again rating on a missed-meal card grades at once — no reason question', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{
+        ...deck[1], topicId: 'cooking',
+        front: 'Which planned meal did you skip this week?',
+        back: 'Pasta with tomato sauce — 2026-07-27',
+        skippedReason: 'no-time',
+      }],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rate Again — forgot it' }));
+    expect(document.body.textContent).not.toMatch(/still describe why planned meals get skipped/);
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.skipReasonProfile['no-time']).toBeUndefined();
+    expect(storedDeck()[0].lastReviewedAt).toBe('2026-07-28T10:00:00.000Z'); // graded immediately
+    // Again keeps the card due today — it returns to the front of the queue.
+    expect(screen.getByRole('button', { name: 'Reveal answer' })).toBeDefined();
+  });
+
+  it('a reason reflected on before carries its last conclusion onto the reveal', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{
+        ...deck[1], topicId: 'cooking',
+        front: 'Which planned meal did you skip this week?',
+        back: 'Pasta with tomato sauce — 2026-07-27',
+        skippedReason: 'no-time',
+      }],
+      skipReasonProfile: {
+        'no-time': { applies: 2, changed: 1, lastStillApplies: false, lastAt: 1234 },
+      },
+    }));
+    renderCard();
+    expect(screen.queryByText(/Reflected on this reason/)).toBeNull(); // hidden with the answer
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+    expect(document.body.textContent).toMatch(/Reflected on this reason 3× — you last said it no longer applies/);
+  });
+
+  it('offers a stale tonight card for removal in the refresh preview', () => {
+    cleanup();
+    const stale = {
+      ...deck[1], topicId: 'cooking', origin: 'auto',
+      front: "What's planned for dinner tonight?", back: 'Pasta with tomato sauce',
+      due: '9999-12-31', // not due — the removal offer lives under Nothing due
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded, cards: [stale], plan: {}, mealPlanEvents: [],
+    }));
+    renderCard();
+    // The merge sees the outlived card even though nothing is due.
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 1 kitchen card' }));
+    expect(document.body.textContent).toMatch(/No longer on the plan/);
+    fireEvent.click(screen.getByRole('button', { name: `Remove stale card for What's planned for dinner tonight?` }));
+    expect(storedDeck()).toHaveLength(0);
+    expect(screen.getByText('No cards yet')).toBeDefined(); // the stale card is gone
+    expect(screen.queryByText(/No longer on the plan/)).toBeNull();
+  });
+
+  it('keeping a stale plan card is durable: it stays and stops being offered', () => {
+    cleanup();
+    const stale = {
+      ...deck[1], topicId: 'cooking', origin: 'auto',
+      front: "What's planned for dinner tonight?", back: 'Pasta with tomato sauce',
+      due: '9999-12-31',
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded, cards: [stale], plan: {}, mealPlanEvents: [],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 1 kitchen card' }));
+    fireEvent.click(screen.getByRole('button', { name: `Keep stale card for What's planned for dinner tonight?` }));
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.cards).toHaveLength(1); // kept, not removed
+    expect(stored.kitchenKeptFronts).toEqual(["What's planned for dinner tonight?"]);
+    expect(screen.getByText('Nothing due today')).toBeDefined();
+    expect(screen.queryByRole('button', { name: /Refresh/ })).toBeNull(); // no longer offered
+  });
+
   it('previews what a refresh changes and applies one row on its own confirm', () => {
     cleanup();
     const staleAuto = {
@@ -415,7 +546,12 @@ describe('the flashcard review queue on Learn', () => {
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
 
     const strip = await screen.findByLabelText('Start a deck from your kitchen');
-    expect(within(strip).getByText(/3 questions from what you buy/)).toBeDefined();
+    expect(within(strip).getByText(/3 questions from your kitchen/)).toBeDefined();
+    // The count breaks down by card before the tap — the template chips name
+    // exactly which cards will fire, planned-meal ones included.
+    expect(within(strip).getByText('Bought most')).toBeDefined();
+    expect(within(strip).getByText('Last shop cost')).toBeDefined();
+    expect(within(strip).getByText('Next to expire')).toBeDefined();
 
     // The tap opens the preview first — nothing is written yet.
     fireEvent.click(within(strip).getByText('Start a deck from your kitchen'));
@@ -466,6 +602,30 @@ describe('the flashcard review queue on Learn', () => {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
     expect(stored.cards || []).toHaveLength(0); // no deck invented
     expect(stored.kitchenKeptFronts).toHaveLength(3);
+  });
+
+  it('names the planned-meal cards the offer would build, not just a total', async () => {
+    cleanup();
+    const iso = (d) => new Date(d).toISOString().slice(0, 10);
+    const skippedDay = iso(Date.now() - 2 * 86_400_000);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded, cards: [],
+      myRecipes: [
+        { id: 'r1', name: 'Pasta with tomato sauce' },
+        { id: 'r2', name: 'Lentil soup' },
+      ],
+      plan: { [iso(Date.now())]: { dinner: 'r1' } },
+      mealPlanEvents: [
+        { id: 'mpe1', date: skippedDay, slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'no-time' },
+      ],
+    }));
+    render(<App />);
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+    const strip = await screen.findByLabelText('Start a deck from your kitchen');
+    expect(within(strip).getByText('2 questions from your kitchen.')).toBeDefined();
+    // The plan templates are named as cards, not hidden behind a total.
+    expect(within(strip).getByText("Tonight's dinner")).toBeDefined();
+    expect(within(strip).getByText('A meal you skipped')).toBeDefined();
   });
 
   it('the kitchen-seed strip stays off the dashboard once a deck exists', async () => {

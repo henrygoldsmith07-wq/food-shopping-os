@@ -1,5 +1,6 @@
 import { Card } from './ui.jsx';
 import { useApp } from '../lib/store.jsx';
+import { reasonLabel } from '../lib/plan-outcome.js';
 import { gbp } from '../lib/utils.js';
 import { wasteCauseBreakdown, wasteCauseInsight } from '../lib/waste-log.js';
 
@@ -54,6 +55,13 @@ export default function WasteCauseCard() {
           </div>
         ))}
       </div>
+      {breakdown.topSkipReason && (
+        <p className="mt-2 text-[0.75rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
+          Last week's misses were mostly{' '}
+          <span style={{ color: 'var(--ink)' }}>{reasonLabel(breakdown.topSkipReason.reason)}</span>
+          {breakdown.topSkipReason.count > 1 && ` (${breakdown.topSkipReason.count}×)`}.
+        </p>
+      )}
       {breakdown.missedMeals.length > 0 && (
         <p className="mt-2 border-t pt-2 text-[0.75rem] font-semibold leading-snug" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
           <span style={{ color: 'var(--warn)' }}>

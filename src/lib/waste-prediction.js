@@ -161,10 +161,27 @@ export const predictUnusedIngredients = ({
   const summary = items.length
     ? `${highRisk ? `${highRisk} high-risk ` : ''}${items.length} ingredient${items.length === 1 ? '' : 's'} may go unused if the plan stays unchanged.`
     : 'No ingredient is currently predicted to go unused from the evidence recorded.';
+  // Seen-but-covered dated stock: within the expiry horizon and fully used by
+  // a planned meal on or before its date. Distinct from `items` on purpose —
+  // the UI reads a covered near-expiry item as handled, not as ignored.
+  const covered = (scored.coveredDatedStock || [])
+    .filter((row) => row.date && validDate(row.date))
+    .map((row) => ({
+      key: row.key,
+      name: row.name,
+      amount: round(row.amount),
+      qty: quantityLabel(row.amount, row.dim, row.unit),
+      date: row.date,
+      daysLeft: row.daysLeft ?? daysBetween(today, row.date),
+      mealCount: Math.max(1, Number(row.occurrences) || 1),
+    }))
+    .sort((a, b) => (a.daysLeft ?? 99) - (b.daysLeft ?? 99) || a.name.localeCompare(b.name));
 
   return {
     items,
     predictions: items,
+    covered,
+    coveredCount: covered.length,
     count: items.length,
     highRisk,
     hasPredictions: items.length > 0,

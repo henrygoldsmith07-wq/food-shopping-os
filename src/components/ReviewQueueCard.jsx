@@ -4,7 +4,9 @@ import { useApp } from '../lib/store.jsx';
 import AddCardForm from './AddCardForm.jsx';
 import { Card, Pill, Section } from './ui.jsx';
 import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
+import SkipReasonReflection from './SkipReasonReflection.jsx';
 import { dayStamp, dueTopicGroups, forecastDueCounts } from '../domain/scheduling';
+import { skipReflectionFor } from '../domain/skip-profile';
 import { topicLabel } from '../domain/topic-labels';
 import { reasonLabel } from '../lib/plan-outcome.js';
 
@@ -45,22 +47,56 @@ export default function ReviewQueueCard({ now = new Date() }) {
     [allQueue, focusedTopic],
   );
   const [flipped, setFlipped] = useState(false);
+  // A rated missed-meal card holds its review for one question — whether the
+  // skip reason still applies. The grade commits on its answer (or dismissal).
+  const [pendingReflection, setPendingReflection] = useState(null);
   const [adding, setAdding] = useState(false);
   const [editingTopic, setEditingTopic] = useState(false);
   const [topicDraft, setTopicDraft] = useState('');
   const current = queue[0] ?? null;
   const empty = !deck.length;
   const focusable = topicGroups.length > 1;
+  // Profile context: a reason the household already reflected on carries its
+  // last conclusion onto the missed-meal reveal.
+  const profile = app.skipReasonProfile && typeof app.skipReasonProfile === 'object' && !Array.isArray(app.skipReasonProfile)
+    ? app.skipReasonProfile
+    : {};
+  const seenReflection = current?.skippedReason ? skipReflectionFor(profile, current.skippedReason) : null;
 
-  const rate = (rating) => {
-    if (!current) return;
-    app.reviewCard(current.id, rating, now);
-    setFlipped(false);
+  const advance = (clearFlipped = true) => {
+    setPendingReflection(null);
+    if (clearFlipped) setFlipped(false);
     setEditingTopic(false);
     // A focused topic's last card just left the queue — fall back to All so
     // the session continues into the next topic instead of hitting a wall.
     if (focusedTopic && queue.length <= 1) setFocusedTopic(null);
   };
+
+  const rate = (rating) => {
+    if (!current) return;
+    // The reason a missed meal was skipped is a habit claim, not just an
+    // answer to recall — hold the review open one question before the grade
+    // lands. An Again rating (relearn step) asks nothing: the card stays due
+    // today, so the follow-up would nag the very next review.
+    if (current.skippedReason && rating !== 'again') {
+      setPendingReflection({ id: current.id, rating, reason: current.skippedReason });
+      return;
+    }
+    app.reviewCard(current.id, rating, now);
+    advance();
+  };
+
+  // The reflection's answer commits the held grade — the card is captured by
+  // id at hold time, so no topic switch can redirect the grade elsewhere.
+  const answerReflection = (applies) => {
+    const pending = pendingReflection;
+    if (!pending) return;
+    if (applies === true || applies === false) app.answerSkipReflection(pending.reason, applies, now);
+    app.reviewCard(pending.id, pending.rating, now);
+    advance();
+  };
+
+  const dismissReflection = () => answerReflection(null);
 
   const openRefreshPreview = () => {
     setPreviewPlan(app.kitchenSeedPreview(now));
@@ -95,7 +131,7 @@ export default function ReviewQueueCard({ now = new Date() }) {
 
   const pickTopic = (topicId) => {
     setFocusedTopic((prev) => (prev === topicId ? null : topicId));
-    setFlipped(false);
+    advance(); // a pending reflection belongs to the card that was showing
   };
 
   const nextDue = useMemo(() => {
@@ -411,21 +447,35 @@ export default function ReviewQueueCard({ now = new Date() }) {
                     Why it was skipped: <span className="font-extrabold" style={{ color: 'var(--ink)' }}>{reasonLabel(current.skippedReason)}</span> — rate it against the reason, not the answer.
                   </p>
                 )}
-                <div className="mt-3 grid grid-cols-4 gap-2">
-                  {RATINGS.map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      aria-label={`Rate ${r.label} — ${r.hint}`}
-                      onClick={() => rate(r.id)}
-                      className="press rounded-xl border px-2 py-2.5 text-center"
-                      style={{ borderColor: 'var(--line)' }}
-                    >
-                      <span className="block text-[0.8125rem] font-extrabold" style={{ color: r.tone }}>{r.label}</span>
-                      <span className="mt-0.5 block text-[0.5625rem] font-semibold" style={{ color: 'var(--faint)' }}>{r.hint}</span>
-                    </button>
-                  ))}
-                </div>
+                {seenReflection && (
+                  <p className="mt-1.5 text-left text-[0.6875rem] font-semibold leading-relaxed" style={{ color: 'var(--faint)' }}>
+                    Reflected on this reason {seenReflection.applies + seenReflection.changed}× — you last said it {seenReflection.lastStillApplies ? 'still applies' : 'no longer applies'}.
+                  </p>
+                )}
+                {pendingReflection ? (
+                  <SkipReasonReflection
+                    reason={pendingReflection.reason}
+                    ratingLabel={RATINGS.find((r) => r.id === pendingReflection.rating)?.label}
+                    onAnswer={answerReflection}
+                    onDismiss={dismissReflection}
+                  />
+                ) : (
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {RATINGS.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        aria-label={`Rate ${r.label} — ${r.hint}`}
+                        onClick={() => rate(r.id)}
+                        className="press rounded-xl border px-2 py-2.5 text-center"
+                        style={{ borderColor: 'var(--line)' }}
+                      >
+                        <span className="block text-[0.8125rem] font-extrabold" style={{ color: r.tone }}>{r.label}</span>
+                        <span className="mt-0.5 block text-[0.5625rem] font-semibold" style={{ color: 'var(--faint)' }}>{r.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             ) : (
               <button

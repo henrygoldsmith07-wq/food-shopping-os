@@ -41,6 +41,7 @@ export const wasteCauseBreakdown = (app = {}, { windowDays = WASTE_WINDOW_DAYS, 
       leftoverBought: { count: 0, cost: 0 },
       neverCooked: 0,
       missedMeals: [],
+      topSkipReason: null,
     };
   }
   const rows = (app.waste || [])
@@ -56,6 +57,34 @@ export const wasteCauseBreakdown = (app = {}, { windowDays = WASTE_WINDOW_DAYS, 
   // recorded — are the cause worth reviewing: naming them is what lets a
   // person recognise the pattern instead of staring at a count.
   const silentMiss = (event) => event?.missed === true || event?.reason === 'missed';
+  // The dominant reason behind last week's misses — the same events and the
+  // same week the review's missed-meal cards read, so the two tell one
+  // story. Substituted meals carry no reason (a swap is not a skip); silent
+  // rollover stamps (`missed`) name nothing — the line above already says
+  // they slipped by unrecorded — and takeaway nights are counted elsewhere,
+  // so none of them shape the tally. Ties go to the most recent miss.
+  const weekStart = day ? addDays(day, -7) : null;
+  let topSkipReason = null;
+  if (weekStart) {
+    const reasonCounts = new Map();
+    const reasonEvents = (app.mealPlanEvents || [])
+      .filter((event) =>
+        event?.status === 'skipped'
+        && event.reason
+        && event.reason !== 'missed'
+        && event.reason !== 'takeaway'
+        && event.reason !== 'leftovers-available'
+        && !event.isTakeaway
+        && event.date >= weekStart
+        && event.date <= day,
+      )
+      .sort((a, b) => String(b.date).localeCompare(String(a.date))); // newest first
+    for (const event of reasonEvents) {
+      const n = (reasonCounts.get(event.reason) || 0) + 1;
+      reasonCounts.set(event.reason, n);
+      if (!topSkipReason || n > topSkipReason.count) topSkipReason = { reason: event.reason, count: n };
+    }
+  }
   return {
     leftoverCooked: bucket((row) => row.cat === LEFTOVER_CAT),
     leftoverBought: bucket((row) => row.cat !== LEFTOVER_CAT),
@@ -67,6 +96,7 @@ export const wasteCauseBreakdown = (app = {}, { windowDays = WASTE_WINDOW_DAYS, 
         name: event?.plannedRecipeId ? byId(event.plannedRecipeId)?.name || null : null,
       }))
       .sort((a, b) => String(b.date).localeCompare(String(a.date))),
+    topSkipReason,
   };
 };
 

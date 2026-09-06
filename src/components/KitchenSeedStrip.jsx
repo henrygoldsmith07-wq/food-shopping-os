@@ -4,10 +4,24 @@ import { useApp } from '../lib/store.jsx';
 import { Card, Pill } from './ui.jsx';
 import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
 
+/** A template seedKey → the card it makes, said short enough for a chip. */
+const TEMPLATE_LABELS = {
+  'shop-most': 'Bought most',
+  'shop-total': 'Last shop cost',
+  'pantry-expiring': 'Next to expire',
+  'log-recent': 'Last food logged',
+  'cooked-last': 'Last cooked',
+  'missed-meal': 'A meal you skipped',
+  'plan-tonight': "Tonight's dinner",
+  'plan-swapped': 'A meal you swapped',
+  'leftovers-covered': 'Leftovers win',
+};
+
 /**
  * The deck starts from the dashboard. A returning user with real kitchen
- * activity but no cards yet sees one strip on Today: what it would ask, and
- * one tap to see the questions — then a tap per question (or all) to build
+ * activity but no cards yet sees one strip on Today: what it would ask —
+ * broken down by the template cards it would build, not just a total — and
+ * one tap to see the questions, then a tap per question (or all) to build
  * the deck, no trip to Learn required. Honest on both ends: it shows
  * nothing when there is nothing to seed, previews before it writes, stands
  * down once the deck exists or the user opted out, and names its action
@@ -16,6 +30,12 @@ import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
 export default function KitchenSeedStrip({ goTab }) {
   const app = useApp();
   const seedable = useMemo(() => app.kitchenSeedCount(), [app, app.cards]);
+  // What the offer would build, read once for the breakdown: which templates
+  // will fire. Only a still-empty, still-opted-in deck has one worth showing.
+  const offerPlan = useMemo(() => {
+    if (!seedable || app.kitchenCardsForgotten || (app.cards || []).length > 0) return null;
+    return app.kitchenSeedPreview();
+  }, [app, app.cards, seedable, app.kitchenCardsForgotten]);
   // The preview shown before anything is written: its plan, frozen at open.
   const [preview, setPreview] = useState(null);
   const [seededCount, setSeededCount] = useState(null);
@@ -76,6 +96,15 @@ export default function KitchenSeedStrip({ goTab }) {
 
   if (!seedable || app.kitchenCardsForgotten || deckSize > 0) return null;
 
+  // The count broken down by card: up to four named templates, then "+N" so
+  // the offer still says what will fire without becoming a list. Templates
+  // without a chip label (unknown seedKeys) only count toward the total.
+  const labels = (offerPlan?.additions || [])
+    .map((a) => TEMPLATE_LABELS[a.seedKey])
+    .filter(Boolean);
+  const chips = labels.slice(0, 4);
+  const overflow = labels.length - chips.length;
+
   return (
     <section className="px-5 rise rise-1" aria-label="Start a deck from your kitchen">
       <Card
@@ -95,11 +124,32 @@ export default function KitchenSeedStrip({ goTab }) {
           <div className="min-w-0 flex-1">
             <p className="text-[0.9375rem] font-extrabold">Start a deck from your kitchen</p>
             <p className="mt-0.5 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {seedable} question{seedable === 1 ? '' : 's'} from what you buy, log and cook.
+              {seedable} question{seedable === 1 ? '' : 's'} from your kitchen.
             </p>
           </div>
           <Pill tone="accent">{seedable}</Pill>
         </div>
+        {chips.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1" aria-label="Cards it would build">
+            {chips.map((label) => (
+              <span
+                key={label}
+                className="rounded-full px-2 py-0.5 text-[0.625rem] font-bold"
+                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+              >
+                {label}
+              </span>
+            ))}
+            {overflow > 0 && (
+              <span
+                className="rounded-full px-2 py-0.5 text-[0.625rem] font-bold"
+                style={{ background: 'var(--line)', color: 'var(--muted)' }}
+              >
+                +{overflow} more
+              </span>
+            )}
+          </div>
+        )}
       </Card>
     </section>
   );

@@ -26,6 +26,9 @@ export default function KitchenRefreshPreview({ now, plan, kind = 'refresh', onA
   const [rows, setRows] = useState(() => [
     ...(plan.updates || []).map((u) => ({ kind: 'update', ...u })),
     ...(plan.additions || []).map((a) => ({ kind: 'addition', ...a })),
+    // Outlived plan questions: the slot or week moved on, so the auto card
+    // answers nothing current. Remove retires it; Keep keeps it durably.
+    ...(plan.removals || []).map((r) => ({ kind: 'removal', ...r })),
   ]);
   const remaining = rows.length;
 
@@ -76,29 +79,58 @@ export default function KitchenRefreshPreview({ now, plan, kind = 'refresh', onA
                   <span className="block font-extrabold" style={{ color: 'var(--ink)' }}>{row.front}</span>
                   {row.kind === 'update' ? (
                     <span className="block">{row.oldBack} <span aria-hidden="true" style={{ color: 'var(--faint)' }}>→</span> {row.newBack}</span>
+                  ) : row.kind === 'removal' ? (
+                    <span className="block" style={{ color: 'var(--faint)' }}>
+                      No longer on the plan — {row.back || 'not planned this week'}. Remove the stale card, or keep it.
+                    </span>
                   ) : (
                     <span className="block" style={{ color: 'var(--faint)' }}>New question</span>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2.5">
-                  <button
-                    type="button"
-                    aria-label={seedMode ? `Add question for ${row.front}` : `Apply refresh for ${row.front}`}
-                    onClick={() => act(row, 'apply')}
-                    className="press text-[0.6875rem] font-extrabold"
-                    style={{ color: 'var(--accent)' }}
-                  >
-                    {seedMode ? 'Add' : 'Apply'}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={seedMode ? `Skip question for ${row.front}` : `Skip refresh for ${row.front}`}
-                    onClick={() => act(row, 'keep')}
-                    className="press text-[0.6875rem] font-bold"
-                    style={{ color: 'var(--faint)' }}
-                  >
-                    Skip
-                  </button>
+                  {row.kind === 'removal' ? (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`Remove stale card for ${row.front}`}
+                        onClick={() => act(row, 'apply')}
+                        className="press text-[0.6875rem] font-extrabold"
+                        style={{ color: 'var(--danger)' }}
+                      >
+                        Remove
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Keep stale card for ${row.front}`}
+                        onClick={() => act(row, 'keep')}
+                        className="press text-[0.6875rem] font-bold"
+                        style={{ color: 'var(--faint)' }}
+                      >
+                        Keep
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={seedMode ? `Add question for ${row.front}` : `Apply refresh for ${row.front}`}
+                        onClick={() => act(row, 'apply')}
+                        className="press text-[0.6875rem] font-extrabold"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        {seedMode ? 'Add' : 'Apply'}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={seedMode ? `Skip question for ${row.front}` : `Skip refresh for ${row.front}`}
+                        onClick={() => act(row, 'keep')}
+                        className="press text-[0.6875rem] font-bold"
+                        style={{ color: 'var(--faint)' }}
+                      >
+                        Skip
+                      </button>
+                    </>
+                  )}
                 </div>
               </li>
             ))}

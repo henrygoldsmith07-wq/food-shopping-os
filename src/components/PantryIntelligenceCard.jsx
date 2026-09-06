@@ -16,6 +16,9 @@ export default function PantryIntelligenceCard({ onPlanItem } = {}) {
   const pantryRestockNeeds = buyingNeeds.filter((row) => row.source === 'pantry');
   const wastePrediction = app.wastePrediction || {};
   const predictedWaste = wastePrediction.items || [];
+  // Near-expiry stock the plan already uses: seen but not predicted — it
+  // reads as covered here rather than silently absent from the warn block.
+  const coveredByPlan = wastePrediction.covered || [];
 
   return (
     <Section title="Pantry intelligence" className="!px-0" aria-label="Pantry intelligence">
@@ -60,17 +63,27 @@ export default function PantryIntelligenceCard({ onPlanItem } = {}) {
                 // affordance skips the generator and opens tonight's picker
                 // with the item already searched, for the user who just wants
                 // dinner sorted.
+                // The row's cause is part of the row: a half-covered item says
+                // the plan leaves a remainder rather than looking overlooked.
+                const reason = row.reasons?.[0];
                 const inner = (
                   <>
-                    <span className="min-w-0 truncate">{row.name} · {row.qty}</span>
-                    <span className="shrink-0 flex items-center gap-1" style={{ color: tone }}>
-                      {risk}{onPlanItem ? <span aria-hidden="true">→</span> : null}
+                    <span className="flex min-w-0 items-center justify-between gap-2 text-[0.75rem] font-bold">
+                      <span className="min-w-0 truncate">{row.name} · {row.qty}</span>
+                      <span className="shrink-0 flex items-center gap-1" style={{ color: tone }}>
+                        {risk}{onPlanItem ? <span aria-hidden="true">→</span> : null}
+                      </span>
                     </span>
+                    {reason && (
+                      <span className="block text-[0.6875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
+                        {reason}
+                      </span>
+                    )}
                   </>
                 );
                 if (!onPlanItem) {
                   return (
-                    <div key={key} className="flex items-center justify-between gap-2 text-[0.75rem] font-bold">
+                    <div key={key} className="flex min-w-0 flex-col gap-0.5">
                       {inner}
                     </div>
                   );
@@ -81,7 +94,7 @@ export default function PantryIntelligenceCard({ onPlanItem } = {}) {
                       type="button"
                       onClick={() => onPlanItem(row.name)}
                       aria-label={`Plan a meal using ${row.name}`}
-                      className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-2 text-left text-[0.75rem] font-bold"
+                      className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-2.5 py-2 text-left"
                     >
                       {inner}
                     </button>
@@ -101,6 +114,17 @@ export default function PantryIntelligenceCard({ onPlanItem } = {}) {
               })}
             </div>
             <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--accent)' }}>{predictedWaste[0].action}</p>
+          </div>
+        )}
+        {coveredByPlan.length > 0 && (
+          <div className="border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+            <p className="text-[0.71875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--good)' }}>Covered by the plan</p>
+            <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {coveredByPlan.slice(0, 3).map((row) =>
+                `${row.name} · ${row.qty} — used by ${row.mealCount} planned meal${row.mealCount === 1 ? '' : 's'} before its date`
+              ).join(' · ')}
+              {coveredByPlan.length > 3 ? ' · …' : ''}
+            </p>
           </div>
         )}
         {buyingNeeds.length > 0 && (

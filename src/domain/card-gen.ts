@@ -44,6 +44,25 @@ export type RecipeNameResolver = (id: Id) => string | null;
  * assigned by the caller at seed time, so candidates carry none. */
 export type CardCandidate = Omit<CardDraft, "id"> & { seedKey: string };
 
+/** The four plan-sourced questions, whose *meaning* is bound to "now". */
+export const FRONT_MISSED_MEAL = "Which planned meal did you skip this week?";
+export const FRONT_PLAN_TONIGHT = "What's planned for dinner tonight?";
+export const FRONT_PLAN_SWAPPED = "Which planned meal did you swap this week?";
+export const FRONT_LEFTOVERS_COVERED = "Which planned meal did leftovers cover this week?";
+
+/** Plan questions that go stale when their slot or week moves on: tonight's
+ * dinner has passed, this week's swap/skip/leftovers-win is no longer in the
+ * window. An auto card bearing one of these fronts is retired by the merge
+ * when the template did not fire this run — the alternative is a card that
+ * answers a question its data no longer asks. Handmade cards are never
+ * retired; these strings are their template's own front, in one place. */
+export const RETIRABLE_AUTO_FRONTS = [
+  FRONT_MISSED_MEAL,
+  FRONT_PLAN_TONIGHT,
+  FRONT_PLAN_SWAPPED,
+  FRONT_LEFTOVERS_COVERED,
+];
+
 const DAY_MS = 86_400_000;
 const dayStamp = (date: Date): string => {
   const year = date.getUTCFullYear();
@@ -198,7 +217,7 @@ export function kitchenCardCandidates(
         subjectId: "kitchen",
         topicId: "cooking",
         origin: "auto",
-        front: "Which planned meal did you skip this week?",
+        front: FRONT_MISSED_MEAL,
         back: `${name} — ${skipped.date}`,
         skippedReason: skipped.reason || "other",
       });
@@ -218,7 +237,7 @@ export function kitchenCardCandidates(
         subjectId: "kitchen",
         topicId: "cooking",
         origin: "auto",
-        front: "What's planned for dinner tonight?",
+        front: FRONT_PLAN_TONIGHT,
         back: name,
       });
     }
@@ -246,7 +265,7 @@ export function kitchenCardCandidates(
         subjectId: "kitchen",
         topicId: "cooking",
         origin: "auto",
-        front: "Which planned meal did you swap this week?",
+        front: FRONT_PLAN_SWAPPED,
         back: `${plannedName} → ${actualName}`,
       });
     }
@@ -274,7 +293,7 @@ export function kitchenCardCandidates(
         subjectId: "kitchen",
         topicId: "cooking",
         origin: "auto",
-        front: "Which planned meal did leftovers cover this week?",
+        front: FRONT_LEFTOVERS_COVERED,
         back: `${name} — ${covered.date}`,
       });
     }
@@ -290,6 +309,10 @@ export interface SeedPlan {
   /** Existing auto cards whose stored back is stale: `{ id, back }` patches.
    * A missed-meal refresh carries the new skip's `skippedReason` alongside. */
   updates: { id: Id; back: string; skippedReason?: string | null }[];
+  /** Auto plan cards whose question's moment has passed — the template did
+   * not fire this run, so the card answers nothing current. The merge names
+   * them; the caller decides whether to disclose, apply or keep them. */
+  removals: { id: Id; front: string }[];
 }
 
 /**
@@ -302,13 +325,19 @@ export interface SeedPlan {
  * recent trip was a different one), in which case the stored back is
  * refreshed in place. Handmade and other non-auto cards are never rewritten:
  * the user owns their words.
+ *
+ * A time-scoped plan question whose template did not fire this run is
+ * retired instead: tonight's dinner card outlived its evening, this week's
+ * swap/skip/leftover-win card outlived its week. Only auto cards carrying
+ * one of the retirable fronts, and only when no candidate offers the same
+ * front, are named — an answer the merge can still refresh is never retired.
  */
 export function planSeedMerge(candidates: CardCandidate[], deck: Card[]): SeedPlan {
   const byFront = new Map<string, Card>();
   for (const card of deck) byFront.set(card.front, card);
 
   const additions: CardCandidate[] = [];
-  const updates: { id: Id; back: string }[] = [];
+  const updates: { id: Id; back: string; skippedReason?: string | null }[] = [];
   const seenFronts = new Set<string>();
   for (const cand of candidates) {
     if (seenFronts.has(cand.front)) continue; // a template fires once per run
@@ -325,5 +354,12 @@ export function planSeedMerge(candidates: CardCandidate[], deck: Card[]): SeedPl
       updates.push(patch);
     }
   }
-  return { additions, updates };
+  const retirable = new Set(RETIRABLE_AUTO_FRONTS);
+  const removals: { id: Id; front: string }[] = [];
+  for (const card of deck) {
+    if (card.origin === 'auto' && retirable.has(card.front) && !seenFronts.has(card.front)) {
+      removals.push({ id: card.id, front: card.front });
+    }
+  }
+  return { additions, updates, removals };
 }
