@@ -9,7 +9,7 @@
  */
 
 import { kitchenCardCandidates, planSeedMerge } from '../domain/card-gen';
-import { createCard, dueCards as collectDue, gradeReview } from '../domain/scheduling';
+import { createCard, dueCards as collectDue, gradeReview, dueReasonGroups } from '../domain/scheduling';
 import { foldSkipReflection } from '../domain/skip-profile';
 import { RECIPES } from '../data/recipes.js';
 import { uid } from './state.js';
@@ -92,6 +92,9 @@ export const reviewActions = (set, latest) => {
     /** The cards due right now, soonest first — the queue a review screen shows. */
     reviewDueCards: (now = new Date()) =>
       collectDue(Array.isArray(latest.current.cards) ? latest.current.cards : [], now),
+    /** The due queue grouped by a missed meal's skip reason — for cards elsewhere on the tab that point at one reason's questions. */
+    reviewDueReasonGroups: (now = new Date()) =>
+      dueReasonGroups(Array.isArray(latest.current.cards) ? latest.current.cards : [], now),
     /**
      * Cards the user's own kitchen activity would seed — count only, no
      * writes, so the UI can offer "build a deck" without committing to it.

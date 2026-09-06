@@ -37,9 +37,9 @@ const deck = [
 
 const seeded = { onboarded: true, name: 'Sam', day: DAY, cards: deck };
 
-const renderCard = () => render(
+const renderCard = (topicReviewRequest = null) => render(
   <AppProvider>
-    <ReviewQueueCard now={NOW} />
+    <ReviewQueueCard now={NOW} topicReviewRequest={topicReviewRequest} />
   </AppProvider>,
 );
 
@@ -91,6 +91,26 @@ describe('focusing the review queue one topic at a time', () => {
     fireEvent.click(screen.getByLabelText('Rate Good — knew it'));
     expect(within(bar).getByText('All')).toBeDefined();
     expect(screen.getByText('Membrane structure?')).toBeDefined(); // queue continues
+  });
+
+  it('rating the last card of a multi-card focus ends the session, not one card early', () => {
+    renderCard();
+    const bar = screen.getByLabelText('Review one topic at a time');
+    fireEvent.click(within(bar).getByText('Membranes · 2'));
+    // First membrane card: the focus holds — a second card is still due.
+    fireEvent.click(screen.getByLabelText('Reveal answer'));
+    fireEvent.click(screen.getByLabelText('Rate Good — knew it'));
+    expect(screen.getByText('Second membrane card?')).toBeDefined();
+    expect(within(screen.getByLabelText('Review one topic at a time')).getByRole('button', { name: 'Membranes · 1' }).getAttribute('aria-pressed')).toBe('true');
+    // Second membrane card: the topic is spent — the session leaves the
+    // focus and the full queue's soonest card (the enzyme card) surfaces.
+    fireEvent.click(screen.getByLabelText('Reveal answer'));
+    fireEvent.click(screen.getByLabelText('Rate Good — knew it'));
+    expect(screen.getByText('Enzyme card?')).toBeDefined();
+    // Only one topic still owes cards, so the bar stops offering filters —
+    // the queue is All by construction, with nothing pressed.
+    expect(screen.queryByLabelText('Review one topic at a time')).toBeNull();
+    expect(screen.getByText('1 to review')).toBeDefined();
   });
 
   it('toggling focus off returns to the full queue', () => {
@@ -813,5 +833,55 @@ describe('the flashcard review queue on Learn', () => {
     expect(await screen.findByText('1 to review')).toBeDefined();
     expect(screen.getByText('First ever card?')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Reveal answer' })).toBeDefined();
+  });
+
+  it('a reason ask focuses only that reason’s missed-meal cards; the tap-out releases it', () => {
+    cleanup();
+    const skipCard = (id, reason, front) => ({
+      ...deck[1], id, topicId: 'cooking', front, back: `${front} — 2026-07-27`,
+      skippedReason: reason,
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [
+        skipCard('s1', 'no-time', 'Which planned meal did you skip this week?'),
+        skipCard('s2', 'missing-ingredients', 'Which planned meal was unmakeable?'),
+      ],
+    }));
+    renderCard({ id: 1, reason: 'no-time' });
+    // Focus lands on the asked reason only — the other reason's card is out.
+    expect(screen.getByText('Which planned meal did you skip this week?')).toBeDefined();
+    expect(screen.queryByText('Which planned meal was unmakeable?')).toBeNull();
+    expect(screen.getByText('1 to review')).toBeDefined();
+    // The tap-out names the active focus and releases it — the full queue's
+    // soonest card (s1 wins the due-day tiebreak) is back on top.
+    fireEvent.click(screen.getByRole('button', { name: 'Stop focusing this skip reason' }));
+    expect(screen.getByText('Which planned meal did you skip this week?')).toBeDefined();
+    expect(screen.getByText('2 to review')).toBeDefined();
+  });
+
+  it('a topic ask supersedes a reason focus and vice versa — one narrowing at a time', () => {
+    cleanup();
+    const skipCard = {
+      ...deck[1], id: 's1', topicId: 'cooking',
+      front: 'Which planned meal did you skip this week?',
+      back: 'Which planned meal did you skip this week? — 2026-07-27',
+      skippedReason: 'no-time',
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{ ...deck[0], id: 'm1' }, skipCard], // one due topic card, one due reason card
+    }));
+    const { rerender } = renderCard({ id: 1, topicId: 't1' });
+    expect(screen.getByText('Membrane structure?')).toBeDefined();
+    const ask = (request) => rerender(
+      <AppProvider>
+        <ReviewQueueCard now={NOW} topicReviewRequest={request} />
+      </AppProvider>,
+    );
+    ask({ id: 2, reason: 'no-time' });
+    expect(screen.getByText('Which planned meal did you skip this week?')).toBeDefined();
+    ask({ id: 3, topicId: 't1' });
+    expect(screen.getByText('Membrane structure?')).toBeDefined();
   });
 });

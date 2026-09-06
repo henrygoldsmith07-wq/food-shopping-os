@@ -40,6 +40,7 @@ export function createCard(input: CardDraft, now: Date = new Date()): Card {
     ease: INITIAL_EASE,
     intervalDays: 0,
     due: dayStamp(now),
+    lastRating: null,
     createdAt: now.toISOString(),
     lastReviewedAt: null,
   };
@@ -131,6 +132,7 @@ export function gradeReview(card: Card, rating: Rating, now: Date = new Date()):
       ease: alreadySeen ? clampEase(roundEase(card.ease - EASE_AGAIN_PENALTY)) : card.ease,
       intervalDays: 0,
       due: dayStamp(now),
+      lastRating: rating,
       lastReviewedAt: reviewedAt,
     };
   }
@@ -142,6 +144,7 @@ export function gradeReview(card: Card, rating: Rating, now: Date = new Date()):
     ease: rating === "easy" ? clampEase(roundEase(card.ease + EASE_EASY_BONUS)) : card.ease,
     intervalDays,
     due: dueAfter(now, intervalDays),
+    lastRating: rating,
     lastReviewedAt: reviewedAt,
   };
 }
@@ -193,6 +196,37 @@ export function dueTopicGroups(cards: Card[], now: Date = new Date()): DueTopicG
     cards: groupCards,
   })).sort((a, b) =>
     a.count === b.count ? (a.topicId < b.topicId ? -1 : a.topicId > b.topicId ? 1 : 0) : b.count - a.count,
+  );
+}
+
+/** One skip reason's slice of the due queue. */
+export interface DueReasonGroup {
+  reason: string;
+  count: number;
+  /** The reason's due cards, in the queue's soonest-first order. */
+  cards: Card[];
+}
+
+/**
+ * The due queue, grouped by a missed meal's skip reason, so the review can be
+ * focused on the one question a card elsewhere on the tab points at. Same
+ * ordering rules as dueTopicGroups — most-cards-first, stable tiebreak — and
+ * cards without a reason get no group (there is nothing to reflect on).
+ */
+export function dueReasonGroups(cards: Card[], now: Date = new Date()): DueReasonGroup[] {
+  const byReason = new Map<string, Card[]>();
+  for (const card of dueCards(cards, now)) {
+    if (!card.skippedReason) continue;
+    const list = byReason.get(card.skippedReason);
+    if (list) list.push(card);
+    else byReason.set(card.skippedReason, [card]);
+  }
+  return Array.from(byReason.entries(), ([reason, groupCards]) => ({
+    reason,
+    count: groupCards.length,
+    cards: groupCards,
+  })).sort((a, b) =>
+    a.count === b.count ? (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0) : b.count - a.count,
   );
 }
 

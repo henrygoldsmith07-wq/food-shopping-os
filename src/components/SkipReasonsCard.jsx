@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useApp } from '../lib/store.jsx';
 import { reasonLabel } from '../lib/plan-outcome.js';
 import {
@@ -15,9 +16,19 @@ import { Card, Section } from './ui.jsx';
  * nothing). Reads the same shared phrases and threshold the planner uses,
  * so what the card promises is exactly what planning does. No reflections,
  * no card — silence instead of a placeholder.
+ *
+ * Each row that has due questions is a one-tap path to them: it asks the
+ * review queue (rendered above) to focus that reason's cards, so the loop
+ * from seeing what a reason taught the plan to answering the next reflection
+ * is one tap, not a hunt through the queue.
  */
-export default function SkipReasonsCard() {
+export default function SkipReasonsCard({ onReviewReason = null }) {
   const app = useApp();
+  // Which reasons have due questions right now — same source the queue shows.
+  const dueByReason = useMemo(() => {
+    const groups = app.reviewDueReasonGroups?.() || [];
+    return new Map(groups.map((g) => [g.reason, g.count]));
+  }, [app.cards]);
   const profile = app.skipReasonProfile && typeof app.skipReasonProfile === 'object' && !Array.isArray(app.skipReasonProfile)
     ? app.skipReasonProfile
     : {};
@@ -28,6 +39,7 @@ export default function SkipReasonsCard() {
       applies: entry?.applies || 0,
       changed: entry?.changed || 0,
       lastStillApplies: entry?.lastStillApplies === true,
+      dueCount: dueByReason.get(reasonId) || 0,
     }))
     .sort((a, b) => (b.applies + b.changed) - (a.applies + a.changed));
   if (!rows.length) return null;
@@ -53,8 +65,8 @@ export default function SkipReasonsCard() {
                     ? `Confirmed — the next plan leans on ${phrase}.`
                     : 'Confirmed — the next plan takes it into account.' }
                 : { color: 'var(--muted)', text: `One more “still applies” and the plan leans on ${phrase || 'this'}.` };
-            return (
-              <li key={row.reasonId} className="rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+            const body = (
+              <>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-[0.8125rem] font-extrabold" style={{ color: 'var(--ink)' }}>{row.label}</p>
                   <p className="shrink-0 text-[0.6875rem] font-bold" style={{ color: 'var(--faint)' }}>
@@ -64,6 +76,26 @@ export default function SkipReasonsCard() {
                 <p className="mt-1 text-[0.75rem] font-semibold leading-relaxed" style={{ color: tone.color }}>
                   {tone.text}
                 </p>
+                {onReviewReason && row.dueCount > 0 && (
+                  <p className="mt-1.5 text-[0.6875rem] font-extrabold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>
+                    Review {row.dueCount} question{row.dueCount === 1 ? '' : 's'} →
+                  </p>
+                )}
+              </>
+            );
+            const canReview = Boolean(onReviewReason && row.dueCount > 0);
+            return (
+              <li key={row.reasonId} className="rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+                {canReview ? (
+                  <button
+                    type="button"
+                    aria-label={`Review ${row.dueCount} ${row.label} question${row.dueCount === 1 ? '' : 's'}`}
+                    onClick={() => onReviewReason(row.reasonId)}
+                    className="press block w-full text-left"
+                  >
+                    {body}
+                  </button>
+                ) : body}
               </li>
             );
           })}

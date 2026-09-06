@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, Pencil } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import AddCardForm from './AddCardForm.jsx';
 import { Card, Pill, Section } from './ui.jsx';
 import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
 import SkipReasonReflection from './SkipReasonReflection.jsx';
-import { dayStamp, dueTopicGroups, forecastDueCounts } from '../domain/scheduling';
+import { dayStamp, dueTopicGroups, dueReasonGroups, forecastDueCounts } from '../domain/scheduling';
 import { skipReflectionFor } from '../domain/skip-profile';
 import { topicLabel } from '../domain/topic-labels';
 import { reasonLabel } from '../lib/plan-outcome.js';
@@ -20,31 +20,60 @@ const RATINGS = [
 
 /**
  * The SRS review queue on the Learn tab. Shows the soonest-due card, flips it
- * to reveal the answer, and grades it through the store's reviewCard — which
- * persists the scheduler's next state. A card rated Again stays in the queue
- * (it is due again today, the relearning step); any other rating advances it
- * out. `now` is injectable so tests and renders stay deterministic.
- *
- * A card is created right here, through the store's addCard: an empty deck
- * shows the form straight away (the queue starts the moment the first card is
- * saved), and a deck with cards can add another from the review header.
+ * to reveal the answer, and grades it through the store's reviewCard, which
+ * persists the scheduler's next state. Again keeps the card due today (the
+ * relearning step); any other rating advances it out. `now` is injectable so
+ * tests stay deterministic. Cards are created here through the store's
+ * addCard — an empty deck shows the form straight away, and a deck with cards
+ * can add another from the review header.
  */
-export default function ReviewQueueCard({ now = new Date() }) {
+export default function ReviewQueueCard({ now = new Date(), topicReviewRequest = null }) {
   const app = useApp();
   const deck = Array.isArray(app.cards) ? app.cards : [];
   const allQueue = useMemo(() => app.reviewDueCards(now), [app.cards, now]);
-  // One topic at a time: the due queue grouped by topic, biggest debt first.
-  // Focusing filters the session to that topic — the bar shows every topic's
-  // count either way, so the rest of the debt stays visible and honest.
+  // One topic at a time: due cards grouped by topic, biggest debt first.
+  // Focusing filters the session; the bar still shows every topic's count.
   const topicGroups = useMemo(() => dueTopicGroups(deck, now), [deck, now]);
+  // One reason at a time: due missed-meal cards grouped by the skip reason
+  // they carry — the group a skip-reasons row elsewhere on the tab points at.
+  const reasonGroups = useMemo(() => dueReasonGroups(deck, now), [deck, now]);
   const [focusedTopic, setFocusedTopic] = useState(null);
+  const [focusedReason, setFocusedReason] = useState(null);
+  // A sibling "Review this topic/reason" asks the queue to focus one topic or
+  // one reason's cards. The ask's id re-applies on repeat (never toggles) and
+  // drops the current flip.
+  const appliedRequest = useRef(0);
+  useEffect(() => {
+    if (!topicReviewRequest || topicReviewRequest.id === appliedRequest.current) return;
+    appliedRequest.current = topicReviewRequest.id;
+    setFlipped(false); setEditingTopic(false); setPendingReflection(null);
+    setFocusedTopic(topicReviewRequest.topicId || null);
+    setFocusedReason(topicReviewRequest.reason || null);
+  }, [topicReviewRequest]);
+  // A focused session ends when its topic/reason drains from the due groups.
+  // The effect runs on the *post-grade* queue: rating the last card (not
+  // Again) removes the group, and this clears instead of guessing pre-grade.
+  useEffect(() => {
+    if (!focusedTopic || topicGroups.some((g) => g.topicId === focusedTopic)) return;
+    setFocusedTopic(null);
+  }, [focusedTopic, topicGroups]);
+  useEffect(() => {
+    if (!focusedReason || reasonGroups.some((g) => g.reason === focusedReason)) return;
+    setFocusedReason(null);
+  }, [focusedReason, reasonGroups]);
+  // Focusing one reason also clears the topic focus — the queue can only be
+  // narrowed one way, and the two asks must not fight over the filter.
+  useEffect(() => {
+    if (focusedReason && focusedTopic) setFocusedTopic(null);
+  }, [focusedReason, focusedTopic]);
   // What a refresh would change, shown before it is applied — one row per
-  // affected card, each with its own Apply/Skip, so a stale answer that is
-  // actually still right can be kept while the rest refresh.
+  // affected card, each with its own Apply/Skip.
   const [previewPlan, setPreviewPlan] = useState(null);
   const queue = useMemo(
-    () => (focusedTopic ? allQueue.filter((c) => c.topicId === focusedTopic) : allQueue),
-    [allQueue, focusedTopic],
+    () => (focusedReason
+      ? allQueue.filter((c) => c.skippedReason === focusedReason)
+      : focusedTopic ? allQueue.filter((c) => c.topicId === focusedTopic) : allQueue),
+    [allQueue, focusedTopic, focusedReason],
   );
   const [flipped, setFlipped] = useState(false);
   // A rated missed-meal card holds its review for one question — whether the
@@ -67,9 +96,6 @@ export default function ReviewQueueCard({ now = new Date() }) {
     setPendingReflection(null);
     if (clearFlipped) setFlipped(false);
     setEditingTopic(false);
-    // A focused topic's last card just left the queue — fall back to All so
-    // the session continues into the next topic instead of hitting a wall.
-    if (focusedTopic && queue.length <= 1) setFocusedTopic(null);
   };
 
   const rate = (rating) => {
@@ -97,11 +123,7 @@ export default function ReviewQueueCard({ now = new Date() }) {
   };
 
   const dismissReflection = () => answerReflection(null);
-
-  const openRefreshPreview = () => {
-    setPreviewPlan(app.kitchenSeedPreview(now));
-  };
-
+  const openRefreshPreview = () => setPreviewPlan(app.kitchenSeedPreview(now));
   const closeRefreshPreview = () => setPreviewPlan(null);
 
   const startRetag = () => {
@@ -131,9 +153,9 @@ export default function ReviewQueueCard({ now = new Date() }) {
 
   const pickTopic = (topicId) => {
     setFocusedTopic((prev) => (prev === topicId ? null : topicId));
-    advance(); // a pending reflection belongs to the card that was showing
+    setFocusedReason(null);
+    advance();
   };
-
   const nextDue = useMemo(() => {
     const today = dayStamp(now);
     const later = deck.filter((c) => c.due > today).sort((a, b) => (a.due < b.due ? -1 : 1));
@@ -167,6 +189,7 @@ export default function ReviewQueueCard({ now = new Date() }) {
             app.forgetKitchenCards();
             setConfirmingForget(false);
             setFocusedTopic(null);
+            setFocusedReason(null);
             setFlipped(false);
             setEditingTopic(false);
           }}
@@ -349,11 +372,14 @@ export default function ReviewQueueCard({ now = new Date() }) {
               <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Review one topic at a time">
                 <button
                   type="button"
-                  aria-pressed={!focusedTopic}
-                  onClick={() => focusedTopic && pickTopic(focusedTopic)}
+                  aria-pressed={!focusedTopic && !focusedReason}
+                  onClick={() => {
+                    if (focusedTopic) pickTopic(focusedTopic);
+                    else if (focusedReason) { setFocusedReason(null); advance(); }
+                  }}
                   className="press"
                 >
-                  <Pill tone={!focusedTopic ? 'accent' : 'muted'}>All</Pill>
+                  <Pill tone={!focusedTopic && !focusedReason ? 'accent' : 'muted'}>All</Pill>
                 </button>
                 {topicGroups.map((group) => (
                   <button
@@ -369,6 +395,18 @@ export default function ReviewQueueCard({ now = new Date() }) {
                   </button>
                 ))}
               </div>
+            )}
+
+            {focusedReason && (
+              <button
+                type="button"
+                aria-label="Stop focusing this skip reason"
+                onClick={() => { setFocusedReason(null); advance(); }}
+                className="press mt-2 inline-flex items-center gap-1.5 text-[0.6875rem] font-extrabold uppercase tracking-wide"
+                style={{ color: 'var(--accent)' }}
+              >
+                Reviewing only “{reasonLabel(focusedReason)}” — show everything
+              </button>
             )}
 
             <div className="mt-3 rounded-2xl border px-4 py-5 text-center" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
