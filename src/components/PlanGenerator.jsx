@@ -18,12 +18,9 @@ import RecommendationExplanation from './RecommendationExplanation.jsx';
 const SCOPES = ['1 meal', 'A day', 'A week', 'A month'];
 
 /**
- * The plan generator.
- *
- * It reads your goal, your dietary patterns (yours and everyone you cook for),
- * your pantry and the month, and returns dishes that satisfy the hard rules and
- * lean towards what you already have and what's at its best right now. Applying
- * it writes real dates into the plan.
+ * The plan generator: reads your goal, dietary patterns, pantry and the month,
+ * and returns dishes that satisfy hard rules and lean to what you have and
+ * what's at its best. Applying writes real dates into the plan.
  */
 export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApplied, goTab, focusItems = [] }) {
   const app = useApp();
@@ -45,8 +42,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const [seed, setSeed] = useState(() => (app.calendarBusy?.length ? Date.now() % 100000 : 0));
   const [generating, setGenerating] = useState(false);
   const [addedToList, setAddedToList] = useState(false);
-  const month = monthOf(app.day);
-  const dates = scope === 'A month' ? monthDates : weekDates;
+  const month = monthOf(app.day); const dates = scope === 'A month' ? monthDates : weekDates;
   const busyDates = new Set((app.calendarBusy || []).map((item) => item.date));
   const busyInScope = [...busyDates].filter((date) => dates.includes(date)).length;
   const planDates = dates.filter((date) => !busyDates.has(date));
@@ -175,7 +171,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
     );
     app.addToList(wasteAwareList(
       scaled,
-      { waste: app.waste, today: app.day, learnedAliases: app.aliasMemory || {} },
+      { waste: app.waste, cooked: app.cooked, today: app.day, learnedAliases: app.aliasMemory || {} },
     ));
     setAddedToList(true);
   };  const cost = generated ? generated.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
@@ -183,12 +179,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const distinct = generated ? new Set(generated.map((r) => r.id)).size : 0;
   const wastePlan = plan?.wastePlan || null;
   const wasteMetric = (value) => value === null || value === undefined ? '—' : `${Math.round(value)}%`;
-  const planNotes = [
-    plan?.note,
-    generated && busyInScope > 0
-      ? `Leaving ${busyInScope} calendar-busy evening${busyInScope === 1 ? '' : 's'} empty.`
-      : null,
-  ].filter(Boolean);
+  const planNotes = [plan?.note, generated && busyInScope > 0 ? `Leaving ${busyInScope} calendar-busy evening${busyInScope === 1 ? '' : 's'} empty.` : null].filter(Boolean);
   const busyMap = useMemo(() => {
     const m = {};
     for (const b of app.calendarBusy || []) m[b.date] = { busy: true, date: b.date, dayName: new Date(`${b.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' }) };
@@ -218,10 +209,9 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           </div>
         </div>
 
-        {weeklyBudget !== null && (
-          <p className="rounded-2xl border px-3 py-2 text-center text-[0.75rem] font-bold" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-            {weeklyBudget <= budgetSpent ? `This ${scope === 'A month' ? 'month' : 'week'} is over budget by ${gbp(budgetSpent - weeklyBudget, { always: true })}.` : `${gbp(budgetSpent, { always: true })} spent of ${gbp(weeklyBudget, { always: true })} this ${scope === 'A month' ? 'month' : 'week'} — ${gbp(weeklyBudget - budgetSpent, { always: true })} left to rank against.`}
-          </p>)}
+        {weeklyBudget !== null && <p className="rounded-2xl border px-3 py-2 text-center text-[0.75rem] font-bold" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+          {weeklyBudget <= budgetSpent ? `This ${scope === 'A month' ? 'month' : 'week'} is over budget by ${gbp(budgetSpent - weeklyBudget, { always: true })}.` : `${gbp(budgetSpent, { always: true })} spent of ${gbp(weeklyBudget, { always: true })} this ${scope === 'A month' ? 'month' : 'week'} — ${gbp(weeklyBudget - budgetSpent, { always: true })} left to rank against.`}
+        </p>}
 
         <div className="flex items-center justify-between">
           <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
@@ -248,7 +238,6 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           />
         </div>
 
-        {/* Goal and diet come from your profile — one place, not two */}
         <div className="rounded-2xl border p-3" style={{ borderColor: 'var(--line)' }}>
           <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Planning for</p>
           <p className="mt-0.5 text-[0.84375rem] font-bold">{app.goalSummary}</p>

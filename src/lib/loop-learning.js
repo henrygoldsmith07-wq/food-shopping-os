@@ -13,6 +13,8 @@ import { daysUntil } from './kitchen.js';
 import { shoppingForPlan } from './mealplan.js';
 import { planEntries } from './mealplan.js';
 import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from './portions.js';
+import { scrapAdjustedQty, scrapIngredientRates } from './scrap-factors.js';
+import { allRecipes } from '../data/recipes.js';
 
 /** How far back "you keep binning this" looks. */
 export const WASTE_LOOKBACK_DAYS = 28;
@@ -64,29 +66,55 @@ export const reduceCountQty = (qty) => {
 };
 
 /**
- * The list builder's learning pass. An ingredient the household has binned
- * twice or more in the last month comes back with one fewer unit than the
- * recipes asked for, and a note saying why. Everything else passes through
- * untouched.
+ * The list builder's learning pass, from two kinds of evidence:
+ *
+ * - Binned ingredients: something thrown away directly arrives one unit
+ *   lighter after two or more bins in the last month, with the reason shown.
+ * - Leftover scraps: ingredients whose dishes repeatedly end up binned as
+ *   leftovers (see scrap-factors.js) come back lighter too — a single unit
+ *   for counts, a quarter less for mass/volume once the rate is high.
+ *
+ * Direct bins win when both apply — first-hand evidence outranks evidence
+ * derived from dish scraps. Where the evidence supports nothing, rows pass
+ * through untouched.
  */
-export const wasteAwareList = (items = [], { waste = [], today, learnedAliases = {} } = {}) => {
+export const wasteAwareList = (items = [], { waste = [], cooked = null, recipes, today, learnedAliases = {} } = {}) => {
   const profile = recentWasteProfile(waste, { today, learnedAliases });
+  const pool = recipes === undefined ? allRecipes() : recipes;
+  const scraps = cooked
+    ? scrapIngredientRates(waste, cooked, pool || [], { learnedAliases, today })
+    : new Map();
   return (Array.isArray(items) ? items : []).map((item) => {
     if (!item?.name) return item;
     const key = canonicalName(item.name, learnedAliases) || String(item.name).toLowerCase();
     const row = profile.get(key);
-    if (!row || row.count < 2) return item;
-    const reduced = reduceCountQty(item.qty);
-    const note = reduced
-      ? `Binned ${row.count}× recently — buying one fewer`
-      : `You've binned this ${row.count}× recently — consider buying less`;
-    return {
-      ...item,
-      qty: reduced || item.qty,
-      wasteNote: note,
-      binnedCount: row.count,
-      lastBinnedAt: row.lastDate,
-    };
+    if (row && row.count >= 2) {
+      const reduced = reduceCountQty(item.qty);
+      const note = reduced
+        ? `Binned ${row.count}× recently — buying one fewer`
+        : `You've binned this ${row.count}× recently — consider buying less`;
+      return {
+        ...item,
+        qty: reduced || item.qty,
+        wasteNote: note,
+        binnedCount: row.count,
+        lastBinnedAt: row.lastDate,
+      };
+    }
+    const scrap = scraps.get(key);
+    if (scrap) {
+      const adjusted = scrapAdjustedQty(item, scrap.rate);
+      if (adjusted) {
+        return {
+          ...item,
+          qty: adjusted.qty,
+          wasteNote: `${scrap.recipeName}'s leftovers were binned ${scrap.discards}× of ${scrap.cooks} cooks — buying less`,
+          scrapRate: scrap.rate,
+          lastScrapAt: scrap.lastDate,
+        };
+      }
+    }
+    return item;
   });
 };
 
@@ -100,13 +128,19 @@ export const wasteAwareList = (items = [], { waste = [], today, learnedAliases =
 export const shoppingListForPlan = (
   plan,
   dates,
-  { pantry = [], waste = [], today, learnedAliases = {}, app = null } = {},
+  { pantry = [], waste = [], cooked = [], today, learnedAliases = {}, app = null } = {},
 ) => {
   const household = app ? householdPortionsFor(app) : { portions: 1, source: 'configured' };
   const raw = shoppingForPlan(plan, dates, { pantry, today, learnedAliases });
   const entries = planEntries(plan, dates);
   const scaled = scaleListToPortions(raw, household.portions, recipePortionFactors(entries, household.portions));
-  return wasteAwareList(scaled, { waste, today, learnedAliases });
+  return wasteAwareList(scaled, {
+    waste,
+    cooked: app?.cooked || cooked,
+    recipes: allRecipes(),
+    today,
+    learnedAliases,
+  });
 };
 
 /**

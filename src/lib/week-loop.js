@@ -169,6 +169,7 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   const dynamic = deriveDynamicShoppingList(state, { dates });
   const derived = wasteAwareList(dynamic.length ? dynamic : shoppingForWeekLoop(state, dates).items, {
     waste: state.waste || [],
+    cooked: state.cooked || [],
     today: state.day,
     learnedAliases: aliasMemory,
   });
