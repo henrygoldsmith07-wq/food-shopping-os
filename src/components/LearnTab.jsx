@@ -4,6 +4,7 @@ import NewCardSection from './NewCardSection.jsx';
 import { Card, Meter, Pill, Section } from './ui.jsx';
 import ReviewQueueCard from './ReviewQueueCard.jsx';
 import KnowledgeMapSection from './KnowledgeMapSection.jsx';
+import SkipReasonsCard from './SkipReasonsCard.jsx';
 
 const EMPTY_LOOP = {
   steps: [],
@@ -186,6 +187,8 @@ export default function LearnTab({ goTab, openGuidance }) {
       </Section>
 
       <NewCardSection />
+
+      <SkipReasonsCard />
 
       <ReviewQueueCard />
 
