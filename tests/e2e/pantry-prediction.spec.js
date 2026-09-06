@@ -99,3 +99,45 @@ test('the tonight affordance opens the dinner picker pre-searched in the built a
   // The generator is not part of this path — the picker came up instead.
   await expect(page.getByRole('button', { name: 'Close generator' })).toHaveCount(0);
 });
+test('the week-plan affordance opens the generator focused on the at-risk item', async ({ page }) => {
+  // The row's primary affordance goes to the week generator, not tonight's
+  // picker: the Plan tab opens with the generator already favouring dishes
+  // that use the expiring spinach.
+  await page.addInitScript(() => {
+    const stamp = (offset) => {
+      const d = new Date(Date.now() + offset * 86400000);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
+    const state = {
+      onboarded: true,
+      name: 'Sam',
+      day: stamp(0),
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: stamp(1) },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: stamp(60) },
+      ],
+    };
+    localStorage.setItem('forq-state-v2', JSON.stringify(state));
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /Check pantry before buying/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole('button', { name: 'Plan a meal using Spinach' }).click();
+
+  // The Plan tab is now current and the generator is open, not the picker.
+  const nav = page.getByRole('navigation', { name: 'Main navigation' });
+  await expect(nav.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-current', 'page');
+  const generator = page.getByRole('button', { name: 'Close generator' });
+  await expect(generator).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Plan a meal' })).toHaveCount(0);
+  await expect(sheet).toBeHidden();
+
+  // The item arrived as the generator's focus: it reads as use-soon and the
+  // generated week must actually pin a dish that uses it before it goes off.
+  await expect(page.getByText(/Spinach — use soon/)).toBeVisible();
+  await page.getByRole('button', { name: /^Generate$/ }).click();
+  await expect(page.getByText(/is pinned in — it uses Spinach before it goes off/)).toBeVisible({ timeout: 15000 });
+});
