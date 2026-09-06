@@ -394,13 +394,13 @@ export function AppProvider({ children }) {
     blockPersistence, cloudStatus, latest, setState: routedSetState, setStorageIssue, storageIssue,
     undoHistory, undoBatch, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
   });
+
   /* Kitchen cards stay current on boot — adopted-deck merge only, forget
      opt-out honoured; tests drive the merge explicitly. */
   useEffect(() => {
     if (process.env.NODE_ENV === 'test' || demoRef.current) return undefined;
     api.autoRefreshSeededCards(new Date()); // eslint-disable-line react-hooks/exhaustive-deps
   }, []);
-
 
   /* An import records one undo step for all its writes. Begin/end go through
      the same state queue as the writes themselves, so they run in order even

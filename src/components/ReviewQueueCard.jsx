@@ -3,8 +3,10 @@ import { Eye, Pencil } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import AddCardForm from './AddCardForm.jsx';
 import { Card, Pill, Section } from './ui.jsx';
+import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
 import { dayStamp, dueTopicGroups, forecastDueCounts } from '../domain/scheduling';
 import { topicLabel } from '../domain/topic-labels';
+import { reasonLabel } from '../lib/plan-outcome.js';
 
 /** The four ratings, in the order the scheduler's ease curve expects. */
 const RATINGS = [
@@ -34,10 +36,9 @@ export default function ReviewQueueCard({ now = new Date() }) {
   // count either way, so the rest of the debt stays visible and honest.
   const topicGroups = useMemo(() => dueTopicGroups(deck, now), [deck, now]);
   const [focusedTopic, setFocusedTopic] = useState(null);
-  // What a refresh would change, shown before it is applied — stale answers
-  // as old → new plus any new questions — so the tap confirms rather than
-  // surprises.
-  const [previewOpen, setPreviewOpen] = useState(false);
+  // What a refresh would change, shown before it is applied — one row per
+  // affected card, each with its own Apply/Skip, so a stale answer that is
+  // actually still right can be kept while the rest refresh.
   const [previewPlan, setPreviewPlan] = useState(null);
   const queue = useMemo(
     () => (focusedTopic ? allQueue.filter((c) => c.topicId === focusedTopic) : allQueue),
@@ -63,8 +64,9 @@ export default function ReviewQueueCard({ now = new Date() }) {
 
   const openRefreshPreview = () => {
     setPreviewPlan(app.kitchenSeedPreview(now));
-    setPreviewOpen(true);
   };
+
+  const closeRefreshPreview = () => setPreviewPlan(null);
 
   const startRetag = () => {
     setTopicDraft(current.topicId && current.topicId !== 'general' ? current.topicId : '');
@@ -187,54 +189,8 @@ export default function ReviewQueueCard({ now = new Date() }) {
             </div>
           </div>
         )}
-        {previewOpen && previewPlan && (
-          <div className="mb-3 rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-            <p className="text-[0.78125rem] font-bold">What refreshing would change</p>
-            {previewPlan.total === 0 ? (
-              <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Everything is already current — nothing to refresh.
-              </p>
-            ) : (
-              <ul className="mt-2 space-y-1.5">
-                {previewPlan.updates.map((u) => (
-                  <li key={u.front} className="text-[0.6875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
-                    <span className="font-extrabold" style={{ color: 'var(--ink)' }}>{u.front}</span>
-                    <span className="block">{u.oldBack} <span aria-hidden="true" style={{ color: 'var(--faint)' }}>→</span> {u.newBack}</span>
-                  </li>
-                ))}
-                {previewPlan.additions.map((a) => (
-                  <li key={a.front} className="text-[0.6875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
-                    <span className="font-extrabold" style={{ color: 'var(--ink)' }}>New question</span>
-                    <span className="block">{a.front}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-2.5 flex items-center gap-3">
-              <button
-                type="button"
-                aria-label="Apply refresh changes"
-                onClick={() => {
-                  app.seedCardsFromActivity(now);
-                  setPreviewOpen(false);
-                  setFlipped(false);
-                }}
-                className="press rounded-xl px-3 py-2 text-[0.78125rem] font-extrabold"
-                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-              >
-                Apply
-              </button>
-              <button
-                type="button"
-                aria-label="Cancel refresh"
-                onClick={() => setPreviewOpen(false)}
-                className="press text-[0.78125rem] font-bold"
-                style={{ color: 'var(--faint)' }}
-              >
-                Keep as is
-              </button>
-            </div>
-          </div>
+        {previewPlan && (
+          <KitchenRefreshPreview now={now} plan={previewPlan} onClose={closeRefreshPreview} />
         )}
         {confirmForget}
         {empty ? (
@@ -450,6 +406,11 @@ export default function ReviewQueueCard({ now = new Date() }) {
                 <p className="mt-3 rounded-2xl px-4 py-3 text-[0.9375rem] font-bold leading-relaxed" style={{ background: 'color-mix(in srgb, var(--good) 8%, transparent)' }}>
                   {current.back}
                 </p>
+                {current.skippedReason && (
+                  <p className="mt-2 rounded-2xl border px-4 py-2.5 text-left text-[0.78125rem] font-semibold leading-relaxed" style={{ borderColor: 'var(--line)', background: 'var(--card)', color: 'var(--muted)' }}>
+                    Why it was skipped: <span className="font-extrabold" style={{ color: 'var(--ink)' }}>{reasonLabel(current.skippedReason)}</span> — rate it against the reason, not the answer.
+                  </p>
+                )}
                 <div className="mt-3 grid grid-cols-4 gap-2">
                   {RATINGS.map((r) => (
                     <button

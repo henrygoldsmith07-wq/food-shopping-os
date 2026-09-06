@@ -101,6 +101,10 @@ export interface Card {
   topicId: Id;
   front: string;
   back: string;
+  /** Why a missed-meal card's meal was skipped — the raw reason id, set by
+   * the kitchen seeder so a review can double as reflection. Labels live in
+   * the app's plan-outcome vocabulary, not in this pure contract. */
+  skippedReason?: string | null;
   origin?: string;
   specPointIds?: Id[];
   /** SRS state, managed by scheduling. */

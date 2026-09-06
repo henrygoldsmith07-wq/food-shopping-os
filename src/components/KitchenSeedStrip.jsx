@@ -2,19 +2,45 @@ import { useMemo, useState } from 'react';
 import { Sprout } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { Card, Pill } from './ui.jsx';
+import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
 
 /**
  * The deck starts from the dashboard. A returning user with real kitchen
  * activity but no cards yet sees one strip on Today: what it would ask, and
- * one tap to build the deck — no trip to Learn required. Honest on both
- * ends: it shows nothing when there is nothing to seed, stands down once
- * the deck exists or the user opted out, and names its action exactly.
+ * one tap to see the questions — then a tap per question (or all) to build
+ * the deck, no trip to Learn required. Honest on both ends: it shows
+ * nothing when there is nothing to seed, previews before it writes, stands
+ * down once the deck exists or the user opted out, and names its action
+ * exactly.
  */
 export default function KitchenSeedStrip({ goTab }) {
   const app = useApp();
   const seedable = useMemo(() => app.kitchenSeedCount(), [app, app.cards]);
+  // The preview shown before anything is written: its plan, frozen at open.
+  const [preview, setPreview] = useState(null);
   const [seededCount, setSeededCount] = useState(null);
   const deckSize = (app.cards || []).length;
+
+  // The strip's preview: what the deck would ask, decided question by
+  // question. Only a still-empty, still-opted-in deck shows it — once any
+  // row is applied the confirmation below owns the strip, and closing
+  // without acting returns to the plain offer.
+  if (preview && !app.kitchenCardsForgotten && deckSize === 0) {
+    return (
+      <section className="px-5 rise rise-1" aria-label="Kitchen deck preview">
+        <KitchenRefreshPreview
+          now={preview.now}
+          plan={preview.plan}
+          kind="seed"
+          onApplied={(count) => {
+            setSeededCount(count);
+            setPreview(null);
+          }}
+          onClose={() => setPreview(null)}
+        />
+      </section>
+    );
+  }
 
   // Just seeded: confirm what happened, with the way in to review.
   if (seededCount != null && deckSize > 0) {
@@ -55,8 +81,8 @@ export default function KitchenSeedStrip({ goTab }) {
       <Card
         className="press !p-4"
         onClick={() => {
-          setSeededCount(seedable); // captured before the write empties the offer
-          app.seedCardsFromActivity();
+          const now = new Date();
+          setPreview({ now, plan: app.kitchenSeedPreview(now) });
         }}
       >
         <div className="flex items-center gap-3">

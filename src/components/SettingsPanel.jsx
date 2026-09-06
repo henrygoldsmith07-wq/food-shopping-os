@@ -36,6 +36,7 @@ export default function SettingsPanel() {
   // Kitchen flashcards as a preference: the same clear-out the Learn queue
   // offers, reachable from Settings without hunting through the deck first.
   const autoCards = (Array.isArray(app.cards) ? app.cards : []).filter((c) => c.origin === 'auto').length;
+  const seedCount = app.kitchenSeedCount();
   const [confirmKitchenOff, setConfirmKitchenOff] = useState(false);
   const toggleKitchenCards = () => {
     if (app.kitchenCardsForgotten) {
@@ -46,6 +47,15 @@ export default function SettingsPanel() {
     if (autoCards > 0) setConfirmKitchenOff(true);
     else app.set({ kitchenCardsForgotten: true });
   };
+  // The one-tap way back in for someone who turned cards off: seeding lifts
+  // the opt-out and builds the deck from current activity in the same write.
+  const rebuildKitchenCards = () => {
+    app.seedCardsFromActivity();
+    setConfirmKitchenOff(false);
+  };
+  // Questions the user kept as-is in a refresh preview: durable until they
+  // are restored here — this row is the single place the offer comes back.
+  const keptFronts = Array.isArray(app.kitchenKeptFronts) ? app.kitchenKeptFronts : [];
 
   /** Your data, as the JSON it is stored as — yours to keep or move. */
   const exportData = () => {
@@ -155,6 +165,52 @@ export default function SettingsPanel() {
                   Keep
                 </button>
               </div>
+            </div>
+          )}
+          {app.kitchenCardsForgotten && (
+            <div
+              className="rounded-2xl border px-4 py-3"
+              style={{ borderColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}
+            >
+              <p className="text-[0.78125rem] font-extrabold">Cards are turned off.</p>
+              <p className="mt-0.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Build a fresh deck from what you buy, cook and log — your own cards are untouched.
+              </p>
+              <button
+                type="button"
+                aria-label="Build kitchen cards from your activity"
+                onClick={rebuildKitchenCards}
+                className="press mt-2 rounded-xl px-3 py-2 text-[0.78125rem] font-extrabold"
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+              >
+                {seedCount > 0
+                  ? `Build ${seedCount} question${seedCount === 1 ? '' : 's'} from your kitchen`
+                  : 'Rebuild from your kitchen'}
+              </button>
+            </div>
+          )}
+          {keptFronts.length > 0 && (
+            <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+              <p className="text-[0.78125rem] font-extrabold">Refresh kept as-is</p>
+              <p className="mt-0.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                You kept these questions in a refresh preview, so the app leaves their answers alone. Restoring one offers its refresh again.
+              </p>
+              <ul className="mt-2 space-y-1">
+                {keptFronts.map((front) => (
+                  <li key={front} className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-[0.71875rem] font-semibold" style={{ color: 'var(--ink)' }}>{front}</span>
+                    <button
+                      type="button"
+                      aria-label={`Restore refresh offer for ${front}`}
+                      onClick={() => app.set({ kitchenKeptFronts: keptFronts.filter((f) => f !== front) })}
+                      className="press shrink-0 text-[0.6875rem] font-extrabold"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </Card>

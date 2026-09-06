@@ -32,6 +32,16 @@ const applySeedPlan = (s, now, plan, liftForget) => {
   };
 };
 
+/** Candidates minus the fronts the user kept as-is in a refresh preview. A
+ * kept front stops being re-offered and never refreshes on its own — the
+ * durable version of "that answer is actually still right". Every seed flow
+ * (count, preview, seed, boot auto-refresh, per-row apply) shares this one
+ * filter, so a kept question stays put until Settings restores the offers. */
+const seedCandidates = (s, now) => {
+  const kept = new Set(Array.isArray(s.kitchenKeptFronts) ? s.kitchenKeptFronts : []);
+  return kitchenCardCandidates(s, now, recipeNameOf(s)).filter((c) => !kept.has(c.front));
+};
+
 export const reviewActions = (set, latest) => {
   const reviewCard = (id, rating, now = new Date()) =>
     set((s) => {
@@ -73,7 +83,7 @@ export const reviewActions = (set, latest) => {
     kitchenSeedCount: (now = new Date()) => {
       const s = latest.current;
       const deck = Array.isArray(s.cards) ? s.cards : [];
-      const plan = planSeedMerge(kitchenCardCandidates(s, now, recipeNameOf(s)), deck);
+      const plan = planSeedMerge(seedCandidates(s, now), deck);
       // Anything the run would change counts: new questions to add, stale
       // answers to refresh — so the offer never understates the work.
       return plan.additions.length + plan.updates.length;
@@ -86,7 +96,7 @@ export const reviewActions = (set, latest) => {
     kitchenSeedPreview: (now = new Date()) => {
       const s = latest.current;
       const deck = Array.isArray(s.cards) ? s.cards : [];
-      const plan = planSeedMerge(kitchenCardCandidates(s, now, recipeNameOf(s)), deck);
+      const plan = planSeedMerge(seedCandidates(s, now), deck);
       const byId = new Map(deck.map((c) => [c.id, c]));
       return {
         total: plan.additions.length + plan.updates.length,
@@ -104,17 +114,54 @@ export const reviewActions = (set, latest) => {
      * a card whose question is already in the deck is never added twice.
      */
     seedCardsFromActivity: (now = new Date()) =>
-      set((s) =>
-        applySeedPlan(
+      set((s) => {
+        const changed = applySeedPlan(
           s,
           now,
-          planSeedMerge(
-            kitchenCardCandidates(s, now, recipeNameOf(s)),
-            Array.isArray(s.cards) ? s.cards : [],
-          ),
+          planSeedMerge(seedCandidates(s, now), Array.isArray(s.cards) ? s.cards : []),
           true,
-        ),
-      ),
+        );
+        // An explicit re-seed always lifts the forget opt-out — even when
+        // there is nothing to build yet, the person asked for kitchen cards.
+        return { ...changed, kitchenCardsForgotten: false };
+      }),
+    /**
+     * Apply a chosen subset of the refresh preview — rows the user said yes
+     * to, keyed by question front. Rows not named stay exactly as they are
+     * (a kept answer or a still-stale one is untouched), so one pass can
+     * refresh the rest while a single row is left alone.
+     */
+    applySeedRows: (now = new Date(), fronts = []) =>
+      set((s) => {
+        const deck = Array.isArray(s.cards) ? s.cards : [];
+        const plan = planSeedMerge(seedCandidates(s, now), deck);
+        const wanted = new Set(fronts);
+        const frontById = new Map(deck.map((c) => [c.id, c.front]));
+        const additions = plan.additions.filter((a) => wanted.has(a.front));
+        const updates = plan.updates.filter((u) => wanted.has(frontById.get(u.id)));
+        if (!additions.length && !updates.length) return {}; // nothing chosen is pending — not a failure
+        return applySeedPlan(s, now, { additions, updates }, true);
+      }),
+    /**
+     * Remember that the user deliberately kept these questions as-is. Kept
+     * fronts leave the seed offers entirely (count, preview, seed, boot
+     * auto-refresh all share the filter), so the refresh never silently
+     * overwrites an answer the person said was right.
+     */
+    keepSeedFronts: (fronts = []) =>
+      set((s) => {
+        const kept = Array.isArray(s.kitchenKeptFronts) ? s.kitchenKeptFronts : [];
+        const next = [...new Set([...kept, ...fronts])];
+        if (next.length === kept.length) return {}; // already kept — nothing new
+        return { kitchenKeptFronts: next };
+      }),
+    /** Clear every kept front, so refresh offers (and the boot auto-refresh) return. */
+    clearKeptSeedFronts: () =>
+      set((s) => {
+        const kept = Array.isArray(s.kitchenKeptFronts) ? s.kitchenKeptFronts : [];
+        if (!kept.length) return {}; // nothing to restore — not a failure
+        return { kitchenKeptFronts: [] };
+      }),
     /**
      * Keep an adopted kitchen deck current without the tap: opening the app
      * with a deck that already holds kitchen cards refreshes its stale auto
@@ -128,12 +175,7 @@ export const reviewActions = (set, latest) => {
         if (s.kitchenCardsForgotten) return {};
         const deck = Array.isArray(s.cards) ? s.cards : [];
         if (!deck.some((c) => c.origin === 'auto')) return {};
-        return applySeedPlan(
-          s,
-          now,
-          planSeedMerge(kitchenCardCandidates(s, now, recipeNameOf(s)), deck),
-          false,
-        );
+        return applySeedPlan(s, now, planSeedMerge(seedCandidates(s, now), deck), false);
       }),
     /**
      * Clear every kitchen-seeded card at once — for users who simply don't

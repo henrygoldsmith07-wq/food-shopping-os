@@ -202,6 +202,7 @@ export const EMPTY_STATE = {
   /* study — spaced-repetition cards: everything the SRS engine needs is on the card */
   cards: [], // {id,userId,subjectId,topicId,front,back,origin,specPointIds,reps,lapses,ease,intervalDays,due,createdAt,lastReviewedAt}
   kitchenCardsForgotten: false, // user cleared all kitchen-seeded cards — seed offers stand down until a re-seed
+  kitchenKeptFronts: [], // questions the user kept as-is in a refresh preview — offers and the boot auto-refresh stand down until cleared
   /* food diary */
   log: {}, // { 'YYYY-MM-DD': entry[] }
   favouriteFoods: [],

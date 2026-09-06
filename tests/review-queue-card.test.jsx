@@ -245,9 +245,31 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.getByRole('button', { name: 'Rate Hard — effortful' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Rate Good — knew it' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Rate Easy — too easy' })).toBeDefined();
+    // Plain cards carry no skip story — no follow-up line appears.
+    expect(screen.queryByText(/Why it was skipped/)).toBeNull();
   });
 
-  it('previews what a refresh changes and applies only on confirm', () => {
+  it('reveals why a missed meal was skipped, once the answer is shown', () => {
+    cleanup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [{
+        ...deck[1], topicId: 'cooking',
+        front: 'Which planned meal did you skip this week?',
+        back: 'Pasta with tomato sauce — 2026-07-27',
+        skippedReason: 'no-time',
+      }],
+    }));
+    renderCard();
+    // The reason stays hidden with the answer.
+    expect(screen.queryByText(/Why it was skipped/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+    // The label and the reason sit in sibling nodes; the body reads the line whole.
+    expect(document.body.textContent).toMatch(/Why it was skipped: No time/);
+    expect(screen.getByRole('button', { name: 'Rate Good — knew it' })).toBeDefined();
+  });
+
+  it('previews what a refresh changes and applies one row on its own confirm', () => {
     cleanup();
     const staleAuto = {
       id: 'c-auto', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
@@ -266,12 +288,48 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.getByText('What refreshing would change')).toBeDefined();
     expect(document.body.textContent).toMatch(/Milk — on 2 trips.*→.*Bread/);
     expect(storedDeck()[0].back).toBe('Milk — on 2 trips'); // untouched while previewing
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel refresh' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close refresh preview' }));
     expect(storedDeck()[0].back).toBe('Milk — on 2 trips');
-    // Reopening and confirming applies the refresh.
+    // Reopening and confirming that one row applies the refresh and closes.
     fireEvent.click(screen.getByRole('button', { name: 'Refresh 1 kitchen card' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Apply refresh changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply refresh for Which food did you buy most of this week?' }));
     expect(storedDeck()[0].back).toBe('Bread');
+    expect(screen.queryByRole('button', { name: /Refresh \d kitchen card/ })).toBeNull();
+  });
+
+  it('applies one stale row and skips another: the kept answer stays put for good', () => {
+    cleanup();
+    const twoStale = [
+      {
+        id: 'c-most', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+        front: 'Which food did you buy most of this week?', back: 'Milk — on 2 trips',
+        origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+        createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+      },
+      {
+        id: 'c-total', userId: 'local', subjectId: 'kitchen', topicId: 'budget',
+        front: 'What did your most recent shop cost?', back: 'Tesco — £5.00',
+        origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+        createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+      },
+    ];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: twoStale,
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', total: 12.4, items: [{ name: 'Bread' }] }],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 2 kitchen cards' }));
+    // Each row carries its own decision: refresh just the shop-total card.
+    fireEvent.click(screen.getByRole('button', { name: 'Apply refresh for What did your most recent shop cost?' }));
+    expect(storedDeck().find((c) => c.id === 'c-total').back).toBe('Co-op — £12.40');
+    expect(storedDeck().find((c) => c.id === 'c-most').back).toBe('Milk — on 2 trips'); // not touched yet
+    // Skipping the other keeps its current answer durably — no future re-offer.
+    fireEvent.click(screen.getByRole('button', { name: 'Skip refresh for Which food did you buy most of this week?' }));
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.cards.find((c) => c.id === 'c-most').back).toBe('Milk — on 2 trips');
+    expect(stored.kitchenKeptFronts).toEqual(['Which food did you buy most of this week?']);
+    // Both rows are dealt with — nothing is left to refresh or re-offer.
     expect(screen.queryByRole('button', { name: /Refresh \d kitchen card/ })).toBeNull();
   });
 
@@ -359,8 +417,15 @@ describe('the flashcard review queue on Learn', () => {
     const strip = await screen.findByLabelText('Start a deck from your kitchen');
     expect(within(strip).getByText(/3 questions from what you buy/)).toBeDefined();
 
-    // One tap builds the deck right there — no trip to Learn first.
+    // The tap opens the preview first — nothing is written yet.
     fireEvent.click(within(strip).getByText('Start a deck from your kitchen'));
+    const preview = await screen.findByLabelText('Kitchen deck preview');
+    expect(within(preview).getByText('Cards your kitchen would build')).toBeDefined();
+    expect(within(preview).getByText('Which food did you buy most of this week?')).toBeDefined();
+    expect((JSON.parse(localStorage.getItem(STORAGE_KEY)).cards || [])).toHaveLength(0);
+
+    // One tap on the footer builds the whole deck right there.
+    fireEvent.click(within(preview).getByRole('button', { name: 'Add remaining seed questions' }));
     expect(await screen.findByText('Deck started')).toBeDefined();
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
     expect(stored.cards).toHaveLength(3);
@@ -369,6 +434,38 @@ describe('the flashcard review queue on Learn', () => {
     // The confirmation leads into the review queue.
     fireEvent.click(screen.getByText('Review'));
     expect(await screen.findByText('Flashcard review')).toBeDefined();
+  });
+
+  it('skipping every question on Today keeps the deck from being invented', async () => {
+    cleanup();
+    const iso = (d) => new Date(d).toISOString().slice(0, 10);
+    const inWeek = iso(Date.now() - 2 * 86_400_000);
+    const soon = iso(Date.now() + 3 * 86_400_000);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded, cards: [],
+      shops: [{ id: 's1', date: inWeek, store: 'Co-op', total: 12.4, items: [{ name: 'Milk' }] }],
+      pantry: [{ id: 'p1', name: 'Salmon', expiry: soon }],
+    }));
+    render(<App />);
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+
+    const strip = await screen.findByLabelText('Start a deck from your kitchen');
+    fireEvent.click(within(strip).getByText('Start a deck from your kitchen'));
+    const preview = await screen.findByLabelText('Kitchen deck preview');
+    for (const front of [
+      'Which food did you buy most of this week?',
+      'What did your most recent shop cost?',
+      'Which pantry item is next to expire?',
+    ]) {
+      fireEvent.click(within(preview).getByRole('button', { name: `Skip question for ${front}` }));
+    }
+    // Every row declined: the panel closes and the offer stands down — but
+    // the skips are durable, so nothing re-asks until Settings restores them.
+    expect(screen.queryByLabelText('Kitchen deck preview')).toBeNull();
+    expect(screen.queryByLabelText('Start a deck from your kitchen')).toBeNull();
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.cards || []).toHaveLength(0); // no deck invented
+    expect(stored.kitchenKeptFronts).toHaveLength(3);
   });
 
   it('the kitchen-seed strip stays off the dashboard once a deck exists', async () => {

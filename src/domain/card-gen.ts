@@ -21,7 +21,11 @@ export interface KitchenActivity {
   pantry?: { id: Id; name: string; expiry?: string }[];
   cooked?: { recipeId: Id; date: string }[];
   myRecipes?: { id: Id; name: string }[];
-  /** Plan outcomes — the missed-meal template reads the skips. */
+  /** The week plan — date → slot → recipe id; the plan-reading templates
+   * (tonight, swaps) resolve ids through the same book as everything else. */
+  plan?: Record<string, Record<string, Id>>;
+  /** Plan outcomes — the missed-meal template reads the skips, the swap and
+   * leftovers templates read the deviations. */
   mealPlanEvents?: {
     date: string;
     slot: string;
@@ -29,6 +33,7 @@ export interface KitchenActivity {
     reason?: string | null;
     isTakeaway?: boolean;
     plannedRecipeId?: Id | null;
+    actualRecipeId?: Id | null;
   }[];
 }
 
@@ -168,12 +173,17 @@ export function kitchenCardCandidates(
   // The most recent planned meal skipped this week — the waste log's third
   // bucket, surfaced as a question. Takeaway nights are excluded: the app
   // counts those separately (household-outcomes), so a takeaway is not a
-  // skip. Only meals the plan can actually name become cards.
+  // skip. A leftovers-available skip is excluded too — the household ate
+  // leftovers *instead* of the dish, which is the deliberate win the
+  // leftovers template below owns, not a missed meal. Only meals the plan
+  // can actually name become cards. The reason rides on the card so the
+  // review can show why the dish was skipped.
   const skipped = (activity.mealPlanEvents || [])
     .filter((e) =>
       e.status === "skipped"
       && !e.isTakeaway
       && e.reason !== "takeaway"
+      && e.reason !== "leftovers-available"
       && e.plannedRecipeId
       && e.date >= weekAgo,
     )
@@ -190,6 +200,82 @@ export function kitchenCardCandidates(
         origin: "auto",
         front: "Which planned meal did you skip this week?",
         back: `${name} — ${skipped.date}`,
+        skippedReason: skipped.reason || "other",
+      });
+    }
+  }
+
+  // The plan's dinner for tonight — the card that looks forward instead of
+  // back. Only a dinner the plan actually names becomes a card: a free
+  // evening (nothing planned) or an unnameable dish asks nothing.
+  const tonightRecipeId = activity.plan?.[today]?.dinner;
+  if (tonightRecipeId) {
+    const name = nameOf(tonightRecipeId);
+    if (name) {
+      out.push({
+        seedKey: "plan-tonight",
+        userId: "local",
+        subjectId: "kitchen",
+        topicId: "cooking",
+        origin: "auto",
+        front: "What's planned for dinner tonight?",
+        back: name,
+      });
+    }
+  }
+
+  // The most recent meal the plan swapped this week — the slot said one
+  // dish, the kitchen cooked another. Both sides must be nameable; a swap
+  // into something the book cannot name tells nothing.
+  const swapped = (activity.mealPlanEvents || [])
+    .filter((e) =>
+      e.status === "substituted"
+      && e.plannedRecipeId
+      && e.actualRecipeId
+      && e.date >= weekAgo,
+    )
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .reverse()[0];
+  if (swapped) {
+    const plannedName = nameOf(swapped.plannedRecipeId!);
+    const actualName = nameOf(swapped.actualRecipeId!);
+    if (plannedName && actualName) {
+      out.push({
+        seedKey: "plan-swapped",
+        userId: "local",
+        subjectId: "kitchen",
+        topicId: "cooking",
+        origin: "auto",
+        front: "Which planned meal did you swap this week?",
+        back: `${plannedName} → ${actualName}`,
+      });
+    }
+  }
+
+  // The most recent meal this week that leftovers covered — the slot was
+  // skipped because leftovers were available, the deliberate win: the
+  // household ate what it had instead of cooking the plan. Reason-specific,
+  // so the same event never also becomes a missed-meal card above.
+  const covered = (activity.mealPlanEvents || [])
+    .filter((e) =>
+      e.status === "skipped"
+      && e.reason === "leftovers-available"
+      && e.plannedRecipeId
+      && e.date >= weekAgo,
+    )
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .reverse()[0];
+  if (covered) {
+    const name = nameOf(covered.plannedRecipeId!);
+    if (name) {
+      out.push({
+        seedKey: "leftovers-covered",
+        userId: "local",
+        subjectId: "kitchen",
+        topicId: "cooking",
+        origin: "auto",
+        front: "Which planned meal did leftovers cover this week?",
+        back: `${name} — ${covered.date}`,
       });
     }
   }
@@ -201,8 +287,9 @@ export function kitchenCardCandidates(
 export interface SeedPlan {
   /** Candidates the deck does not hold yet — drafts needing ids and insertion. */
   additions: CardCandidate[];
-  /** Existing auto cards whose stored back is stale: `{ id, back }` patches. */
-  updates: { id: Id; back: string }[];
+  /** Existing auto cards whose stored back is stale: `{ id, back }` patches.
+   * A missed-meal refresh carries the new skip's `skippedReason` alongside. */
+  updates: { id: Id; back: string; skippedReason?: string | null }[];
 }
 
 /**
@@ -230,7 +317,12 @@ export function planSeedMerge(candidates: CardCandidate[], deck: Card[]): SeedPl
     if (!existing) {
       additions.push(cand);
     } else if (existing.origin === 'auto' && existing.back !== cand.back) {
-      updates.push({ id: existing.id, back: cand.back });
+      const patch: { id: Id; back: string; skippedReason?: string | null } = { id: existing.id, back: cand.back };
+      // The reason travels with the answer: when the skipped meal changes,
+      // why it was skipped changes with it.
+      const nextReason = cand.skippedReason ?? null;
+      if ((existing.skippedReason ?? null) !== nextReason) patch.skippedReason = nextReason;
+      updates.push(patch);
     }
   }
   return { additions, updates };

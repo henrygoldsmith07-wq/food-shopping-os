@@ -43,6 +43,7 @@ describe('kitchenCardCandidates', () => {
     expect(missed.front).toBe('Which planned meal did you skip this week?');
     expect(missed.back).toBe('Pasta with tomato sauce — 2026-07-21'); // in-window skip
     expect(missed.topicId).toBe('cooking');
+    expect(missed.skippedReason).toBe('no-time'); // the reason rides on the card
 
     const [shopMost, shopTotal, expiring, logRecent, cookedLast] = cards;
     expect(shopMost.front).toBe('Which food did you buy most of this week?');
@@ -128,6 +129,111 @@ describe('kitchenCardCandidates', () => {
     );
     expect(cards.find((c) => c.seedKey === 'missed-meal').back).toBe('Lentil soup — 2026-07-26');
   });
+
+  it('the planned-meals family fires: tonight, the swap, and leftovers covered', () => {
+    const cards = kitchenCardCandidates({
+      myRecipes: [
+        { id: 'r1', name: 'Pasta with tomato sauce' },
+        { id: 'r2', name: 'Lentil soup' },
+      ],
+      plan: { '2026-07-28': { dinner: 'r1' } },
+      mealPlanEvents: [
+        // The Tuesday slot said Pasta, the kitchen cooked soup instead.
+        { date: '2026-07-27', slot: 'dinner', plannedRecipeId: 'r1', actualRecipeId: 'r2', status: 'substituted' },
+        // The Monday slot was skipped because leftovers were available.
+        { date: '2026-07-26', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'leftovers-available' },
+      ],
+    }, NOW);
+    const byKey = Object.fromEntries(cards.map((c) => [c.seedKey, c]));
+    expect(byKey['plan-tonight']).toMatchObject({
+      front: "What's planned for dinner tonight?",
+      back: 'Pasta with tomato sauce',
+      topicId: 'cooking', origin: 'auto',
+    });
+    expect(byKey['plan-swapped'].front).toBe('Which planned meal did you swap this week?');
+    expect(byKey['plan-swapped'].back).toBe('Pasta with tomato sauce → Lentil soup');
+    expect(byKey['leftovers-covered'].front).toBe('Which planned meal did leftovers cover this week?');
+    expect(byKey['leftovers-covered'].back).toBe('Pasta with tomato sauce — 2026-07-26');
+    // The leftovers-available skip is a deliberate win, not a miss — one
+    // event must never become two cards.
+    expect(byKey['missed-meal']).toBeUndefined();
+  });
+
+  it('plan-tonight fires only for a dinner the plan names today', () => {
+    // Tomorrow's dinner is not tonight's — nothing to ask today.
+    const tomorrowOnly = kitchenCardCandidates({
+      myRecipes: [{ id: 'r1', name: 'Lentil soup' }],
+      plan: { '2026-07-29': { dinner: 'r1' } },
+    }, NOW);
+    expect(tomorrowOnly.some((c) => c.seedKey === 'plan-tonight')).toBe(false);
+    // An unnameable dinner asks nothing.
+    const ghost = kitchenCardCandidates(
+      { plan: { '2026-07-28': { dinner: 'ghost' } } },
+      NOW,
+      () => null,
+    );
+    expect(ghost.some((c) => c.seedKey === 'plan-tonight')).toBe(false);
+    // A plan with only lunch leaves tonight's question unasked.
+    const lunchOnly = kitchenCardCandidates({
+      myRecipes: [{ id: 'r1', name: 'Lentil soup' }],
+      plan: { '2026-07-28': { lunch: 'r1' } },
+    }, NOW);
+    expect(lunchOnly.some((c) => c.seedKey === 'plan-tonight')).toBe(false);
+  });
+
+  it('plan-swapped needs both sides named and stays inside the week', () => {
+    const unnamedActual = kitchenCardCandidates(
+      {
+        mealPlanEvents: [
+          { date: '2026-07-27', slot: 'dinner', plannedRecipeId: 'r1', actualRecipeId: 'ghost', status: 'substituted' },
+        ],
+      },
+      NOW,
+      (id) => (id === 'r1' ? 'Lentil soup' : null),
+    );
+    expect(unnamedActual.some((c) => c.seedKey === 'plan-swapped')).toBe(false);
+    const oldSwap = kitchenCardCandidates(
+      {
+        myRecipes: [
+          { id: 'r1', name: 'Pasta with tomato sauce' },
+          { id: 'r2', name: 'Lentil soup' },
+        ],
+        mealPlanEvents: [
+          { date: '2026-07-01', slot: 'dinner', plannedRecipeId: 'r1', actualRecipeId: 'r2', status: 'substituted' },
+        ],
+      },
+      NOW,
+    );
+    expect(oldSwap.some((c) => c.seedKey === 'plan-swapped')).toBe(false);
+  });
+
+  it('leftovers-covered reads only leftovers-available skips; plain skips stay missed-meal', () => {
+    const cards = kitchenCardCandidates(
+      {
+        mealPlanEvents: [
+          // A no-time skip is a miss, not a leftovers win — and vice versa.
+          { date: '2026-07-27', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'no-time' },
+          { date: '2026-07-25', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'leftovers-available' },
+        ],
+      },
+      NOW,
+      (id) => (id === 'r1' ? 'Lentil soup' : null),
+    );
+    const byKey = Object.fromEntries(cards.map((c) => [c.seedKey, c]));
+    expect(byKey['leftovers-covered'].back).toBe('Lentil soup — 2026-07-25');
+    expect(byKey['missed-meal'].back).toBe('Lentil soup — 2026-07-27');
+    // Out of the week, a leftovers skip is history, not a question.
+    const oldCover = kitchenCardCandidates(
+      {
+        mealPlanEvents: [
+          { date: '2026-07-01', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'leftovers-available' },
+        ],
+      },
+      NOW,
+      (id) => (id === 'r1' ? 'Lentil soup' : null),
+    );
+    expect(oldCover.some((c) => c.seedKey === 'leftovers-covered')).toBe(false);
+  });
 });
 
 describe('planSeedMerge', () => {
@@ -180,7 +286,34 @@ describe('planSeedMerge', () => {
     const plan = planSeedMerge(candidates, []);
     expect(plan.additions).toHaveLength(1);
     expect(plan.updates).toEqual([]);
-  });  it('a matching answer means no update, and each template fires once', () => {
+  });  it('refreshes the skip reason when the missed meal changes', () => {
+    const deck = [
+      mkDeckCard({
+        id: 'm', origin: 'auto',
+        front: 'Which planned meal did you skip this week?',
+        back: 'Lentil soup — 2026-07-20',
+        skippedReason: 'no-time',
+      }),
+    ];
+    // A newer, differently-motivated skip supersedes the stored answer — the
+    // reason must travel with the refresh, not linger as yesterday's excuse.
+    const candidates = kitchenCardCandidates(
+      {
+        mealPlanEvents: [
+          { date: '2026-07-26', slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'changed-preference' },
+        ],
+      },
+      NOW,
+      (id) => (id === 'r1' ? 'Lentil soup' : null),
+    );
+    const plan = planSeedMerge(candidates, deck);
+    expect(plan.updates).toEqual([{
+      id: 'm', back: 'Lentil soup — 2026-07-26', skippedReason: 'changed-preference',
+    }]);
+    expect(plan.additions).toEqual([]);
+  });
+
+  it('a matching answer means no update, and each template fires once', () => {
     const deck = [
       mkDeckCard({ front: 'Which food did you buy most of this week?', back: 'Bread' }),
     ];
