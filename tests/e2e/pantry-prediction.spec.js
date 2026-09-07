@@ -99,6 +99,118 @@ test('the tonight affordance opens the dinner picker pre-searched in the built a
   // The generator is not part of this path — the picker came up instead.
   await expect(page.getByRole('button', { name: 'Close generator' })).toHaveCount(0);
 });
+
+test('the prediction block stays quiet when the week plan covers the expiring stock', async ({ page }) => {
+  // The quiet twin of the block journey, in the real browser: the same 300 g
+  // of spinach sits on the shelf expiring on the plan's last day, but the
+  // week's two curries (150 g each) use every gram before the date — so no
+  // warning fires, and the seen-but-covered item reads as covered instead.
+  await page.addInitScript(() => {
+    const stamp = (offset) => {
+      const d = new Date(Date.now() + offset * 86400000);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
+    // This week's Saturday and Sunday — the dates the seeded plan must land
+    // on so the week derive actually resolves the meals.
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const week = (index) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + index);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
+    const state = {
+      onboarded: true,
+      name: 'Sam',
+      day: stamp(0),
+      // Expiring on the plan's last day, fully used by two chickpea curries;
+      // the rice sits two months out and must never appear anywhere.
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '300 g', location: 'Fridge', expiry: week(6) },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: stamp(60) },
+      ],
+      plan: {
+        [week(5)]: { dinner: 'chickpea-curry' },
+        [week(6)]: { dinner: 'chickpea-curry' },
+      },
+    };
+    localStorage.setItem('forq-state-v2', JSON.stringify(state));
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /Check pantry before buying/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
+  await expect(sheet).toBeVisible();
+
+  // The spinach is genuinely on the shelf and near its date, yet the plan is
+  // what keeps it out of the prediction: no warning heading, row or summary.
+  await expect(sheet.getByText('Likely to go unused')).toHaveCount(0);
+  await expect(sheet.getByRole('button', { name: 'Plan a meal using Spinach' })).toHaveCount(0);
+  await expect(sheet.getByText(/ingredient may go unused/)).toHaveCount(0);
+  // Seen-but-covered reads as covered, not ignored, in the real app too.
+  await expect(sheet.getByText('Covered by the plan')).toBeVisible();
+  await expect(sheet.getByText('Spinach · 300 g — used by 2 planned meals before its date', { exact: true })).toBeVisible();
+});
+
+test('a plan that only half-uses the expiring stock still flags the leftover', async ({ page }) => {
+  // The sibling of the quiet journey, in the real browser: the same spinach
+  // is genuinely planned, but 400 g against two 150 g curries leaves 100 g
+  // after the plan — so it stays on the warning list with the remainder and
+  // the cause named, never read as fully covered.
+  await page.addInitScript(() => {
+    const stamp = (offset) => {
+      const d = new Date(Date.now() + offset * 86400000);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const week = (index) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + index);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
+    const state = {
+      onboarded: true,
+      name: 'Sam',
+      day: stamp(0),
+      // 400 g expiring on the plan's last day against 300 g the two curries
+      // use: 100 g is left over even though the plan genuinely uses the item.
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '400 g', location: 'Fridge', expiry: week(6) },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: stamp(60) },
+      ],
+      plan: {
+        [week(5)]: { dinner: 'chickpea-curry' },
+        [week(6)]: { dinner: 'chickpea-curry' },
+      },
+    };
+    localStorage.setItem('forq-state-v2', JSON.stringify(state));
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /Check pantry before buying/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
+  await expect(sheet).toBeVisible();
+
+  // The item stays on the warning list — coverage was only partial.
+  await expect(sheet.getByText('Likely to go unused')).toBeVisible();
+  await expect(sheet.getByText(/ingredient may go unused/)).toBeVisible();
+  // Only the remainder is at risk, and the row names it by quantity…
+  await expect(sheet.getByText('Spinach · 100 g', { exact: true })).toBeVisible();
+  // …and by cause: the plan used some of it — what is left is the rest.
+  await expect(sheet.getByText('No planned meal uses all of this dated stock.')).toBeVisible();
+  // It must not simultaneously read as fully covered.
+  await expect(sheet.getByText('Covered by the plan')).toHaveCount(0);
+});
+
 test('the week-plan affordance opens the generator focused on the at-risk item', async ({ page }) => {
   // The row's primary affordance goes to the week generator, not tonight's
   // picker: the Plan tab opens with the generator already favouring dishes
@@ -140,4 +252,6 @@ test('the week-plan affordance opens the generator focused on the at-risk item',
   await expect(page.getByText(/Spinach — use soon/)).toBeVisible();
   await page.getByRole('button', { name: /^Generate$/ }).click();
   await expect(page.getByText(/is pinned in — it uses Spinach before it goes off/)).toBeVisible({ timeout: 15000 });
+  // The slot that carries the focused item is badged, not just described.
+  await expect(page.getByText('Pinned', { exact: true }).first()).toBeVisible();
 });

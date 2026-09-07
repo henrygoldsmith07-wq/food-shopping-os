@@ -9,7 +9,7 @@
  */
 
 import { kitchenCardCandidates, planSeedMerge } from '../domain/card-gen';
-import { createCard, dueCards as collectDue, gradeReview, dueReasonGroups } from '../domain/scheduling';
+import { createCard, dayStamp, dueCards as collectDue, gradeReview, dueReasonGroups } from '../domain/scheduling';
 import { foldSkipReflection } from '../domain/skip-profile';
 import { RECIPES } from '../data/recipes.js';
 import { uid } from './state.js';
@@ -170,6 +170,49 @@ export const reviewActions = (set, latest) => {
         return { kitchenKeptFronts: next };
       }),
     /**
+     * How many of the kept-as-is fronts today's offers would otherwise still
+     * show. The refresh count already excludes kept fronts, so a button that
+     * read "Refresh 1" after two skips would look like an offer vanished —
+     * this names the reduction as the choice it was. Counts the kept fronts
+     * the *unkept* merge would still offer (update, removal or addition), so
+     * a kept front whose question the activity no longer asks is not counted.
+     */
+    kitchenKeptAsIsCount: (now = new Date()) => {
+      const s = latest.current;
+      const kept = new Set(Array.isArray(s.kitchenKeptFronts) ? s.kitchenKeptFronts : []);
+      if (!kept.size) return 0;
+      const deck = Array.isArray(s.cards) ? s.cards : [];
+      const plan = planSeedMerge(kitchenCardCandidates(s, now, recipeNameOf(s)), deck);
+      // Update rows carry `{ id, back }` only — their front lives on the card.
+      const frontById = new Map(deck.map((c) => [c.id, c.front]));
+      const offered = new Set([
+        ...plan.additions.map((a) => a.front),
+        ...plan.updates.map((u) => frontById.get(u.id)),
+        ...plan.removals.map((r) => r.front),
+      ]);
+      let count = 0;
+      for (const front of kept) if (offered.has(front)) count += 1;
+      return count;
+    },
+    /**
+     * Keep every kitchen answer the deck currently holds — the per-row Skip
+     * applied at deck level. Each auto front present in the deck is recorded
+     * as kept, so the refresh offers (and the boot auto-refresh) leave the
+     * whole deck's current answers alone. Deliberately not the forget opt-out:
+     * no card is removed and `kitchenCardsForgotten` stays untouched — the
+     * deck is kept, only future rewrites stop.
+     */
+    keepAllAutoFronts: () =>
+      set((s) => {
+        const deck = Array.isArray(s.cards) ? s.cards : [];
+        const fronts = [...new Set(deck.filter((c) => c.origin === 'auto').map((c) => c.front))];
+        if (!fronts.length) return {}; // no kitchen cards to keep — not a failure
+        const kept = Array.isArray(s.kitchenKeptFronts) ? s.kitchenKeptFronts : [];
+        const next = [...new Set([...kept, ...fronts])];
+        if (next.length === kept.length) return {}; // already all kept — nothing new
+        return { kitchenKeptFronts: next };
+      }),
+    /**
      * Fold one review-time reflection on a skip reason into the learning
      * profile. Asked after a missed-meal card is rated: does the recorded
      * reason still describe why meals get skipped? The answer rides the same
@@ -203,10 +246,19 @@ export const reviewActions = (set, latest) => {
      */
     autoRefreshSeededCards: (now = new Date()) =>
       set((s) => {
-        if (s.kitchenCardsForgotten) return {};
+        // The stamp records the last boot merge, so Learn can say "N kitchen
+        // cards refreshed" instead of leaving the write silent — and a boot
+        // that changed nothing clears yesterday's stamp rather than keeping a
+        // stale note alive. The clear is a no-op when no stamp exists, so the
+        // original gating never grows a write where there was none.
+        const clearStamp = () => (s.kitchenBootRefresh ? { kitchenBootRefresh: null } : {});
+        if (s.kitchenCardsForgotten) return clearStamp();
         const deck = Array.isArray(s.cards) ? s.cards : [];
-        if (!deck.some((c) => c.origin === 'auto')) return {};
-        return applySeedPlan(s, now, seedPlan(s, now), false);
+        if (!deck.some((c) => c.origin === 'auto')) return clearStamp();
+        const plan = seedPlan(s, now);
+        const count = plan.additions.length + plan.updates.length + (plan.removals || []).length;
+        if (!count) return clearStamp();
+        return { ...applySeedPlan(s, now, plan, false), kitchenBootRefresh: { count, day: dayStamp(now) } };
       }),
     /**
      * Clear every kitchen-seeded card at once — for users who simply don't

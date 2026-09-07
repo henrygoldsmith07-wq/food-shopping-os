@@ -484,6 +484,87 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.queryByRole('button', { name: /Refresh \d kitchen card/ })).toBeNull();
   });
 
+  it('keeps every current answer at deck level without forgetting the deck', () => {
+    const twoStale = [
+      {
+        id: 'c-most', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+        front: 'Which food did you buy most of this week?', back: 'Milk — on 2 trips',
+        origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+        createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+      },
+      {
+        id: 'c-total', userId: 'local', subjectId: 'kitchen', topicId: 'budget',
+        front: 'What did your most recent shop cost?', back: 'Tesco — £5.00',
+        origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+        createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+      },
+      {
+        id: 'c-hand', userId: 'local', subjectId: 'manual', topicId: 'general',
+        front: 'My own note', back: 'keep me', origin: 'handmade',
+        reps: 0, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+        createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+      },
+    ];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: twoStale,
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', total: 12.4, items: [{ name: 'Bread' }] }],
+    }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 2 kitchen cards' }));
+    // The per-row Skip, applied once: the deck-level action sits beside it.
+    fireEvent.click(screen.getByRole('button', { name: 'Keep all current answers' }));
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    // Every auto front present in the deck is recorded as kept, durably.
+    expect([...stored.kitchenKeptFronts].sort()).toEqual([
+      'What did your most recent shop cost?',
+      'Which food did you buy most of this week?',
+    ]);
+    // Not the forget opt-out: no card leaves and nothing is marked forgotten.
+    expect(stored.cards).toHaveLength(3);
+    expect(stored.kitchenCardsForgotten).toBeFalsy();
+    expect(stored.cards.some((c) => c.id === 'c-hand')).toBe(true); // handmade untouched
+    expect(stored.cards.find((c) => c.id === 'c-most').back).toBe('Milk — on 2 trips'); // answer kept as-is
+    // The preview closed and nothing is left to refresh or re-offer.
+    expect(screen.queryByText('What refreshing would change')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Refresh \d kitchen card/ })).toBeNull();
+  });
+
+  it('labels the reduced refresh offer when a row was skipped as-is', () => {
+    const twoStale = [
+      {
+        id: 'c-most', userId: 'local', subjectId: 'kitchen', topicId: 'shopping',
+        front: 'Which food did you buy most of this week?', back: 'Milk — on 2 trips',
+        origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+        createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+      },
+      {
+        id: 'c-total', userId: 'local', subjectId: 'kitchen', topicId: 'budget',
+        front: 'What did your most recent shop cost?', back: 'Tesco — £5.00',
+        origin: 'auto', reps: 1, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+        createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+      },
+    ];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: twoStale,
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', total: 12.4, items: [{ name: 'Bread' }] }],
+    }));
+    renderCard();
+    // Two refreshes are offered; skipping one halves the offer.
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 2 kitchen cards' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip refresh for Which food did you buy most of this week?' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close refresh preview' }));
+    // The remaining offer reads as a choice, not a vanished row.
+    expect(screen.getByRole('button', { name: 'Refresh 1 kitchen card' })).toBeDefined();
+    expect(screen.getByText(/1 kept as-is/)).toBeDefined();
+    // Refreshing what is left clears the offer and the label together.
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh 1 kitchen card' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply refresh for What did your most recent shop cost?' }));
+    expect(screen.queryByRole('button', { name: /Refresh \d kitchen card/ })).toBeNull();
+    expect(screen.queryByText(/kept as-is/)).toBeNull();
+  });
+
   it('grades through the store and advances the queue', () => {
     renderCard();
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
@@ -883,5 +964,42 @@ describe('the flashcard review queue on Learn', () => {
     expect(screen.getByText('Which planned meal did you skip this week?')).toBeDefined();
     ask({ id: 3, topicId: 't1' });
     expect(screen.getByText('Membrane structure?')).toBeDefined();
+  });
+});
+
+describe('the boot refresh note on the queue', () => {
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  const seedWith = (stamp) => localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    ...seeded,
+    cards: deck.map((c) => ({ ...c, origin: 'auto' })), // an adopted kitchen deck
+    kitchenBootRefresh: stamp,
+  }));
+
+  it('names the merge the boot made, in the queue that shows the deck', () => {
+    seedWith({ count: 2, day: DAY });
+    renderCard();
+    expect(screen.getByText('2 kitchen cards refreshed on open')).toBeDefined();
+  });
+
+  it('reads singular when one card changed', () => {
+    seedWith({ count: 1, day: DAY });
+    renderCard();
+    expect(screen.getByText('1 kitchen card refreshed on open')).toBeDefined();
+  });
+
+  it('never claims a refresh for a stamp that is not from today', () => {
+    seedWith({ count: 2, day: '2026-07-27' }); // yesterday's boot — the note is stale
+    renderCard();
+    expect(screen.queryByText(/kitchen cards? refreshed on open/)).toBeNull();
+  });
+
+  it('stays quiet when no boot refresh has stamped the state', () => {
+    seedWith(null);
+    renderCard();
+    expect(screen.queryByText(/kitchen cards? refreshed on open/)).toBeNull();
   });
 });

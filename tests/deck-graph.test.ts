@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeckGraph, deckMasteryRows } from '../src/domain/deck-graph';
+import { buildDeckGraph, deckMasteryRows, deckMistakeRows } from '../src/domain/deck-graph';
 import { classifyTopic } from '../src/domain/topic-status';
 import type { Card } from '../src/domain/types';
 
@@ -72,6 +72,48 @@ describe('deckMasteryRows — bands read from the schedule', () => {
     expect(classifyTopic(rows[0]).status).toBe('in-progress');
   });
 
+  it('a card that keeps failing reads weaker than one that merely came due', () => {
+    // Both are not-due (full retention), so retention cannot separate them.
+    // The on-schedule card has never lapsed; the other has lapsed 3 times in
+    // 5 reviews — its next review is in the future, but the failure history
+    // must still drag it under the clean card.
+    const onSchedule = deckMasteryRows([
+      card('a', 'shopping', { reps: 4, ease: 2.5, intervalDays: 21, due: '2026-08-25', lapses: 0 }),
+    ], NOW)[0];
+    const lapseProne = deckMasteryRows([
+      card('b', 'shopping', { reps: 5, ease: 2.5, intervalDays: 21, due: '2026-08-25', lapses: 3 }),
+    ], NOW)[0];
+    expect(onSchedule.mastery).toBe(1);
+    expect(onSchedule).toMatchObject({ lapses: 0, lapseDrag: 1 });
+    // The lapsed card's drag (1 − 3/5 = 0.4) drops it to 40% mastery.
+    expect(lapseProne.mastery).toBeCloseTo(0.4, 3);
+    expect(lapseProne).toMatchObject({ lapses: 3, lapseDrag: 0.4 });
+    expect(lapseProne.mastery).toBeLessThan(onSchedule.mastery);
+    expect(lapseProne.weak).toBe(true);
+    expect(classifyTopic(lapseProne).status).toBe('in-progress');
+  });
+
+  it('heavier lapse rates drag the band further than lighter ones', () => {
+    const mild = deckMasteryRows([
+      // One lapse in ten reviews: a blip on a long-mature card.
+      card('a', 'shopping', { reps: 10, ease: 2.5, intervalDays: 21, due: '2026-08-25', lapses: 1 }),
+    ], NOW)[0];
+    const severe = deckMasteryRows([
+      // Two lapses in three reviews: the card is failing most of the time.
+      card('b', 'shopping', { reps: 3, ease: 2.5, intervalDays: 21, due: '2026-08-25', lapses: 2 }),
+    ], NOW)[0];
+    expect(mild.lapseDrag).toBeCloseTo(2 / 3, 3); // 1 − 1/3
+    expect(severe.lapseDrag).toBeCloseTo(0.5, 3); // 1 − 2/4
+    expect(severe.mastery).toBeLessThan(mild.mastery);
+    expect(mild.mastery).toBeCloseTo(2 / 3, 3);
+    expect(severe.mastery).toBeCloseTo(0.5, 3);
+    // A single blip on a mature card stays covered; failing most of the
+    // reviews drops the topic under the covered line.
+    expect(mild.weak).toBe(false);
+    expect(severe.weak).toBe(true);
+    expect(classifyTopic(severe).status).toBe('in-progress');
+  });
+
   it('feeds the graph so the mastery node is real and totals add up', () => {
     const graph = buildDeckGraph([
       card('a', 'shopping', { reps: 5, ease: 2.5, intervalDays: 21, due: '2026-08-25' }),
@@ -83,9 +125,61 @@ describe('deckMasteryRows — bands read from the schedule', () => {
     // The mastered topic carries a band; the untouched one stays honest.
     expect(shopping?.mastery).not.toBeNull();
     expect(shopping?.mastery?.attempts).toBe(8);
+    // The retention split rides with the node: 2 studied, 1 of them due.
+    expect(shopping?.mastery?.studied).toBe(2);
+    expect(shopping?.mastery?.cardsDue).toBe(1);
     expect(shopping?.flashcards.due).toBe(1);
     expect(cooking?.mastery).toBeNull();
     expect(graph.totals.dueCards).toBe(1);
     expect(graph.totals.studiedCards).toBe(2);
+  });
+});
+
+describe('deckMistakeRows — the mistake level reads the review schedule', () => {
+  it('a card whose last review was Again is one open mistake', () => {
+    const rows = deckMistakeRows([
+      card('a', 'shopping', { reps: 3, lapses: 2, ease: 1.7, lastRating: 'again', lastReviewedAt: '2026-08-19T10:00:00Z' }),
+      // A clean card has no mistake to show.
+      card('b', 'shopping', { reps: 4, ease: 2.5, lastRating: 'good' }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: 'card-lapse:a',
+      topicId: 'shopping',
+      category: 'card-lapse',
+      resolved: false,
+    });
+  });
+
+  it('a lapsed card recovered by a successful review reads resolved, not open', () => {
+    const rows = deckMistakeRows([
+      card('a', 'shopping', { reps: 5, lapses: 1, ease: 2.0, lastRating: 'good', lastReviewedAt: '2026-08-19T10:00:00Z' }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ resolved: true });
+    expect(rows[0].description).toMatch(/reviewed successfully/);
+  });
+
+  it('a lapsed card from the pre-stamp scheduler stays silent — no outcome to read', () => {
+    // lapses > 0 but no lastRating: the card predates the outcome stamp, so
+    // the map must not guess whether its last review failed or recovered.
+    expect(deckMistakeRows([card('a', 'shopping', { reps: 5, lapses: 2, ease: 1.7 })])).toEqual([]);
+    expect(deckMistakeRows([card('a', 'shopping', {})])).toEqual([]);
+  });
+
+  it('feeds the graph: open and resolved mistakes land per topic and in totals', () => {
+    const graph = buildDeckGraph([
+      // Open: last review was Again.
+      card('a', 'shopping', { reps: 3, lapses: 2, ease: 1.7, lastRating: 'again', lastReviewedAt: '2026-08-19T10:00:00Z' }),
+      // Resolved: lapsed, then recovered.
+      card('b', 'shopping', { reps: 5, lapses: 1, ease: 2.0, lastRating: 'good', lastReviewedAt: '2026-08-19T11:00:00Z' }),
+      // Clean: no mistake.
+      card('c', 'cooking', { reps: 4, ease: 2.5, lastRating: 'good' }),
+    ], NOW);
+    const shopping = graph.units[0].topics.find((t) => t.topicId === 'shopping');
+    const cooking = graph.units[0].topics.find((t) => t.topicId === 'cooking');
+    expect(shopping?.mistakes).toMatchObject({ total: 2, unresolved: 1, marksLost: 0 });
+    expect(cooking?.mistakes).toMatchObject({ total: 0, unresolved: 0 });
+    expect(graph.totals.unresolvedMistakes).toBe(1);
   });
 });

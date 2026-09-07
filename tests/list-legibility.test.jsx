@@ -5,12 +5,13 @@ import ShoppingListRow from '../src/components/ShoppingListRow.jsx';
 
 const LONG = 'Sainsbury’s Wholemeal Seeded Batch Loaf';
 
-const row = (overrides = {}) => render(
+const row = (overrides = {}, props = {}) => render(
   <AppProvider>
     <ShoppingListRow
       item={{ id: 'x', name: LONG, qty: '800g', aisle: 'Bakery', ...overrides }}
       storeOptions={[]}
       setDragging={() => {}}
+      {...props}
     />
   </AppProvider>,
 );
@@ -55,5 +56,20 @@ describe('a row survives an item the insight pass has not seen', () => {
     // a moment ago has no insight yet, so it took its own row down.
     expect(() => row({ id: 'brand-new' })).not.toThrow();
     expect(screen.getByText(LONG, { exact: false })).toBeTruthy();
+  });
+})
+
+describe('the past-the-cap marker on a ranked row', () => {
+  it('shows only on the row the cap pushed out', () => {
+    row({ id: 'x' }, { pastCap: true });
+    expect(screen.getByText(/Past the week's cap/)).toBeTruthy();
+  });
+
+  it('stays hidden on a row that fits', () => {
+    row({ id: 'x' }, { pastCap: false });
+    expect(screen.queryByText(/Past the week's cap/)).toBeNull();
+    // Default too — an unranked list shows no boundary marker at all.
+    row({ id: 'y' });
+    expect(screen.queryByText(/Past the week's cap/)).toBeNull();
   });
 })

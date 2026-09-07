@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { ArrowRight } from 'lucide-react';
 import {
   GRAPH_LEVELS, type ConceptNode, type SubjectGraph, type TopicGraph,
 } from '../domain/knowledge-graph';
@@ -85,6 +86,15 @@ function topicChain(topic: TopicGraph, graph: SubjectGraph): ChainNode[] {
   const accuracy = pct(questions.accuracy);
   const masteryPct = mastery ? pct(mastery.mastery) : null;
   const retentionPct = mastery ? pct(mastery.retention) : null;
+  const lapseDragPct = mastery && mastery.lapseDrag < 1 ? pct(mastery.lapseDrag) : null;
+  // The visible retention split: how many studied cards are held right now
+  // versus due today — the reason a topic's mastery reads weak, no hover needed.
+  const heldOf = mastery
+    ? `${Math.max(0, mastery.studied - mastery.cardsDue)} of ${mastery.studied} held`
+    : null;
+  const dueSplit = mastery && mastery.cardsDue > 0
+    ? ` · ${mastery.cardsDue} due today`
+    : '';
   const outlook = graph.exam.outlook;
   const examValue = outlook ? `${outlook.low}–${outlook.high}%` : 'no band yet';
 
@@ -140,10 +150,10 @@ function topicChain(topic: TopicGraph, graph: SubjectGraph): ChainNode[] {
     },
     {
       level: 'mastery',
-      value: masteryPct || 'per card',
+      value: mastery && heldOf ? `${heldOf}${dueSplit}` : 'per card',
       hint: mastery
         ? retentionPct
-          ? `retention ${retentionPct} · confidence ${pct(mastery.confidence)} · ${mastery.attempts} graded`
+          ? `${lapseDragPct ? `lapse history drags ${lapseDragPct} of it · ` : ''}retention ${retentionPct} (${heldOf}${dueSplit}) · confidence ${pct(mastery.confidence)} · ${mastery.attempts} graded`
           : 'mastery tracked'
         : flashcards.total
           ? 'Schedules live per card — see the review queue for the whole deck'
@@ -160,7 +170,10 @@ function topicChain(topic: TopicGraph, graph: SubjectGraph): ChainNode[] {
   ];
 }
 
-function TopicRow({ topic, graph }: { topic: TopicGraph; graph: SubjectGraph }) {
+function TopicRow({ topic, graph, dueCount, onReviewTopic }: {
+  topic: TopicGraph; graph: SubjectGraph;
+  dueCount: number; onReviewTopic?: (topicId: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const nodes = topicChain(topic, graph);
   const { conceptTotals, questions, unmapped } = topic;
@@ -243,6 +256,17 @@ function TopicRow({ topic, graph }: { topic: TopicGraph; graph: SubjectGraph }) 
               statement — counted here rather than guessed onto a concept.
             </p>
           ) : null}
+
+          {dueCount > 0 && onReviewTopic && (
+            <button
+              type="button"
+              onClick={() => onReviewTopic(topic.topicId)}
+              className="press inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[0.75rem] font-extrabold"
+              style={{ background: 'var(--accent-soft)', color: 'var(--accent-deep)' }}
+            >
+              Review this topic — {dueCount} due <ArrowRight size={13} />
+            </button>
+          )}
         </div>
       ) : null}
     </Card>
@@ -256,7 +280,12 @@ const headerNode = (title: string, children: ReactNode) => (
   </div>
 );
 
-export function KnowledgeMap({ graph }: { graph: SubjectGraph }) {
+export function KnowledgeMap({ graph, dueCounts = {}, onReviewTopic }: {
+  graph: SubjectGraph;
+  /** Cards due in the real review queue, per topic — the action's honest count. */
+  dueCounts?: Record<string, number>;
+  onReviewTopic?: (topicId: string) => void;
+}) {
   const { totals, unmapped, exam } = graph;
   const accuracy = pct(totals.accuracy);
   const outlook = exam.outlook;
@@ -342,7 +371,13 @@ export function KnowledgeMap({ graph }: { graph: SubjectGraph }) {
           <p className="mb-1.5 text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: FAINT }}>{unit.title}</p>
           <div className="space-y-1.5">
             {unit.topics.map((topic) => (
-              <TopicRow key={topic.topicId} topic={topic} graph={graph} />
+              <TopicRow
+                key={topic.topicId}
+                topic={topic}
+                graph={graph}
+                dueCount={dueCounts[topic.topicId] || 0}
+                onReviewTopic={onReviewTopic}
+              />
             ))}
           </div>
         </section>

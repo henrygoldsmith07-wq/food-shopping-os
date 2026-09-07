@@ -3,6 +3,7 @@ import { recipeAllowed } from './goals.js';
 import { seasonScore } from '../data/seasons.js';
 import { seededPick } from './utils.js';
 import { tasteScore } from './taste.js';
+import { confirmedSkipReasonIds, SKIP_PHRASES } from './skip-preferences.js';
 import { canonicalName, sameIngredient } from './aliases.js';
 import { isPantrySufficient } from './kitchen.js';
 import { chooseWasteMinimisingPlan, rankWastePlans, scoreWastePlan } from './waste-planner.js';
@@ -154,13 +155,6 @@ const skipReasonPref = (reasonId, pantryNames) => {
   if (reasonId === 'missing-ingredients') return (r) => r.ingredients.length > 0
     && pantryHits(r, pantryNames) * 2 >= r.ingredients.length;
   return null;
-};
-
-/** What leaning on each pref sounds like in the plan's note. */
-const SKIP_PHRASES = {
-  'no-time': 'quicker, 30-minute dishes',
-  'plan-too-complex': 'simpler dishes',
-  'missing-ingredients': 'dishes you can mostly make from what you already have',
 };
 
 /** Dishes worth cooking in bulk: they scale, keep, or reheat well. */
@@ -317,10 +311,7 @@ export function buildPlan(
 
   // The skip reasons the review loop confirmed still apply — strongest
   // first — become a soft preference, exactly like taste or occasion.
-  const confirmedReasons = Object.entries(skipProfile || {})
-    .filter(([, entry]) => (entry?.applies || 0) >= 2 && entry?.lastStillApplies)
-    .sort((a, b) => ((b[1].applies || 0) + (b[1].changed || 0)) - ((a[1].applies || 0) + (a[1].changed || 0)))
-    .map(([reasonId]) => reasonId);
+  const confirmedReasons = confirmedSkipReasonIds(skipProfile);
   const skipPrefs = confirmedReasons
     .map((reasonId) => skipReasonPref(reasonId, pantryItems || pantry))
     .filter(Boolean);

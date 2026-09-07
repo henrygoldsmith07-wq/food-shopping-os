@@ -119,7 +119,13 @@ export interface TopicGraph {
     mastery: number;
     retention: number;
     confidence: number;
+    lapses: number;
+    /** 1 with no lapse history; lower as failures accumulate (the drag). */
+    lapseDrag: number;
     attempts: number;
+    /** Studied cards — the pool retention is measured over. */
+    studied: number;
+    /** Of those studied, how many are due today. */
     cardsDue: number;
     weak: boolean;
   } | null;
@@ -242,7 +248,7 @@ export function buildTopicGraph(
       lapsedCardCount: linkedCards.filter((c) => c.lapses > 0).length,
       mistakeCount: linkedMistakes.length,
       unresolvedMistakeCount: unresolved,
-      marksLost: linkedMistakes.reduce((sum, m) => sum + m.marksLost, 0),
+      marksLost: linkedMistakes.reduce((sum, m) => sum + (Number(m.marksLost) || 0), 0),
     };
   });
 
@@ -277,7 +283,7 @@ export function buildTopicGraph(
     mistakes: {
       total: topicMistakes.length,
       unresolved: topicMistakes.filter((m) => !m.resolved).length,
-      marksLost: topicMistakes.reduce((sum, m) => sum + m.marksLost, 0),
+      marksLost: topicMistakes.reduce((sum, m) => sum + (Number(m.marksLost) || 0), 0),
     },
     flashcards: {
       total: topicCards.length,
@@ -290,7 +296,10 @@ export function buildTopicGraph(
           mastery: masteryRow.mastery,
           retention: masteryRow.retention,
           confidence: masteryRow.confidence,
+          lapses: masteryRow.lapses,
+          lapseDrag: masteryRow.lapseDrag,
           attempts: masteryRow.attempts,
+          studied: masteryRow.studied,
           cardsDue: masteryRow.cardsDue,
           weak: masteryRow.weak,
         }

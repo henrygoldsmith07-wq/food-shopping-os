@@ -9,7 +9,7 @@ import { gbp } from '../lib/utils.js';
 import { Glyph } from './icons.jsx';
 import { Chip, GestureMenu, Pill } from './ui.jsx';
 
-export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, largeTouch = false }) {
+export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, largeTouch = false, pastCap = false, guardOver = false }) {
   const app = useApp();
   const [moving, setMoving] = useState(false);
   const [swapping, setSwapping] = useState(false);
@@ -110,6 +110,16 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
             />
           )}
           {item.priority === 'high' && <p className="text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>Need it</p>}
+          {pastCap && (
+            <p className="mt-0.5 inline-flex items-center gap-1 text-[0.65625rem] font-extrabold" style={{ color: 'var(--warn)' }}>
+              Past the week's cap — ranked last so you see what fits first
+            </p>
+          )}
+          {guardOver && (
+            <p className="mt-0.5 inline-flex items-center gap-1 text-[0.65625rem] font-extrabold" style={{ color: 'var(--warn)' }}>
+              Past the week's headroom — this row would take the budget over
+            </p>
+          )}
           {item.confidenceEvidence && (
             <p className="text-[0.6875rem] font-bold" style={{ color: item.confidenceEvidence.tone === 'warn' ? 'var(--warn)' : 'var(--muted)' }}>
               {item.confidenceEvidence.label}{item.confidenceEvidence.sourceLabel ? ` · ${item.confidenceEvidence.sourceLabel}` : ''}

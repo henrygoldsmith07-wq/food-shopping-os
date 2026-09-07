@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   affordableCap, aisleFor, applyOffers, basketProjection, cheapestFor, compareStores, expiryBuckets,
-  groupForStore, mergeItems, refile, rememberAisle, restockSuggestions, routeFor,
+  groupForStore, mergeItems, refile, rememberAisle, restockSuggestions, routeFor, rowsOverHeadroom,
   findShoppingDuplicate, parseVoiceShopping, priceAlertMatches, quantitySuggestion, routeFromTicks,
   savingsAvailable, wasteSummary,
 } from '../src/lib/shopping.js';
@@ -347,6 +347,11 @@ describe('affordableCap — the basket against what\'s left of the week', () => 
     expect(cap.ordered.map((row) => row.name)).toEqual(['Milk', 'Bread', 'Cheese', 'Wine']);
     expect(cap).toMatchObject({ fitCount: 3, fitsCost: 25, outsideCount: 1, outsideCost: 20, unpriced: 0 });
     expect(cap.outside).toEqual(['Wine']);
+    // The per-row marker lookup: exactly the priced item past the headroom,
+    // keyed by id so the ranked view can mark rows without position math.
+    expect(cap.outsideKeys).toEqual(new Set(['Wine']));
+    expect(cap.outsideKeys.has('Wine')).toBe(true);
+    expect(cap.outsideKeys.has('Milk')).toBe(false);
   });
 
   it('measures headroom after what the week already spent', () => {
@@ -363,10 +368,53 @@ describe('affordableCap — the basket against what\'s left of the week', () => 
     // The unpriced item trails the ranked order rather than being dropped.
     expect(cap.ordered.map((row) => row.name)).toEqual(['Butter', 'Cream', 'Mystery']);
     expect(cap.outsideCount).toBe(0);
+    // An unknown price cannot be marked past the cap — it never claimed a
+    // slot inside it, so it is not a row the trim pushed out.
+    expect(cap.outsideKeys.has('Mystery')).toBe(false);
   });
 
   it('stays silent without a weekly budget', () => {
     expect(affordableCap([item('Milk', 2)], { budget: 0 })).toBeNull();
     expect(affordableCap([item('Milk', 2)], {})).toBeNull();
+  });
+});
+
+// ---------- the guard read in the household's own order ----------
+describe('rowsOverHeadroom — where the money runs out in list order', () => {
+  it('flags every row from the one that spends the last of the headroom', () => {
+    // 20 → 25 → 33: the £30 headroom runs out on Bread, and Wine (already
+    // inside) stays clean even though ranked-by-price would single it out.
+    const items = [item('Wine', 20), item('Milk', 5), item('Bread', 8)];
+    const keys = rowsOverHeadroom(items, { headroom: 30 });
+    expect(keys.has('Wine')).toBe(false);
+    expect(keys.has('Milk')).toBe(false);
+    expect(keys.has('Bread')).toBe(true);
+  });
+
+  it('never flags a basket that fits inside the headroom', () => {
+    const items = [item('Milk', 5), item('Bread', 8), item('Cheese', 12)];
+    expect(rowsOverHeadroom(items, { headroom: 30 }).size).toBe(0);
+  });
+
+  it('flags unpriced rows too once the headroom is already spent', () => {
+    // Tea costs nothing typed, so it cannot cross the boundary itself — but it
+    // comes after the crossing, so it is unaffordable within the week as well.
+    const items = [item('Milk', 9), item('Cream', 5), item('Tea', 0)];
+    const keys = rowsOverHeadroom(items, { headroom: 10 });
+    expect(keys.has('Milk')).toBe(false);
+    expect(keys.has('Cream')).toBe(true);
+    expect(keys.has('Tea')).toBe(true);
+  });
+
+  it('respects spent spend by shrinking the headroom', () => {
+    // £25 already spent of £30: only £5 remains, so the £8 item crosses.
+    const items = [item('Milk', 3), item('Bread', 8)];
+    expect(rowsOverHeadroom(items, { headroom: 5 }).has('Bread')).toBe(true);
+  });
+
+  it('treats a missing headroom as zero so any priced row crosses', () => {
+    expect(rowsOverHeadroom([item('Milk', 9)], { headroom: 0 }).has('Milk')).toBe(true);
+    expect(rowsOverHeadroom([item('Milk', 9)]).has('Milk')).toBe(true);
+    expect(rowsOverHeadroom([], { headroom: 10 }).size).toBe(0);
   });
 });

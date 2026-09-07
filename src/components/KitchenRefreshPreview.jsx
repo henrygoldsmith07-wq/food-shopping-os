@@ -49,6 +49,18 @@ export default function KitchenRefreshPreview({ now, plan, kind = 'refresh', onA
     onClose();
   };
 
+  // The per-row Skip applied once: every auto answer already in the deck
+  // (the stale-update and outlived-plan rows — not the new questions, which
+  // are not present yet) is recorded as kept. Rows that row-level Skips
+  // would resolve leave the panel; new questions stay for their own decision.
+  const presentRows = rows.filter((r) => r.kind !== 'addition');
+  const keepAllCurrent = () => {
+    if (!presentRows.length) return;
+    app.keepAllAutoFronts();
+    setRows((current) => current.filter((r) => r.kind === 'addition'));
+    if (!rows.some((r) => r.kind === 'addition')) onClose();
+  };
+
   const heading = seedMode ? 'Cards your kitchen would build' : 'What refreshing would change';
   const sub = seedMode
     ? 'Add builds the question; Skip leaves it out — restore any kept offer in Settings.'
@@ -136,7 +148,7 @@ export default function KitchenRefreshPreview({ now, plan, kind = 'refresh', onA
             ))}
           </ul>
           {remaining > 0 && (
-            <div className="mt-2.5 flex items-center gap-3">
+            <div className="mt-2.5 flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 aria-label={seedMode ? 'Add remaining seed questions' : 'Apply remaining refresh changes'}
@@ -146,6 +158,17 @@ export default function KitchenRefreshPreview({ now, plan, kind = 'refresh', onA
               >
                 {seedMode ? 'Add remaining' : 'Apply remaining'} ({remaining})
               </button>
+              {!seedMode && presentRows.length > 0 && (
+                <button
+                  type="button"
+                  aria-label="Keep all current answers"
+                  onClick={keepAllCurrent}
+                  className="press rounded-xl border px-3 py-2 text-[0.78125rem] font-extrabold"
+                  style={{ borderColor: 'var(--line)', color: 'var(--warn)' }}
+                >
+                  Keep all current answers ({presentRows.length})
+                </button>
+              )}
               <button
                 type="button"
                 aria-label={seedMode ? 'Close seed preview' : 'Close refresh preview'}
@@ -153,7 +176,7 @@ export default function KitchenRefreshPreview({ now, plan, kind = 'refresh', onA
                 className="press text-[0.78125rem] font-bold"
                 style={{ color: 'var(--faint)' }}
               >
-                {seedMode ? 'Not now' : 'Keep as is'}
+                Not now
               </button>
             </div>
           )}

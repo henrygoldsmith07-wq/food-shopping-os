@@ -113,6 +113,9 @@ export interface Card {
   ease: number;
   intervalDays: number;
   due: string;
+  /** The rating the most recent review earned — the mistake level's evidence:
+   * a card whose last review was "again" is an open, unrelearned miss. */
+  lastRating?: "again" | "hard" | "good" | "easy" | null;
   createdAt: string;
   lastReviewedAt: string | null;
 }
@@ -142,6 +145,13 @@ export interface TopicMastery {
   mastery: number;
   retention: number;
   confidence: number;
+  /** Total lapses across the topic's studied cards — failure history. */
+  lapses: number;
+  /** 1 when no card has lapsed; below 1 as lapse history accumulates, so a
+   * topic whose cards keep failing reads weaker than one merely due. */
+  lapseDrag: number;
+  /** Cards ever reviewed — retention's denominator. */
+  studied: number;
   cardsTotal: number;
   cardsDue: number;
   attempts: number;

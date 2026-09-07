@@ -51,6 +51,8 @@ describe("first reviews graduate the card", () => {
     expect(next.intervalDays).toBe(1);
     expect(next.due).toBe("2026-05-02");
     expect(next.lastReviewedAt).toBe(NOW.toISOString());
+    // The outcome stamp rides with the review — the mistake level's evidence.
+    expect(next.lastRating).toBe("good");
   });
 
   it("easy: skips to a 2-day interval and lifts ease by the bonus", () => {
@@ -118,6 +120,8 @@ describe("lapses: misses on cards already seen", () => {
     expect(next.ease).toBe(INITIAL_EASE);
     expect(next.intervalDays).toBe(0);
     expect(next.due).toBe("2026-05-01");
+    // A first-sight miss is still an open mistake: last review was Again.
+    expect(next.lastRating).toBe("again");
   });
 
   it("a second miss on the same card does count as a lapse", () => {
@@ -137,9 +141,11 @@ describe("lapses: misses on cards already seen", () => {
   it("after a lapse the next success re-graduates to 1 day", () => {
     let c = gradeReview(card(), "good", NOW);
     c = gradeReview(c, "again", TOMORROW);
+    expect(c.lastRating).toBe("again"); // the miss is open while unrecovered
     c = gradeReview(c, "good", new Date("2026-05-02T12:00:00Z"));
     expect(c.intervalDays).toBe(1);
     expect(c.lapses).toBe(1);
+    expect(c.lastRating).toBe("good"); // recovered — the mistake resolves
   });
 });
 

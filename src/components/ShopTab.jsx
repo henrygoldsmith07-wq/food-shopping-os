@@ -8,7 +8,7 @@ import { Glyph } from './icons.jsx';
 import { gbp, cx, prettyDate } from '../lib/utils.js';
 import { AISLE_ORDER, COMMON_STORES, checkedTotalOf } from '../data/stores.js';
 import {
-  affordableCap, basketProjection, dealQuality, groupForStore, parseVoiceShopping, recurringStaples, shoppingNameKey,
+  affordableCap, basketProjection, dealQuality, groupForStore, parseVoiceShopping, recurringStaples, rowsOverHeadroom, shoppingNameKey,
 } from '../lib/shopping.js';
 import { AISLE_ORDER as ALL_AISLES } from '../data/stores.js';
 import { clearObservedPriceCache, fetchObservedForList } from '../lib/observed-prices.js';
@@ -90,6 +90,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   const storeChoices = useMemo(() => [...new Set([...stores, ...COMMON_STORES])].slice(0, 8), [stores]);
   const visibleList = useMemo(() => (store ? list.filter((item) => item.store === store) : list), [list, store]);
   const cap = useMemo(() => affordableCap(visibleList, { budget: app.weeklyBudget, spent: app.spentThisWeek }), [visibleList, app.weeklyBudget, app.spentThisWeek]);
+  const outsideKeys = reRanked ? cap?.outsideKeys : null; // ranked rows past the cap wear a marker
   const grouped = useMemo(() => groupForStore(reRanked && cap ? cap.ordered : visibleList, { store, routes: app.storeRoutes, memory: app.aisleMemory }), [visibleList, cap, reRanked, store, app.storeRoutes, app.aisleMemory]);
 
   const basket = useMemo(() => (store
@@ -101,6 +102,8 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
       today: app.day,
     })
     : app.basket), [store, visibleList, app.weeklyBudget, app.spentThisWeek, app.offers, app.day, app.basket]);
+  // Own-order guard: basket over and no re-rank, so rows past the last of the headroom flag.
+  const guardOverKeys = (!reRanked && !shoppingMode && basket.over && cap) ? rowsOverHeadroom(visibleList, { headroom: cap.headroom }) : null;
   const ticked = visibleList.filter((i) => i.checked).length;
   const checkedTotal = checkedTotalOf(visibleList);
   const known = store && app.storeRoutes[store];
@@ -201,9 +204,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
     <div className={cx('pb-6 space-y-6', shoppingMode && largeTouch && 'shopping-large-touch')}><CloudSyncRow />
       {/* Rows both devices changed while apart need a person, not a last writer. */}
       <ListConflictCard app={app} />
-      {/* The shared header carries the title now. Five views don't fit a
-          320px phone on one line, so this scrolls rather than pushing the
-          whole page sideways. */}
+      {/* Five views don't fit a 320px phone on one line, so this scrolls. */}
       <div className="hero-gradient pt-1 pb-3">
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar scroll-x-fade px-5 rise rise-1">
           {[['list', 'List', ShoppingCart], ['history', 'Shops', Receipt], ['prices', 'Prices', TrendingUp], ['stores', 'Stores', Building2], ['budget', 'Budget', Banknote]].map(([k, label, Icon]) => (
@@ -433,7 +434,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                             setDragging={setDragging}
                             observedPrice={observedByKey?.[shoppingNameKey(item.name)] || null}
                             largeTouch={largeTouch}
-                          />
+                            pastCap={Boolean(outsideKeys?.has(item.id ? String(item.id) : item.name))} guardOver={Boolean(guardOverKeys?.has(item.id ? String(item.id) : item.name))} />
                         ))}
                       </Card>
                     </div>

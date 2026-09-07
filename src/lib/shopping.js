@@ -260,7 +260,34 @@ export const affordableCap = (items = [], { budget = 0, spent = 0 } = {}) => {
     outsideCount: outside.length,
     outsideCost: round2(outside.reduce((sum, item) => sum + (Number(item.price) || 0), 0)),
     unpriced: (Array.isArray(items) ? items : []).filter((item) => Number(item.price) <= 0).length,
+    // The rows that sit past the cap, keyed for direct per-row lookup: the
+    // ranked view keeps them visible at the tail, so a row needs to know
+    // whether it is one of them rather than guessing from its position.
+    outsideKeys: new Set(outside.map((item) => (item.id ? String(item.id) : item.name))),
   };
+};
+
+/**
+ * Rows that sit past the week's headroom when the list is read in the
+ * household's own order — the same running-walk the optimisation guard uses,
+ * over the prices actually typed on the rows.
+ *
+ * The ranked cap answers "which N cheapest fit"; this answers "where, in my
+ * order, does the money run out". Unpriced rows cannot cross the boundary
+ * themselves, but once it is crossed every later row is unaffordable too, so
+ * they are flagged with the rest rather than silently slipping past.
+ */
+export const rowsOverHeadroom = (items = [], { headroom = 0 } = {}) => {
+  const boundary = Math.max(0, Number(headroom) || 0);
+  const keys = new Set();
+  let running = 0;
+  let over = false;
+  for (const item of Array.isArray(items) ? items : []) {
+    running = round2(running + (Number(item.price) || 0));
+    if (!over && running > boundary) over = true;
+    if (over) keys.add(item.id ? String(item.id) : item.name);
+  }
+  return keys;
 };
 
 /* ---------- Pantry: what's going off, what ran out ---------- */

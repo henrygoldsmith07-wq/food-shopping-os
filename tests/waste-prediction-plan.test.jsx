@@ -239,6 +239,87 @@ describe('the prediction block names partial coverage', () => {
   });
 });
 
+describe('the covered row opens tonight\'s picker', () => {
+  // A covered row is not a passive fact: the same near-expiry item the plan
+  // saves can have its saving slot kept or swapped. Seeding coverage through
+  // tonight's own dinner (one curry, one curry's worth of spinach, expiring
+  // two days out) makes the tap deterministic whatever real day the suite
+  // runs on — the slot that saves the item is always tonight's.
+  const seedCoveredTonight = () => {
+    const today = dayStamp();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      onboarded: true,
+      name: 'Sam',
+      day: today,
+      pantry: [
+        { id: 'p1', name: 'Spinach', qty: '150 g', location: 'Fridge', expiry: addDays(today, 2) },
+        { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(today, 60) },
+      ],
+      plan: { [today]: { dinner: 'chickpea-curry' } },
+    }));
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    seedCoveredTonight();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  const openSheet = () => {
+    fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
+    return [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
+  };
+
+  it('a tap on a covered row offers to keep or replace the meal that saves the item', async () => {
+    render(<App />);
+    const sheet = openSheet();
+    // Covered, not flagged — one planned meal uses all of it before the date.
+    expect(within(sheet).queryByText('Likely to go unused')).toBeNull();
+    expect(within(sheet).getByText((_, el) => el?.textContent === 'Spinach · 150 g — used by 1 planned meal before its date')).toBeDefined();
+
+    // The covered row is an action now, not just a line: tapping it hands the
+    // item to tonight's picker the same way an at-risk row does.
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Swap or confirm the meal using Spinach' }));
+
+    // Tonight's slot is already the curry that saves it — the guard surfaces
+    // the dinner rather than silently overwriting it.
+    const dialog = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Plan a meal');
+    expect(dialog).toBeDefined();
+    expect(within(dialog).getByText("Tonight's dinner is already set")).toBeDefined();
+    expect(within(dialog).getByText('Coconut Chickpea Curry')).toBeDefined();
+
+    // Keeping backs out with the plan untouched — the saving meal stays.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep Coconut Chickpea Curry' }));
+    await waitFor(() => expect(screen.queryByText('Plan a meal')).toBeNull());
+    expect(screen.getAllByText('Coconut Chickpea Curry').length).toBeGreaterThan(0);
+  });
+
+  it('replacing from a covered row opens the picker pre-searched on the item', async () => {
+    render(<App />);
+    const sheet = openSheet();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Swap or confirm the meal using Spinach' }));
+    const dialog = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Plan a meal');
+    expect(within(dialog).getByText('Coconut Chickpea Curry')).toBeDefined();
+
+    // Choosing to replace swaps the saving slot deliberately: the picker
+    // opens on the ingredient, so the dish that takes the slot still uses it.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Replace with something else' }));
+    const search = within(dialog).getByLabelText('Search recipes');
+    expect(search.value).toBe('Spinach');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Coconut Chickpea Curry/ }));
+
+    // Tonight still holds the curry that saves the spinach.
+    await waitFor(() => expect(screen.queryByText('Plan a meal')).toBeNull());
+    expect(screen.getAllByText('Coconut Chickpea Curry').length).toBeGreaterThan(0);
+  });
+});
+
 describe('the tonight picker surfaces an already-planned dinner first', () => {
   // When tonight's slot is already full, the tonight flow must not silently
   // overwrite it: the picker opens on the existing dinner and the user chooses

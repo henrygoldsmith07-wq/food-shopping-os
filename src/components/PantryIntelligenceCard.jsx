@@ -119,12 +119,41 @@ export default function PantryIntelligenceCard({ onPlanItem } = {}) {
         {coveredByPlan.length > 0 && (
           <div className="border-t pt-3" style={{ borderColor: 'var(--line)' }}>
             <p className="text-[0.71875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--good)' }}>Covered by the plan</p>
-            <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {coveredByPlan.slice(0, 3).map((row) =>
-                `${row.name} · ${row.qty} — used by ${row.mealCount} planned meal${row.mealCount === 1 ? '' : 's'} before its date`
-              ).join(' · ')}
-              {coveredByPlan.length > 3 ? ' · …' : ''}
-            </p>
+            {onPlanItem ? (
+              // With a planner in reach each covered row is an action, not a
+              // fact: tapping hands the item to tonight's picker so the slot
+              // that saves it can be kept or swapped — the covered read and
+              // the swap surface are the same row.
+              <div className="mt-1 space-y-1">
+                {coveredByPlan.slice(0, 3).map((row) => (
+                  <button
+                    key={row.key}
+                    type="button"
+                    onClick={() => onPlanItem(row.name, 'tonight')}
+                    aria-label={`Swap or confirm the meal using ${row.name}`}
+                    className="press flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left"
+                    style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
+                  >
+                    <span className="min-w-0 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                      {row.name} · {row.qty} — used by {row.mealCount} planned meal{row.mealCount === 1 ? '' : 's'} before its date
+                    </span>
+                    <span className="shrink-0 text-[0.75rem] font-extrabold" style={{ color: 'var(--accent)' }}>
+                      Tonight
+                    </span>
+                  </button>
+                ))}
+                {coveredByPlan.length > 3 ? (
+                  <p className="px-1 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>…</p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                {coveredByPlan.slice(0, 3).map((row) =>
+                  `${row.name} · ${row.qty} — used by ${row.mealCount} planned meal${row.mealCount === 1 ? '' : 's'} before its date`
+                ).join(' · ')}
+                {coveredByPlan.length > 3 ? ' · …' : ''}
+              </p>
+            )}
           </div>
         )}
         {buyingNeeds.length > 0 && (

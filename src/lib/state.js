@@ -204,6 +204,7 @@ export const EMPTY_STATE = {
   cards: [], // {id,userId,subjectId,topicId,front,back,origin,specPointIds,reps,lapses,ease,intervalDays,due,createdAt,lastReviewedAt}
   kitchenCardsForgotten: false, // user cleared all kitchen-seeded cards — seed offers stand down until a re-seed
   kitchenKeptFronts: [], // questions the user kept as-is in a refresh preview — offers and the boot auto-refresh stand down until cleared
+  kitchenBootRefresh: null, // {count, day} — the boot auto-refresh's last merge, so the write on open is never silent
   skipReasonProfile: {}, // reasonId -> {applies, changed, lastAt} — review reflections on why meals get skipped, folded one answer at a time
   /* food diary */
   log: {}, // { 'YYYY-MM-DD': entry[] }

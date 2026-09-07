@@ -1,12 +1,13 @@
 // Turn the app's real flashcard deck into a SubjectGraph the knowledge map can
 // render. Honest by construction: the deck has no spec statements, questions,
-// mistakes or exam dates, so those levels come back empty and the map says so
-// — what it shows is the deck itself (topics, card counts, studied cards) and
-// the mastery the schedule has actually earned through reviews.
+// or exam dates, so those levels come back empty and the map says so — what
+// it shows is the deck itself (topics, card counts, studied cards), the
+// mistakes the review schedule has actually earned, and the mastery that
+// schedule has built through reviews.
 
 import { buildSubjectGraph, type GraphInput } from './knowledge-graph';
 import { KITCHEN_TOPICS, topicLabel } from './topic-labels';
-import type { Card, TopicMastery } from './types';
+import type { Card, Mistake, TopicMastery } from './types';
 
 const SUBJECT_ID = 'kitchen';
 const KITCHEN_ORDER = Object.keys(KITCHEN_TOPICS);
@@ -35,10 +36,15 @@ export function deckTopicIds(cards: Card[]): string[] {
  *                believed held);
  *   confidence — how far above the 1.3 ease floor the reviewed cards' mean
  *                ease sits, normalised against the 2.5 ceiling;
- *   mastery    — retention weighted 70/30 with confidence;
- *   attempts   — total reviews across the topic's cards;
- *   weak       — below the covered line (0.6); a due card drags retention
- *                down, which is exactly the signal a review queue needs.
+ *   mastery    — (retention weighted 70/30 with confidence), dragged down
+ *                by lapse history. A card that keeps failing reads weaker
+ *                than one that merely came due: each card's drag is
+ *                1 − lapses/(lapses + 2), so a single lapse on a long-mature
+ *                card costs little while a card failing most of its reviews
+ *                pulls a topic hard toward the shaky band;
+ *   lapses     — total misses across the studied cards;
+ *   lapseDrag  — the mean per-card drag above, 1 when nothing has lapsed;
+ *   weak       — below the covered line (0.6).
  *
  * A topic returns no row until its first review: mastery cannot be read
  * from a schedule that has never graded a card, so untouched topics keep
@@ -61,7 +67,15 @@ export function deckMasteryRows(cards: Card[], now: Date = DEFAULT_NOW()): Topic
     const retention = round3(due.length ? 1 - due.length / studied.length : 1);
     const easeMean = studied.reduce((sum, card) => sum + (Number(card.ease) || 0), 0) / studied.length;
     const confidence = round3(clamp01((easeMean - 1.3) / 1.2));
-    const mastery = round3(clamp01(retention * 0.7 + confidence * 0.3));
+    // Failure history drags a topic below what retention alone would claim:
+    // each card's drag starts at 1 and falls as its lapses grow relative to
+    // its reviews, so a topic is only ever dragged by cards that lapsed.
+    const lapseCounts = studied.map((card) => Math.max(0, Number(card.lapses) || 0));
+    const lapses = lapseCounts.reduce((sum, count) => sum + count, 0);
+    const lapseDrag = round3(lapseCounts.length
+      ? lapseCounts.reduce((sum, count) => sum + 1 - count / (count + 2), 0) / lapseCounts.length
+      : 1);
+    const mastery = round3(clamp01((retention * 0.7 + confidence * 0.3) * lapseDrag));
     const lastStudied = studied.map((card) => card.lastReviewedAt).filter(Boolean).sort().at(-1);
     rows.push({
       topicId,
@@ -69,6 +83,9 @@ export function deckMasteryRows(cards: Card[], now: Date = DEFAULT_NOW()): Topic
       mastery,
       retention,
       confidence,
+      lapses,
+      lapseDrag,
+      studied: studied.length,
       cardsTotal: topicCards.length,
       cardsDue: due.length,
       attempts: studied.reduce((sum, card) => sum + (Number(card.reps) || 0), 0),
@@ -81,12 +98,47 @@ export function deckMasteryRows(cards: Card[], now: Date = DEFAULT_NOW()): Topic
 }
 
 /**
+ * The deck's mistakes, read from the review schedule's own evidence.
+ *
+ * A card whose most recent review was "again" is an open, unrelearned miss
+ * (the scheduler sent it back to the queue for recovery); a card that lapsed
+ * but whose last review succeeded is resolved — the recovery happened, and
+ * the map says so rather than dropping the history. A card stamped only by
+ * the pre-stamp scheduler (lapsed, no lastRating) stays silent: there is no
+ * review outcome to read, and the map does not invent one. Nothing here
+ * invents marks lost: card reviews carry no exam marks.
+ */
+export function deckMistakeRows(cards: Card[]): Mistake[] {
+  const rows: Mistake[] = [];
+  for (const card of Array.isArray(cards) ? cards : []) {
+    const lastWasAgain = card.lastRating === 'again';
+    const lapsed = (Number(card.lapses) || 0) > 0;
+    const recovered = lapsed && card.lastRating != null && card.lastRating !== 'again';
+    if (!lastWasAgain && !recovered) continue;
+    rows.push({
+      id: `card-lapse:${card.id}`,
+      userId: card.userId,
+      subjectId: card.subjectId,
+      topicId: card.topicId,
+      description: lastWasAgain
+        ? `Last review of “${card.front}” was rated Again — still open`
+        : `“${card.front}” lapsed but has since been reviewed successfully`,
+      category: 'card-lapse',
+      resolved: !lastWasAgain,
+      createdAt: card.lastReviewedAt ?? card.createdAt,
+    });
+  }
+  return rows;
+}
+
+/**
  * The kitchen subject's graph from the deck. Only levels the deck can
  * evidence appear with numbers; the curriculum-only levels stay at zero and
  * the map's copy says what is missing rather than implying it exists.
  */
 export function buildDeckGraph(cards: Card[], now: Date = DEFAULT_NOW()): ReturnType<typeof buildSubjectGraph> {
-  const topicIds = deckTopicIds(cards);
+  const deck = Array.isArray(cards) ? cards : [];
+  const topicIds = deckTopicIds(deck);
   const topics = topicIds.map((id, i) => ({
     id,
     subjectId: SUBJECT_ID,
@@ -99,10 +151,10 @@ export function buildDeckGraph(cards: Card[], now: Date = DEFAULT_NOW()): Return
     units: [{ id: 'kitchen', subjectId: SUBJECT_ID, title: 'Topics', order: 1 }],
     topics,
     questions: [],
-    cards: (Array.isArray(cards) ? cards : []).filter((c) => topicIds.includes(c.topicId)),
+    cards: deck.filter((c) => topicIds.includes(c.topicId)),
     attempts: [],
-    mistakes: [],
-    mastery: deckMasteryRows(cards, now),
+    mistakes: deckMistakeRows(deck),
+    mastery: deckMasteryRows(deck, now),
     predictions: [],
     examDates: [],
     targetGrades: {},

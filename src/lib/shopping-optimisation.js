@@ -144,12 +144,29 @@ export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = '
   let explanation;
 
   if (mode === 'lowest_cost') {
+    // Cheapest *known* price wins, not cheapest recorded: a price the
+    // household typed that beats every record is kept — raising it to a
+    // record would cost more, and that extra is what pushes a basket over
+    // the week's headroom. Only when a record is genuinely cheaper does the
+    // row move to that store. Rows without either stay priced as typed.
     assignment = items.map((item) => {
+      const typed = Number(item.price) > 0 ? Number(item.price) : 0;
       const known = cheapestStoreFor(item.name);
-      if (!known) return { ...item, store: item.store || 'Any store', reason: 'No recorded price — price as typed.' };
+      if (typed > 0 && (!known || typed < known.price)) {
+        return {
+          ...item,
+          store: item.store || 'Any store',
+          price: typed,
+          source: 'manual',
+          reason: known
+            ? `Typed £${typed.toFixed(2)} beats the £${known.price.toFixed(2)} record — kept as typed.`
+            : 'No recorded price — price as typed.',
+        };
+      }
+      if (!known) return { ...item, store: item.store || 'Any store', price: typed, reason: 'No recorded price — price as typed.' };
       return { ...item, store: known.store, price: known.price, source: 'historical', reason: `Cheapest recorded at ${known.store}.` };
     });
-    explanation = 'Each item assigned to its cheapest recorded store; basket total is minimised regardless of store count.';
+    explanation = 'Each item priced at its cheapest known source — a typed price that beats every record is kept, otherwise the cheapest recorded store wins; the basket total is minimised regardless of store count.';
   } else if (mode === 'fewest_shops') {
     // Greedy set cover: pick store covering most items, repeat
     const stores = compareStores(items, shops);
@@ -248,7 +265,7 @@ export const optimiseShopping = (items = [], { shops = [], pantry = [], mode = '
 };
 
 export const optimisationModes = [
-  { id: 'lowest_cost', label: 'Lowest cost', hint: 'Cheapest recorded price per item' },
+  { id: 'lowest_cost', label: 'Lowest cost', hint: 'Cheapest known price per item — typed or recorded' },
   { id: 'fewest_shops', label: 'Fewest shops', hint: 'Consolidate to one store where possible' },
   { id: 'balanced', label: 'Balanced', hint: 'Cost + convenience' },
   { id: 'lowest_waste', label: 'Lowest waste', hint: 'Skip what pantry covers, use dated stock' },

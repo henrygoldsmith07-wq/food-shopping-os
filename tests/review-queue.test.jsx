@@ -423,6 +423,24 @@ describe('the boot auto-refresh of adopted kitchen decks', () => {
     expect(auto.back).toBe('Bread'); // the week's most-bought changed
     expect(auto).toMatchObject({ reps: 2, intervalDays: 4, due: '2026-08-01', origin: 'auto' });
     expect(snap.cards.find((c) => c.id === 'c-hand')).toMatchObject({ front: 'My own?', back: 'My note.' });
+    // The boot write is stamped, so Learn can say what opened changed.
+    expect(snap.kitchenBootRefresh).toMatchObject({ count: 1, day: DAY });
+  });
+
+  it('a boot that merges nothing clears the previous stamp', () => {
+    cleanup();
+    const first = runAuto({ cards: [autoCard, handmade] });
+    expect(first.kitchenBootRefresh).toMatchObject({ count: 1, day: DAY });
+    // The deck now holds the merged answer — the same boot finds nothing left
+    // to change, so yesterday's note must not linger as if it just happened.
+    cleanup(); // runAuto mounts a fresh provider; two mounts would double the button
+    const second = runAuto({
+      cards: first.cards,
+      kitchenBootRefresh: first.kitchenBootRefresh,
+      shops: [{ id: 's1', date: DAY, store: 'Co-op', items: [{ name: 'Bread' }] }],
+    });
+    expect(second.cards.find((c) => c.id === 'c-auto').back).toBe('Bread'); // still merged
+    expect(second.kitchenBootRefresh).toBeNull();
   });
 
   it('admits a newly supported template into a deck that adopted kitchen cards', () => {
@@ -442,6 +460,8 @@ describe('the boot auto-refresh of adopted kitchen decks', () => {
     cleanup();
     const snap = runAuto({ cards: [] });
     expect(snap.cards).toHaveLength(0);
+    // No deck, no merge — and never a stamp pretending one happened.
+    expect(snap.kitchenBootRefresh).toBeNull();
   });
 
   it('leaves a purely handmade deck alone', () => {
@@ -449,14 +469,22 @@ describe('the boot auto-refresh of adopted kitchen decks', () => {
     const snap = runAuto({ cards: [handmade] });
     expect(snap.cards).toHaveLength(1);
     expect(snap.cards[0]).toMatchObject({ front: 'My own?', back: 'My note.' });
+    expect(snap.kitchenBootRefresh).toBeNull();
   });
 
   it('honours the forget opt-out: no refresh, no resurrection', () => {
     cleanup();
-    const snap = runAuto({ cards: [autoCard], kitchenCardsForgotten: true });
+    const snap = runAuto({
+      cards: [autoCard],
+      kitchenCardsForgotten: true,
+      kitchenBootRefresh: { count: 3, day: DAY }, // a stale stamp from a past boot
+    });
     const auto = snap.cards.find((c) => c.id === 'c-auto');
     expect(auto.back).toBe('Milk — on 2 trips'); // untouched
     expect(snap.kitchenCardsForgotten).toBe(true);
+    // The opt-out gate also clears the stale stamp — a note must never claim
+    // a refresh that the forgotten flag just ruled out.
+    expect(snap.kitchenBootRefresh).toBeNull();
   });
 });
 
@@ -618,6 +646,95 @@ describe('the refresh preview decides one row at a time', () => {
     expect(snap.kitchenSeedCount(NOW)).toBe(1); // the offer is back
     expect(snap.kitchenSeedPreview(NOW).updates[0].oldBack).toBe('Milk — on 2 trips');
     expect(snap.kitchenSeedPreview(NOW).updates[0].newBack).toBe('Bread');
+  });
+
+  it('keeping every current answer freezes the deck without forgetting it', () => {
+    const handmade = {
+      id: 'c-hand', userId: 'local', subjectId: 'manual', topicId: 'general',
+      front: 'My own note', back: 'keep me', origin: 'handmade',
+      reps: 0, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+      createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [
+        stale('c-most', 'shopping', 'Which food did you buy most of this week?', 'Milk — on 2 trips'),
+        stale('c-total', 'budget', 'What did your most recent shop cost?', 'Tesco — £5.00'),
+        handmade,
+      ],
+      shops: SHOP, // makes both auto answers stale (Bread / Co-op £12.40)
+    }));
+    const getSnap = probe((app) => (
+      <div>
+        <button onClick={() => app.keepAllAutoFronts()}>keep all</button>
+        <button onClick={() => app.autoRefreshSeededCards(NOW)}>auto</button>
+      </div>
+    ));
+    fireEvent.click(screen.getByText('keep all'));
+    let snap = getSnap();
+    expect(snap.cards).toHaveLength(3); // the deck is kept, not forgotten
+    expect(snap.kitchenCardsForgotten).toBeFalsy(); // no forget opt-out was set
+    expect([...snap.kitchenKeptFronts].sort()).toEqual([
+      'What did your most recent shop cost?',
+      'Which food did you buy most of this week?',
+    ]);
+    // Both refresh offers for the deck's answers are gone — the count is quiet.
+    expect(snap.kitchenSeedCount(NOW)).toBe(0);
+    expect(snap.kitchenSeedPreview(NOW).total).toBe(0);
+    // The boot auto-refresh honours the freeze: stale answers stay exactly as-is.
+    fireEvent.click(screen.getByText('auto'));
+    snap = getSnap();
+    const byFront = new Map(snap.cards.map((c) => [c.front, c]));
+    expect(byFront.get('Which food did you buy most of this week?').back).toBe('Milk — on 2 trips');
+    expect(byFront.get('What did your most recent shop cost?').back).toBe('Tesco — £5.00');
+    expect(snap.cards.some((c) => c.id === 'c-hand')).toBe(true); // handmade untouched
+  });
+
+  it('is a no-op when the deck holds no kitchen cards', () => {
+    const handmade = {
+      id: 'c-hand', userId: 'local', subjectId: 'manual', topicId: 'general',
+      front: 'My own note', back: 'keep me', origin: 'handmade',
+      reps: 0, lapses: 0, ease: 2.5, intervalDays: 0, due: DAY,
+      createdAt: '2026-07-20T00:00:00Z', lastReviewedAt: null,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [handmade],
+      kitchenKeptFronts: ['Something already kept'],
+    }));
+    const getSnap = probe((app) => (
+      <button onClick={() => app.keepAllAutoFronts()}>keep all</button>
+    ));
+    fireEvent.click(screen.getByText('keep all'));
+    const snap = getSnap();
+    expect(snap.cards).toHaveLength(1);
+    expect(snap.kitchenKeptFronts).toEqual(['Something already kept']); // nothing added
+  });
+
+  it('names the kept decisions the refresh would otherwise still show', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...seeded,
+      cards: [
+        stale('c-most', 'shopping', 'Which food did you buy most of this week?', 'Milk — on 2 trips'),
+        stale('c-total', 'budget', 'What did your most recent shop cost?', 'Tesco — £5.00'),
+      ],
+      shops: SHOP,
+    }));
+    const getSnap = probe((app) => (
+      <div>
+        <button onClick={() => app.keepSeedFronts(['Which food did you buy most of this week?'])}>keep one</button>
+        <button onClick={() => app.keepAllAutoFronts()}>keep all</button>
+      </div>
+    ));
+    fireEvent.click(screen.getByText('keep one'));
+    let snap = getSnap();
+    expect(snap.kitchenSeedCount(NOW)).toBe(1); // the other stale answer is still offered
+    expect(snap.kitchenKeptAsIsCount(NOW)).toBe(1); // and the kept one reads as a choice
+    // Keeping the rest suppresses every offer — the read still names them all.
+    fireEvent.click(screen.getByText('keep all'));
+    snap = getSnap();
+    expect(snap.kitchenSeedCount(NOW)).toBe(0);
+    expect(snap.kitchenKeptAsIsCount(NOW)).toBe(2);
   });
 });
 

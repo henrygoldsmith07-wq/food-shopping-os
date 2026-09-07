@@ -434,6 +434,73 @@ describe('the shopping budget guard', () => {
     expect(res.assignment.some((row) => row.overBudget)).toBe(false);
     expect(res.explanation).not.toMatch(/budget/i);
   });
+
+  it('keeps a typed price that beats every record instead of raising it', () => {
+    // Butter is recorded at £2.00 only, but the household typed £1.50 —
+    // the honest cheapest-known price is the typed one. Raising it to the
+    // record would make the basket cost more, not less.
+    const res = optimiseShopping(
+      [{ name: 'Butter', price: 1.5, qty: '250g', store: 'Aldi' }],
+      { shops: [{ store: 'Aldi', date: '2026-08-01', items: [{ name: 'Butter', price: 2 }] }], mode: 'lowest_cost', weeklyBudget: 10 },
+    );
+    expect(res.assignment[0]).toMatchObject({ price: 1.5, store: 'Aldi', source: 'manual' });
+    expect(res.assignment[0].reason).toMatch(/beats the £2\.00 record — kept as typed/);
+    expect(res.total).toBe(1.5);
+  });
+
+  it('lets the kept typed price pull a basket back inside the headroom', () => {
+    // Milk £1.10 and Bread £0.90 are cheapest at Aldi; Eggs is recorded at
+    // £2.20 (Aldi) and £1.90 (Tesco), but the household typed £1.50. At the
+    // old behaviour Eggs jumped to £1.90 and the £3.60 headroom was missed
+    // by £0.30; re-optimised at cheapest-known, the basket fits.
+    const res = optimiseShopping(
+      [
+        { name: 'Milk', price: 1.4, qty: '1l' },
+        { name: 'Bread', price: 1.2, qty: '1 loaf' },
+        { name: 'Eggs', price: 1.5, qty: '6' },
+      ],
+      {
+        shops: [
+          { store: 'Aldi', date: '2026-08-01', items: [{ name: 'Milk', price: 1.1 }, { name: 'Bread', price: 0.9 }, { name: 'Eggs', price: 2.2 }] },
+          { store: 'Tesco', date: '2026-08-01', items: [{ name: 'Eggs', price: 1.9 }] },
+        ],
+        mode: 'lowest_cost',
+        weeklyBudget: 3.6,
+      },
+    );
+    expect(res.budget).toMatchObject({ total: 3.5, left: 3.6, over: false, overBy: 0 });
+    expect(res.assignment.find((r) => r.name === 'Eggs')).toMatchObject({ price: 1.5, source: 'manual' });
+    expect(res.assignment.every((row) => !row.overBudget)).toBe(true);
+  });
+
+  it('still moves to a cheaper recorded store when the typed price is higher', () => {
+    const res = optimiseShopping(
+      [{ name: 'Milk', price: 1.5, qty: '1l', store: 'Tesco' }],
+      {
+        shops: [
+          { store: 'Tesco', date: '2026-08-01', items: [{ name: 'Milk', price: 1.5 }] },
+          { store: 'Aldi', date: '2026-08-01', items: [{ name: 'Milk', price: 1.1 }] },
+        ],
+        mode: 'lowest_cost',
+        weeklyBudget: 1.2,
+      },
+    );
+    expect(res.assignment[0]).toMatchObject({ price: 1.1, store: 'Aldi', source: 'historical' });
+    expect(res.budget.over).toBe(false);
+  });
+
+  it('still flags rows that are over even at their cheapest known price', () => {
+    // Honey typed at £1.60 is the cheapest known option (records run £1.80),
+    // yet even that cannot fit £1.50 of headroom — the re-optimisation keeps
+    // the typed price and the guard flags the genuine overage honestly.
+    const res = optimiseShopping(
+      [{ name: 'Honey', price: 1.6, qty: '340g' }],
+      { shops: [{ store: 'Sainsbury', date: '2026-08-01', items: [{ name: 'Honey', price: 1.8 }] }], mode: 'lowest_cost', weeklyBudget: 1.5 },
+    );
+    expect(res.assignment[0]).toMatchObject({ price: 1.6, source: 'manual', overBudget: true });
+    expect(res.budget).toMatchObject({ total: 1.6, left: 1.5, overBy: 0.1, over: true });
+    expect(res.explanation).toMatch(/over the £1\.50 left/);
+  });
 });
 
 // ---------- outcome dashboard ----------

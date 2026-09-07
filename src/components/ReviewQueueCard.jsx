@@ -3,8 +3,10 @@ import { Eye, Pencil } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import AddCardForm from './AddCardForm.jsx';
 import { Card, Pill, Section } from './ui.jsx';
+import KitchenForgetConfirm from './KitchenForgetConfirm.jsx';
 import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
 import SkipReasonReflection from './SkipReasonReflection.jsx';
+import WeekAheadForecast from './WeekAheadForecast.jsx';
 import { dayStamp, dueTopicGroups, dueReasonGroups, forecastDueCounts } from '../domain/scheduling';
 import { skipReflectionFor } from '../domain/skip-profile';
 import { topicLabel } from '../domain/topic-labels';
@@ -164,90 +166,46 @@ export default function ReviewQueueCard({ now = new Date(), topicReviewRequest =
   // The week ahead: cards landing on each of the next 7 days, so a user can
   // see the workload coming instead of meeting it one morning at a time.
   const forecast = useMemo(() => forecastDueCounts(deck, now, 7), [deck, now]);
-  const peak = Math.max(...forecast.map((d) => d.count), 1);
   // Questions your own activity would seed — count only, so the empty state
   // can offer the deck honestly (and hide it when there is nothing to build).
   const seedable = useMemo(() => app.kitchenSeedCount(now), [app, app.cards, now]);
+  // Kept decisions today's offers would otherwise still show — the reduced
+  // refresh count reads as a choice, not an offer that silently vanished.
+  const keptAsIs = seedable > 0 ? app.kitchenKeptAsIsCount(now) : 0;
+  // What the boot auto-refresh merged on open — a quiet line so the write is
+  // never silent, valid only for the day the boot happened.
+  const bootRefresh = app.kitchenBootRefresh && app.kitchenBootRefresh.day === dayStamp(now)
+    ? app.kitchenBootRefresh.count
+    : 0;
   // The forget opt-out: how many kitchen cards would go, and whether the user
   // is mid-confirmation. Only origin:'auto' cards ever leave.
   const autoCount = useMemo(() => deck.filter((c) => c.origin === 'auto').length, [deck]);
   const [confirmingForget, setConfirmingForget] = useState(false);
   const forgotten = Boolean(app.kitchenCardsForgotten);
   const confirmForget = confirmingForget && autoCount > 0 && (
-    <div className="mb-3 rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-      <p className="text-[0.78125rem] font-bold">
-        Remove {autoCount} kitchen card{autoCount === 1 ? '' : 's'}? Your own cards stay.
-      </p>
-      <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-        Undo works right after — and kitchen cards can be brought back any time.
-      </p>
-      <div className="mt-2 flex items-center gap-3">
-        <button
-          type="button"
-          aria-label="Confirm removing kitchen cards"
-          onClick={() => {
-            app.forgetKitchenCards();
-            setConfirmingForget(false);
-            setFocusedTopic(null);
-            setFocusedReason(null);
-            setFlipped(false);
-            setEditingTopic(false);
-          }}
-          className="press rounded-xl border px-3 py-2 text-[0.78125rem] font-extrabold"
-          style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
-        >
-          Remove
-        </button>
-        <button
-          type="button"
-          aria-label="Keep kitchen cards"
-          onClick={() => setConfirmingForget(false)}
-          className="press text-[0.78125rem] font-bold"
-          style={{ color: 'var(--faint)' }}
-        >
-          Keep
-        </button>
-      </div>
-    </div>
+    <KitchenForgetConfirm
+      count={autoCount}
+      onRemove={() => {
+        app.forgetKitchenCards();
+        setConfirmingForget(false);
+        setFocusedTopic(null);
+        setFocusedReason(null);
+        setFlipped(false);
+        setEditingTopic(false);
+      }}
+      onKeep={() => setConfirmingForget(false)}
+    />
   );
 
   return (
     <Section title="Flashcard review" className="rise rise-3">
       <Card className="!p-4">
-        {!empty && !adding && (
-          <div className="mb-3" aria-label="Week-ahead forecast">
-            <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-              Coming up
-            </p>
-            <div className="mt-1.5 flex items-end justify-between gap-1">
-              {forecast.map((day) => {
-                const isToday = day.date === dayStamp(now);
-                return (
-                  <div
-                    key={day.date}
-                    aria-label={`${day.count} cards due on ${day.date}`}
-                    className="flex flex-1 flex-col items-center gap-1"
-                  >
-                    <div
-                      className="w-full rounded-md"
-                      style={{
-                        height: day.count > 0 ? `${6 + (day.count / peak) * 18}px` : '2px',
-                        background: day.count > 0 ? 'var(--accent)' : 'var(--line)',
-                        opacity: isToday || day.count > 0 ? 1 : 0.45,
-                      }}
-                    />
-                    <span
-                      className="text-[0.5625rem] font-bold"
-                      style={{ color: isToday ? 'var(--accent)' : 'var(--faint)' }}
-                    >
-                      {isToday ? 'Today' : day.date.slice(8)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        {bootRefresh > 0 && !empty && (
+          <p className="mb-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+            {bootRefresh} kitchen card{bootRefresh === 1 ? '' : 's'} refreshed on open
+          </p>
         )}
+        {!empty && !adding && <WeekAheadForecast forecast={forecast} now={now} />}
         {previewPlan && (
           <KitchenRefreshPreview now={now} plan={previewPlan} onClose={closeRefreshPreview} />
         )}
@@ -306,14 +264,18 @@ export default function ReviewQueueCard({ now = new Date(), topicReviewRequest =
               Add a card
             </button>
             {!forgotten && seedable > 0 && (
-              <button
-                type="button"
-                onClick={openRefreshPreview}
-                className="press mt-1 block text-[0.78125rem] font-extrabold"
-                style={{ color: 'var(--accent)' }}
-              >
-                Refresh {seedable} kitchen card{seedable === 1 ? '' : 's'}
-              </button>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <button
+                  type="button"
+                  aria-label={`Refresh ${seedable} kitchen card${seedable === 1 ? '' : 's'}`}
+                  onClick={openRefreshPreview}
+                  className="press text-[0.78125rem] font-extrabold"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Refresh {seedable} kitchen card{seedable === 1 ? '' : 's'}
+                </button>
+                {keptAsIs > 0 && <span className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>· {keptAsIs} kept as-is</span>}
+              </div>
             )}
             {autoCount > 0 && (
               <button
@@ -332,7 +294,7 @@ export default function ReviewQueueCard({ now = new Date(), topicReviewRequest =
               <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
                 Due now
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <Pill tone="muted">{queue.length} to review</Pill>
                 {seedable > 0 && !forgotten && (
                   <button
@@ -345,6 +307,7 @@ export default function ReviewQueueCard({ now = new Date(), topicReviewRequest =
                     Refresh
                   </button>
                 )}
+                {keptAsIs > 0 && <span className="text-[0.625rem] font-bold" style={{ color: 'var(--faint)' }}>· {keptAsIs} kept as-is</span>}
                 <button
                   type="button"
                   aria-label="Add a new card"
