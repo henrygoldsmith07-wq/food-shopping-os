@@ -479,6 +479,7 @@ describe('checking a product across shops', () => {
     // budget (none here) would have fired first, the honest 'aborted'. What
     // it must never be is a hang or a made-up answer from the model.
     expect(out.results.every((result) => result.status === 'no-match' || result.status === 'aborted')).toBe(true);
+    expect(out.results.every((result) => result.status === 'no-match' || result.status === 'aborted')).toBe(true);
   });
 
   it('a budget also stops the query ladder inside a shop', async () => {
