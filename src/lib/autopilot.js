@@ -28,7 +28,50 @@ const decisionScore = (app, id, { waste = 0, money = 0, convenience = 0 } = {}) 
  * Rank the one or two food actions that make the household's next decision
  * easier. Scores stay internal; the returned copy contains only human-facing
  * reasons and an executable action.
+ *
+ * Confidence-aware: every candidate carries `confidence` (high/medium/low),
+ * `reversalCost` (low/medium/high) and `needsConfirmation`. Costly-to-reverse
+ * or low-evidence actions are downgraded to normal priority with cautious
+ * wording and must never auto-apply — see shouldAutoApply().
  */
+export const AUTOPILOT_CONFIDENCE_POLICY = {
+  // Auto-apply only cheap, high-confidence nudges. Everything else is a
+  // suggestion the household confirms.
+  autoApply: { maxReversalCost: 'low', minConfidence: 'high' },
+  reversalCost: {
+    'use-expiring': 'low',
+    'cook-planned': 'low',
+    'reuse-leftover': 'low',
+    'restock-low': 'low',
+    'save-on-shop': 'medium',
+    steady: 'low',
+  },
+};
+
+const CONFIDENCE_RANK = { high: 3, medium: 2, low: 1, none: 0 };
+
+export const shouldAutoApply = (candidate = {}) => {
+  const cost = candidate.reversalCost || 'low';
+  const confidence = candidate.confidence || candidate.confidenceEvidence?.level || 'low';
+  if (cost !== 'low') return false;
+  return (CONFIDENCE_RANK[confidence] || 0) >= CONFIDENCE_RANK[AUTOPILOT_CONFIDENCE_POLICY.autoApply.minConfidence];
+};
+
+const withCaution = (candidate) => {
+  const reversalCost = AUTOPILOT_CONFIDENCE_POLICY.reversalCost[candidate.id] || 'low';
+  const confidence = candidate.confidenceEvidence?.level || 'low';
+  const needsConfirmation = !shouldAutoApply({ ...candidate, reversalCost, confidence });
+  // Costly or uncertain actions never shout: cap at normal priority and say why.
+  const priority = needsConfirmation && candidate.priority === 'high' && (reversalCost !== 'low' || CONFIDENCE_RANK[confidence] < 3)
+    ? 'normal'
+    : candidate.priority;
+  const caution = needsConfirmation
+    ? reversalCost !== 'low'
+      ? 'Worth a quick check — harder to undo once done.'
+      : 'Based on limited evidence — confirm before acting.'
+    : null;
+  return { ...candidate, priority, reversalCost, confidence, needsConfirmation, caution };
+};
 export const rankAutopilotActions = (app = {}) => {
   const pantry = app.pantry || [];
   const today = app.day;
@@ -141,6 +184,7 @@ export const rankAutopilotActions = (app = {}) => {
   }
 
   return candidates
+    .map(withCaution)
     .sort((a, b) => b.score - a.score)
     .filter((item, index, all) => index === 0 || item.actionLabel !== all[index - 1].actionLabel)
     .slice(0, 2);
@@ -156,4 +200,8 @@ export const autopilotPrimary = (app) => rankAutopilotActions(app)[0] || {
   actionLabel: 'Review your plan',
   action: { kind: 'tab', target: 'plan' },
   score: 0,
+  confidence: 'none',
+  reversalCost: 'low',
+  needsConfirmation: false,
+  caution: null,
 };
