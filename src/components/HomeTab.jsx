@@ -1,67 +1,51 @@
-import { useMemo, useState } from 'react';
-import {
-  AlarmClock, BookOpen, Camera, CheckCircle2, ChevronRight, Layers, Mic, Package, Plus,
-  ScanBarcode, Search, SlidersHorizontal,
-} from 'lucide-react';
+import { useMemo } from 'react';
+import { AlarmClock, CheckCircle2, ChevronRight, ClipboardList, CookingPot, CalendarDays } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
-import { gbp, greeting, prettyDate, expiryStatus } from '../lib/utils.js';
-import { byId, RECIPES } from '../data/recipes.js';
+import { gbp, expiryStatus } from '../lib/utils.js';
+import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS } from '../data/plan.js';
 import {
-  daysUntil, expiringSoon, leftovers, pantryValue, planForDay, runningLow,
+  daysUntil, expiringSoon, leftovers, planForDay, runningLow,
 } from '../lib/kitchen.js';
 import { rankLeftovers } from '../lib/food-suitability.js';
-import { weeklyFoodLoop } from '../lib/food-loop.js';
 import { totalOf } from '../data/stores.js';
 import { bestForSlot } from '../lib/recommend.js';
-import { Section, Card, Ring, Pill, Meter, FoodArt } from './ui.jsx';
-import GuidancePreview from './GuidancePreview.jsx';
-import WaterGlasses from './WaterGlasses.jsx';
-import { DueList } from './RemindersPanel.jsx';
+import { weeklyFoodLoop } from '../lib/food-loop.js';
+import { Section, Card, Pill, Meter, FoodArt } from './ui.jsx';
 import { Glyph } from './icons.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
-import OutcomeDashboard from './OutcomeDashboard.jsx';
+import AutopilotCard from './AutopilotCard.jsx';
+import GuidancePreview from './GuidancePreview.jsx';
 import HomeNumbers from './HomeNumbers.jsx';
 import HomeFoodLoop from './HomeFoodLoop.jsx';
 import LoopCheck from './LoopCheck.jsx';
-import AutopilotCard from './AutopilotCard.jsx';
-import KitchenAdventure from './KitchenAdventure.jsx';
-import MilestonesCard from './MilestonesCard.jsx';
-import KitchenSeedStrip from './KitchenSeedStrip.jsx';
+import OutcomeDashboard from './OutcomeDashboard.jsx';
 
-/** Capture routes that open straight into the diary's matching sheet. */
-const LOG_SHORTCUTS = [
-  { id: 'add', label: 'Search food', Icon: Search },
-  { id: 'barcode', label: 'Scan barcode', Icon: ScanBarcode },
-  { id: 'photo', label: 'Photo', Icon: Camera },
-  { id: 'voice', label: 'Voice', Icon: Mic },
-  { id: 'copy', label: 'Copy meal', Icon: Layers },
-];
-
+/**
+ * Home — reduced to Plan → Shop → Eat.
+ *
+ * Shows, in order: the best next action (Autopilot), tonight's meal (single
+ * Meal Decision Engine), items to buy / use soon, and a concise weekly
+ * outlook. Everything else lives under “Explore more” so progress, loop
+ * health and the full dashboard stay one tap away without cluttering the
+ * default view. Offline-first, no fetching, fully keyboard navigable.
+ */
 export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, goLog }) {
   const app = useApp();
-  const [customising, setCustomising] = useState(false);
-  const [dragging, setDragging] = useState(null);
   const todayPlan = planForDay(app.plan, app.day);
   const expiring = app.useSoonIngredients?.length
     ? app.useSoonIngredients.map((row) => row.item)
     : expiringSoon(app.pantry, 3, app.day);
   const low = runningLow(app.pantry);
-  const left = app.weeklyBudget - app.spentThisWeek;
-  const recipeOfDay = RECIPES[new Date().getDate() % RECIPES.length];
-  const listTotal = totalOf(app.shoppingList);
-  // Cards whose interval has elapsed — the queue Learn will show. Zero renders
-  // nothing, so a quiet deck never reads as a broken badge.
-  const dueReviewCount = useMemo(() => app.reviewDueCards().length, [app.cards]);
-  // Rank leftovers through the central engine so expired ones drop out and
-  // near-expiry ones surface first with consistent warnings.
   const leftoverItems = rankLeftovers(leftovers(app.pantry), {
     ...app.prefs,
     today: app.day,
     members: app.members || [],
     diets: app.diets || app.prefs?.diets || [],
   });
-  const foodLoop = weeklyFoodLoop(app);
+  const listTotal = totalOf(app.shoppingList);
+  const budgetLeft = (Number(app.weeklyBudget) || 0) - (Number(app.spentThisWeek) || 0);
+
   const availability = useMemo(() => {
     const map = {};
     for (const entry of app.calendarBusy || []) {
@@ -70,23 +54,30 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     }
     return map;
   }, [app.calendarBusy]);
+
+  // Single decision engine first; legacy pantry-hero as fallback.
+  const tonight = app.tonightDecision?.pick || null;
   const pantryHero = useMemo(() => {
-    if (!app.pantry.length || !app.safeRecipes.length) return null;
+    if (tonight || !app.pantry.length || !app.safeRecipes.length) return null;
     const dinners = app.safeRecipes.filter((r) => r.meal === 'dinner');
     if (!dinners.length) return null;
     const month = Number(String(app.day).slice(5, 7)) || new Date().getMonth() + 1;
-    const ctx = {
-      pantry: app.pantry,
-      today: app.day,
-      date: app.day,
-      availability,
+    return bestForSlot(dinners, {
+      pantry: app.pantry, today: app.day, date: app.day, availability,
       people: Math.max(1, Math.round(app.portions || 1)),
       budget: app.weeklyBudget ? Math.min(4, Math.max(1, app.weeklyBudget / 7)) : 2.5,
-      month,
-      taste: app.tasteProfile,
-    };
-    return bestForSlot(dinners, ctx);
-  }, [app.pantry, app.safeRecipes, app.day, app.portions, app.weeklyBudget, app.tasteProfile, availability]);
+      month, taste: app.tasteProfile,
+    });
+  }, [tonight, app.pantry, app.safeRecipes, app.day, app.portions, app.weeklyBudget, app.tasteProfile, availability]);
+
+  const tonightRecipe = tonight?.recipe || pantryHero?.recipe || null;
+  const tonightExplanation = tonight?.explanation || pantryHero?.explanation || null;
+  const tonightReasons = tonight?.reasons || null;
+  const tonightConfidence = tonight?.confidence || app.tonightDecision?.confidence || null;
+
+  const plannedCount = Object.keys(app.plan || {}).filter((d) => d >= app.day).length;
+  const recovery = app.weekRecovery;
+  const foodLoop = weeklyFoodLoop(app);
   const runGuidanceAction = (item) => {
     const { action } = item;
     if (action.kind === 'view') openGuidance(action.target);
@@ -95,148 +86,156 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     else if (action.kind === 'log') goLog('add');
     else goTab(action.target);
   };
+  const outlookLines = [
+    plannedCount ? `${plannedCount} day${plannedCount === 1 ? '' : 's'} planned ahead` : 'Nothing planned yet',
+    app.shoppingList.length ? `${app.shoppingList.length} items on the list · about ${gbp(listTotal, { always: true })}` : 'Shopping list empty',
+    app.weeklyBudget ? `${gbp(Math.max(0, budgetLeft), { always: true })} left this week` : null,
+    recovery?.explanations?.[0] || null,
+  ].filter(Boolean).slice(0, 4);
 
-  /* Every card Home can show. Which appear, and in what order, is yours to
-     set under Preferences — hiding one hides a panel, never a number. */
-  const blocks = {
-    setup: () => (
+  const useSoon = expiring.slice(0, 4);
+  const buySoon = app.shoppingList.filter((r) => !r.checked).slice(0, 4);
+
+  return (
+    <div className="pb-6 space-y-6">
+      {/* 1 — Best next action */}
+      <AutopilotCard onOpenPantry={openPantry} goTab={goTab} />
+
+      {/* Setup gates: what unlocks the rest, ticking off as you do it */}
       <Section className="rise rise-1">
         <GuidancePreview onOpen={() => openGuidance('next')} onAction={runGuidanceAction} />
       </Section>
-    ),
-    reminders: () => (
-      <>
-          {/* Anything due right now, where you'll actually see it */}
-          {app.remindersDue.length > 0 && (
-            <Section title="Reminders" action="All →" onAction={() => goTab('profile')} className="rise rise-2">
-              <DueList compact />
-            </Section>
-          )}
-      </>
-    ),
-    goals: () => (
-      <>
-          {/* Today's goals — small, and every bar is a count of something real */}
-          <Section title="Today’s goals" action="Progress →" onAction={() => goTab('profile')} className="rise rise-2">
-            <Card>
-              <div className="flex items-center justify-between">
-                <p className="text-[0.8125rem] font-bold">
-                  {app.game.daily.filter((g) => g.done).length} of {app.game.daily.length} done
-                </p>
-    <Pill tone="muted">{app.game.streaks.logging.days} day diary streak</Pill>
-              </div>
-              <div className="mt-2.5 space-y-2">
-                {app.game.daily.map((goal) => (
-                  <div key={goal.id}>
-                    <div className="flex justify-between text-[0.75rem] font-bold mb-1">
-                      <span style={goal.done ? { color: 'var(--good)' } : undefined}>
-                        {goal.done ? '✓ ' : ''}{goal.label}
-                      </span>
-                      <span style={{ color: 'var(--muted)' }}>{goal.progress}/{goal.of}</span>
-                    </div>
-                    <Meter value={goal.progress} max={goal.of} height={4} color={goal.done ? 'var(--good)' : 'var(--accent)'} />
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </Section>
-      </>
-    ),
-    log: () => (
-      <>
-          {/* One-tap food logging */}
-          <Section title="Log what you ate" action="Diary →" onAction={() => goLog()} className="rise rise-2">
-            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
-              {LOG_SHORTCUTS.map(({ id, label, Icon }) => (
-                <button
-                  key={label}
-                  onClick={() => goLog(id)}
-                  className="press shrink-0 inline-flex items-center gap-1.5 rounded-2xl border px-3.5 py-3 text-[0.78125rem] font-bold"
-                  style={{ background: 'var(--card)', borderColor: 'var(--line)' }}
-                >
-                  <Icon size={14} /> {label}
-                </button>
-              ))}
-            </div>
-          </Section>
-      </>
-    ),
-    meals: () => (
-      <>
-          {/* Today's plan */}
-          <Section title="Today’s meals" action="Full plan →" onAction={() => goTab('plan')} className="rise rise-2">
-            <div className="space-y-2.5">
-              {MEAL_SLOTS.map(({ key, label }) => {
-                const r = todayPlan[key] ? byId(todayPlan[key]) : null;
-                return r ? (
-                  <Card key={key} onClick={() => openRecipe(r)} className="flex items-center gap-3 !p-3">
-                    <FoodArt recipe={r} className="h-14 w-14 rounded-xl shrink-0" px={26} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>{label}</p>
-                      <p className="font-bold text-[0.9375rem] truncate">{r.name}</p>
-                      <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                        {r.time <= 60 ? `${r.time} min` : `${Math.round(r.time / 60)} h`} · {r.kcal} kcal · {gbp(r.costPerServing, { always: true })}/serving
-                      </p>
-                    </div>
-                    <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
-                  </Card>
-                ) : (
-                  <Card key={key} className="flex items-center gap-3 !p-3" onClick={() => goTab('plan')}>
-                    <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--card-2)', color: 'var(--faint)' }}>
-                      <Plus size={22} />
-                    </div>
-                    <div>
-                      <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>{label}</p>
-                      <p className="font-semibold text-[0.875rem]" style={{ color: 'var(--muted)' }}>Nothing planned — tap to choose</p>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </Section>
-      </>
-    ),
-    water: () => (
-      <>
-          {/* Water + shopping list */}
-          <div className="type-responsive-pair px-5 grid gap-3 rise rise-2">
-            <Card>
-              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Water</p>
-              <div className="mt-2.5"><WaterGlasses size={16} /></div>
-              <p className="mt-2 text-[0.8125rem] font-bold">
-                {app.hydration.total.toLocaleString()} <span className="font-semibold" style={{ color: 'var(--muted)' }}>/ {app.targets.water.toLocaleString()} ml</span>
-              </p>
-            </Card>
 
-            <Card onClick={() => goTab('shop')}>
-              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Shopping list</p>
-              {app.shoppingList.length ? (
-                <>
-                  <p className="mt-1.5 text-[1.375rem] font-extrabold leading-none">{app.shoppingList.length}</p>
-                  <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    items · about {gbp(listTotal, { always: true })}
-                  </p>
-                  <div className="mt-2">
-                    <Meter value={app.shoppingList.filter((i) => i.checked).length} max={app.shoppingList.length} height={5} />
-                  </div>
-                </>
-              ) : (
-                <p className="mt-2 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  Empty — add items or send a recipe's ingredients over.
-                </p>
-              )}
-            </Card>
+      {/* Plan → Shop → Eat quick nav */}
+      <nav className="px-5" aria-label="Plan, shop, eat">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { id: 'plan', label: 'Plan', Icon: CalendarDays, hint: 'This week' },
+            { id: 'shop', label: 'Shop', Icon: ClipboardList, hint: app.shoppingList.length ? `${app.shoppingList.length} items` : 'Empty' },
+            { id: 'cook', label: 'Eat', Icon: CookingPot, hint: 'Tonight' },
+          ].map(({ id, label, Icon, hint }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => goTab(id)}
+              className="press flex flex-col items-center gap-1 rounded-2xl border px-3 py-3"
+              style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
+              aria-label={`${label} — ${hint}`}
+            >
+              <Icon size={17} style={{ color: 'var(--accent)' }} />
+              <span className="text-[0.8125rem] font-extrabold">{label}</span>
+              <span className="text-[0.625rem] font-bold" style={{ color: 'var(--faint)' }}>{hint}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* 2 — Tonight's meal (one decision engine) */}
+      <section className="px-5" aria-label="Tonight's meal">
+        <Card className="!p-0 overflow-hidden">
+          <div className="px-4 pt-3 pb-1 flex items-baseline justify-between">
+            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
+              Tonight — from what you have
+            </p>
+            {tonightExplanation && (
+              <span className="text-[0.6875rem] font-bold" style={{ color: 'var(--accent)' }}>
+                {tonightExplanation.coverage.pct}% in your kitchen
+              </span>
+            )}
           </div>
-      </>
-    ),
-    pantry: () => (
-      <>
-          {/* Pantry */}
-          <Section title="Pantry" action="Open pantry →" onAction={openPantry} className="rise rise-3">
-            <Card>
-              {app.pantry.length === 0 ? (
+          {tonightRecipe ? (
+            <>
+              <div
+                role="button" tabIndex={0}
+                onClick={() => openRecipe(tonightRecipe)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(tonightRecipe); } }}
+                className="press flex items-center gap-3 px-4 pb-3 pt-1 cursor-pointer"
+                aria-label={`Cook ${tonightRecipe.name} tonight`}
+              >
+                <FoodArt recipe={tonightRecipe} className="h-14 w-14 rounded-xl shrink-0" px={26} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-extrabold text-[0.9375rem] truncate">{tonightRecipe.name}</p>
+                  <p className="text-[0.75rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
+                    {tonightRecipe.cuisine} · {tonightRecipe.time} min · {gbp(tonightRecipe.costPerServing, { always: true })}/serving
+                  </p>
+                </div>
+                <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
+              </div>
+              <div className="px-4 pb-4">
+                {tonightExplanation && <RecommendationExplanation explanation={tonightExplanation} compact />}
+                {tonightReasons && !tonightExplanation && (
+                  <ul className="mt-1 space-y-0.5">
+                    {tonightReasons.slice(0, 3).map((r) => (
+                      <li key={r} className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>· {r}</li>
+                    ))}
+                  </ul>
+                )}
+                {tonightConfidence && tonightConfidence !== 'high' && (
+                  <p className="mt-1.5 text-[0.6875rem] font-bold" style={{ color: 'var(--faint)' }}>
+                    {tonightConfidence === 'low' ? 'Low confidence — based on limited evidence.' : 'Medium confidence.'}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="px-4 pb-4">
+              <p className="text-[0.875rem] font-bold">Nothing to suggest yet</p>
+              <p className="mt-0.5 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Plan a meal or add pantry items — tonight’s pick appears here with its reasons.
+              </p>
+              <button
+                type="button" onClick={() => goTab('plan')}
+                className="press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}
+              >
+                Plan tonight →
+              </button>
+            </div>
+          )}
+        </Card>
+      </section>
+
+      {/* Today's planned slots, compact */}
+      <Section title="Today’s meals" action="Full plan →" onAction={() => goTab('plan')} className="rise rise-2">
+        <div className="space-y-2.5">
+          {MEAL_SLOTS.map(({ key, label }) => {
+            const r = todayPlan[key] ? byId(todayPlan[key]) : null;
+            return r ? (
+              <Card key={key} onClick={() => openRecipe(r)} className="flex items-center gap-3 !p-3">
+                <FoodArt recipe={r} className="h-12 w-12 rounded-xl shrink-0" px={24} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>{label}</p>
+                  <p className="font-bold text-[0.875rem] truncate">{r.name}</p>
+                </div>
+                <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
+              </Card>
+            ) : (
+              <Card key={key} className="flex items-center gap-3 !p-3" onClick={() => goTab('plan')}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>{label}</p>
+                  <p className="font-semibold text-[0.875rem]" style={{ color: 'var(--muted)' }}>Nothing planned — tap to choose</p>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* 3 — Buy / use soon */}
+      <section className="px-5" aria-label="Items to buy or use soon">
+        <Card>
+          <div className="flex items-baseline justify-between">
+            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Buy / use soon</p>
+            <button
+              type="button" onClick={openPantry}
+              className="press text-[0.75rem] font-extrabold" style={{ color: 'var(--accent)' }}
+            >
+              Open pantry →
+            </button>
+          </div>
+          {useSoon.length === 0 && buySoon.length === 0 && leftoverItems.length === 0 ? (
+            <>
+              {app.pantry.length === 0 && (
                 <button onClick={openPantry} className="press w-full flex items-center gap-3 text-left">
-                  <Package size={22} style={{ color: 'var(--faint)' }} />
                   <span>
                     <span className="block font-bold text-[0.875rem]">Nothing tracked yet</span>
                     <span className="block text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
@@ -244,167 +243,77 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                     </span>
                   </span>
                 </button>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Pantry value</p>
-                      <p className="text-[1.375rem] font-extrabold">{gbp(pantryValue(app.pantry), { always: true })}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Items</p>
-                      <p className="text-[0.875rem] font-bold">{app.pantry.length} tracked</p>
-                    </div>
-                  </div>
-
-                  {expiring.length > 0 && (
-                    <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
-                      <p className="text-[0.75rem] font-bold mb-2 flex items-center gap-1.5" style={{ color: 'var(--danger)' }}>
-                        <AlarmClock size={13} /> Use first
-                      </p>
-                      <div className="flex gap-2 flex-wrap">
-                        {expiring.slice(0, 4).map((p) => {
-                          const d = daysUntil(p.expiry, app.day);
-                          return (
-                            <Pill key={p.id} tone={d <= 1 ? 'danger' : 'warn'}>
-                              <Glyph e={p.emoji} size={12} /> {p.name} · {d <= 0 ? 'today' : `${d}d`}
-                            </Pill>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {low.length > 0 && (
-                    <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
-                      <p className="text-[0.75rem] font-bold mb-2" style={{ color: 'var(--muted)' }}>Running low</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {low.map((p) => (
-                          <Pill key={p.id} tone="muted"><Glyph e={p.emoji} size={12} /> {p.name}</Pill>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
               )}
-            </Card>
-          </Section>
-      </>
-    ),
-    leftovers: () => (
-      <>
-          {/* Leftovers ranked by the central engine — expired filtered out,
-              near-expiry shown first with explicit use-by warnings. */}
-          {leftoverItems.length > 0 && (
-            <Section title="Leftovers to use" className="rise rise-4">
-              <div className="grid grid-cols-2 gap-3">
-                {leftoverItems.map((l) => {
-                  const days = l.expiry ? daysUntil(l.expiry, app.day) : null;
-                  const st = days === null ? null : expiryStatus(days);
-                  return (
-                    <Card key={l.id} className="!p-3">
-                      <p className="font-bold text-[0.875rem] flex items-center gap-1.5">
-                        <Glyph e={l.emoji} size={15} style={{ color: 'var(--muted)' }} /> {l.name}
-                      </p>
-                      <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                        {[l.qty, l.location].filter(Boolean).join(' · ')}
-                      </p>
-                      {st && (
-                        <div className="mt-1.5">
-                          <Pill tone={st.tone}>{st.label}</Pill>
-                        </div>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            </Section>
-          )}
-      </>
-    ),
-    recipe: () => (
-      <>
-          {/* Recipe of the day */}
-          <Section title="Recipe of the day" className="rise rise-4">
-            <Card onClick={() => openRecipe(recipeOfDay)} className="!p-0 overflow-hidden">
-              <FoodArt recipe={recipeOfDay} className="h-36 w-full" px={56} />
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <p className="font-extrabold text-[1rem]">{recipeOfDay.name}</p>
-                  <Pill tone="accent">{recipeOfDay.protein}g protein</Pill>
+              {app.shoppingList.length === 0 && (
+                <p className="mt-2 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  Empty — add items or send a recipe's ingredients over.
+                </p>
+              )}
+              {app.pantry.length > 0 && app.shoppingList.length > 0 && (
+                <p className="mt-2 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  Nothing urgent — your kitchen is in a good rhythm.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              {useSoon.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[0.75rem] font-bold mb-2 flex items-center gap-1.5" style={{ color: 'var(--danger)' }}>
+                    <AlarmClock size={13} /> Use first
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {useSoon.map((p) => {
+                      const d = daysUntil(p.expiry, app.day);
+                      return (
+                        <Pill key={p.id} tone={d <= 1 ? 'danger' : 'warn'}>
+                          <Glyph e={p.emoji} size={12} /> {p.name} · {d <= 0 ? 'today' : `${d}d`}
+                        </Pill>
+                      );
+                    })}
+                  </div>
                 </div>
-                <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {recipeOfDay.cuisine} · {recipeOfDay.time} min · {gbp(recipeOfDay.costPerServing, { always: true })}/serving · {recipeOfDay.kcal} kcal
-                </p>
-              </div>
-            </Card>
-          </Section>
-      </>
-    ),
-  };
+              )}
+              {buySoon.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[0.75rem] font-bold mb-2" style={{ color: 'var(--muted)' }}>Next shop</p>
+                  <ul className="space-y-1">
+                    {buySoon.map((r) => (
+                      <li key={r.id} className="text-[0.8125rem] font-semibold" style={{ color: 'var(--ink)' }}>
+                        · {r.name}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button" onClick={() => goTab('shop')}
+                    className="press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}
+                  >
+                    Open shopping list →
+                  </button>
+                </div>
+              )}
+              {leftoverItems.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[0.75rem] font-bold mb-2" style={{ color: 'var(--muted)' }}>Leftovers to use</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {leftoverItems.slice(0, 3).map((l) => {
+                      const days = l.expiry ? daysUntil(l.expiry, app.day) : null;
+                      const st = days === null ? null : expiryStatus(days);
+                      return (
+                        <Pill key={l.id} tone={st?.tone || 'muted'}>
+                          <Glyph e={l.emoji} size={12} /> {l.name}
+                        </Pill>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      </section>
 
-  const orderedWidgets = app.homeWidgets.filter((id) => blocks[id]);
-  const focusWidget = app.entryGoal === 'pantry' ? 'pantry' : app.entryGoal === 'shop' ? 'water' : 'recipe';
-  const tierCore = {
-    starter: ['setup', focusWidget],
-    regular: ['setup', 'meals', focusWidget],
-    established: ['setup', 'reminders', 'goals', 'meals', focusWidget],
-  };
-  const coreIds = new Set(tierCore[app.personaTier] || tierCore.regular);
-  const coreWidgets = orderedWidgets.filter((id) => coreIds.has(id));
-  const moreWidgets = orderedWidgets.filter((id) => !coreIds.has(id));
-  const renderWidget = (id) => (
-    <div
-      key={id}
-      draggable={customising}
-      onDragStart={() => setDragging(id)}
-      onDragOver={(event) => customising && event.preventDefault()}
-      onDrop={() => {
-        if (customising && dragging) app.moveWidgetTo(dragging, id);
-        setDragging(null);
-      }}
-      className={customising ? 'cursor-grab rounded-2xl outline outline-1 outline-dashed outline-[var(--line)] py-1' : ''}
-    >
-      {blocks[id]()}
-    </div>
-  );
-
-  return (
-    <div className="pb-6 space-y-6">
-      <AutopilotCard onOpenPantry={openPantry} goTab={goTab} />
-
-      <HomeFoodLoop app={app} foodLoop={foodLoop} expiring={expiring} low={low} goTab={goTab} openPantry={openPantry} />
-
-      <section className="px-5 rise rise-1" aria-label="Kitchen adventure"><KitchenAdventure /></section>
-
-      <LoopCheck goTab={goTab} />
-
-      {pantryHero && (
-        <section className="px-5 rise rise-1" aria-label="Tonight's pantry pick">
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-4 pt-3 pb-1 flex items-baseline justify-between">
-              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Tonight — from what you have</p>
-              <span className="text-[0.6875rem] font-bold" style={{ color: 'var(--accent)' }}>{pantryHero.explanation.coverage.pct}% in your kitchen</span>
-            </div>
-            <div role="button" tabIndex={0} onClick={() => openRecipe(pantryHero.recipe)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(pantryHero.recipe); } }} className="press flex items-center gap-3 px-4 pb-3 pt-1 cursor-pointer">
-              <FoodArt recipe={pantryHero.recipe} className="h-14 w-14 rounded-xl shrink-0" px={26} />
-              <div className="min-w-0 flex-1">
-                <p className="font-extrabold text-[0.9375rem] truncate">{pantryHero.recipe.name}</p>
-                <p className="text-[0.75rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
-                  {pantryHero.recipe.cuisine} · {pantryHero.recipe.time} min · {gbp(pantryHero.recipe.costPerServing, { always: true })}/serving
-                </p>
-              </div>
-              <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
-            </div>
-            <div className="px-4 pb-4">
-              <RecommendationExplanation explanation={pantryHero.explanation} compact />
-            </div>
-          </Card>
-        </section>
-      )}
-
-      <HomeNumbers app={app} goTab={goTab} goLog={goLog} />
-
+      {/* Starter welcome: chosen dinners are planned, list created */}
       {app.starterRecipeIds.length > 0 && !app.welcomeDismissed && (
         <div className="px-5 rise rise-1">
           <Card className="flex items-start gap-3 !p-4">
@@ -430,68 +339,42 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </div>
       )}
 
-      {dueReviewCount > 0 && (
-        <section className="px-5 rise rise-1" aria-label="Flashcards due for review">
-          <Card onClick={() => goTab('learn')} className="press !p-4">
-            <div className="flex items-center gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-              >
-                <BookOpen size={17} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[0.9375rem] font-extrabold">Flashcards waiting</p>
-                <p className="mt-0.5 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {dueReviewCount} card{dueReviewCount === 1 ? '' : 's'} to review — keep the memory fresh.
-                </p>
-              </div>
-              <Pill tone="accent">{dueReviewCount}</Pill>
-              <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
-            </div>
-          </Card>
-        </section>
-      )}
-
-      <KitchenSeedStrip goTab={goTab} />
-
-      <div className="px-5"><MilestonesCard /></div>
-
-      {/* Rearranging the dashboard is a thing you do *to* these cards, so the
-          control sits with them rather than up in the header. */}
-      <div className="px-5 flex justify-end">
-        <button
-          onClick={() => setCustomising((value) => !value)}
-          aria-pressed={customising}
-          className="tap press inline-flex items-center gap-1.5 text-[0.78125rem] font-extrabold"
-          style={{ color: customising ? 'var(--accent)' : 'var(--muted)' }}
-        >
-          <SlidersHorizontal size={14} /> {customising ? 'Done rearranging' : 'Rearrange'}
-        </button>
-      </div>
-
-      {customising && (
-        <div className="mx-5 rounded-2xl border px-4 py-3 text-[0.78125rem] font-bold" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-          Drag these cards into the order you want them. Hidden ones are under the avatar, in Preferences → Home.
-        </div>
-      )}
-      {customising ? orderedWidgets.map(renderWidget) : coreWidgets.map(renderWidget)}
-      <div className="px-5">
-        <OutcomeDashboard />
-      </div>
-
-      {!customising && moreWidgets.length > 0 && (
-        <details className="home-more group">
-          <summary className="mx-5 flex cursor-pointer list-none items-center justify-between rounded-2xl border px-4 py-3 text-[0.8125rem] font-extrabold" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
-            Explore more
-            <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>{moreWidgets.length} sections</span>
-          </summary>
-          <div className="mt-6 space-y-6">
-            {moreWidgets.map(renderWidget)}
+      {/* 4 — Concise weekly outlook */}
+      <section className="px-5" aria-label="Weekly outlook">        <Card>
+          <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>This week</p>
+          <ul className="mt-2 space-y-1.5">
+            {outlookLines.map((line) => (
+              <li key={line} className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>· {line}</li>
+            ))}
+          </ul>
+          <div className="mt-2">
+            <Meter value={app.shoppingList.filter((i) => i.checked).length} max={Math.max(1, app.shoppingList.length)} height={5} />
           </div>
-        </details>
-      )}
+          <button
+            type="button" onClick={() => goTab('plan')}
+            className="press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}
+          >
+            Review the week →
+          </button>
+        </Card>
+      </section>
 
+      <HomeFoodLoop app={app} foodLoop={foodLoop} expiring={expiring} low={low} goTab={goTab} openPantry={openPantry} />
+      <LoopCheck goTab={goTab} />
+      <HomeNumbers app={app} goTab={goTab} goLog={goLog} />
+
+      <details className="home-more group">
+        <summary
+          className="mx-5 flex cursor-pointer list-none items-center justify-between rounded-2xl border px-4 py-3 text-[0.8125rem] font-extrabold"
+          style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
+        >
+          Explore more
+          <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>progress · loop · report</span>
+        </summary>
+        <div className="mt-6 space-y-6 px-5">
+          <OutcomeDashboard />
+        </div>
+      </details>
     </div>
   );
 }

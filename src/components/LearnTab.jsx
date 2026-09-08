@@ -1,11 +1,6 @@
-import { useRef, useState } from 'react';
 import { ArrowRight, BookOpen, Check, ChefHat, Clock3, Leaf, RotateCcw, ShoppingCart } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
-import NewCardSection from './NewCardSection.jsx';
 import { Card, Meter, Pill, Section } from './ui.jsx';
-import ReviewQueueCard from './ReviewQueueCard.jsx';
-import KnowledgeMapSection from './KnowledgeMapSection.jsx';
-import SkipReasonsCard from './SkipReasonsCard.jsx';
 
 const EMPTY_LOOP = {
   steps: [],
@@ -40,29 +35,12 @@ const stageIcon = (id) => ({
  * Learn is the last stage of the product loop, not a second analytics home.
  * It explains what the household actually did, what that changes next, and
  * gives the next plan a single, evidence-backed way forward.
+ *
+ * NOTE: spaced-repetition flashcards / knowledge map (Revise) are legacy and
+ * quarantined under src/legacy/revise-domain. Learn shows food learning only.
  */
 export default function LearnTab({ goTab, openGuidance }) {
   const app = useApp();
-  // The map's "Review this topic" asks the queue (rendered above the map) to
-  // focus one topic. Each ask gets a fresh id so re-asking re-applies, and
-  // the review scrolls back up so the person lands on the focused queue.
-  const [reviewAsk, setReviewAsk] = useState(null);
-  const queueRef = useRef(null);
-  const requestTopic = (topicId) => {
-    setReviewAsk({ id: (reviewAsk?.id || 0) + 1, topicId });
-    // jsdom has no layout, so scrollIntoView is guarded (tests stub scrollTo).
-    if (typeof queueRef.current?.scrollIntoView === 'function') {
-      queueRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-  // The skip-reasons card's per-row "Review N questions" asks the same queue
-  // to focus one skip reason's cards instead of one topic's.
-  const requestReason = (reason) => {
-    setReviewAsk({ id: (reviewAsk?.id || 0) + 1, reason });
-    if (typeof queueRef.current?.scrollIntoView === 'function') {
-      queueRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
   const loop = app.closedLoop || EMPTY_LOOP;
   const outcome = app.planOutcome || {};
   const learning = outcome.learning || {};
@@ -206,16 +184,6 @@ export default function LearnTab({ goTab, openGuidance }) {
           )}
         </Card>
       </Section>
-
-      <NewCardSection />
-
-      <SkipReasonsCard onReviewReason={requestReason} />
-
-      <div ref={queueRef}>
-        <ReviewQueueCard topicReviewRequest={reviewAsk} />
-      </div>
-
-      <KnowledgeMapSection onReviewTopic={requestTopic} />
 
       <Section className="rise rise-2">
         <div className="grid gap-2.5 sm:grid-cols-2">

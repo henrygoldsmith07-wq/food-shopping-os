@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import App from '../src/App.jsx';
 import { AppProvider } from '../src/lib/store.jsx';
 import { STORAGE_KEY } from '../src/lib/state.js';
 import KnowledgeMapSection from '../src/components/KnowledgeMapSection.jsx';
+import ReviewQueueCard from '../src/components/ReviewQueueCard.jsx';
 
 /**
  * The kitchen knowledge map, fed from the real deck: one subject built from
@@ -30,6 +32,26 @@ const renderSection = () => render(
     <KnowledgeMapSection />
   </AppProvider>,
 );
+/**
+ * Legacy SRS integration harness (Revise quarantine): the queue + map wired
+ * together exactly as the old Learn tab did, without routing through the
+ * food-loop shell. Learn now serves food learning only (see the boundary
+ * test below); this harness keeps the queue/map interaction covered.
+ */
+const renderQueueAndMap = () => {
+  const Harness = () => {
+    const [ask, setAsk] = useState(null);
+    return (
+      <AppProvider>
+        <ReviewQueueCard now={new Date()} topicReviewRequest={ask} />
+        <KnowledgeMapSection
+          onReviewTopic={(topicId) => setAsk((prev) => ({ id: (prev?.id || 0) + 1, topicId }))}
+        />
+      </AppProvider>
+    );
+  };
+  return render(<Harness />);
+};
 
 describe('the kitchen knowledge map on Learn', () => {
   beforeEach(() => localStorage.clear());
@@ -72,6 +94,15 @@ describe('the kitchen knowledge map on Learn', () => {
 });
 
 describe('the kitchen knowledge map through the app shell', () => {
+  it('Learn tab serves food learning, not the quarantined knowledge map', async () => {
+    // Boundary (Revise quarantine, src/legacy/README.md): the SRS map left
+    // the food-loop shell. Learn teaches from meals/shops/waste instead.
+    render(<App />);
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
+    expect(await screen.findByText('Make the next week easier')).toBeDefined();
+    expect(screen.queryByText('Kitchen knowledge map')).toBeNull();
+  });
+
   beforeEach(() => {
     localStorage.clear();
     seed([
@@ -87,11 +118,9 @@ describe('the kitchen knowledge map through the app shell', () => {
     localStorage.clear();
   });
 
-  it('renders the map from the seeded deck on the Learn tab', async () => {
-    render(<App />);
-    // Returning users land on the list; Learn is a lazy tab.
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
-    await screen.findByText('Kitchen knowledge map');
+  it('renders the map from the seeded deck (legacy direct render)', async () => {
+    renderSection();
+    expect(screen.getByText('Kitchen knowledge map')).toBeDefined();
 
     // The subject header and both kitchen topics arrive from the deck.
     expect(screen.getByText('Your kitchen')).toBeDefined();
@@ -127,10 +156,8 @@ describe('the kitchen knowledge map through the app shell', () => {
       card('p1', 'pantry', 3, { ease: 1.7, intervalDays: 0, due: '2026-07-27', lapses: 2, lastReviewedAt: '2026-07-20T10:00:00Z' }),
       card('d1', 'diary', 0),
     ]);
-    render(<App />);
-    // Returning users land on the list; Learn is a lazy tab.
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
-    await screen.findByText('Kitchen knowledge map');
+    renderSection();
+    expect(screen.getByText('Kitchen knowledge map')).toBeDefined();
 
     // All four kitchen topics arrive, each wearing its own band from the
     // same schedule — no fabricated statuses, no missing rows.
@@ -156,9 +183,8 @@ describe('the kitchen knowledge map through the app shell', () => {
     // grade the topic has ever seen — which is exactly what the band reads.
     localStorage.clear();
     seed([card('s1', 'shopping', 0, { due: '2026-07-27' })]);
-    render(<App />);
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
-    await screen.findByText('Kitchen knowledge map');
+    renderQueueAndMap();
+    expect(screen.getByText('Kitchen knowledge map')).toBeDefined();
 
     // Before the review: the topic carries no band because nothing has been
     // graded — the map says Not started, honestly, whatever the queue holds.
@@ -207,9 +233,8 @@ describe('the kitchen knowledge map through the app shell', () => {
       ease: 1.7, intervalDays: 0, due: DAY, lapses: 2,
       lastRating: 'again', lastReviewedAt: '2026-07-20T10:00:00Z',
     })]);
-    render(<App />);
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
-    await screen.findByText('Kitchen knowledge map');
+    renderSection();
+    expect(screen.getByText('Kitchen knowledge map')).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: /Shopping.*Show the map/ }));
     // The chain's mistake level shows the open miss; the flashcard hint names
@@ -260,9 +285,8 @@ describe('reviewing a topic from the map', () => {
   });
 
   it('expanding a topic with due cards offers Review, which focuses the queue on that topic', async () => {
-    render(<App />);
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
-    await screen.findByText('Kitchen knowledge map');
+    renderQueueAndMap();
+    expect(screen.getByText('Kitchen knowledge map')).toBeDefined();
 
     // The queue bar above groups the due cards into two reviewable topics.
     const bar = screen.getByLabelText('Review one topic at a time');
@@ -305,9 +329,8 @@ describe('reviewing a topic from the map', () => {
       card('s2', 'shopping', 0, { due: DAY }),
       card('c1', 'cooking', 0, { due: DAY }),
     ]);
-    render(<App />);
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Learn'));
-    await screen.findByText('Kitchen knowledge map');
+    renderQueueAndMap();
+    expect(screen.getByText('Kitchen knowledge map')).toBeDefined();
 
     const bar = screen.getByLabelText('Review one topic at a time');
     expect(within(bar).getByText('Shopping · 2')).toBeDefined();
