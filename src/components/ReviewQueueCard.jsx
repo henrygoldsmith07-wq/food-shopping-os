@@ -7,9 +7,9 @@ import KitchenForgetConfirm from './KitchenForgetConfirm.jsx';
 import KitchenRefreshPreview from './KitchenRefreshPreview.jsx';
 import SkipReasonReflection from './SkipReasonReflection.jsx';
 import WeekAheadForecast from './WeekAheadForecast.jsx';
-import { dayStamp, dueTopicGroups, dueReasonGroups, forecastDueCounts } from '../domain/scheduling';
-import { skipReflectionFor } from '../domain/skip-profile';
-import { topicLabel } from '../domain/topic-labels';
+import { dayStamp, dueTopicGroups, dueReasonGroups, forecastDueCounts } from '../legacy/revise-domain/scheduling';
+import { skipReflectionFor } from '../legacy/revise-domain/skip-profile';
+import { topicLabel } from '../legacy/revise-domain/topic-labels';
 import { reasonLabel } from '../lib/plan-outcome.js';
 
 /** The four ratings, in the order the scheduler's ease curve expects. */

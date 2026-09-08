@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCard } from "../src/domain/scheduling";
+import { createCard } from "../src/legacy/revise-domain/scheduling";
 import {
   buildSubjectGraph,
   buildTopicGraph,
@@ -7,7 +7,7 @@ import {
   SHAKY_ACCURACY,
   type GraphInput,
   type SubjectGraph,
-} from "../src/domain/knowledge-graph";
+} from "../src/legacy/revise-domain/knowledge-graph";
 import type {
   Attempt,
   Card,
@@ -19,7 +19,7 @@ import type {
   Topic,
   TopicMastery,
   Unit,
-} from "../src/domain/types";
+} from "../src/legacy/revise-domain/types";
 
 // ---------------------------------------------------------------------------
 // Fixtures: one subject, one unit, one topic with two spec statements. sp-1 is

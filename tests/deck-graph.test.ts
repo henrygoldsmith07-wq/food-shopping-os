@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeckGraph, deckMasteryRows, deckMistakeRows } from '../src/domain/deck-graph';
-import { classifyTopic } from '../src/domain/topic-status';
-import type { Card } from '../src/domain/types';
+import { buildDeckGraph, deckMasteryRows, deckMistakeRows } from '../src/legacy/revise-domain/deck-graph';
+import { classifyTopic } from '../src/legacy/revise-domain/topic-status';
+import type { Card } from '../src/legacy/revise-domain/types';
 
 /**
  * Mastery is read from the deck's scheduling state, not invented: retention

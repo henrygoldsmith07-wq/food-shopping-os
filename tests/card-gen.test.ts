@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { kitchenCardCandidates, planSeedMerge } from '../src/domain/card-gen';
-import type { Card } from '../src/domain/types';
+import { kitchenCardCandidates, planSeedMerge } from '../src/legacy/revise-domain/card-gen';
+import type { Card } from '../src/legacy/revise-domain/types';
 
 /**
  * The deck a food app earns: cards generated from the user's own kitchen

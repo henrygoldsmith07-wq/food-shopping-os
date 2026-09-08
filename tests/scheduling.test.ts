@@ -12,8 +12,8 @@ import {
   INITIAL_EASE,
   MIN_EASE,
   MAX_EASE,
-} from "../src/domain/scheduling";
-import type { Card } from "../src/domain/types";
+} from "../src/legacy/revise-domain/scheduling";
+import type { Card } from "../src/legacy/revise-domain/types";
 
 // ---------------------------------------------------------------------------
 // Fixtures: one card at a fixed review time. All dates are UTC so the day keys

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useApp } from '../lib/store.jsx';
-import { buildDeckGraph } from '../domain/deck-graph';
+import { buildDeckGraph } from '../legacy/revise-domain/deck-graph';
 import { KnowledgeMap } from './KnowledgeMap';
 import { Section } from './ui.jsx';
 

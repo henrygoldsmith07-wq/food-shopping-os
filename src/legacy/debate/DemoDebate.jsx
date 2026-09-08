@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, GitBranch, Lightbulb, Play, ShieldCheck } from 'lucide-react';
-import { DEMO_DEBATE } from '../data/demoDebate.js';
-import { scoreGraph } from '../lib/argGraph.ts';
-import { Card } from './ui.jsx';
+import { DEMO_DEBATE } from './demoDebate.js';
+import { scoreGraph } from './argGraph.ts';
+import { Card } from '../../components/ui.jsx';
+// LEGACY — Daily Debate demo, quarantined from the Forq food loop.
+// Do not import from food-loop code. See tests/arch-boundaries.test.js.
 
 const nodeTone = { claim: ['Claim', 'var(--accent-soft)'], evidence: ['Evidence', 'var(--success-soft)'], rebuttal: ['Rebuttal', 'var(--review-soft)'], dropped: ['Dropped claim', 'var(--danger-soft)'] };
 

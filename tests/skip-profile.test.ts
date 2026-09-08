@@ -4,7 +4,7 @@ import {
   foldSkipReflection,
   reflectionTotal,
   skipReflectionFor,
-} from '../src/domain/skip-profile';
+} from '../src/legacy/revise-domain/skip-profile';
 
 /**
  * The skip-reason reflection profile: every answer to "does this reason

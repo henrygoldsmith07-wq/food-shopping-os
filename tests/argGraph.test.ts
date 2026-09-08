@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyGraph, scoreGraph, validateGraph, type ArgGraph } from "../src/lib/argGraph";
+import { emptyGraph, scoreGraph, validateGraph, type ArgGraph } from "../src/legacy/debate/argGraph";
 
 const graphWith = (overrides: Partial<ArgGraph>): ArgGraph => ({ ...emptyGraph(), ...overrides });
 const node = (id: string, kind: "claim" | "evidence" = "claim") => ({ id, kind, owner: "a" as const, text: id, round: 1, ...(kind === "evidence" ? { evidenceStrength: "cited" as const } : {}) });

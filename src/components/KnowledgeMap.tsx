@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { ArrowRight } from 'lucide-react';
 import {
   GRAPH_LEVELS, type ConceptNode, type SubjectGraph, type TopicGraph,
-} from '../domain/knowledge-graph';
+} from '../legacy/revise-domain/knowledge-graph';
 import TopicStatusTagBase from './TopicStatusTag.jsx';
 import { Card as UiCard, Pill as UiPill } from './ui.jsx';
 // The ui kit is plain JSX without declarations, so tsx importers see inferred

@@ -1,16 +1,16 @@
 /**
  * The flashcard review queue — the SRS engine, wired to the store.
  *
- * The scheduling domain (`createCard`, `gradeReview`, `dueCards`) is pure;
- * these actions are the thin persistence layer around it: add a card, ask
- * what is due, grade one and store the returned state. A review lands in the
- * same write as the rest of the household state, so it syncs, backs up and
- * undoes like everything else — and a miss is a no-op, never a crash.
+ * LEGACY (Revise): spaced-repetition flashcards are quarantined under
+ * src/legacy/revise-domain. This bridge is the only food-loop file allowed
+ * to import it, so Learn can keep showing an existing deck without letting
+ * exam/flashcard logic leak into planning, shopping or cooking.
+ * See tests/arch-boundaries.test.js.
  */
 
-import { kitchenCardCandidates, planSeedMerge } from '../domain/card-gen';
-import { createCard, dayStamp, dueCards as collectDue, gradeReview, dueReasonGroups } from '../domain/scheduling';
-import { foldSkipReflection } from '../domain/skip-profile';
+import { kitchenCardCandidates, planSeedMerge } from '../legacy/revise-domain/card-gen';
+import { createCard, dayStamp, dueCards as collectDue, gradeReview, dueReasonGroups } from '../legacy/revise-domain/scheduling';
+import { foldSkipReflection } from '../legacy/revise-domain/skip-profile';
 import { RECIPES } from '../data/recipes.js';
 import { uid } from './state.js';
 

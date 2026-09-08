@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KITCHEN_TOPICS, topicLabel } from "../src/domain/topic-labels";
+import { KITCHEN_TOPICS, topicLabel } from "../src/legacy/revise-domain/topic-labels";
 
 // The kitchen-seeded topics read as proper names; anything else is prettified
 // rather than shown as a raw id — a deck is for humans, not databases.

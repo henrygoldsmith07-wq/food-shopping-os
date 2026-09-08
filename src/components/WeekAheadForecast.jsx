@@ -1,4 +1,4 @@
-import { dayStamp } from '../domain/scheduling';
+import { dayStamp } from '../lib/kitchen-dates.js';
 
 /**
  * The week ahead on the Learn tab: one bar per day for the next seven days,
