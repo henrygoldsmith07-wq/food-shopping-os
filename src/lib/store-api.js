@@ -35,6 +35,9 @@ import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
 import { predictionActions } from './prediction-feedback.js';
+import { buildDomainCommands } from './store-commands.js';
+import { ledgerCommands } from './event-ledger.js';
+import { pantryLifecycleActions } from './store-pantry-slice.js';
 export function useStoreApi({
   blockPersistence, cloudStatus, latest, setState, setStorageIssue, storageIssue,
   undoHistory, undoBatch, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
@@ -380,99 +383,8 @@ export function useStoreApi({
         today: latest.current.day,
         learnedAliases: latest.current.aliasMemory || {},
       }),
-      binPantryItem: (id, { qty, value, reason } = {}) =>
-        set((s) => {
-          const item = householdPermission(s, 'pantry') ? s.pantry.find((p) => p.id === id) : null;
-          if (!item) return {};
-          const wasteValue = value != null ? Number(value) : Number(item.cost) || 0;
-          const lifecycleEvent = {
-            id: uid('pe'),
-            type: 'pantry_lifecycle',
-            itemId: item.id,
-            name: item.name,
-            from: item.lifecycleState || 'purchased',
-            to: 'discarded',
-            qty: qty || item.qty || '',
-            value: Math.round(wasteValue * 100) / 100,
-            cat: item.cat || 'Other',
-            reason: reason || 'discarded',
-            date: s.day,
-            at: Date.now(),
-          };
-          return {
-            pantry: s.pantry
-              .map((p) => (p.id === id ? { ...p, lifecycleState: 'discarded', discardedAt: s.day } : p))
-              .filter((p) => p.id !== id),
-            waste: [...s.waste, {
-              name: item.name,
-              cost: Math.round(wasteValue * 100) / 100,
-              qty: qty || item.qty || '',
-              cat: item.cat || 'Other',
-              reason: reason || 'expired',
-              lifecycleState: 'discarded',
-              date: s.day,
-              quantity: Number(qty) || undefined,
-            }],
-            pantryEvents: [...(s.pantryEvents || []), lifecycleEvent].slice(-100),
-            lastPantryEvent: lifecycleEvent,
-          };
-        }),
-      consumePantryItem: (id, { qty } = {}) =>
-        set((s) => {
-          const item = householdPermission(s, 'pantry') ? s.pantry.find((p) => p.id === id) : null;
-          if (!item) return {};
-          const event = {
-            id: uid('pe'),
-            type: 'pantry_lifecycle',
-            itemId: item.id,
-            name: item.name,
-            from: item.lifecycleState || 'purchased',
-            to: 'consumed',
-            qty: qty || item.qty || '',
-            value: Number(item.cost) || 0,
-            cat: item.cat || 'Other',
-            reason: 'consumed',
-            date: s.day,
-            at: Date.now(),
-          };
-          return {
-            pantry: s.pantry.filter((p) => p.id !== id),
-            pantryEvents: [...(s.pantryEvents || []), event].slice(-100),
-            lastPantryEvent: event,
-          };
-        }),
-      updatePantryLifecycle: (id, toState, { qty, value, note } = {}) =>
-        set((s) => {
-          const item = s.pantry.find((p) => p.id === id);
-          if (!item || !['opened', 'partially_consumed', 'leftover', 'expired', 'consumed', 'discarded'].includes(toState)) return {};
-          const event = {
-            id: uid('pe'),
-            type: 'pantry_lifecycle',
-            itemId: item.id,
-            name: item.name,
-            from: item.lifecycleState || 'purchased',
-            to: toState,
-            qty: qty || item.qty || '',
-            value: value != null ? Number(value) : Number(item.cost) || 0,
-            note: note || '',
-            date: s.day,
-            at: Date.now(),
-          };
-          const patch = { lifecycleState: toState };
-          if (toState === 'opened') patch.openedDate = s.day;
-          if (toState === 'expired') patch.expiredAt = s.day;
-          if (toState === 'consumed' || toState === 'discarded') return {
-            pantry: s.pantry.filter((p) => p.id !== id),
-            waste: toState === 'discarded' ? [...s.waste, { name: item.name, cost: event.value, qty: event.qty, cat: item.cat || 'Other', reason: note || 'discarded', lifecycleState: toState, date: s.day }] : s.waste,
-            pantryEvents: [...(s.pantryEvents || []), event].slice(-100),
-            lastPantryEvent: event,
-          };
-          return {
-            pantry: s.pantry.map((p) => (p.id === id ? { ...p, ...patch } : p)),
-            pantryEvents: [...(s.pantryEvents || []), event].slice(-100),
-            lastPantryEvent: event,
-          };
-        }),
+      // Pantry lifecycle lives in its own domain slice (see store-pantry-slice.js).
+      ...pantryLifecycleActions(set, { householdPermission, uid }),
       ...planActions(set),
       ...pantryFlowActions(set),
       ...householdActions(set, uid),
@@ -483,6 +395,10 @@ export function useStoreApi({
       ...advancedActions(set, uid),
       ...diaryActions(set),
       ...reviewActions(set, latest),
+      // Plan → Shop → Eat domain slices: one verb per intent + ledger events.
+      // Legacy slice actions above stay for backwards compatibility.
+      ...buildDomainCommands(set),
+      ...ledgerCommands(set),
     };
     // Every other input is a ref or a useState setter, so their identities are
     // stable for the component's life: naming them changes nothing at runtime

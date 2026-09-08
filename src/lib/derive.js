@@ -66,6 +66,31 @@ import { pantryIntelligenceSummary } from './pantry-summary.js';
 import { learnHouseholdPreferences, preferenceSummary } from './household-preferences.js';
 import { predictUnusedIngredients } from './waste-prediction.js';
 import { predictionCalibration, predictionLearningProfile } from './prediction-feedback.js';
+import { buildHouseholdModel, householdModelSummary } from './household-model.js';
+import { decideTonight } from './meal-decision.js';
+import { recoverWeek } from './week-recovery.js';
+import { evaluateHousehold } from './eval-metrics.js';
+import { ledgerCounts } from './event-ledger.js';
+
+/**
+ * Memo for the heavier household-intelligence derivations below. deriveApp is
+ * pure and the store replaces (never mutates) state, so caching per state
+ * identity is safe: the same state object always derives the same model.
+ * Without this, ranking the whole recipe book on every render would tax the
+ * slowest suites (and low-end devices) for values most screens never read.
+ */
+const intelligenceCache = new WeakMap();
+const memoIntelligence = (state, key, compute) => {
+  const cacheable = state && typeof state === 'object';
+  if (!cacheable) return compute();
+  let entry = intelligenceCache.get(state);
+  if (!entry) {
+    entry = {};
+    intelligenceCache.set(state, entry);
+  }
+  if (!(key in entry)) entry[key] = compute();
+  return entry[key];
+};
 
 export const deriveApp = (state) => {
   const activeMember = state.members.find((member) => member.id === state.activeMemberId) || null;
@@ -322,6 +347,45 @@ export const deriveApp = (state) => {
     loopHealth: loopHealth(state, state.day),
     planOutcome: planOutcome30,
     dashboard,
+    // ---- Unified household intelligence (new Plan → Shop → Eat core) ----
+    // Each is computed defensively (one failing learner must not break Home)
+    // and memoized per state: ranking the recipe book is the heaviest derive
+    // here, and most renders never change state in between.
+    householdModel: memoIntelligence(state, 'householdModel', () => {
+      try { return buildHouseholdModel(state, { recipes: recipeBook, today: state.day }); }
+      catch { return null; }
+    }),
+    householdModelSummary() {
+      try { return householdModelSummary(this.householdModel); }
+      catch { return 'Household learning unavailable.'; }
+    },
+    tonightDecision: memoIntelligence(state, 'tonightDecision', () => {
+      try {
+        return decideTonight({
+          recipes: filterBySuitability(recipeBook, suitabilityCtx).filter((r) => r.meal === 'dinner'),
+          pantry: state.pantry, leftovers: leftoverItems(state.pantry),
+          taste: tasteProfile, diets: planDiets,
+          allergies: [...new Set([...state.allergies, ...memberAllergies])],
+          intolerances: [...new Set([...state.intolerances, ...memberIntolerances])],
+          religious: state.religious, members: state.members, cooked: state.cooked,
+          waste: state.waste, date: state.day, today: state.day,
+          people: Math.max(1, Math.round(Number(state.household) || 1)),
+          budgetPerServing: state.weeklyBudget ? Math.min(4, Math.max(1, state.weeklyBudget / 7)) : 4,
+        });
+      } catch { return { pick: null, ranked: [], confidence: 'none', reasons: [] }; }
+    }),
+    weekRecovery: memoIntelligence(state, 'weekRecovery', () => {
+      try { return recoverWeek(state, { today: state.day, catalogue: recipeBook }); }
+      catch { return null; }
+    }),
+    householdEval: memoIntelligence(state, 'householdEval', () => {
+      try { return evaluateHousehold(state, { today: state.day }); }
+      catch { return null; }
+    }),
+    ledgerCounts: (() => {
+      try { return ledgerCounts(state); }
+      catch { return { total: 0 }; }
+    })(),
     shoppingOptimisation: (mode = 'balanced') => optimiseShopping(state.shoppingList, {
       shops: state.shops, pantry: state.pantry, mode, today: state.day, learnedAliases: state.aliasMemory,
       // Fastest mode walks the aisles the way this household actually does:
