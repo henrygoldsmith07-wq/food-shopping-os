@@ -115,6 +115,7 @@ export const EMPTY_STATE = {
   members: [], // {id,name,portions,diets,role,permissions,notifications}
   chores: [],
   householdEvents: [],
+  householdLedger: [], // unified Plan → Shop → Eat event timeline (see lib/event-ledger.js), capped at 500
   shoppingList: [], // {id,name,emoji,aisle,store,qty,price,checked,note,priority,assigneeId}
   favouriteShopping: [], // saved products {name,emoji,aisle,qty,price,note}
   shops: [], // recorded trips {id,date,store,total,items[]}
