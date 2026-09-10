@@ -114,6 +114,12 @@ export const DEFAULT_UNITS = { weight: 'kg', height: 'cm', energy: 'kcal', volum
  * next action, guidance, quick navigation, tonight, today's meals, buy/use
  * soon, the weekly outlook, week recovery and the closed loop. These rows
  * shape the optional extra panels that follow them.
+ *
+ * Defaults stay quiet: numbers, loop diagnostics and the full report are
+ * OFF until asked for — Home leads with the cooking, not the analytics.
+ * A mode that genuinely needs them (Nutrition, Reduce waste) turns its own
+ * set on when applied, so nobody has to go digging for the numbers that
+ * mode is for.
  */
 export const WIDGETS = [
   { id: 'rings', label: 'Budget and diary numbers', fixed: true },
@@ -125,4 +131,4 @@ export const WIDGETS = [
   { id: 'report', label: 'Progress and reports' },
 ];
 
-export const DEFAULT_WIDGETS = ['rings', 'setup', 'loop', 'numbers', 'report'];
+export const DEFAULT_WIDGETS = ['rings', 'setup'];

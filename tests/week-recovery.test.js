@@ -3,8 +3,8 @@ import {
   applyWeekRecoveryTo, foldSkipReflection,
 } from '../src/lib/store-commands.js';
 import {
-  bestPantrySwap, inferWeekRecoveryTrigger, pantryCoverageOf, plannedUsesOf, recoverWeek, recoveryChanged,
-  remainingWeekDates,
+  bestPantrySwap, inferWeekRecoveryTrigger, inferWeekRecoveryTriggers, pantryCoverageOf,
+  plannedUsesOf, recoverWeek, recoveryChanged, remainingWeekDates,
 } from '../src/lib/week-recovery.js';
 
 const catalogue = [
@@ -139,6 +139,25 @@ describe('week recovery engine', () => {
       { today: '2026-09-01', trigger: { kind: 'LeftoverCreated', name: 'Curry portions' }, catalogue },
     );
     expect(result.leftoverReuse.length).toBeGreaterThan(0);
+    expect(result.leftoverReuse[0].date).toBe('2026-09-02'); // the soonest open slot
+  });
+
+  it('links the leftover row when the portion exists, and still allocates when it does not', () => {
+    const withRow = recoverWeek(
+      {
+        ...baseState,
+        plan: { '2026-09-01': { dinner: 'curry' } },
+        leftovers: [{ id: 'l1', name: 'Curry portions', expiry: '2026-09-04', portions: 1 }],
+      },
+      { today: '2026-09-01', trigger: { kind: 'LeftoverCreated', name: 'Curry portions' }, catalogue },
+    );
+    expect(withRow.leftoverReuse[0]).toMatchObject({ leftoverId: 'l1', date: '2026-09-02', slot: 'dinner' });
+    // No row yet (the event arrived first): allocation still happens by name.
+    const rowless = recoverWeek(
+      { ...baseState, plan: { '2026-09-01': { dinner: 'curry' } }, leftovers: [] },
+      { today: '2026-09-01', trigger: { kind: 'LeftoverCreated', name: 'Curry portions' }, catalogue },
+    );
+    expect(rowless.leftoverReuse).toEqual([{ date: '2026-09-02', slot: 'dinner', name: 'Curry portions' }]);
   });
 
   it('an unplanned shop clears the rows it already covered', () => {
@@ -205,9 +224,51 @@ describe('week recovery candidates', () => {
         { id: 'e3', type: 'IngredientWasted', at: '2026-09-01T12:00:00.000Z', day: '2026-09-01', origin: 'user', name: 'Pasta' },
       ],
     };
-    expect(inferWeekRecoveryTrigger(state, catalogue)).toEqual({
+    expect(inferWeekRecoveryTrigger(state, catalogue)).toMatchObject({
       kind: 'IngredientWasted', ingredient: 'Pasta',
     });
+  });
+
+  it('returns every unresolved trigger since the last recovery, oldest first', () => {
+    const state = {
+      ...baseState,
+      householdLedger: [
+        { id: 'e0', type: 'MealSkipped', at: '2026-08-31T10:00:00.000Z', day: '2026-08-31', origin: 'user', date: '2026-08-31', slot: 'dinner', recipeId: 'curry' },
+        { id: 'e1', type: 'WeekRecovered', at: '2026-09-01T09:00:00.000Z', day: '2026-09-01', origin: 'recovery' },
+        { id: 'e2', type: 'MealSkipped', at: '2026-09-01T10:00:00.000Z', day: '2026-09-01', origin: 'user', date: '2026-09-01', slot: 'dinner', recipeId: 'curry' },
+        { id: 'e3', type: 'IngredientWasted', at: '2026-09-01T11:00:00.000Z', day: '2026-09-01', origin: 'user', name: 'Pasta' },
+        { id: 'e4', type: 'LeftoverCreated', at: '2026-09-01T12:00:00.000Z', day: '2026-09-01', origin: 'user', name: 'Curry portions' },
+      ],
+    };
+    const triggers = inferWeekRecoveryTriggers(state, catalogue);
+    expect(triggers.map((t) => t.kind)).toEqual(['MealSkipped', 'IngredientWasted', 'LeftoverCreated']);
+    // e0 is answered by the WeekRecovered at e1 — never re-processed.
+    expect(triggers.some((t) => t.id === 'e0')).toBe(false);
+    // The single-trigger view is the newest of them.
+    expect(inferWeekRecoveryTrigger(state, catalogue)).toMatchObject({ kind: 'LeftoverCreated' });
+  });
+
+  it('recovers from every unresolved trigger in one pass, without double-repairing a slot', () => {
+    const state = {
+      ...baseState,
+      plan: { '2026-09-02': { dinner: 'pasta' } },
+      shoppingList: [],
+      householdLedger: [
+        { id: 'e2', type: 'MealSkipped', at: '2026-09-01T10:00:00.000Z', day: '2026-09-01', origin: 'user', date: '2026-09-02', slot: 'dinner', recipeId: 'pasta' },
+        { id: 'e3', type: 'IngredientWasted', at: '2026-09-01T11:00:00.000Z', day: '2026-09-01', origin: 'user', name: 'Chickpeas' },
+      ],
+    };
+    const result = recoverWeek(state, {
+      today: '2026-09-01',
+      triggers: inferWeekRecoveryTriggers(state, catalogue),
+      catalogue,
+    });
+    // The skipped pasta slot is repaired once — not once per trigger.
+    const slotRepairs = result.repairs.filter((r) => r.date === '2026-09-02' && r.slot === 'dinner');
+    expect(slotRepairs).toHaveLength(1);
+    // Both problems were heard: the plan moved AND the explanations name both.
+    expect(result.explanations.join(' ')).toMatch(/Chickpeas/);
+    expect(Object.keys(result.planPatch).length).toBeGreaterThan(0);
   });
 
   it('stops once a recovery has answered the latest trigger', () => {
@@ -247,7 +308,45 @@ describe('week recovery candidates', () => {
   it('coverage counts what the pantry already has', () => {
     const names = new Set(['rice', 'chickpeas']);
     expect(pantryCoverageOf(catalogue[0], names)).toMatchObject({ have: 2, total: 2, pct: 100, missing: [] });
-    expect(pantryCoverageOf(catalogue[1], names).missing).toEqual(['pasta', 'tomatoes']);
+    expect(pantryCoverageOf(catalogue[1], names).missing.map((m) => m.name || m)).toEqual(['Pasta', 'Tomatoes']);
+  });
+
+  it('coverage is quantity-aware: a name match with not enough is missing', () => {
+    const recipe = {
+      id: 'big-rice', name: 'Big rice', ingredients: [{ name: 'Rice', qty: '500 g' }],
+    };
+    const pantryNames = new Set(['rice']);
+    // 200 g in the pantry does not cover 500 g the recipe asks for.
+    const short = pantryCoverageOf(recipe, pantryNames, {
+      pantry: [{ id: 'p1', name: 'Rice', qty: '200 g' }],
+      today: '2026-09-01',
+    });
+    expect(short.have).toBe(0);
+    expect(short.missing[0]).toMatchObject({ name: 'Rice', shortOf: '500 g' });
+    // 750 g does cover it.
+    const enough = pantryCoverageOf(recipe, pantryNames, {
+      pantry: [{ id: 'p1', name: 'Rice', qty: '750 g' }],
+      today: '2026-09-01',
+    });
+    expect(enough.have).toBe(1);
+    // No readable quantity on either side → name-level truth, no invention.
+    const nameOnly = pantryCoverageOf(catalogue[0], new Set(['rice', 'chickpeas']));
+    expect(nameOnly.pct).toBe(100);
+  });
+
+  it('a pantry swap only picks recipes the pantry covers in quantity', () => {
+    const needsLots = { id: 'hefty', name: 'Hefty beans', ingredients: [{ name: 'Beans', qty: '800 g' }] };
+    const catalogue2 = [needsLots, catalogue[2]];
+    const pick = bestPantrySwap({
+      catalogue: catalogue2,
+      pantryNames: new Set(['rice', 'beans']),
+      expiringNames: new Set(),
+      wasRecipe: null,
+      // Pantry holds 300 g of beans — not the 800 g the hefty recipe wants.
+      pantry: [{ id: 'p1', name: 'Rice' }, { id: 'p3', name: 'Beans', qty: '300 g' }],
+      today: '2026-09-01',
+    });
+    expect(pick.recipe.id).toBe('rice-beans');
   });
 
   it('the best swap is fully covered, deterministic and prefers expiring use', () => {

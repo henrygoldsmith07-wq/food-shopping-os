@@ -67,8 +67,8 @@ import { learnHouseholdPreferences, preferenceSummary } from './household-prefer
 import { predictUnusedIngredients } from './waste-prediction.js';
 import { predictionCalibration, predictionLearningProfile } from './prediction-feedback.js';
 import { buildHouseholdModel, householdModelSummary } from './household-model.js';
-import { decideTonight } from './meal-decision.js';
-import { inferWeekRecoveryTrigger, recoverWeek } from './week-recovery.js';
+import { decideTonight, learnMealDecisionProfile } from './meal-decision.js';
+import { inferWeekRecoveryTriggers, recoverWeek } from './week-recovery.js';
 import { evaluateHousehold } from './eval-metrics.js';
 import { ledgerCounts } from './event-ledger.js';
 
@@ -365,7 +365,12 @@ export const deriveApp = (state) => {
         return decideTonight({
           recipes: filterBySuitability(recipeBook, suitabilityCtx).filter((r) => r.meal === 'dinner'),
           pantry: state.pantry, leftovers: leftoverItems(state.pantry),
-          taste: tasteProfile, householdModel, diets: planDiets,
+          taste: tasteProfile, householdModel,
+          decisionProfile: memoIntelligence(state, 'decisionProfile', () => {
+            try { return learnMealDecisionProfile(state, { today: state.day }); }
+            catch { return null; }
+          }),
+          diets: planDiets,
           allergies: [...new Set([...state.allergies, ...memberAllergies])],
           intolerances: [...new Set([...state.intolerances, ...memberIntolerances])],
           religious: state.religious, members: state.members, cooked: state.cooked,
@@ -377,8 +382,8 @@ export const deriveApp = (state) => {
     }),
     weekRecovery: memoIntelligence(state, 'weekRecovery', () => {
       try {
-        const trigger = inferWeekRecoveryTrigger(state, recipeBook);
-        return recoverWeek(state, { today: state.day, catalogue: recipeBook, trigger });
+        const triggers = inferWeekRecoveryTriggers(state, recipeBook);
+        return recoverWeek(state, { today: state.day, catalogue: recipeBook, triggers });
       }
       catch { return null; }
     }),

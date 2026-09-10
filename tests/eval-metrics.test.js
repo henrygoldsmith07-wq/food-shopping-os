@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateHousehold, evaluateHouseholdTrend } from '../src/lib/eval-metrics.js';
+import {
+  evaluateHousehold, evaluateHouseholdTrend, evaluateLearningStages,
+  householdLearningStage, recommendationFunnel,
+} from '../src/lib/eval-metrics.js';
 
 describe('household evaluation', () => {
   it('is honest when empty', () => {
@@ -56,6 +59,10 @@ describe('household evaluation', () => {
       expect(evalResult[key]).toHaveProperty('evidence');
       expect(evalResult[key]).toHaveProperty('assumption');
     }
+    // The funnel and stage blocks carry the same honesty contract.
+    expect(evalResult.recommendationFunnel).toHaveProperty('confidence');
+    expect(evalResult.recommendationFunnel).toHaveProperty('assumption');
+    expect(evalResult.learningStages).toHaveProperty('assumption');
   });
 
   it('compares the household’s first month with its latest month', () => {
@@ -95,5 +102,93 @@ describe('household evaluation', () => {
     }, { today: '2026-09-01' });
     expect(trend.ready).toBe(false);
     expect(trend.conclusion).toMatch(/not enough history/i);
+  });
+});
+
+describe('recommendation funnel', () => {
+  const ev = (id, type, at, extra = {}) => ({ id, type, at, day: String(at).slice(0, 10), origin: 'user', ...extra });
+
+  it('follows recommendation → action → outcome through the ledger', () => {
+    const state = {
+      householdLedger: [
+        ev('a1', 'RecommendationAccepted', '2026-08-28T18:00:00.000Z', { recipeId: 'curry' }),
+        ev('a2', 'RecommendationAccepted', '2026-08-29T18:00:00.000Z', { recipeId: 'roast' }),
+        ev('a3', 'RecommendationAccepted', '2026-08-30T18:00:00.000Z', { recipeId: 'pasta' }),
+        ev('r1', 'RecommendationRejected', '2026-08-31T18:00:00.000Z', { recipeId: 'noodles' }),
+        // curry got cooked after acceptance; pasta got skipped instead.
+        ev('c1', 'MealCooked', '2026-08-28T20:00:00.000Z', { recipeId: 'curry' }),
+        ev('s1', 'MealSkipped', '2026-08-30T21:00:00.000Z', { date: '2026-08-30', slot: 'dinner' }),
+      ],
+    };
+    const funnel = recommendationFunnel(state, { today: '2026-09-01' });
+    expect(funnel.total).toBe(4);
+    expect(funnel.acceptanceRate).toBeCloseTo(0.75, 2);
+    // Only curry became a meal: 1 of 3 accepted.
+    expect(funnel.followThrough).toBeCloseTo(0.33, 2);
+    expect(funnel.actedOn).toBe(1);
+    expect(funnel.open).toBe(1); // roast: accepted, neither cooked nor skipped
+    expect(funnel.confidence).toBe('medium');
+  });
+
+  it('an empty ledger is an honest empty funnel', () => {
+    const funnel = recommendationFunnel({}, { today: '2026-09-01' });
+    expect(funnel.total).toBe(0);
+    expect(funnel.acceptanceRate).toBeNull();
+    expect(funnel.followThrough).toBeNull();
+    expect(funnel.confidence).toBe('none');
+  });
+});
+
+describe('learning stages', () => {
+  it('grades the stage from the earliest dated observation', () => {
+    expect(householdLearningStage({}, { today: '2026-09-01' })).toMatchObject({ stage: 'cold-start', daysOfHistory: 0 });
+    expect(householdLearningStage({ cooked: [{ date: '2026-08-25' }] }, { today: '2026-09-01' }))
+      .toMatchObject({ stage: 'cold-start' });
+    expect(householdLearningStage({ cooked: [{ date: '2026-08-01' }] }, { today: '2026-09-01' }))
+      .toMatchObject({ stage: 'early' });
+    expect(householdLearningStage({ cooked: [{ date: '2026-05-01' }] }, { today: '2026-09-01' }))
+      .toMatchObject({ stage: 'established' });
+  });
+
+  it('compares cold-start, early and established windows without inventing any', () => {
+    const ev = (id, type, at, extra = {}) => ({ id, type, at, day: String(at).slice(0, 10), origin: 'user', ...extra });
+    const state = {
+      // 70 days of history: cold-start + early + established all active.
+      cooked: [
+        { recipeId: 'curry', date: '2026-07-01' }, { recipeId: 'roast', date: '2026-07-02' },
+        { recipeId: 'curry', date: '2026-08-15' }, { recipeId: 'roast', date: '2026-08-16' },
+        { recipeId: 'pasta', date: '2026-08-20' },
+      ],
+      waste: [{ date: '2026-07-02' }, { date: '2026-08-16' }],
+      mealPlanEvents: [
+        { date: '2026-07-01', status: 'cooked' },
+        { date: '2026-07-03', status: 'skipped' },
+        { date: '2026-08-20', status: 'cooked' },
+      ],
+      householdLedger: [
+        ev('a1', 'RecommendationAccepted', '2026-07-01T10:00:00.000Z', { recipeId: 'curry' }),
+        ev('a2', 'RecommendationAccepted', '2026-08-15T10:00:00.000Z', { recipeId: 'curry' }),
+      ],
+    };
+    const stages = evaluateLearningStages(state, { today: '2026-09-01' });
+    expect(stages.ready).toBe(true);
+    expect(stages.stages['cold-start'].active).toBe(true);
+    expect(stages.stages.early.active).toBe(true);
+    // Established window is open (62 days of history) but empty so far —
+    // its numbers read null, never zero.
+    expect(stages.stages.established.active).toBe(true);
+    expect(stages.stages.established.cooked).toBe(0);
+    expect(stages.stages.established.followThrough).toBeNull();
+    // Follow-through: day-1 acceptance → cooked; day-45 acceptance → cooked.
+    expect(stages.stages['cold-start'].followThrough).toBe(1);
+    expect(stages.stages.early.followThrough).toBe(1);
+    // Waste per cook improved between windows.
+    expect(stages.stages['cold-start'].wastePerCooked).toBeGreaterThan(stages.stages.early.wastePerCooked);
+  });
+
+  it('a fresh household has no stages to compare and says so', () => {
+    const stages = evaluateLearningStages({}, { today: '2026-09-01' });
+    expect(stages.ready).toBe(false);
+    expect(stages.conclusion).toMatch(/cold-start numbers are the defaults/i);
   });
 });

@@ -12,7 +12,6 @@ import {
   advancedToolsForMode,
   profileSectionVisible,
 } from '../src/data/productModes.js';
-import { DEFAULT_WIDGETS } from '../src/data/preferences.js';
 import { setupProgress } from '../src/lib/setup.js';
 import { notificationPresets } from '../src/lib/reminder-suggest.js';
 import { guidanceFor } from '../src/lib/guidance.js';
@@ -51,14 +50,24 @@ describe('product modes', () => {
     expect(applied.widgets).not.toContain('log');
     expect(applied.advancedToolsVisible).toEqual([]);
     expect(applied.name).toBe('Ada');
-  });
-
-  it('everything mode surfaces the full widget set and advanced tools', () => {
+  });  it('everything mode surfaces the full widget set and advanced tools', () => {
     const applied = applyProductMode('everything');
-    expect(applied.widgets).toEqual([...DEFAULT_WIDGETS]);
+    expect(applied.widgets).toEqual(['rings', 'setup', 'log', 'reminders', 'numbers', 'loop', 'report']);
     expect(applied.advancedToolsVisible).toEqual(
       expect.arrayContaining(['planet', 'micros', 'fasting', 'results', 'register']),
     );
+  });
+
+  it('defaults are quiet: optional numbers, loop diagnostics and reports stay off until chosen', () => {
+    const applied = applyProductMode('meal_planning', { name: 'Ada' });
+    expect(applied.productMode).toBe('meal_planning');
+    expect(applied.widgets).toEqual(['rings', 'setup']);
+    // The focused modes only turn on the extras that mode is for.
+    const budget = applyProductMode('shopping_budget');
+    expect(budget.widgets).toContain('numbers');
+    const household = applyProductMode('household');
+    expect(household.widgets).toContain('loop');
+    expect(household.widgets).not.toContain('numbers');
   });
 
   it('reorders nav tabs without dropping any', () => {
@@ -137,7 +146,15 @@ describe('product modes', () => {
     });
     expect(app.productMode).toBe('shopping_budget');
     expect(app.navTabs[1]).toBe('shop');
-    expect(app.homeWidgets).toContain('numbers');
+    // Quiet defaults: no stored widgets → the core loop only; the mode's own
+    // widget set lands when the mode is applied, not merely selected.
+    expect(app.homeWidgets).toEqual(['rings', 'setup']);
+    const applied = deriveApp({
+      ...EMPTY_STATE,
+      productMode: 'shopping_budget',
+      widgets: applyProductMode('shopping_budget').widgets,
+    });
+    expect(applied.homeWidgets).toContain('numbers');
     expect(app.advancedToolsVisible).toEqual([]);
   });
 

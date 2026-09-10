@@ -1,19 +1,19 @@
-/**
- * Week Recovery Engine — repairs the rest of the week whenever reality changes.
+﻿/**
+ * Week Recovery Engine â€” repairs the rest of the week whenever reality changes.
  *
  * Triggers: MealSkipped, IngredientWasted, PantryCorrected, LeftoverCreated,
  * UnplannedShop, MealCooked (with substitutions). Pure + offline + deterministic.
  *
  * Recovery is state-driven, not only trigger-driven: the engine scans the
- * remaining week for real problems — skipped slots that never got refilled,
+ * remaining week for real problems â€” skipped slots that never got refilled,
  * broken meals (an ingredient the pantry no longer covers), urgent leftovers
- * with no home, and shopping rows nothing needs anymore — then repairs each
+ * with no home, and shopping rows nothing needs anymore â€” then repairs each
  * with a MINIMUM-DISRUPTION strategy:
  *
- *   1. reuse a leftover (no new food, frees a slot)          — disruption 0
- *   2. swap in a recipe the pantry already covers            — disruption 1
- *   3. keep the recipe, add the missing item to the list     — disruption 2
- *   4. free the slot and let the household choose             — disruption 3
+ *   1. reuse a leftover (no new food, frees a slot)          â€” disruption 0
+ *   2. swap in a recipe the pantry already covers            â€” disruption 1
+ *   3. keep the recipe, add the missing item to the list     â€” disruption 2
+ *   4. free the slot and let the household choose             â€” disruption 3
  *
  * A cheaper repair always wins over a dearer one for the same problem; ties
  * break deterministically on coverage then id.
@@ -29,77 +29,18 @@
 
 import { dayStamp, daysUntil, weekDates } from './kitchen-dates.js';
 import { expiringSoon } from './kitchen.js';
+import { inferWeekRecoveryTrigger, inferWeekRecoveryTriggers } from './week-recovery-triggers.js';
+import { pantryCoverageOf } from './pantry-coverage.js';
+
+export { inferWeekRecoveryTrigger, inferWeekRecoveryTriggers, pantryCoverageOf };
 
 const norm = (s) => String(s || '').trim().toLowerCase();
 
 const ingredientsOf = (recipe) => (recipe?.ingredients || []).map((i) => norm(i.name || i));
 
-/** Infer the newest unresolved Plan → Shop → Eat event that needs recovery. */
-export const inferWeekRecoveryTrigger = (state = {}, recipeBook = []) => {
-  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
-  const recipesById = Object.fromEntries((recipeBook || []).filter((r) => r?.id).map((r) => [r.id, r]));
-  const pantryById = new Map((Array.isArray(state.pantry) ? state.pantry : []).filter((p) => p?.id).map((p) => [p.id, p]));
-  let recoveryIndex = -1;
-  for (let i = ledger.length - 1; i >= 0; i -= 1) {
-    if (ledger[i]?.type === 'WeekRecovered') {
-      recoveryIndex = i;
-      break;
-    }
-  }
-  const rows = recoveryIndex >= 0 ? ledger.slice(recoveryIndex + 1) : ledger;
-
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const event = rows[i] || {};
-    if (event.type === 'MealSkipped') {
-      return {
-        kind: 'MealSkipped',
-        date: event.date,
-        slot: event.slot || 'dinner',
-        recipeId: event.recipeId || event.plannedRecipeId,
-      };
-    }
-    if (event.type === 'IngredientWasted') {
-      return { kind: 'IngredientWasted', ingredient: event.ingredient || event.name };
-    }
-    if (event.type === 'PantryCorrected') {
-      const corrections = Array.isArray(event.corrections) ? event.corrections : [];
-      const names = corrections
-        .map((c) => c?.name || c?.itemName || pantryById.get(c?.id)?.name)
-        .filter(Boolean);
-      return { kind: 'PantryCorrected', name: names[0] || event.name || event.ingredient, corrections };
-    }
-    if (event.type === 'LeftoverCreated') {
-      return { kind: 'LeftoverCreated', name: event.name };
-    }
-    if (event.type === 'IngredientPurchased' && (event.unplanned || event.offPlan || event.triggerKind === 'UnplannedShop')) {
-      return { kind: 'UnplannedShop', items: event.items || [] };
-    }
-    if (event.type === 'MealCooked' && event.substituted && event.plannedRecipeId) {
-      const actualRecipe = recipesById[event.recipeId] || recipesById[event.actualRecipeId] || null;
-      return {
-        kind: 'MealCooked',
-        substituted: true,
-        plannedRecipeId: event.plannedRecipeId,
-        substitutionIngredients: event.substitutionIngredients || ingredientsOf(actualRecipe),
-      };
-    }
-  }
-
-  // Restored backups and older installs may not have a ledger yet.
-  if (ledger.length) return null;
-  const skipped = [...(Array.isArray(state.mealPlanEvents) ? state.mealPlanEvents : [])]
-    .reverse().find((e) => e?.status === 'skipped' && (!state.day || !e.date || e.date >= state.day));
-  if (skipped) return { kind: 'MealSkipped', date: skipped.date, slot: skipped.slot || 'dinner', recipeId: skipped.plannedRecipeId };
-  const wasted = [...(Array.isArray(state.waste) ? state.waste : [])].reverse()[0];
-  if (wasted?.name) return { kind: 'IngredientWasted', ingredient: wasted.name };
-  const leftover = [...(Array.isArray(state.leftovers) ? state.leftovers : [])]
-    .reverse().find((l) => l?.createdAt === state.day);
-  if (leftover?.name) return { kind: 'LeftoverCreated', name: leftover.name };
-  return null;
-};
 
 
-/** Remaining dates in the week (today → Sunday), Monday-first. */
+/** Remaining dates in the week (today â†’ Sunday), Monday-first. */
 export const remainingWeekDates = (today = dayStamp()) => {
   const week = weekDates(today);
   return week.filter((d) => d >= today);
@@ -127,14 +68,6 @@ export const plannedUsesOf = (plan = {}, recipesById = {}, ingredientName, dates
   return uses;
 };
 
-/** Coverage of a recipe against the pantry: how many ingredients are already owned. */
-export const pantryCoverageOf = (recipe, pantryNames) => {
-  const ingredients = ingredientsOf(recipe);
-  if (!ingredients.length) return { have: 0, total: 0, pct: 0, missing: [] };
-  const have = ingredients.filter((n) => pantryNames.has(n));
-  const missing = ingredients.filter((n) => !pantryNames.has(n));
-  return { have: have.length, total: ingredients.length, pct: Math.round((have.length / ingredients.length) * 100), missing };
-};
 
 /**
  * Minimum-disruption candidate for a slot: a catalogue recipe the pantry
@@ -142,13 +75,13 @@ export const pantryCoverageOf = (recipe, pantryNames) => {
  * cuisine with the broken recipe. Deterministic: coverage desc, shared
  * ingredients desc, time asc, id asc.
  */
-export const bestPantrySwap = ({ catalogue = [], avoidIds = [], pantryNames = new Set(), expiringNames = new Set(), wasRecipe = null }) => {
+export const bestPantrySwap = ({ catalogue = [], avoidIds = [], pantryNames = new Set(), expiringNames = new Set(), wasRecipe = null, pantry = null, today = dayStamp() }) => {
   const wasIngredients = new Set(ingredientsOf(wasRecipe));
   const wasCuisine = norm(wasRecipe?.cuisine);
   const rows = [];
   for (const recipe of catalogue) {
     if (!recipe?.id || avoidIds.includes(recipe.id) || recipe.id === wasRecipe?.id) continue;
-    const coverage = pantryCoverageOf(recipe, pantryNames);
+    const coverage = pantryCoverageOf(recipe, pantryNames, { pantry, today });
     if (coverage.total === 0 || coverage.missing.length > 0) continue; // must be fully covered
     const expiringHits = ingredientsOf(recipe).filter((n) => expiringNames.has(n)).length;
     const shared = ingredientsOf(recipe).filter((n) => wasIngredients.has(n)).length;
@@ -167,23 +100,29 @@ export const bestPantrySwap = ({ catalogue = [], avoidIds = [], pantryNames = ne
 
 /**
  * A repair candidate with its disruption rank. Lower = gentler.
- * 0 reuse-leftover · 1 pantry-swap · 2 add-to-list · 3 slot-freed
+ * 0 reuse-leftover Â· 1 pantry-swap Â· 2 add-to-list Â· 3 slot-freed
  */
 const CANDIDATE_DISRUPTION = { 'reuse-leftover': 0, 'pantry-swap': 1, 'add-to-list': 2, 'slot-freed': 3 };
 
 /**
- * Main entry. `trigger` = { kind, date?, slot?, recipeId?, ingredient?, reason? }.
- * `catalogue` = recipe list for substitution search (optional).
+ * Main entry. `trigger` = { kind, date?, slot?, recipeId?, ingredient?, reason? }
+ * or `triggers` = an array of them (every unresolved trigger since the last
+ * recovery â€” see inferWeekRecoveryTriggers). `catalogue` = recipe list for
+ * substitution search (optional).
  *
- * Without a trigger, the engine audits the remaining week on its own — the
+ * Multiple triggers are processed oldest-first and merged without piling
+ * repairs onto the same slot: a skipped dinner and a wasted ingredient both
+ * naming Thursday's slot produce one repair, not two.
+ *
+ * Without a trigger, the engine audits the remaining week on its own â€” the
  * same repairs the explicit triggers name, found by scanning, so a recovery
  * preview on Home is always current rather than tied to one event.
  */
-export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, catalogue = [] } = {}) => {
+export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, triggers = null, catalogue = [] } = {}) => {
   const plan = state.plan || {};
   const pantry = Array.isArray(state.pantry) ? state.pantry : [];
   const shoppingList = Array.isArray(state.shoppingList) ? state.shoppingList : [];
-  // A saved portion has two homes — the first-class leftovers slice and
+  // A saved portion has two homes â€” the first-class leftovers slice and
   // pantry rows marked Leftovers. Both count, deduped by id.
   const leftoverRows = new Map();
   for (const p of pantry) {
@@ -213,12 +152,26 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
     name: p.name, expiry: p.expiry, daysLeft: daysUntil(p.expiry, today),
   }));
 
-  /** The most urgent leftover, soonest expiry first. */
-  const urgentLeftover = () => leftovers
-    .filter((l) => !l.expiry || daysUntil(l.expiry, today) <= 2)
-    .sort((a, b) => daysUntil(a.expiry || `${today}+7`, today) - daysUntil(b.expiry || `${today}+7`, today))[0] || null;
+  // A trigger list, oldest first; a lone `trigger` still works.
+  const triggerList = (Array.isArray(triggers) && triggers.length
+    ? [...triggers]
+    : (trigger ? [trigger] : []))
+    .filter((t) => t && t.kind)
+    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')) || String(a.id ?? '').localeCompare(String(b.id ?? '')));
 
-  /** A remaining dinner slot with no recipe in it. */
+  /** Leftovers not already promised to a slot, urgent first. */
+  const availableLeftovers = (urgentOnly = false) => leftovers
+    .filter((l) => (urgentOnly ? (!l.expiry || daysUntil(l.expiry, today) <= 2) : true))
+    .filter((l) => !leftoverReuse.some((r) => r.leftoverId === l.id))
+    .sort((a, b) => daysUntil(a.expiry || `${today}+7`, today) - daysUntil(b.expiry || `${today}+7`, today));
+
+  /** The most urgent leftover worth rescuing right now. */
+  const urgentLeftover = () => availableLeftovers(true)[0] || null;
+
+  /**
+   * A remaining dinner slot with no recipe in it â€” soonest first, so a
+   * just-saved portion is offered its earliest sensible home, not the last.
+   */
   const openSlot = () => dates
     .map((date) => ({ date, day: plan[date] || {} }))
     .find(({ day }) => !day.dinner) || null;
@@ -230,7 +183,7 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
 
   /**
    * Repair one broken/freed slot with the least disruptive option that
-   * actually solves it. Exactly one repair per problem — never a pile.
+   * actually solves it. Exactly one repair per problem â€” never a pile.
    */
   const repairSlot = (date, slot, wasRecipeId, problemLabel) => {
     const wasRecipe = byId.get(wasRecipeId) || null;
@@ -238,27 +191,28 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
 
     // Option 0: an urgent leftover fills the slot.
     const leftover = urgentLeftover();
-    if (leftover && !leftoverReuse.some((r) => r.leftoverId === leftover.id)) {
+    if (leftover) {
       options.push({
         kind: 'reuse-leftover',
         apply: () => {
           leftoverReuse.push({ date, slot, leftoverId: leftover.id, name: leftover.name });
           planPatch[date] = { ...(planPatch[date] || plan[date] || {}), [slot]: null };
           repairs.push({ kind: 'reuse-leftover', date, slot, name: leftover.name, disruption: 0, because: problemLabel });
-          explanations.push(`${leftover.name} needs using — suggested for ${slot} on ${date} instead of cooking fresh.`);
+          explanations.push(`${leftover.name} needs using â€” suggested for ${slot} on ${date} instead of cooking fresh.`);
         },
       });
     }
 
-    // Option 1: a catalogue recipe the pantry already fully covers.
-    const swap = bestPantrySwap({ catalogue, avoidIds: [], pantryNames, expiringNames, wasRecipe });
+    // Option 1: a catalogue recipe the pantry already fully covers â€”
+    // quantity-aware, so "covered" means enough of everything, not the name.
+    const swap = bestPantrySwap({ catalogue, avoidIds: [], pantryNames, expiringNames, wasRecipe, pantry, today });
     if (swap) {
       options.push({
         kind: 'pantry-swap',
         apply: () => {
           planPatch[date] = { ...(planPatch[date] || plan[date] || {}), [slot]: swap.recipe.id };
           repairs.push({ kind: 'pantry-swap', date, slot, recipeId: swap.recipe.id, recipeName: swap.recipe.name, disruption: 1, because: problemLabel });
-          explanations.push(`${swap.recipe.name} is already covered by your pantry${swap.expiringHits ? ' and uses food expiring soon' : ''} — suggested for ${slot} on ${date}.`);
+          explanations.push(`${swap.recipe.name} is already covered by your pantry${swap.expiringHits ? ' and uses food expiring soon' : ''} â€” suggested for ${slot} on ${date}.`);
         },
       });
     }
@@ -266,17 +220,18 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
     // Option 2: keep the planned recipe, buy what's missing (only when the
     // plan has a real recipe and the missing rows are not already listed).
     if (wasRecipeId && byId.has(wasRecipeId)) {
-      const missing = pantryCoverageOf(wasRecipe, pantryNames).missing
-        .filter((n) => !pantryNames.has(n) && !listNames.has(n));
+      const missing = pantryCoverageOf(wasRecipe, pantryNames, { pantry, today }).missing
+        .filter((n) => !pantryNames.has(norm(n?.name || n)) && !listNames.has(norm(n?.name || n)));
       if (missing.length) {
         options.push({
           kind: 'add-to-list',
           apply: () => {
-            for (const name of missing.slice(0, 4)) {
+            for (const item of missing.slice(0, 4)) {
+              const name = norm(item?.name || item);
               shoppingAdd.push({ name, reason: `Needed for ${wasRecipe.name} on ${date}`, qty: 1, price: 0, priority: 'normal' });
             }
             repairs.push({ kind: 'add-to-list', date, slot, recipeId: wasRecipeId, recipeName: wasRecipe.name, missing, disruption: 2, because: problemLabel });
-            explanations.push(`${wasRecipe.name} stays on ${date} — ${missing.join(', ')} added to the list.`);
+            explanations.push(`${wasRecipe.name} stays on ${date} â€” ${missing.map((m) => norm(m?.name || m)).join(', ')} added to the list.`);
           },
         });
       }
@@ -288,7 +243,7 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
       apply: () => {
         planPatch[date] = { ...(planPatch[date] || plan[date] || {}), [slot]: null };
         repairs.push({ kind: 'slot-freed', date, slot, disruption: 3, because: problemLabel });
-        explanations.push(`${slot} on ${date} is freed — nothing urgent to rescue, so the choice stays yours.`);
+        explanations.push(`${slot} on ${date} is freed â€” nothing urgent to rescue, so the choice stays yours.`);
       },
     });
 
@@ -296,11 +251,15 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
     options[0].apply();
   };
 
-  // --- 1. MealSkipped (explicit) or a remaining skipped slot still planned ----
+  // --- 1. MealSkipped (explicit, every trigger) or a scanned skipped slot ---
+  // One repair per date|slot, no matter how many triggers name it.
+  const repairedSlots = new Set();
   const skippedSlots = [];
-  if (trigger?.kind === 'MealSkipped' || trigger?.kind === 'MealPlanned') {
-    const { date = today, slot = 'dinner', recipeId = null } = trigger;
-    if (dates.includes(date)) skippedSlots.push({ date, slot, recipeId });
+  const skippedByName = triggerList.filter((t) => t.kind === 'MealSkipped' || t.kind === 'MealPlanned');
+  if (skippedByName.length) {
+    for (const { date = today, slot = 'dinner', recipeId = null } of skippedByName) {
+      if (dates.includes(date)) skippedSlots.push({ date, slot, recipeId });
+    }
   } else {
     // Scan: a slot the household recorded as skipped that the plan still shows.
     for (const e of mealPlanEvents) {
@@ -309,100 +268,136 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
       if (skippedSlotDone.has(key) && plan[e.date]?.[e.slot]) skippedSlots.push({ date: e.date, slot: e.slot, recipeId: plan[e.date][e.slot] });
     }
     // Past-due slots still planned for remaining dates whose meal was never
-    // cooked or skipped (silent misses) are left alone — plan-outcome owns them.
+    // cooked or skipped (silent misses) are left alone â€” plan-outcome owns them.
   }
   for (const { date, slot, recipeId } of skippedSlots) {
+    const key = `${date}|${slot}`;
+    if (repairedSlots.has(key)) continue;
+    repairedSlots.add(key);
     repairSlot(date, slot, recipeId || plan[date]?.[slot] || null, 'a skipped meal');
   }
 
-  // --- 2. Wasted / corrected ingredient: repair the broken future meals ----
-  if (trigger?.kind === 'IngredientWasted' || trigger?.kind === 'PantryCorrected') {
-    const name = trigger.ingredient || trigger.name;
+  // --- 2. Wasted / corrected ingredients: repair the broken future meals ----
+  // Every wasted-ingredient trigger is processed; one list add per distinct
+  // ingredient, one repair per distinct date|slot.
+  const wastedHandled = new Set();
+  for (const t of triggerList) {
+    if (t.kind !== 'IngredientWasted' && t.kind !== 'PantryCorrected') continue;
+    const name = t.ingredient || t.name;
+    const key = norm(name);
+    if (!name || (wastedHandled.has(key) && t.kind === 'IngredientWasted')) continue;
+    wastedHandled.add(key);
     const uses = plannedUsesOf(plan, recipesById, name, dates);
-    if (name && uses.length) {
-      for (const use of uses.slice(0, 4)) {
-        // Prefer a pantry-covered swap; only if none exists does it become a buy.
-        const wasRecipe = byId.get(use.recipeId);
-        const coverage = pantryCoverageOf(wasRecipe, pantryNames);
-        const wastedNowMissing = coverage.missing.some((n) => n.includes(norm(name)) || norm(name).includes(n));
-        const swap = bestPantrySwap({ catalogue, avoidIds: [use.recipeId], pantryNames, expiringNames, wasRecipe });
-        if (swap && wastedNowMissing) {
-          planPatch[use.date] = { ...(planPatch[use.date] || plan[use.date] || {}), [use.slot]: swap.recipe.id };
-          repairs.push({ kind: 'pantry-swap', date: use.date, slot: use.slot, recipeId: swap.recipe.id, recipeName: swap.recipe.name, wasRecipeName: use.recipeName, missingIngredient: name, disruption: 1, because: 'a wasted ingredient' });
-          explanations.push(`${name} is gone, so ${use.recipeName} on ${use.date} swaps to ${swap.recipe.name} — already in your pantry.`);
-        } else {
-          if (name && !pantryNames.has(norm(name)) && !listNames.has(norm(name)) && !shoppingAdd.some((r) => norm(r.name) === norm(name))) {
-            shoppingAdd.push({ name, reason: `Needed for ${use.recipeName} on ${use.date}`, qty: 1, price: 0, priority: 'high' });
-          }
+    if (!uses.length) {
+      explanations.push(`${name} changed, but no remaining planned meal needs it â€” list untouched.`);
+      continue;
+    }
+    let shortAnywhere = 0;
+    for (const use of uses.slice(0, 4)) {
+      const slotKey = `${use.date}|${use.slot}`;
+      if (repairedSlots.has(slotKey)) continue; // already repaired by another trigger
+      // Prefer a pantry-covered swap; only if none exists does it become a buy.
+      const wasRecipe = byId.get(use.recipeId);
+      const coverage = pantryCoverageOf(wasRecipe, pantryNames, { pantry, today });
+      const wastedNowMissing = coverage.missing.some((n) => {
+        const nn = norm(n?.name || n);
+        return nn.includes(norm(name)) || norm(name).includes(nn);
+      });
+      const swap = bestPantrySwap({ catalogue, avoidIds: [use.recipeId], pantryNames, expiringNames, wasRecipe, pantry, today });
+      if (swap && wastedNowMissing) {
+        repairedSlots.add(slotKey);
+        planPatch[use.date] = { ...(planPatch[use.date] || plan[use.date] || {}), [use.slot]: swap.recipe.id };
+        repairs.push({ kind: 'pantry-swap', date: use.date, slot: use.slot, recipeId: swap.recipe.id, recipeName: swap.recipe.name, wasRecipeName: use.recipeName, missingIngredient: name, disruption: 1, because: 'a wasted ingredient' });
+        explanations.push(`${name} is gone, so ${use.recipeName} on ${use.date} swaps to ${swap.recipe.name} â€” already in your pantry.`);
+      } else {
+        shortAnywhere += 1;
+        if (name && !pantryNames.has(norm(name)) && !listNames.has(norm(name)) && !shoppingAdd.some((r) => norm(r.name) === norm(name))) {
+          shoppingAdd.push({ name, reason: `Needed for ${use.recipeName} on ${use.date}`, qty: 1, price: 0, priority: 'high' });
+        }
+        if (!repairedSlots.has(slotKey)) {
+          repairedSlots.add(slotKey);
           repairs.push({ kind: 'add-to-list', date: use.date, slot: use.slot, recipeId: use.recipeId, recipeName: use.recipeName, missingIngredient: name, disruption: 2, because: 'a wasted ingredient' });
         }
       }
-      if (shoppingAdd.length) explanations.push(`${name} is short for ${uses.length} remaining meal${uses.length === 1 ? '' : 's'} — added to the list.`);
-    } else if (name) {
-      explanations.push(`${name} changed, but no remaining planned meal needs it — list untouched.`);
     }
+    if (shortAnywhere) explanations.push(`${name} is short for ${uses.length} remaining meal${uses.length === 1 ? '' : 's'} â€” added to the list.`);
   }
 
-  // --- 3. Leftover created: offer it against the next open slot ----------------
-  if (trigger?.kind === 'LeftoverCreated') {
+  // --- 3. Leftover created: offer it against a suitable open slot ----------
+  // A just-saved portion goes to the SOONEST open dinner slot, not only when
+  // it is already urgent; waiting for urgency is how portions get forgotten.
+  // The portion may not be in either home yet (the event can arrive first),
+  // so a name-only trigger still allocates â€” the id link is made when there
+  // is a row to link.
+  const leftoverTriggers = triggerList.filter((t) => t.kind === 'LeftoverCreated' && t.name);
+  for (const t of leftoverTriggers) {
+    // Fresh leftovers the engine can identify (either home), urgent first.
+    const named = availableLeftovers().find((l) => norm(l.name) === norm(t.name)) || null;
+    if (leftoverReuse.some((r) => r.leftoverId === named?.id) || leftoverReuse.some((r) => !r.leftoverId && norm(r.name) === norm(t.name))) continue;
     const open = openSlot();
-    if (open && trigger.name && !urgentLeftover()) {
-      leftoverReuse.push({ date: open.date, slot: 'dinner', name: trigger.name });
-      repairs.push({ kind: 'reuse-leftover', date: open.date, slot: 'dinner', name: trigger.name, disruption: 0, because: 'a saved leftover' });
-      explanations.push(`${trigger.name} saved — suggested for dinner on ${open.date} before it goes off.`);
-    } else if (trigger.name && !open) {
-      explanations.push(`${trigger.name} saved — every remaining slot already has a meal, so it waits as a fallback.`);
+    if (!open) {
+      explanations.push(`${t.name} saved â€” every remaining slot already has a meal, so it waits as a fallback.`);
+      continue;
     }
+    leftoverReuse.push({
+      date: open.date, slot: 'dinner',
+      ...(named ? { leftoverId: named.id } : {}),
+      name: t.name,
+    });
+    repairs.push({ kind: 'reuse-leftover', date: open.date, slot: 'dinner', name: t.name, disruption: 0, because: 'a saved leftover' });
+    explanations.push(`${t.name} saved â€” suggested for dinner on ${open.date} before it goes off.`);
   }
 
   // --- 4. UnplannedShop: bought items off-plan leave the list ------------------
-  if (trigger?.kind === 'UnplannedShop') {
-    const bought = new Set((trigger.items || []).map(norm).filter(Boolean));
-    if (bought.size) {
-      for (const row of shoppingList) {
-        if (bought.has(norm(row.name))) {
-          shoppingRemove.push({ id: row.id, name: row.name, reason: 'Already bought in the unplanned shop' });
-        }
+  for (const t of triggerList.filter((t) => t.kind === 'UnplannedShop')) {
+    const bought = new Set((t.items || []).map(norm).filter(Boolean));
+    if (!bought.size) continue;
+    for (const row of shoppingList) {
+      if (bought.has(norm(row.name)) && !shoppingRemove.some((r) => r.id === row.id)) {
+        shoppingRemove.push({ id: row.id, name: row.name, reason: 'Already bought in the unplanned shop' });
       }
-      if (shoppingRemove.length) explanations.push(`Removed ${shoppingRemove.length} list item${shoppingRemove.length === 1 ? '' : 's'} the unplanned shop already covered.`);
     }
+    if (shoppingRemove.length) explanations.push(`Removed ${shoppingRemove.length} list item${shoppingRemove.length === 1 ? '' : 's'} the unplanned shop already covered.`);
   }
 
   // --- 5. MealCooked (with substitutions): retire the swapped-out rows ---------
-  if (trigger?.kind === 'MealCooked' && trigger.substituted && trigger.plannedRecipeId && byId.has(trigger.plannedRecipeId)) {
-    const cookedIngredients = new Set((trigger.substitutionIngredients || []).map(norm).filter(Boolean));
-    if (cookedIngredients.size) {
-      const plannedIngredients = new Set(ingredientsOf(byId.get(trigger.plannedRecipeId)));
-      const orphaned = [...plannedIngredients].filter((n) => !cookedIngredients.has(n) && !pantryNames.has(n));
-      for (const row of shoppingList) {
-        if (orphaned.some((n) => norm(row.name).includes(n) || n.includes(norm(row.name)))) {
-          shoppingRemove.push({ id: row.id, name: row.name, reason: 'The substitution no longer needs it' });
-        }
+  for (const t of triggerList.filter((t) => t.kind === 'MealCooked' && t.substituted && t.plannedRecipeId && byId.has(t.plannedRecipeId))) {
+    const cookedIngredients = new Set((t.substitutionIngredients || []).map(norm).filter(Boolean));
+    if (!cookedIngredients.size) continue;
+    const plannedIngredients = new Set(ingredientsOf(byId.get(t.plannedRecipeId)));
+    const orphaned = [...plannedIngredients].filter((n) => !cookedIngredients.has(n) && !pantryNames.has(n));
+    for (const row of shoppingList) {
+      if (shoppingRemove.some((r) => r.id === row.id)) continue;
+      if (orphaned.some((n) => norm(row.name).includes(n) || n.includes(norm(row.name)))) {
+        shoppingRemove.push({ id: row.id, name: row.name, reason: 'The substitution no longer needs it' });
       }
-      if (shoppingRemove.length) explanations.push(`Removed ${shoppingRemove.length} row${shoppingRemove.length === 1 ? '' : 's'} the cooked substitution made unnecessary.`);
     }
+    if (orphaned.length && shoppingRemove.length) explanations.push(`Removed ${shoppingRemove.length} row${shoppingRemove.length === 1 ? '' : 's'} the cooked substitution made unnecessary.`);
   }
 
   // --- 6. Prune shopping list: drop rows only needed by skipped meals ------------
-  if ((trigger?.kind === 'MealSkipped') && trigger.recipeId && byId.has(trigger.recipeId)) {
-    const skippedIngredients = new Set(ingredientsOf(byId.get(trigger.recipeId)));
+  for (const triggerRow of triggerList.filter((t) => t.kind === 'MealSkipped' && t.recipeId && byId.has(t.recipeId))) {
+    const skippedIngredients = new Set(ingredientsOf(byId.get(triggerRow.recipeId)));
     const stillNeeded = new Set();
     for (const date of dates) {
       const day = planPatch[date] || plan[date] || {};
       for (const recipeId of Object.values(day)) {
-        if (!recipeId || recipeId === trigger.recipeId) continue;
+        if (!recipeId || recipeId === triggerRow.recipeId) continue;
         for (const n of ingredientsOf(byId.get(recipeId) || {})) stillNeeded.add(n);
       }
     }
     for (const row of shoppingList) {
       const key = norm(row.name);
+      if (shoppingRemove.some((r) => r.id === row.id)) continue;
       if (skippedIngredients.has(key) && ![...stillNeeded].some((n) => n.includes(key) || key.includes(n))) {
         if (!pantryNames.has(key)) {
           shoppingRemove.push({ id: row.id, name: row.name, reason: 'Only needed by the skipped meal' });
         }
       }
     }
-    if (shoppingRemove.length) explanations.push(`Removed ${shoppingRemove.length} list item${shoppingRemove.length === 1 ? '' : 's'} only needed by the skipped meal.`);
+  }
+  if (triggerList.some((t) => t.kind === 'MealSkipped') && shoppingRemove.length) {
+    explanations.push(`Removed ${shoppingRemove.length} list item${shoppingRemove.length === 1 ? '' : 's'} only needed by the skipped meal.`);
   }
 
   // --- 7. Budget check ----------------------------------------------------------
@@ -425,7 +420,7 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
     }
     : null;
   if (budgetNote?.over) explanations.push('Heads up: the repaired list would push this week over budget.');
-  else if (budgetNote && removalSavings > 0) explanations.push(`The repairs save about £${removalSavings.toFixed(2)} on the list.`);
+  else if (budgetNote && removalSavings > 0) explanations.push(`The repairs save about Â£${removalSavings.toFixed(2)} on the list.`);
 
   // Deterministic ordering: least disruptive first, then by date.
   repairs.sort((a, b) => (a.disruption ?? 9) - (b.disruption ?? 9) || String(a.date).localeCompare(String(b.date)));
@@ -435,12 +430,13 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, ca
     : 0;
 
   if (!repairs.length && !explanations.length) {
-    explanations.push('Week checked — plan, list, leftovers and budget still line up.');
+    explanations.push('Week checked â€” plan, list, leftovers and budget still line up.');
   }
 
   return {
     today,
-    trigger: trigger || { kind: 'Check' },
+    trigger: trigger || (triggerList.length ? triggerList.at(-1) : { kind: 'Check' }),
+    triggers: triggerList,
     remainingDates: dates,
     repairs,
     planPatch,

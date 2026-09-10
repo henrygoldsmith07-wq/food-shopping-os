@@ -26,6 +26,20 @@ const openPantry = () => {
 
 const closeSheet = (title) => fireEvent.click(within(dialogFor(title)).getByLabelText('Close'));
 
+/** The budget headroom sits in the optional numbers panel on Home — turn it
+ *  on through the real Preferences sheet, as a person who wants it would. */
+const enableNumbersWidget = () => {
+  fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
+  const section = screen.getByText('Guidance & you').closest('section');
+  fireEvent.click(within(section).getByText('Preferences'));
+  const prefs = dialogFor('Preferences');
+  const chip = within(prefs).queryByRole('button', { name: 'Home preferences' });
+  fireEvent.click(chip || within(prefs).getByText('Home'));
+  // 'Your numbers' is the optional panel; 'rings' is fixed and always on.
+  fireEvent.click(within(prefs).getByLabelText('Show Your numbers'));
+  fireEvent.click(within(prefs).getByLabelText('Close'));
+};
+
 const addListItem = (name, price) => {
   // The form stays open between adds, so only open it when it is closed.
   if (screen.queryByText('Add an item')) fireEvent.click(screen.getByText('Add an item'));
@@ -183,6 +197,7 @@ describe('shopping and spending', () => {
     fireEvent.click(within(dialogFor('Finish shop')).getByText('Record this shop'));
 
     fireEvent.click(screen.getByText('Today'));
+    enableNumbersWidget();
     expect(screen.getAllByText('£42.00').length).toBeGreaterThan(0);
     expect(screen.getByText('£18.00 left')).toBeDefined();
   });

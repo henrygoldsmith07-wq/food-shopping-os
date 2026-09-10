@@ -25,6 +25,7 @@ const DEFAULT_WEIGHTS = {
   time: 0.12,
   budget: 0.1,
   waste: 0.12,
+  nutrition: 0.06,
   leftover: 0.6,
 };
 
@@ -67,9 +68,137 @@ const leftoverBonus = (recipe, leftovers = []) => {
 };
 
 /**
+ * Learn how THIS household actually responds to recommendations, from the
+ * ledger alone — the one timeline of what really happened. Every signal is
+ * dated, so the profile decays: last month's rejection matters less than
+ * last night's. Nothing here touches state; it is a pure reading.
+ *
+ *   acceptance  — recommended recipes the household cooked (vs rejected)
+ *   skipRate    — planned meals that became skips, by reason
+ *   substitutions — cooked-off-plan swaps away from what was suggested
+ *   wasteBias   — wasted ingredients pulling riskier picks down
+ *   budgetDiscipline — over-budget weeks pulling budget weight up
+ *   timeAccuracy — actual cooking minutes vs estimates steering time weight
+ */
+export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recipesById = {} } = {}) => {
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  const cookingTimeHistory = Array.isArray(state.cookingTimeHistory) ? state.cookingTimeHistory : [];
+  const shops = Array.isArray(state.shops) ? state.shops : [];
+
+  // Half-life decay: a signal loses half its weight every 28 days.
+  const ageDays = (at) => {
+    if (!at) return 0;
+    const t = new Date(`${String(today)}T12:00:00`);
+    const s = new Date(String(at));
+    if (Number.isNaN(s.getTime())) return 0;
+    return Math.max(0, Math.round((t - s) / 86400000));
+  };
+  const weightAt = (at) => Math.pow(0.5, ageDays(at) / 28);
+
+  const accepted = {};
+  const rejected = {};
+  const cookedCount = {};
+  const skippedWithReason = {};
+  let acceptedWeight = 0;
+  let rejectedWeight = 0;
+  let substitutionWeight = 0;
+  let responseTotalRaw = 0;
+  let cookedSignalCount = 0;
+
+  for (const e of ledger) {
+    const w = weightAt(e.at);
+    if (e.type === 'RecommendationAccepted' && e.recipeId) {
+      accepted[e.recipeId] = (accepted[e.recipeId] || 0) + w;
+      acceptedWeight += w;
+      responseTotalRaw += 1;
+    } else if (e.type === 'RecommendationRejected' && e.recipeId) {
+      rejected[e.recipeId] = (rejected[e.recipeId] || 0) + w;
+      rejectedWeight += w;
+      responseTotalRaw += 1;
+    } else if (e.type === 'MealCooked' && e.recipeId) {
+      cookedCount[e.recipeId] = (cookedCount[e.recipeId] || 0) + 1;
+      cookedSignalCount += 1;
+      if (e.substituted) substitutionWeight += w;
+    } else if (e.type === 'MealSkipped' && e.reason) {
+      skippedWithReason[e.reason] = (skippedWithReason[e.reason] || 0) + w;
+    }
+  }
+
+  // Acceptance of what we suggested — the headline learning signal.
+  const responseTotal = acceptedWeight + rejectedWeight;
+  const acceptanceRate = responseTotal > 0 ? acceptedWeight / responseTotal : null;
+
+  // Waste: disliked/overcooked ingredients the household threw away recently.
+  const waste = Array.isArray(state.waste) ? state.waste : [];
+  const wasteByIngredient = {};
+  for (const row of waste) {
+    const key = String(row?.name || '').trim().toLowerCase();
+    if (!key) continue;
+    // waste rows carry a date, not an ISO stamp — approximate the same decay.
+    const w = weightAt(row.date ? `${row.date}T12:00:00.000Z` : null);
+    wasteByIngredient[key] = (wasteByIngredient[key] || 0) + w;
+  }
+  const wasteWeightTotal = Object.values(wasteByIngredient).reduce((s, v) => s + v, 0);
+
+  // Budget discipline: weeks where the list+spend exceeded the budget.
+  const weeklyBudget = Number(state.weeklyBudget) || 0;
+  const overBudgetWeeks = weeklyBudget
+    ? shops.filter((s) => {
+      const spend = Number(s?.total) || 0;
+      return spend > weeklyBudget * 0.6 && spend > 0; // a single trip over 60% of the weekly budget counts
+    }).length
+    : 0;
+
+  // Time accuracy: how far actual minutes sit from estimates, decayed.
+  let timeDelta = 0;
+  let timeSamples = 0;
+  for (const row of cookingTimeHistory) {
+    const actual = Number(row?.actualMins);
+    const est = Number(row?.estimatedMins);
+    if (!Number.isFinite(actual) || !Number.isFinite(est) || actual <= 0 || est <= 0) continue;
+    const w = weightAt(row.date ? `${row.date}T12:00:00.000Z` : null);
+    timeDelta += w * (actual - est) / Math.max(1, est);
+    timeSamples += w;
+  }
+  const timeBias = timeSamples > 0 ? timeDelta / timeSamples : null; // + = cooking takes longer than recipes say
+
+  const evidence = responseTotalRaw + cookedSignalCount + waste.length + cookingTimeHistory.length;
+  const confidence = evidence >= 12 ? 'high' : evidence >= 5 ? 'medium' : evidence > 0 ? 'low' : 'none';
+
+  return {
+    acceptanceRate,
+    acceptedByRecipe: accepted,
+    rejectedByRecipe: rejected,
+    cookedCount,
+    skippedWithReason,
+    substitutionWeight,
+    wasteByIngredient,
+    wasteWeightTotal,
+    overBudgetWeeks,
+    timeBias,
+    timeSamples,
+    evidence: Math.round(evidence * 100) / 100,
+    confidence,
+    /** Per-recipe affinity in [-1, 1]: accepted/cooked up, rejected down. */
+    affinityFor(recipeId) {
+      const a = accepted[recipeId] || 0;
+      const r = rejected[recipeId] || 0;
+      const c = Math.min(3, cookedCount[recipeId] || 0);
+      const total = a + r + c;
+      if (total <= 0) return 0;
+      return Math.max(-1, Math.min(1, (a + c * 0.6 - r * 1.2) / total));
+    },
+  };
+};
+
+/**
  * Rank recipes for one evening. Returns [{ recipe, score, confidence,
  * reasons[], explanation, blocked }] sorted best-first. Blocked (allergen /
  * diet / religious) rows sort last with score 0 and reasons saying why.
+ *
+ * Learning arrives two ways: the household model (what the household likes,
+ * tolerates and wastes) and the decision profile (how it responded to past
+ * suggestions). Both adjust the weights; hard dietary lines never move.
  */
 export const rankMealsForTonight = ({
   recipes = [],
@@ -77,6 +206,7 @@ export const rankMealsForTonight = ({
   leftovers = [],
   taste = null,
   householdModel = null,
+  decisionProfile = null,
   diets = [],
   allergies = [],
   intolerances = [],
@@ -96,20 +226,45 @@ export const rankMealsForTonight = ({
   const wasteNames = new Set((waste || []).filter((w) => w.reason === 'disliked').map((w) => String(w.name || '').toLowerCase()));
   const m = month || Number(String(today).slice(5, 7)) || new Date().getMonth() + 1;
   const model = householdModel || {};
+  const profile = decisionProfile || null;
   const preferences = fact(model.preferences);
   const effort = fact(model.effortTolerance);
   const wasteLearning = fact(model.wasteProbability);
   const pricing = fact(model.priceSensitivity);
+
+  // Weight adjustment starts from the model's confidence levels…
+  let coverageDelta = -0.06 * preferences.level - 0.05 * effort.level - 0.04 * pricing.level;
+  let preferenceDelta = 0.06 * preferences.level;
+  let timeDelta = 0.05 * effort.level;
+  let budgetDelta = 0.04 * pricing.level;
+  let wasteDelta = 0.04 * wasteLearning.level;
+
+  // …then the decision profile bends them by what actually happened.
+  if (profile) {
+    const learnable = profile.confidence === 'high' ? 1 : profile.confidence === 'medium' ? 0.6 : profile.confidence === 'low' ? 0.3 : 0;
+    if (learnable) {
+      // Accepted suggestions say we can lean on learned taste harder.
+      if (profile.acceptanceRate != null) preferenceDelta += learnable * 0.05 * (profile.acceptanceRate - 0.5) * 2;
+      // Frequent substitutions say our pantry reasoning misses — trust coverage more, taste less.
+      if (profile.substitutionWeight > 0.5) { coverageDelta += learnable * 0.03; preferenceDelta -= learnable * 0.02; }
+      // Skipping for time reasons says the time fit matters more here.
+      if ((profile.skippedWithReason['no-time'] || 0) > 0.5) timeDelta += learnable * 0.04;
+      // Over-budget weeks push budget weight up.
+      if (profile.overBudgetWeeks >= 2) budgetDelta += learnable * 0.04;
+      // Cooking takes longer than the book says → trust the time fit harder.
+      if (profile.timeBias != null && profile.timeBias > 0.2) timeDelta += learnable * 0.03;
+      // Waste keeps showing up → weigh waste risk more.
+      if (profile.wasteWeightTotal >= 2) wasteDelta += learnable * 0.03;
+    }
+  }
+
   const weights = {
     ...DEFAULT_WEIGHTS,
-    coverage: DEFAULT_WEIGHTS.coverage
-      - 0.06 * preferences.level
-      - 0.05 * effort.level
-      - 0.04 * pricing.level,
-    preference: DEFAULT_WEIGHTS.preference + 0.06 * preferences.level,
-    time: DEFAULT_WEIGHTS.time + 0.05 * effort.level,
-    budget: DEFAULT_WEIGHTS.budget + 0.04 * pricing.level,
-    waste: DEFAULT_WEIGHTS.waste + 0.04 * wasteLearning.level,
+    coverage: DEFAULT_WEIGHTS.coverage + coverageDelta,
+    preference: DEFAULT_WEIGHTS.preference + preferenceDelta,
+    time: DEFAULT_WEIGHTS.time + timeDelta,
+    budget: DEFAULT_WEIGHTS.budget + budgetDelta,
+    waste: DEFAULT_WEIGHTS.waste + wasteDelta,
   };
 
   const rows = (recipes || []).map((recipe) => {
@@ -138,7 +293,12 @@ export const rankMealsForTonight = ({
     const tasteRaw = taste ? tasteScore(recipe, taste) : 0;
     const taste01 = clamp01((tasteRaw + 3) / 12);
     const time = Number(recipe.time) || 0;
-    const timeFit = availableMinutes ? (time <= availableMinutes ? 1 : Math.max(0, 1 - (time - availableMinutes) / 60)) : 1;
+    // When the household's own cooking runs long, score against the
+    // estimate it actually experiences, not the one in the book.
+    const effectiveTime = profile?.timeBias != null && profile.timeBias > 0
+      ? Math.round(time * (1 + Math.min(1, profile.timeBias)))
+      : time;
+    const timeFit = availableMinutes ? (effectiveTime <= availableMinutes ? 1 : Math.max(0, 1 - (effectiveTime - availableMinutes) / 60)) : 1;
     const cost = Number(recipe.costPerServing) || 0;
     const budgetFit = cost <= budgetPerServing ? 1 : Math.max(0.4, 1 - (cost - budgetPerServing) / Math.max(1, budgetPerServing));
     const repeat = recencyPenalty(recipe.id, cooked, today);
@@ -146,43 +306,61 @@ export const rankMealsForTonight = ({
     const disliked = (recipe.ingredients || []).some((i) => wasteNames.has(String(i.name || i).toLowerCase()));
     // Waste risk: high coverage + expiring use = low risk (good).
     const wasteRisk = clamp01(1 - (coverage.pct / 100) * 0.6 - Math.min(0.4, expiring.length * 0.12));
+    // Nutrition balance — an explicit, honest factor: kcal per serving
+    // against a 600 kcal dinner norm. Light meals score up, heavy ones
+    // down, both bounded so no single dish is buried by one number.
+    const kcal = Number(recipe.kcal) || 0;
+    const nutritionBalance = kcal
+      ? clamp01(1 - Math.abs(kcal - 600) / 600)
+      : 0.5; // unknown nutrition is neutral, never punished or rewarded
+    // Household-specific affinity: did they accept, cook or reject this
+    // exact recipe before?
+    const affinity = profile ? profile.affinityFor(recipe.id) : 0;
 
     const score = Math.round((
       explanation.score * weights.coverage
-      + (0.5 + taste01) * weights.preference
+      + (0.5 + taste01 + 0.12 * affinity) * weights.preference
       + timeFit * weights.time
       + budgetFit * weights.budget
       + (1 - wasteRisk) * weights.waste
+      + nutritionBalance * weights.nutrition
       + leftover * weights.leftover
       - repeat * 0.8
       - (disliked ? 0.5 : 0)
+      - (affinity < 0 ? Math.min(0.4, -affinity * 0.3) : 0)
       - (suitability.warnings?.length ? 0.06 * suitability.warnings.length : 0)
     ) * 1000) / 1000;
 
     const evidence = (coverage.have || 0) + expiring.length + (taste?.rated ? 1 : 0) + (cooked.length ? 1 : 0)
-      + byConfidence(model.preferences) + byConfidence(model.mealAcceptance) + byConfidence(model.wasteProbability);
-    const confidence = !pantry.length && !taste?.rated && !householdModel ? 'low'
+      + byConfidence(model.preferences) + byConfidence(model.mealAcceptance) + byConfidence(model.wasteProbability)
+      + (profile?.evidence >= 5 ? 1 : 0);
+    const confidence = !pantry.length && !taste?.rated && !householdModel && !profile ? 'low'
       : evidence >= 7 ? 'high' : evidence >= 4 ? 'medium' : 'low';
 
     const reasons = [
       `${coverage.pct}% already in your kitchen`,
       expiring.length ? `Uses ${expiring.map((e) => e.pantryItem.name.toLowerCase()).join(', ')} before it goes off` : null,
       leftover > 0 ? 'Puts saved leftovers to work' : null,
-      availableMinutes && time > availableMinutes ? `${time} min is longer than your ${availableMinutes} min window` : `${time || '?'} min to cook`,
+      availableMinutes && effectiveTime > availableMinutes ? `${effectiveTime} min is longer than your ${availableMinutes} min window` : `${time || '?'} min to cook`,
       `£${cost.toFixed(2)}/serving`,
+      kcal ? `${kcal} kcal/serving` : null,
       repeat >= 0.18 ? 'Cooked very recently — variety counts against it' : null,
       disliked ? 'Uses something this household disliked before' : null,
+      affinity > 0.3 ? 'You took this suggestion before' : null,
+      affinity < -0.3 ? 'Rejected when suggested before' : null,
     ].filter(Boolean);
 
     return {
       recipe, score, confidence, reasons, explanation, suitability, blocked: false,
       wasteRisk: Math.round(wasteRisk * 100) / 100,
       learning: {
-        used: Boolean(householdModel),
+        used: Boolean(householdModel || profile),
         preferenceConfidence: preferences.confidence,
         effortConfidence: effort.confidence,
         wasteConfidence: wasteLearning.confidence,
         priceConfidence: pricing.confidence,
+        decisionConfidence: profile?.confidence || 'none',
+        weights,
       },
     };
   });
@@ -215,6 +393,7 @@ export const decideTonight = (options = {}) => {
       effortConfidence: 'none',
       wasteConfidence: 'none',
       priceConfidence: 'none',
+      decisionConfidence: 'none',
     },
   };
 };

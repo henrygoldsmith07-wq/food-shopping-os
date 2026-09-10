@@ -8,7 +8,6 @@
  * Features stay available; mode only changes what is front and centre.
  */
 
-import { DEFAULT_WIDGETS } from './preferences.js';
 import { NOTIFICATION_PRESETS } from './reminders.js';
 import { ALL_ENABLED_TOOLS, DEFAULT_ENABLED_TOOLS } from './optionalTools.js';
 
@@ -47,7 +46,7 @@ export const PRODUCT_MODES = [
     label: 'Meal Planning',
     blurb: 'Decide what to cook — the list comes from the plan.',
     entryGoal: 'plan',
-    widgets: ['rings', 'setup', 'loop', 'numbers'],
+    widgets: ['rings', 'setup'],
     primaryTabs: ['home', 'plan', 'recipes', 'shop', 'log'],
     setupOrder: ['plan', 'cook', 'pantry', 'shop', 'log', 'targets'],
     recommendationBoost: {
@@ -127,7 +126,7 @@ export const PRODUCT_MODES = [
     label: 'Household Organisation',
     blurb: 'Pantry, people, shared lists and less food going off.',
     entryGoal: 'pantry',
-    widgets: ['rings', 'setup', 'loop', 'numbers', 'reminders'],
+    widgets: ['rings', 'setup', 'loop'],
     primaryTabs: ['home', 'shop', 'plan', 'recipes', 'log'],
     setupOrder: ['pantry', 'shop', 'plan', 'cook', 'log', 'targets'],
     recommendationBoost: {
@@ -154,7 +153,8 @@ export const PRODUCT_MODES = [
     label: 'Everything',
     blurb: 'Full app — every surface visible from day one.',
     entryGoal: 'plan',
-    widgets: [...DEFAULT_WIDGETS],
+    // The one mode that means it: every optional widget, on.
+    widgets: ['rings', 'setup', 'log', 'reminders', 'numbers', 'loop', 'report'],
     primaryTabs: [...ALL_TABS],
     setupOrder: [...ALL_SETUP],
     recommendationBoost: {},

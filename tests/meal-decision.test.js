@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideTonight, rankMealsForTonight } from '../src/lib/meal-decision.js';
+import { decideTonight, learnMealDecisionProfile, rankMealsForTonight } from '../src/lib/meal-decision.js';
 
 const recipes = [
   {
@@ -89,5 +89,93 @@ describe('meal decision engine', () => {
     });
     expect(blockedCount).toBe(1);
     expect(pick.recipe.id).not.toBe('peanut-noodles');
+  });
+});
+
+describe('meal decision learning', () => {
+  const ev = (id, type, at, extra = {}) => ({ id, type, at, day: String(at).slice(0, 10), origin: 'user', ...extra });
+
+  it('learns acceptance and per-recipe affinity from the ledger, with decay', () => {
+    const state = {
+      day: '2026-09-01',
+      householdLedger: [
+        ev('a1', 'RecommendationAccepted', '2026-08-25T10:00:00.000Z', { recipeId: 'quick-curry' }),
+        ev('a2', 'RecommendationAccepted', '2026-08-30T10:00:00.000Z', { recipeId: 'slow-roast' }),
+        ev('r1', 'RecommendationRejected', '2026-08-31T10:00:00.000Z', { recipeId: 'peanut-noodles' }),
+        // Ancient rejection: last year's news barely counts.
+        ev('r0', 'RecommendationRejected', '2025-09-01T10:00:00.000Z', { recipeId: 'quick-curry' }),
+      ],
+    };
+    const profile = learnMealDecisionProfile(state, { today: '2026-09-01' });
+    expect(profile.acceptanceRate).toBeGreaterThan(0.5);
+    expect(profile.affinityFor('quick-curry')).toBeGreaterThan(0);
+    expect(profile.affinityFor('peanut-noodles')).toBeLessThan(0);
+    // The ancient rejection is decayed away — curry still reads positive.
+    expect(profile.rejectedByRecipe['quick-curry']).toBeLessThan(0.01);
+  });
+
+  it('an empty household learns nothing and says so', () => {
+    const profile = learnMealDecisionProfile({}, { today: '2026-09-01' });
+    expect(profile.confidence).toBe('none');
+    expect(profile.acceptanceRate).toBeNull();
+    expect(profile.affinityFor('any-recipe')).toBe(0);
+  });
+
+  it('bends the weights and the ranking with real responses', () => {
+    // This household keeps rejecting the curry and accepting the noodles.
+    const state = {
+      day: '2026-09-01',
+      householdLedger: [
+        ev('r1', 'RecommendationRejected', '2026-08-31T10:00:00.000Z', { recipeId: 'quick-curry' }),
+        ev('r2', 'RecommendationRejected', '2026-08-30T10:00:00.000Z', { recipeId: 'quick-curry' }),
+        ev('r3', 'RecommendationRejected', '2026-08-29T10:00:00.000Z', { recipeId: 'quick-curry' }),
+        ev('a1', 'RecommendationAccepted', '2026-08-28T10:00:00.000Z', { recipeId: 'peanut-noodles' }),
+        ev('a2', 'RecommendationAccepted', '2026-08-27T10:00:00.000Z', { recipeId: 'peanut-noodles' }),
+      ],
+    };
+    const profile = learnMealDecisionProfile(state, { today: '2026-09-01' });
+    expect(profile.confidence).toBe('medium');
+    const learned = rankMealsForTonight({
+      recipes, pantry, decisionProfile: profile, today: '2026-09-01', date: '2026-09-01',
+    });
+    const curry = learned.find((r) => r.recipe.id === 'quick-curry');
+    // The repeated rejection is named in the reasons, honestly.
+    expect(curry.reasons.join(' ')).toMatch(/Rejected when suggested before/i);
+    expect(learned[0].learning.decisionConfidence).toBe('medium');
+    expect(learned[0].learning.weights).toHaveProperty('nutrition');
+  });
+
+  it('scores nutrition as a real factor and says when it does not know', () => {
+    const withKcal = rankMealsForTonight({
+      recipes: [
+        { ...recipes[0], kcal: 550 },
+        { ...recipes[1], kcal: 950 }, // heavy
+      ],
+      pantry, today: '2026-09-01', date: '2026-09-01',
+    });
+    expect(withKcal[0].learning.weights.nutrition).toBeGreaterThan(0);
+    // Unknown kcal is neutral, not punished: the factor exists either way.
+    const noKcal = rankMealsForTonight({ recipes, pantry, today: '2026-09-01', date: '2026-09-01' });
+    expect(noKcal.every((r) => !r.blocked)).toBe(true);
+  });
+
+  it('cooking that really runs longer tightens the time fit', () => {
+    const state = {
+      day: '2026-09-01',
+      householdLedger: [],
+      cookingTimeHistory: [
+        { recipeId: 'slow-roast', estimatedMins: 30, actualMins: 75, date: '2026-08-30' },
+        { recipeId: 'quick-curry', estimatedMins: 20, actualMins: 50, date: '2026-08-29' },
+      ],
+    };
+    const profile = learnMealDecisionProfile(state, { today: '2026-09-01' });
+    expect(profile.timeBias).toBeGreaterThan(0.2);
+    const learned = rankMealsForTonight({
+      recipes, pantry, decisionProfile: profile,
+      availableMinutes: 30, today: '2026-09-01', date: '2026-09-01',
+    });
+    const curry = learned.find((r) => r.recipe.id === 'quick-curry');
+    // 20 min book time, but this household takes ~50 — the reason says 30+.
+    expect(curry.reasons.join(' ')).toMatch(/min is longer than your 30 min window/);
   });
 });

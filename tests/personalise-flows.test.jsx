@@ -172,12 +172,21 @@ describe('the Home layout', () => {
   it('hides an optional panel without touching the number behind it', () => {
     onboard();
     goTab('Today');
+    // Optional panels start hidden — reports are off until asked for.
     fireEvent.click(screen.getByText('Explore more'));
-    expect(screen.getByText('Your outcomes')).toBeTruthy();
+    expect(screen.queryByText('Your outcomes')).toBeNull();
 
+    // Turning the panel on is what makes it appear…
     const sheet = openPrefs('Home');
     fireEvent.click(within(sheet).getByLabelText('Show Progress and reports'));
     fireEvent.click(within(sheet).getByLabelText('Close'));
+    fireEvent.click(screen.getByText('Explore more'));
+    expect(screen.getByText('Your outcomes')).toBeTruthy();
+
+    // …and turning it off hides the panel without touching the numbers.
+    const off = openPrefs('Home');
+    fireEvent.click(within(off).getByLabelText('Show Progress and reports'));
+    fireEvent.click(within(off).getByLabelText('Close'));
     fireEvent.click(screen.getByText('Explore more'));
     expect(screen.queryByText('Your outcomes')).toBeNull();
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
@@ -193,12 +202,18 @@ describe('the Home layout', () => {
   it('puts the default layout back', () => {
     onboard();
     const sheet = openPrefs('Home');
+    // Loop diagnostics are off by default — turn one on, then reset.
+    fireEvent.click(within(sheet).getByLabelText('Show Food loop and loop check'));
     const row = within(sheet).getByLabelText('Move Food loop and loop check up').parentElement;
     fireEvent.click(within(row).getByRole('switch'));
     fireEvent.click(within(sheet).getByText(/Back to the default layout/));
     fireEvent.click(within(sheet).getByLabelText('Close'));
     goTab('Today');
     expect(within(document.querySelector('main')).getAllByText(/This week/).length).toBeGreaterThan(0);
+    // The default layout is the quiet one: no loop diagnostics, no numbers.
+    const again = openPrefs('Home');
+    expect(within(again).getByLabelText('Show Food loop and loop check').getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(within(again).getByLabelText('Close'));
   });
 });
 

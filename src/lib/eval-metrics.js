@@ -28,6 +28,154 @@ const inPeriod = (row, start, end) => {
 
 const rateFor = (count, total) => (total ? Math.round((count / total) * 100) / 100 : null);
 
+/**
+ * Recommendation → action → outcome: the full funnel the app is actually
+ * judged on. A recommendation only counts as "acted on" when the ledger
+ * shows the household cooked that recipe after accepting it; an accepted
+ * suggestion never cooked is a shrug, not a win. Outcomes are read from
+ * what followed: a MealCooked for the same recipe (good), a MealSkipped
+ * for the slot (bad), nothing yet (open).
+ *
+ * Every row is decayed like the rest of the eval: an acceptance from three
+ * months ago is history, this week's is signal.
+ */
+export const recommendationFunnel = (state = {}, { today = dayStamp() } = {}) => {
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  const cookedAfter = (recipeId, at) => ledger.some((e) =>
+    e.type === 'MealCooked' && e.recipeId === recipeId && String(e.at || '') > String(at || ''));
+
+  // Chronological walk: an acceptance stays "open" until something resolves
+  // it — a cook of that recipe (acted on) or the next skip (which belongs to
+  // the most recent still-open acceptance, not to every earlier one).
+  const rows = [...ledger]
+    .filter((e) => e.type === 'RecommendationAccepted' || e.type === 'RecommendationRejected'
+      || e.type === 'MealCooked' || e.type === 'MealSkipped')
+    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')) || String(a.id ?? '').localeCompare(String(b.id ?? '')));
+  const accepted = [];
+  const rejectedCount = rows.filter((e) => e.type === 'RecommendationRejected').length;
+  let actedOn = 0;
+  let acceptedThenSkipped = 0;
+  for (const e of rows) {
+    if (e.type === 'RecommendationAccepted') {
+      accepted.push(e);
+      if (e.recipeId && cookedAfter(e.recipeId, e.at)) actedOn += 1;
+    } else if (e.type === 'MealSkipped') {
+      // The skip resolves the most recent still-open acceptance, if any.
+      const openIdx = [...accepted].reverse().findIndex((a) =>
+        !(a.recipeId && cookedAfter(a.recipeId, a.at)) && !a.resolved);
+      if (openIdx >= 0) accepted[accepted.length - 1 - openIdx].resolved = 'skipped';
+    }
+  }
+  const open = accepted.filter((a) => !a.resolved && !(a.recipeId && cookedAfter(a.recipeId, a.at))).length;
+  acceptedThenSkipped = accepted.filter((a) => a.resolved === 'skipped').length;
+  void today;
+
+  const total = accepted.length + rejectedCount;
+  return {
+    total,
+    accepted: accepted.length,
+    rejected: rejectedCount,
+    actedOn,
+    acceptedThenSkipped,
+    open,
+    acceptanceRate: rateFor(accepted.length, total),
+    /** Of the accepted, how many became a real cooked meal. */
+    followThrough: rateFor(actedOn, accepted.length),
+    assumption: 'Accepted → a later MealCooked of the same recipe; a skip resolves the most recent still-open acceptance.',
+    confidence: total >= 8 ? 'high' : total >= 3 ? 'medium' : total > 0 ? 'low' : 'none',
+    evidence: total,
+  };
+};
+
+/**
+ * Learning stages: how long the household has actually been using Forq.
+ *   cold-start   — under 2 weeks of history (defaults do the talking)
+ *   early        — 2–8 weeks (learning has something to chew on)
+ *   established — past 8 weeks (the model should be earning its keep)
+ * Stage windows are inclusive of the day itself, and read from the earliest
+ * dated observation in state, never from install guesses.
+ */
+export const householdLearningStage = (state = {}, { today = dayStamp() } = {}) => {
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  const cooked = Array.isArray(state.cooked) ? state.cooked : [];
+  const shops = Array.isArray(state.shops) ? state.shops : [];
+  const allDates = [
+    ...cooked.map((r) => r.date),
+    ...shops.map((r) => r.date),
+    ...ledger.map((r) => r.day || String(r.at || '').slice(0, 10)),
+  ].map((date) => String(date || '').slice(0, 10)).filter(Boolean).sort();
+  const earliest = allDates[0] || null;
+  if (!earliest) return { stage: 'cold-start', daysOfHistory: 0, earliest: null };
+  const days = daysBetween(earliest, today);
+  const stage = days >= 56 ? 'established' : days >= 14 ? 'early' : 'cold-start';
+  return { stage, daysOfHistory: Math.max(0, days), earliest };
+};
+
+/**
+ * Longitudinal performance by learning stage: did the app do better once it
+ * knew the household? Compares recommendation follow-through, plan
+ * completion and waste-per-cook across the cold-start, early and
+ * established windows, using only the events dated inside each window —
+ * the same three numbers the Outcome Dashboard already shows, but split by
+ * where the household was in its learning journey. Windows with no events
+ * read as null, never zero.
+ */
+export const evaluateLearningStages = (state = {}, { today = dayStamp() } = {}) => {
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  const cooked = Array.isArray(state.cooked) ? state.cooked : [];
+  const waste = Array.isArray(state.waste) ? state.waste : [];
+  const mealPlanEvents = Array.isArray(state.mealPlanEvents) ? state.mealPlanEvents : [];
+  const { earliest } = householdLearningStage(state, { today });
+  if (!earliest) {
+    return {
+      ready: false,
+      stages: {},
+      conclusion: 'No history yet — the cold-start numbers are the defaults, not learning.',
+      assumption: 'Stages split on earliest dated observation: cold-start <2 weeks, early 2–8, established 8+.',
+    };
+  }
+  const daysOfHistory = Math.max(0, daysBetween(earliest, today));
+  // Window ends: cold-start ends at day 13, early ends at day 55.
+  const windows = {
+    'cold-start': [earliest, addDays(earliest, Math.min(13, daysOfHistory))],
+    'early': [addDays(earliest, 14), addDays(earliest, Math.min(55, daysOfHistory))],
+    'established': [addDays(earliest, 56), today],
+  };
+  const stages = {};
+  for (const [name, [start, end]] of Object.entries(windows)) {
+    if (daysOfHistory < (name === 'early' ? 14 : name === 'established' ? 56 : 0)) {
+      stages[name] = { active: false, cooked: null, wastePerCooked: null, planCompletion: null, followThrough: null };
+      continue;
+    }
+    const rows = {
+      cooked: cooked.filter((r) => inPeriod(r, start, end)).length,
+      waste: waste.filter((r) => inPeriod(r, start, end)).length,
+      skipped: mealPlanEvents.filter((r) => r.status === 'skipped' && inPeriod(r, start, end)).length,
+      accepted: ledger.filter((r) => r.type === 'RecommendationAccepted' && inPeriod(r, start, end)).length,
+      acceptedActed: ledger.filter((r) => r.type === 'RecommendationAccepted' && inPeriod(r, start, end)
+        && cooked.some((c) => c.recipeId === r.recipeId && inPeriod(c, start, end))).length,
+      plannedCooked: mealPlanEvents.filter((r) => (r.status === 'cooked' || r.status === 'substituted') && inPeriod(r, start, end)).length,
+    };
+    stages[name] = {
+      active: true,
+      cooked: rows.cooked,
+      wastePerCooked: rows.cooked ? Math.round((rows.waste / rows.cooked) * 100) / 100 : null,
+      planCompletion: rateFor(rows.plannedCooked, rows.plannedCooked + rows.skipped),
+      followThrough: rateFor(rows.acceptedActed, rows.accepted),
+    };
+  }
+  const activeNames = Object.entries(stages).filter(([, s]) => s.active).map(([n]) => n);
+  const conclusion = activeNames.length < 2
+    ? `Only the ${activeNames[0] || 'cold-start'} window has history so far — later stages are still ahead.`
+    : `Comparing ${activeNames.join(' → ')}: follow-through ${activeNames.map((n) => `${n} ${stages[n].followThrough ?? '—'}`).join(', ')}.`;
+  return {
+    ready: activeNames.length >= 2,
+    stages,
+    conclusion,
+    assumption: 'Windows measured from the earliest dated observation; a window with no events reads null, never zero.',
+  };
+};
+
 /** Longitudinal comparison: the first month a household used Forq vs the latest. */
 export const evaluateHouseholdTrend = (state = {}, { today = dayStamp() } = {}) => {
   const cooked = Array.isArray(state.cooked) ? state.cooked : [];
@@ -200,13 +348,16 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
 
   const evidenceTotal = corrections.length + waste.length + shops.length + outcomes.length + cooked.length;
   return {
-    version: 1,
+    version: 2,
     evaluatedAt: today,
     ready: evidenceTotal >= 4,
     predictionError,
     wasteReduction,
     unplannedShops,
     recommendationAcceptance: recommendationAcceptanceMetric,
+    recommendationFunnel: recommendationFunnel(state, { today }),
+    learningStages: evaluateLearningStages(state, { today }),
+    learningStage: householdLearningStage(state, { today }).stage,
     portionAccuracy,
     autopilotUndoRate,
     trend: evaluateHouseholdTrend(state, { today }),

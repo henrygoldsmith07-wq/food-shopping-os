@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildHouseholdModel, confidenceForCount, confidenceForEvidence, householdModelReady, householdModelSummary,
+  buildHouseholdModel, calibratedConfidence, confidenceCalibration, confidenceForCount,
+  confidenceForEvidence, decayEvidence, householdModelReady, householdModelSummary,
   makeFact,
 } from '../src/lib/household-model.js';
 
@@ -57,7 +58,9 @@ describe('unified household model', () => {
   it('every fact carries confidence, evidence count, source and time', () => {
     const model = buildHouseholdModel(state, { recipes, today: '2026-09-01' });
     for (const [key, fact] of Object.entries(model)) {
-      if (key === 'version' || key === 'updatedAt' || key === 'evidenceScore') continue;
+      // calibration is the audit block (decay/conflict/prediction readings),
+      // not a learned fact; version/updatedAt/evidenceScore are metadata.
+      if (['version', 'updatedAt', 'evidenceScore', 'calibration'].includes(key)) continue;
       expect(fact, key).toHaveProperty('value');
       expect(fact, key).toHaveProperty('confidence');
       expect(['high', 'medium', 'low', 'none']).toContain(fact.confidence);
@@ -136,5 +139,59 @@ describe('unified household model', () => {
     }, { recipes, today: '2026-09-01' });
     expect(model.preferences.confidence).toBe('none');
     expect(model.appetite.confidence).toBe('none');
+  });
+});
+
+describe('confidence calibration', () => {
+  it('decays old evidence with a 28-day half-life', () => {
+    // Fresh: every observation from the last few days survives almost whole.
+    expect(decayEvidence(4, ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-01'], '2026-09-01')).toBeCloseTo(4, 0);
+    // A month old: about half the weight remains.
+    expect(decayEvidence(2, ['2026-08-04', '2026-08-04'], '2026-09-01')).toBeCloseTo(1, 0);
+    // Three months old: barely counts, but never zero.
+    expect(decayEvidence(1, ['2026-06-01'], '2026-09-01')).toBeGreaterThan(0);
+    expect(decayEvidence(1, ['2026-06-01'], '2026-09-01')).toBeLessThan(0.3);
+    // Undated observations count as fresh, not discarded.
+    expect(decayEvidence(5, ['2026-08-30'], '2026-09-01')).toBeCloseTo(5, 0);
+    expect(decayEvidence(3, [], '2026-09-01')).toBeCloseTo(2.4, 0);
+  });
+
+  it('caps confidence when evidence conflicts with itself', () => {
+    const agreeing = calibratedConfidence({ count: 10, source: 'taste-ratings', dates: [], conflicting: 0, today: '2026-09-01' });
+    const split = calibratedConfidence({ count: 10, source: 'taste-ratings', dates: [], conflicting: 4, today: '2026-09-01' });
+    expect(agreeing.level).toBe('high');
+    expect(split.level).toBe('medium'); // a split household is "mixed signals", never "confident"
+    expect(split.conflicting).toBe(true);
+  });
+
+  it('reports the decay it applied so callers can say so', () => {
+    const stale = calibratedConfidence({ count: 4, source: 'cooked', dates: ['2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04'], today: '2026-09-01' });
+    expect(stale.decayed).toBe(true);
+    expect(stale.effectiveCount).toBeLessThan(4);
+  });
+
+  it('calibrates stated confidence against what actually happened', () => {
+    const snap = (confidence, probability, outcome, date = '2026-08-30') => ({
+      type: 'prediction_snapshot', confidence, probability, outcome, date,
+    });
+    const calibration = confidenceCalibration([
+      snap('high', 0.9, true), snap('high', 0.9, true), snap('high', 0.9, false), snap('high', 0.9, true),
+      snap('low', 0.2, false), snap('low', 0.2, false), snap('low', 0.2, true), snap('low', 0.2, false),
+    ], '2026-09-01');
+    expect(calibration.ready).toBe(true);
+    expect(calibration.byConfidence.high.actualRate).toBeCloseTo(0.75, 2);
+    expect(calibration.byConfidence.high.gap).toBeCloseTo(-0.15, 2);
+    expect(calibration.byConfidence.low.verdict).toBe('calibrated');
+    // Nothing resolved yet: an honest "not ready", not zeroes.
+    expect(confidenceCalibration([], '2026-09-01').ready).toBe(false);
+  });
+
+  it('the built model carries calibration readings for its main facts', () => {
+    const model = buildHouseholdModel(state, { recipes, today: '2026-09-01' });
+    expect(model.calibration.preferences).toHaveProperty('level');
+    expect(model.calibration.acceptance).toHaveProperty('level');
+    expect(model.calibration.waste).toHaveProperty('level');
+    expect(model.calibration.cadence).toHaveProperty('level');
+    expect(model.calibration.predictions).toHaveProperty('ready');
   });
 });

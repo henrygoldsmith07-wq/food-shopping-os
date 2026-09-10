@@ -1,5 +1,5 @@
-/**
- * Unified Household Model — the single place Forq learns how a household eats.
+﻿/**
+ * Unified Household Model â€” the single place Forq learns how a household eats.
  *
  * Replaces scattered fragments (taste, household-preferences,
  * planning-intelligence, waste-learning, consumption-predictions,
@@ -8,7 +8,7 @@
  *
  * Sources are evidence names callers can audit: 'taste-ratings', 'cooked',
  * 'meal-events', 'waste', 'receipts', 'pantry', 'plan', 'member-profile'.
- * Nothing is invented: 0 evidence → confidence 'none' and value null.
+ * Nothing is invented: 0 evidence â†’ confidence 'none' and value null.
  */
 
 import { buildTasteProfile } from './taste.js';
@@ -17,6 +17,15 @@ import { wasteLearningProfile } from './waste-learning.js';
 import { consumptionRateFor } from './consumption-predictions.js';
 import { mealPlanAdherence, repeatFatigue, cookingTimeLearning } from './planning-intelligence.js';
 import { dayStamp, weekDates } from './kitchen-dates.js';
+import {
+  calibratedConfidence, confidenceCalibration, confidenceForCount, confidenceForEvidence, decayEvidence,
+} from './confidence-calibration.js';
+
+// Calibration lives in its own module now; re-exported here so every
+// existing import (tests, store, model callers) keeps working.
+export {
+  calibratedConfidence, confidenceCalibration, confidenceForCount, confidenceForEvidence, decayEvidence,
+};
 
 export const MODEL_SOURCES = [
   'taste-ratings',
@@ -30,50 +39,6 @@ export const MODEL_SOURCES = [
   'shopping',
 ];
 
-/**
- * Not all evidence is equally strong. An explicit rating says more than one
- * cooked meal; a pantry row says less than a receipt. These weights turn a
- * raw observation count into an evidence score, so confidence reflects the
- * strength of what was observed rather than merely how often.
- */
-const SOURCE_EVIDENCE_WEIGHTS = {
-  'taste-ratings': 1.15,
-  'member-profile': 1,
-  'waste': 0.9,
-  'meal-events': 0.8,
-  'receipts': 0.8,
-  'shopping': 0.65,
-  'cooked': 0.55,
-  'plan': 0.5,
-  'pantry': 0.4,
-};
-
-const evidenceScoreFor = (count = 0, source = 'cooked') =>
-  (Number(count) || 0) * (SOURCE_EVIDENCE_WEIGHTS[source] ?? 0.5);
-
-/** Back-compatible count-only confidence, used by simple callers and tests. */
-export const confidenceForCount = (count = 0) => {
-  const n = Number(count) || 0;
-  if (n <= 0) return 'none';
-  if (n < 3) return 'low';
-  if (n < 8) return 'medium';
-  return 'high';
-};
-
-/**
- * Source-aware confidence:
- *   none  → no usable evidence
- *   low   → a first signal, not yet a pattern
- *   medium→ enough independent observations to steer a suggestion
- *   high  → repeated, weighted evidence the household can rely on
- */
-export const confidenceForEvidence = (count = 0, source = 'cooked') => {
-  const score = evidenceScoreFor(count, source);
-  if (score <= 0) return 'none';
-  if (score < 1.2) return 'low';
-  if (score < 4) return 'medium';
-  return 'high';
-};
 
 export const makeFact = (value, { confidence, evidenceCount = 0, source = 'cooked', updatedAt = null } = {}) => ({
   value,
@@ -87,7 +52,7 @@ const emptyFact = (source = 'cooked') => makeFact(null, { evidenceCount: 0, sour
 
 const text = (v) => String(v || '').trim().toLowerCase();
 
-/** Weekday (Mon–Fri) vs weekend behaviour from cooked + plan events. */
+/** Weekday (Monâ€“Fri) vs weekend behaviour from cooked + plan events. */
 const weekdayBehaviourFrom = (cooked = [], mealPlanEvents = [], today = dayStamp()) => {
   const buckets = { weekday: 0, weekend: 0 };
   const byDay = {};
@@ -156,7 +121,21 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   const wasteDislikes = waste.filter((w) => w.reason === 'disliked').map((w) => text(w.name)).filter(Boolean);
   const tasteEvidence = Object.keys(tasteRatings).length + favourites.length + cooked.length;
   const explicitTasteEvidence = Object.keys(tasteRatings).length + favourites.length;
-  const preferenceConfidence = confidenceForEvidence(explicitTasteEvidence, 'taste-ratings');
+  // Conflicting taste evidence: 'nope' ratings sit directly against the
+  // likes/favourites/cooks that make up the rest of the signal.
+  const tasteConflicts = dislikedIds.length;
+  const tasteDates = [
+    ...cooked.map((c) => c.date),
+    // Ratings carry no dates â€” they count as fresh but not conflicting.
+  ].filter(Boolean);
+  const prefCalibration = calibratedConfidence({
+    count: explicitTasteEvidence || tasteEvidence,
+    source: explicitTasteEvidence ? 'taste-ratings' : 'cooked',
+    dates: tasteDates,
+    conflicting: tasteConflicts,
+    today: at,
+  });
+  const preferenceConfidence = prefCalibration.level;
 
   // --- dietary constraints (hard lines from profiles + household) -----------
   const memberDiets = [...new Set(members.flatMap((m) => m.diets || []))];
@@ -178,7 +157,18 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     ? Math.round(((adherence.completed ?? adherence.cooked ?? 0) / Math.max(1, adherence.planned)) * 100) / 100
     : null;
   const acceptanceEvidence = (adherence?.planned || 0) + (adherence?.completed ?? adherence?.cooked ?? 0);
-  const acceptanceConfidence = confidenceForEvidence(acceptanceEvidence, 'meal-events');
+  // Skips directly contradict the cooks that make up the acceptance signal.
+  const acceptCalibration = calibratedConfidence({
+    count: acceptanceEvidence,
+    source: 'meal-events',
+    dates: [
+      ...(cooked || []).map((c) => c.date),
+      ...(mealPlanEvents || []).filter((e) => e.status === 'cooked').map((e) => e.date),
+    ],
+    conflicting: adherence?.skipped || 0,
+    today: at,
+  });
+  const acceptanceConfidence = acceptCalibration.level;
   let fatigue = [];
   try {
     const dates = weekDates(today);
@@ -214,7 +204,13 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     });
   }
   const wasteEvidence = wasteProfile.reduce((sum, row) => sum + row.wasteEvents + row.purchases, 0);
-  const wasteConfidence = confidenceForEvidence(wasteEvidence, 'waste');
+  const wasteCalibration = calibratedConfidence({
+    count: wasteEvidence,
+    source: 'waste',
+    dates: waste.map((w) => w.date).filter(Boolean),
+    today: at,
+  });
+  const wasteConfidence = wasteCalibration.level;
   const topWaste = wasteProfile.slice(0, 8).map((r) => r.key);
   // Consumption rates only for ingredients the household actually buys.
   const ingredientConsumption = {};
@@ -232,7 +228,13 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   // --- shopping cadence + price sensitivity --------------------------------------
   const cadence = shoppingCadenceFrom(shops);
   const cadenceEvidence = cadence.trips || 0;
-  const cadenceConfidence = confidenceForEvidence(cadenceEvidence, 'receipts');
+  const cadenceCalibration = calibratedConfidence({
+    count: cadenceEvidence,
+    source: 'receipts',
+    dates: cadence.dates || [],
+    today: at,
+  });
+  const cadenceConfidence = cadenceCalibration.level;
   const offersUsed = (state.offers || []).filter((o) => o.used || o.appliedCount > 0).length;
   const couponsUsed = (state.coupons || []).filter((c) => c.used).length;
   const priceEvidence = shops.length + offersUsed + couponsUsed;
@@ -246,7 +248,7 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   }));
 
   return {
-    version: 1,
+    version: 2,
     updatedAt: at,
     evidenceScore: Math.round(([
       preferenceConfidence === 'high' ? 1 : preferenceConfidence === 'medium' ? 0.5 : 0,
@@ -254,6 +256,14 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
       wasteConfidence === 'high' ? 1 : wasteConfidence === 'medium' ? 0.5 : 0,
       cadenceConfidence === 'high' ? 1 : cadenceConfidence === 'medium' ? 0.5 : 0,
     ].reduce((sum, value) => sum + value, 0) / 4) * 100) / 100,
+    // Calibration: which facts the decay/conflict rules actually moved.
+    calibration: {
+      preferences: prefCalibration,
+      acceptance: acceptCalibration,
+      waste: wasteCalibration,
+      cadence: cadenceCalibration,
+      predictions: confidenceCalibration(state.predictionSnapshots || [], at),
+    },
     appetite: makeFact(
       { householdSize, typicalPortions, portionsOverride: state.portionsOverride || 'auto' },
       {
@@ -348,7 +358,7 @@ export const householdModelReady = (model) =>
 
 /** One-line honest summary for Learn/Home. Never invents a fact. */
 export const householdModelSummary = (model) => {
-  if (!model) return 'No household learning yet — plan, cook and log to teach Forq.';
+  if (!model) return 'No household learning yet â€” plan, cook and log to teach Forq.';
   const bits = [];
   const pref = model.preferences?.value;
   if (pref?.cuisines?.length && model.preferences?.evidenceCount > 0) bits.push(`leans ${pref.cuisines.slice(0, 2).join(' and ')}`);
@@ -358,6 +368,6 @@ export const householdModelSummary = (model) => {
   if (model.effortTolerance?.value?.typicalMinutes && model.effortTolerance?.evidenceCount > 0) {
     bits.push(`happiest around ${model.effortTolerance.value.typicalMinutes} min cooks`);
   }
-  if (!bits.length) return 'Not enough history yet — every suggestion says what evidence it used.';
-  return `Household ${bits.join(' · ')} (${model.preferences?.confidence || 'low'} confidence).`;
+  if (!bits.length) return 'Not enough history yet â€” every suggestion says what evidence it used.';
+  return `Household ${bits.join(' Â· ')} (${model.preferences?.confidence || 'low'} confidence).`;
 };

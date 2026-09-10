@@ -16,6 +16,26 @@ const onboard = () => {
   fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
 };
 
+const dialogFor = (title) => {
+  const dialog = [...document.querySelectorAll('[role="dialog"]')]
+    .find((d) => d.querySelector('h2')?.textContent === title);
+  if (!dialog) throw new Error(`No open sheet titled "${title}"`);
+  return dialog;
+};
+
+/** The loop panel is optional and starts hidden — turn it on through the
+ *  real Preferences sheet, the way a person who wants the diagnostics would. */
+const enableLoopWidget = () => {
+  fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
+  const section = screen.getByText('Guidance & you').closest('section');
+  fireEvent.click(within(section).getByText('Preferences'));
+  const prefs = dialogFor('Preferences');
+  const chip = within(prefs).queryByRole('button', { name: 'Home preferences' });
+  fireEvent.click(chip || within(prefs).getByText('Home'));
+  fireEvent.click(within(prefs).getByLabelText('Show Food loop and loop check'));
+  fireEvent.click(within(prefs).getByLabelText('Close'));
+};
+
 describe('global UX controls', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
@@ -32,6 +52,11 @@ describe('global UX controls', () => {
 
   it('opens quick add with Q and undoes an action with Ctrl+Z', () => {
     onboard();
+    // The hydration counter lives on the diary — the simplified Home shows
+    // the cooking, not the running totals. The diary opens from the palette.
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    const palette = screen.getByText('Command palette').closest('[role="dialog"]');
+    fireEvent.click(within(palette).getByText('Open food diary'));
     fireEvent.keyDown(window, { key: 'q' });
     const quick = screen.getByText('Quick add').closest('[role="dialog"]');
     fireEvent.click(within(quick).getByText('Glass of water'));
@@ -65,6 +90,7 @@ describe('global UX controls', () => {
 
   it('keeps pantry capture name-first and optional', () => {
     onboard();
+    enableLoopWidget();
     fireEvent.click(screen.getByText('Add what’s in your cupboards'));
     const pantry = screen.getByText('Smart pantry').closest('[role="dialog"]');
     fireEvent.click(within(pantry).getByText('Add an item'));
@@ -79,6 +105,7 @@ describe('global UX controls', () => {
 
   it('keeps secondary home detail closed and makes offline recovery visible', async () => {
     onboard();
+    enableLoopWidget();
     expect(screen.getByText('Week progress').closest('details').open).toBe(false);
 
     window.dispatchEvent(new Event('offline'));

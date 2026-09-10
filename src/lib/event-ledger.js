@@ -95,11 +95,43 @@ export const ledgerCounts = (state = {}) => {
  * happened. The projection is the audit view — counts and last-touch stamps
  * per Plan → Shop → Eat stage, recomputed from events alone so evaluation,
  * recovery and the Household Model read one story.
+ *
+ * Ordering is total and deterministic: `at` first, then `id` as the
+ * tiebreak, so two events stamped in the same instant (or the same ledger
+ * arriving in different array orders) always fold the same way. Duplicate
+ * ids are replayed once — first occurrence wins — and the projection
+ * reports `duplicates` so audits see what was skipped rather than silently
+ * double-counting. Unknown event types never enter the fold at all, and an
+ * event with no readable `at` sorts last, not first: an unstamped event
+ * claiming to precede everything is exactly the lie replay must not tell.
  */
+const eventStampOf = (e) => (e?.at != null && String(e.at).trim() !== '' ? String(e.at) : null);
+
 export const replayLedger = (events = []) => {
-  const rows = [...(Array.isArray(events) ? events : [])].sort((a, b) => String(a.at).localeCompare(String(a.at)));
+  const ordered = [...(Array.isArray(events) ? events : [])]
+    .filter((e) => isLedgerType(e?.type))
+    .sort((a, b) => {
+      const atA = eventStampOf(a);
+      const atB = eventStampOf(b);
+      if (atA === null && atB !== null) return 1;
+      if (atB === null && atA !== null) return -1;
+      if (atA !== null && atB !== null && atA !== atB) return atA.localeCompare(atB);
+      // Same instant (or both unstamped): the id tiebreak keeps replay stable.
+      return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+    });
+  const seen = new Set();
+  const duplicates = [];
+  const rows = [];
+  for (const e of ordered) {
+    if (e.id != null) {
+      if (seen.has(e.id)) { duplicates.push(e.id); continue; }
+      seen.add(e.id);
+    }
+    rows.push(e);
+  }
   const projection = {
     total: rows.length,
+    duplicates,
     planned: 0,
     cooked: 0,
     skipped: 0,
@@ -114,7 +146,6 @@ export const replayLedger = (events = []) => {
     byDay: {},
   };
   for (const e of rows) {
-    if (!isLedgerType(e.type)) continue;
     const day = String(e.day || String(e.at || '').slice(0, 10));
     projection.byDay[day] = projection.byDay[day] || { events: 0 };
     projection.byDay[day].events += 1;

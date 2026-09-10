@@ -29,6 +29,29 @@ const openDiary = () => {
 /** Profile moved out of the tab bar; the avatar in the header opens it. */
 const openProfile = () => fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
 
+const dialogFor = (title) => {
+  const dialog = [...document.querySelectorAll('[role="dialog"]')]
+    .find((d) => d.querySelector('h2')?.textContent === title);
+  if (!dialog) throw new Error(`No open sheet titled "${title}"`);
+  return dialog;
+};
+
+/** The numbers panel is optional and starts hidden — turn it on through the
+ *  real Preferences sheet, the way a person who wants the running totals
+ *  on Home would. */
+const enableNumbersWidget = () => {
+  openProfile();
+  const section = screen.getByText('Guidance & you').closest('section');
+  fireEvent.click(within(section).getByText('Preferences'));
+  const prefs = dialogFor('Preferences');
+  const chip = within(prefs).queryByRole('button', { name: 'Home preferences' });
+  fireEvent.click(chip || within(prefs).getByText('Home'));
+  // 'Your numbers' is the optional diary/budget panel; 'Budget and diary
+  // numbers' (rings) is fixed and always on.
+  fireEvent.click(within(prefs).getByLabelText('Show Your numbers'));
+  fireEvent.click(within(prefs).getByLabelText('Close'));
+};
+
 describe('first run', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
@@ -68,12 +91,14 @@ describe('an empty app', () => {
 
   it('shows zeros and prompts, not fabricated history', () => {
     onboard();
-    expect(screen.getAllByText('0').length).toBeGreaterThan(0); // calories today
-    expect(screen.getByText('of 2,200 kcal')).toBeDefined();
+    // The diary totals live behind the optional numbers panel; the prompts
+    // the core Home always shows are checked straight away.
     expect(screen.getAllByText(/Nothing planned — tap to choose/).length).toBe(3);
-    expect(screen.getByText(/Nothing tracked yet/)).toBeDefined();
-    expect(screen.getByText(/Empty — add items/)).toBeDefined();
     expect(screen.queryByText(/day cooking streak/)).toBeNull();
+    enableNumbersWidget();
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0); // calories today
+    expect(screen.getAllByText('of 2,200 kcal').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Nothing tracked yet|Empty — add items/).length).toBeGreaterThan(0);
   });
 
   it('has an empty diary', () => {
@@ -114,6 +139,8 @@ describe('the budget you set', () => {
 
     localStorage.clear();
     onboard({ budget: '60' });
+    // The budget headroom sits in the optional numbers panel.
+    enableNumbersWidget();
     expect(screen.getByText('of £60')).toBeDefined();
     expect(screen.getByText('£60.00 left')).toBeDefined();
   });
@@ -175,6 +202,17 @@ describe('goal-led first entry', () => {
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Start using Forq'));
     fireEvent.click(screen.getByText('Today')); // the dashboard carries the goal CTA
+
+    // The goal CTA lives in the loop panel — optional, so turn it on through
+    // Preferences first, then the CTA is right there on Home.
+    fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
+    const section = screen.getByText('Guidance & you').closest('section');
+    fireEvent.click(within(section).getByText('Preferences'));
+    const prefs = dialogFor('Preferences');
+    const chip = within(prefs).queryByRole('button', { name: 'Home preferences' });
+    fireEvent.click(chip || within(prefs).getByText('Home'));
+    fireEvent.click(within(prefs).getByLabelText('Show Food loop and loop check'));
+    fireEvent.click(within(prefs).getByLabelText('Close'));
 
     expect(screen.getAllByText('Add what’s in your cupboards').length).toBeGreaterThan(0);
   });

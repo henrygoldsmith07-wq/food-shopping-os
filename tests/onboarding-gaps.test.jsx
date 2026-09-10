@@ -78,10 +78,16 @@ describe('copy last week on the plan tab', () => {
       d.setDate(d.getDate() + i);
       return d.toISOString().slice(0, 10);
     });
+    // Last week's Tuesday, computed from the Monday rather than spliced from
+    // a string — a splice lands on the 25th of the month, which is only last
+    // week's Tuesday one week in four.
+    const lastTuesday = new Date(`${lastMonday}T12:00:00`);
+    lastTuesday.setDate(lastTuesday.getDate() + 1);
+    const lastTuesdayStamp = lastTuesday.toISOString().slice(0, 10);
     seedState({
       plan: {
         [lastMonday]: { dinner: 'r-mon' },
-        [lastMonday.slice(0, 8) + '25']: { dinner: 'r-tue' },
+        [lastTuesdayStamp]: { dinner: 'r-tue' },
         [thisMonday]: { dinner: 'already-decided' },
       },
     });

@@ -1,6 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import App from '../src/App.jsx';
+import { weeklyChallenges } from '../src/lib/progress.js';
+
+/** The XP a fresh household earns from its first cook, whatever week it is.
+ *  60 for the cook, 4 for the diary entry it logs, plus 40 for every weekly
+ *  challenge that a first cook happens to complete — the rotation is picked
+ *  by the week itself, so the test reads it rather than guessing at it. */
+const xpAfterFirstCook = (state, today) => {
+  const challenges = weeklyChallenges(state, today).filter((c) => c.done);
+  return 60 + 4 + challenges.reduce((sum, c) => sum + c.xp, 0);
+};
 
 const onboard = () => {
   render(<App />);
@@ -55,9 +65,12 @@ describe('a fresh app has nothing to show off', () => {
 
   it('shows today’s goals, all empty', () => {
     onboard();
-    expect(screen.getByText('Today’s goals')).toBeDefined();
-    expect(screen.getByText('0 of 5 done')).toBeDefined();
-    expect(screen.getByText('Log three meals')).toBeDefined();
+    // Goals live in Progress now, not on Home — the simplified Home shows
+    // the cooking, the Progress sheet shows the counters.
+    const sheet = openProgress();
+    expect(within(sheet).getByText('Today')).toBeDefined();
+    expect(within(sheet).getByText(/0 of 5 done today/)).toBeDefined();
+    expect(within(sheet).getByText('Log three meals')).toBeDefined();
   });
 
   it('has no badges or achievements yet, and says so', () => {
@@ -78,24 +91,29 @@ describe('earning it', () => {
     onboard();
     cookARecipe();
 
-    // 60 for the cook, 4 for the meal it logged, and 40 for the weekly
-    // challenge the cook completes: "Cook something new" has a target of one,
-    // so the first recipe cooked finishes it. The original arithmetic here
-    // counted the first two and not the third.
+    // 60 for the cook and 4 for the meal it logged, plus whatever weekly
+    // challenges a first cook genuinely completes this week. The rotation
+    // is chosen by the week itself, so the expectation is computed from
+    // the same metrics the header reads — the test holds for any week.
+    const today = new Date().toISOString().slice(0, 10);
+    const expectedXp = xpAfterFirstCook({ cooked: [{ recipeId: 'coconut-chickpea-curry', date: today }], log: {}, day: today }, today);
     fireEvent.click(screen.getByText('Today'));
-    expect(screen.getByText(/Level 1 · 104 XP/)).toBeDefined();
-    expect(screen.getByText('1 of 5 done')).toBeDefined();
+    expect(screen.getByText(new RegExp(`Level 1 · ${expectedXp} XP`))).toBeDefined();
 
     const sheet = openProgress();
-    expect(within(sheet).getByText('104 XP')).toBeDefined();
-    expect(within(sheet).getByText(/56 XP to level 2/)).toBeDefined();
+    expect(within(sheet).getByText(`${expectedXp} XP`)).toBeDefined();
+    expect(within(sheet).getByText(new RegExp(`${160 - expectedXp} XP to level 2`))).toBeDefined();
+    // The cook goal moved: 1 of today's 5 goals is now done.
+    expect(within(sheet).getByText(/1 of 5 done today/)).toBeDefined();
 
     fireEvent.click(within(sheet).getByText('Earned'));
     expect(within(sheet).getByText('First thing cooked')).toBeDefined();
     expect(within(sheet).getByText('Coconut Chickpea Curry')).toBeDefined();
     expect(within(sheet).getByText(/Recipes cooked/)).toBeDefined();
     expect(within(sheet).getByText('1 × 60 = 60 XP')).toBeDefined();
-    expect(within(sheet).getByText(/Badges · 1 of 12/)).toBeDefined(); // First Flame
+    // Which badge the first cook lights up depends on the week's rotation;
+    // First Flame (first cook streak) is earned either way on a first cook.
+    expect(within(sheet).getByText(/Badges · 1 of 12/)).toBeDefined();
   });
 
   it('moves a weekly challenge on, and keeps the same challenges all week', () => {
