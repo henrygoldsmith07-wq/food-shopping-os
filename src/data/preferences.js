@@ -110,20 +110,19 @@ export const DEFAULT_UNITS = { weight: 'kg', height: 'cm', energy: 'kcal', volum
 /* ---------- Home widgets ---------- */
 
 /**
- * Which cards Home shows, and in what order. Every one of them reads real
- * data, so turning one off hides a panel — it never changes a number.
+ * What Home can turn on or off. The core loop stays fixed and visible: the
+ * next action, guidance, quick navigation, tonight, today's meals, buy/use
+ * soon, the weekly outlook, week recovery and the closed loop. These rows
+ * shape the optional extra panels that follow them.
  */
 export const WIDGETS = [
-  { id: 'rings', label: 'Calories & macros', fixed: true },
+  { id: 'rings', label: 'Budget and diary numbers', fixed: true },
   { id: 'setup', label: 'Guidance', fixed: true },
   { id: 'reminders', label: 'Reminders due' },
-  { id: 'goals', label: 'Today’s goals' },
-  { id: 'log', label: 'Log what you ate' },
-  { id: 'meals', label: 'Today’s meals' },
-  { id: 'water', label: 'Water & shopping list' },
-  { id: 'pantry', label: 'Pantry' },
-  { id: 'leftovers', label: 'Leftovers to use' },
-  { id: 'recipe', label: 'Recipe of the day' },
+  { id: 'log', label: 'Food diary shortcut' },
+  { id: 'numbers', label: 'Your numbers' },
+  { id: 'loop', label: 'Food loop and loop check' },
+  { id: 'report', label: 'Progress and reports' },
 ];
 
-export const DEFAULT_WIDGETS = WIDGETS.map((w) => w.id);
+export const DEFAULT_WIDGETS = ['rings', 'setup', 'loop', 'numbers', 'report'];

@@ -5,11 +5,20 @@
  * cleared, because "we ordered a takeaway on Thursday" is the useful fact —
  * it is what makes next week's plan smaller and more honest. Leftovers go into
  * the pantry as portions so they can be eaten rather than forgotten.
+ *
+ * Every meaningful action here also appends one event to the household ledger
+ * (see event-ledger.js), so Plan → Shop → Eat stays replayable end to end.
  */
 
 import { applyEntries, clearDates, LEFTOVER_CAT, leftoverEntry, moveMeal } from './mealplan.js';
 import { householdPermission } from './household.js';
 import { uid } from './state.js';
+import { createLedgerEvent } from './event-ledger.js';
+
+const withEvent = (state, event) => {
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  return { ...state, householdLedger: [...ledger, event].slice(-500) };
+};
 
 export const planActions = (set) => ({
   markMealPlanOutcome: ({ date, slot, status = 'skipped', reason = null, actualRecipeId = null } = {}) =>
@@ -33,9 +42,24 @@ export const planActions = (set) => ({
         at: Date.now(),
       };
       const existing = (s.mealPlanEvents || []).filter((item) => !(item.date === date && item.slot === slot));
-      return { mealPlanEvents: [...existing, event].slice(-500), plan: event.status === 'skipped'
-        ? { ...s.plan, [date]: { ...(s.plan[date] || {}), [slot]: plannedRecipeId } }
-        : s.plan };
+      const base = {
+        mealPlanEvents: [...existing, event].slice(-500),
+        plan: event.status === 'skipped'
+          ? { ...s.plan, [date]: { ...(s.plan[date] || {}), [slot]: plannedRecipeId } }
+          : s.plan,
+      };
+      // The same outcome, as one replayable ledger event.
+      const ledgerType = event.status === 'cooked' ? 'MealCooked'
+        : event.status === 'skipped' ? 'MealSkipped'
+          : 'MealCooked'; // substituted: a meal was cooked, just not the planned one
+      return withEvent({ ...s, ...base }, createLedgerEvent(ledgerType, {
+        date, slot,
+        recipeId: event.actualRecipeId || plannedRecipeId,
+        plannedRecipeId,
+        status: event.status,
+        reason: event.reason,
+        substituted: event.status === 'substituted' || undefined,
+      }, { origin: 'user' }));
     }),
   recordTakeaway: ({ date = null, reason = 'takeaway', note = '' } = {}) =>
     set((s) => {
@@ -51,7 +75,10 @@ export const planActions = (set) => ({
         note: String(note || '').slice(0, 120),
         at: Date.now(),
       };
-      return { mealPlanEvents: [...(s.mealPlanEvents || []), event].slice(-500) };
+      return withEvent(
+        { ...s, mealPlanEvents: [...(s.mealPlanEvents || []), event].slice(-500) },
+        createLedgerEvent('MealSkipped', { date: d, slot: 'unplanned', reason: reason || 'takeaway', note: event.note, takeaway: true }, { origin: 'user' }),
+      );
     }),
   setPlanSlot: (date, slot, recipeId) =>
     set((s) => {
@@ -61,25 +88,56 @@ export const planActions = (set) => ({
       const plan = { ...s.plan };
       if (Object.keys(day).length) plan[date] = day;
       else delete plan[date];
-      return { plan };
+      const changed = (s.plan?.[date]?.[slot] || null) !== (recipeId || null);
+      const next = { ...s, plan };
+      return changed
+        ? withEvent(next, createLedgerEvent('MealPlanned', { date, slot, recipeId }, { origin: 'user' }))
+        : next;
     }),
-  clearPlanWeek: (dates) => set((s) => ({ plan: clearDates(s.plan, dates) })),
-  moveMealSlot: (from, to) => set((s) => ({ plan: moveMeal(s.plan, from, to) })),
-  applyPlanEntries: (entries) => set((s) => ({ plan: applyEntries(s.plan, entries) })),
+  clearPlanWeek: (dates) => set((s) => {
+    const removed = (dates || []).reduce(
+      (n, d) => n + Object.keys(s.plan?.[d] || {}).length, 0,
+    );
+    const next = { ...s, plan: clearDates(s.plan, dates) };
+    return removed
+      ? withEvent(next, createLedgerEvent('MealPlanned', { clearedDates: dates || [], removed }, { origin: 'user' }))
+      : next;
+  }),
+  moveMealSlot: (from, to) => set((s) => {
+    const next = { ...s, plan: moveMeal(s.plan, from, to) };
+    const moved = next.plan?.[to?.date]?.[to?.slot] || null;
+    return (moved && moved !== (s.plan?.[from?.date]?.[from?.slot] || null))
+      ? withEvent(next, createLedgerEvent('MealPlanned', { date: to?.date, slot: to?.slot, recipeId: moved, movedFrom: from }, { origin: 'user' }))
+      : next;
+  }),
+  applyPlanEntries: (entries) => set((s) => {
+    const plan = applyEntries(s.plan, entries);
+    const added = (entries || []).filter((e) => e?.date && e?.slot && e?.recipeId).length;
+    return added
+      ? withEvent({ ...s, plan }, createLedgerEvent('MealPlanned', { batch: added }, { origin: 'user' }))
+      : { ...s, plan };
+  }),
   saveLeftovers: (recipe, portions) =>
-    set((s) => (householdPermission(s, 'pantry') && portions > 0
-      ? { pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, portions, s.day) }] }
-      : {})),
+    set((s) => {
+      if (!householdPermission(s, 'pantry') || !(portions > 0) || !recipe) return {};
+      return withEvent(
+        { ...s, pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, portions, s.day) }] },
+        createLedgerEvent('LeftoverCreated', { name: recipe.name, recipeId: recipe.id, portions }, { origin: 'user' }),
+      );
+    }),
   useLeftover: (id) =>
-    set((s) => (householdPermission(s, 'pantry') ? {
-      pantry: s.pantry
+    set((s) => {
+      if (!householdPermission(s, 'pantry')) return {};
+      // Consuming a saved portion is the Eat stage of a LeftoverCreated that
+      // already exists — the cook flow logs the MealCooked, so no second event.
+      return { pantry: s.pantry
         .map((p) => {
           if (p.id !== id) return p;
           const portions = (Number(p.portions) || 1) - 1;
           return { ...p, portions, qty: `${portions} portion${portions === 1 ? '' : 's'}` };
         })
-        .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0),
-    } : {})),
+        .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0) };
+    }),
   /**
    * Reconcile today's saved portions for one dish to exactly `portions` —
    * the correction path for cooking's automatic leftover save. Zero removes

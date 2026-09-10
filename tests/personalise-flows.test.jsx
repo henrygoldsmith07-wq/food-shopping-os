@@ -60,7 +60,7 @@ const openPrefs = (tab) => {
   if (tab) {
     // The view chips are buttons; plain-text lookup can collide with labels
     // elsewhere in the sheet (e.g. the Kitchen profile pill reads 'Home').
-    const chip = within(sheet).queryByRole('button', { name: tab });
+    const chip = within(sheet).queryByRole('button', { name: tab === 'Home' ? 'Home preferences' : tab });
     fireEvent.click(chip || within(sheet).getByText(tab));
   }
   return sheet;
@@ -169,22 +169,17 @@ describe('the Home layout', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it('hides a card without touching the number behind it', () => {
+  it('hides an optional panel without touching the number behind it', () => {
     onboard();
     goTab('Today');
-    expect(screen.getByText('Recipe of the day')).toBeTruthy();
+    fireEvent.click(screen.getByText('Explore more'));
+    expect(screen.getByText('Your outcomes')).toBeTruthy();
 
     const sheet = openPrefs('Home');
-    const row = within(sheet).getByLabelText('Move Recipe of the day up').parentElement;
-    fireEvent.click(within(row).getByRole('switch'));
+    fireEvent.click(within(sheet).getByLabelText('Show Progress and reports'));
     fireEvent.click(within(sheet).getByLabelText('Close'));
-
-    goTab('Today');
-    // Scoped to the page: a closing sheet lingers for its exit animation, and
-    // its own list of widget names shouldn't count as Home still showing one.
-    expect(within(document.querySelector('main')).queryByText('Recipe of the day')).toBeNull();
-    // The diary is untouched — hiding a panel is not hiding data.
-    // Log left the bar in the list-first nav; the command palette still finds it.
+    fireEvent.click(screen.getByText('Explore more'));
+    expect(screen.queryByText('Your outcomes')).toBeNull();
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     const search = screen.getByLabelText('Search Forq');
     fireEvent.change(search, { target: { value: 'food diary' } });
@@ -198,12 +193,12 @@ describe('the Home layout', () => {
   it('puts the default layout back', () => {
     onboard();
     const sheet = openPrefs('Home');
-    const row = within(sheet).getByLabelText('Move Pantry up').parentElement;
+    const row = within(sheet).getByLabelText('Move Food loop and loop check up').parentElement;
     fireEvent.click(within(row).getByRole('switch'));
     fireEvent.click(within(sheet).getByText(/Back to the default layout/));
     fireEvent.click(within(sheet).getByLabelText('Close'));
     goTab('Today');
-    expect(within(document.querySelector('main')).getAllByText('Pantry').length).toBeGreaterThan(0);
+    expect(within(document.querySelector('main')).getAllByText(/This week/).length).toBeGreaterThan(0);
   });
 });
 

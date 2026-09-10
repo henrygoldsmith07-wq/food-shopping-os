@@ -74,6 +74,14 @@ export default function OutcomeDashboard() {
           <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>{d.pantryAccuracy.assumption} · {d.shoppingCompletion.assumption}</p>
         </Card>
 
+        {app.householdEval?.trend?.ready && (
+          <Card>
+            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Long-term learning</p>
+            <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {app.householdEval.trend.conclusion}
+            </p>
+          </Card>
+        )}
         {d.trend.some((w) => w.spend > 0) && (
           <Card>
             <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Spend trend (4 weeks)</p>

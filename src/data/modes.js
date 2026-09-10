@@ -24,16 +24,16 @@
  */
 export const MODULES = [
   { id: 'home', label: 'Home', tab: 'home', widgets: ['rings', 'setup'], always: true },
-  { id: 'plan', label: 'Meal planner', tab: 'plan', widgets: ['meals'] },
-  { id: 'shop', label: 'Shopping', tab: 'shop', widgets: ['water'] },
-  { id: 'recipes', label: 'Recipes', tab: 'recipes', widgets: ['recipe'] },
+  { id: 'plan', label: 'Meal planner', tab: 'plan' },
+  { id: 'shop', label: 'Shopping', tab: 'shop', widgets: ['numbers'] },
+  { id: 'recipes', label: 'Recipes', tab: 'recipes' },
   { id: 'log', label: 'Food diary', tab: 'log', widgets: ['log'] },
-  { id: 'pantry', label: 'Pantry & leftovers', widgets: ['pantry', 'leftovers'] },
+  { id: 'pantry', label: 'Pantry & leftovers' },
   { id: 'nutrition', label: 'Nutrition targets', widgets: ['goals'] },
   { id: 'waste', label: 'Waste & spending' },
   { id: 'household', label: 'Household' },
   { id: 'health', label: 'Health & training' },
-  { id: 'progress', label: 'Streaks & achievements' },
+  { id: 'progress', label: 'Streaks & achievements', widgets: ['report'] },
   { id: 'reminders', label: 'Reminders', widgets: ['reminders'] },
 ];
 

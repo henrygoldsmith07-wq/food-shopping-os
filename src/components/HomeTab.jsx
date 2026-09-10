@@ -20,6 +20,7 @@ import HomeNumbers from './HomeNumbers.jsx';
 import HomeFoodLoop from './HomeFoodLoop.jsx';
 import LoopCheck from './LoopCheck.jsx';
 import OutcomeDashboard from './OutcomeDashboard.jsx';
+import WeekRecoveryPreview from './WeekRecoveryPreview.jsx';
 
 /**
  * Home — reduced to Plan → Shop → Eat.
@@ -32,6 +33,7 @@ import OutcomeDashboard from './OutcomeDashboard.jsx';
  */
 export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, goLog }) {
   const app = useApp();
+  const widgets = new Set(app.homeWidgets || []);
   const todayPlan = planForDay(app.plan, app.day);
   const expiring = app.useSoonIngredients?.length
     ? app.useSoonIngredients.map((row) => row.item)
@@ -194,6 +196,13 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </Card>
       </section>
 
+      <WeekRecoveryPreview
+        recovery={recovery}
+        onApply={app.applyWeekRecovery}
+        onUndo={app.undoLast}
+        goTab={goTab}
+      />
+
       {/* Today's planned slots, compact */}
       <Section title="Today’s meals" action="Full plan →" onAction={() => goTab('plan')} className="rise rise-2">
         <div className="space-y-2.5">
@@ -313,6 +322,32 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </Card>
       </section>
 
+      {widgets.has('reminders') && app.remindersDue?.length > 0 && (
+        <section className="px-5" aria-label="Reminders due">
+          <Card>
+            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Reminders due</p>
+            <ul className="mt-2 space-y-1.5">
+              {app.remindersDue.slice(0, 3).map(({ reminder, at }) => (
+                <li key={`${reminder.id}-${at}`} className="text-[0.8125rem] font-semibold">
+                  · {reminder.label}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      )}
+
+      {widgets.has('log') && (
+        <Section className="rise rise-2">
+          <Card onClick={() => goLog()}>
+            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Food diary</p>
+            <p className="mt-1 font-bold text-[0.875rem]">
+              {app.entries.length ? `${app.entries.length} logged today` : 'Nothing logged today'}
+            </p>
+          </Card>
+        </Section>
+      )}
+
       {/* Starter welcome: chosen dinners are planned, list created */}
       {app.starterRecipeIds.length > 0 && !app.welcomeDismissed && (
         <div className="px-5 rise rise-1">
@@ -359,9 +394,13 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </Card>
       </section>
 
-      <HomeFoodLoop app={app} foodLoop={foodLoop} expiring={expiring} low={low} goTab={goTab} openPantry={openPantry} />
-      <LoopCheck goTab={goTab} />
-      <HomeNumbers app={app} goTab={goTab} goLog={goLog} />
+      {widgets.has('loop') && (
+        <>
+          <HomeFoodLoop app={app} foodLoop={foodLoop} expiring={expiring} low={low} goTab={goTab} openPantry={openPantry} />
+          <LoopCheck goTab={goTab} />
+        </>
+      )}
+      {widgets.has('numbers') && <HomeNumbers app={app} goTab={goTab} goLog={goLog} />}
 
       <details className="home-more group">
         <summary
@@ -372,7 +411,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>progress · loop · report</span>
         </summary>
         <div className="mt-6 space-y-6 px-5">
-          <OutcomeDashboard />
+          {widgets.has('report') && <OutcomeDashboard />}
         </div>
       </details>
     </div>

@@ -18,6 +18,91 @@ const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = 
 
 const daysBetween = (a, b) => Math.round((new Date(`${b}T12:00:00`) - new Date(`${a}T12:00:00`)) / 86400000);
 
+const addDays = (stamp, days) => new Date(new Date(`${stamp}T12:00:00`).getTime() + days * 86400000)
+  .toISOString().slice(0, 10);
+
+const inPeriod = (row, start, end) => {
+  const date = String(row?.date || row?.day || '').slice(0, 10);
+  return Boolean(date) && date >= start && date <= end;
+};
+
+const rateFor = (count, total) => (total ? Math.round((count / total) * 100) / 100 : null);
+
+/** Longitudinal comparison: the first month a household used Forq vs the latest. */
+export const evaluateHouseholdTrend = (state = {}, { today = dayStamp() } = {}) => {
+  const cooked = Array.isArray(state.cooked) ? state.cooked : [];
+  const waste = Array.isArray(state.waste) ? state.waste : [];
+  const shops = Array.isArray(state.shops) ? state.shops : [];
+  const mealPlanEvents = Array.isArray(state.mealPlanEvents) ? state.mealPlanEvents : [];
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  const latestStart = addDays(today, -28);
+  const baselineEnd = addDays(today, -29);
+  const allDates = [
+    ...cooked.map((r) => r.date),
+    ...waste.map((r) => r.date),
+    ...shops.map((r) => r.date),
+    ...mealPlanEvents.map((r) => r.date),
+    ...ledger.map((r) => r.day || r.at),
+  ].map((date) => String(date || '').slice(0, 10)).filter(Boolean).sort();
+  const earliest = allDates[0] || null;
+  const baselineStart = earliest || baselineEnd;
+  const ready = Boolean(earliest && earliest <= baselineEnd);
+
+  const period = (start, end) => {
+    const rows = {
+      cooked: cooked.filter((r) => inPeriod(r, start, end)).length,
+      waste: waste.filter((r) => inPeriod(r, start, end)).length,
+      shops: shops.filter((r) => inPeriod(r, start, end)).length,
+      skipped: mealPlanEvents.filter((r) => r.status === 'skipped' && inPeriod(r, start, end)).length,
+      accepted: ledger.filter((r) => r.type === 'RecommendationAccepted' && inPeriod(r, start, end)).length,
+      rejected: ledger.filter((r) => r.type === 'RecommendationRejected' && inPeriod(r, start, end)).length,
+    };
+    return {
+      ...rows,
+      acceptanceRate: rateFor(rows.accepted, rows.accepted + rows.rejected),
+      planCompletion: rateFor(rows.cooked, rows.cooked + rows.skipped),
+      wastePerCooked: rows.cooked ? Math.round((rows.waste / rows.cooked) * 100) / 100 : null,
+    };
+  };
+
+  const baseline = period(baselineStart, baselineEnd);
+  const latest = period(latestStart, today);
+  const delta = (a, b) => (a != null && b != null ? Math.round((b - a) * 100) / 100 : null);
+  const changes = {
+    planCompletion: delta(baseline.planCompletion, latest.planCompletion),
+    wastePerCooked: delta(baseline.wastePerCooked, latest.wastePerCooked),
+    acceptanceRate: delta(baseline.acceptanceRate, latest.acceptanceRate),
+    shops: delta(baseline.shops, latest.shops),
+  };
+  const bits = [];
+  if (changes.planCompletion != null && changes.planCompletion !== 0) {
+    bits.push(`plan completion ${changes.planCompletion > 0 ? 'up' : 'down'} ${Math.abs(changes.planCompletion * 100).toFixed(0)} points`);
+  }
+  if (changes.wastePerCooked != null && changes.wastePerCooked !== 0) {
+    bits.push(`waste per cook ${changes.wastePerCooked > 0 ? 'up' : 'down'} ${Math.abs(changes.wastePerCooked).toFixed(2)}`);
+  }
+  if (changes.acceptanceRate != null && changes.acceptanceRate !== 0) {
+    bits.push(`acceptance ${changes.acceptanceRate > 0 ? 'up' : 'down'} ${Math.abs(changes.acceptanceRate * 100).toFixed(0)} points`);
+  }
+  const totalEvidence = baseline.cooked + baseline.waste + baseline.shops + baseline.skipped
+    + latest.cooked + latest.waste + latest.shops + latest.skipped;
+  return {
+    ready,
+    value: ready ? { changes, conclusion: null } : null,
+    confidence: ready ? (totalEvidence >= 12 ? 'high' : totalEvidence >= 4 ? 'medium' : 'low') : 'none',
+    evidence: totalEvidence,
+    assumption: 'First month of use compared with the latest four weeks.',
+    earliest,
+    windowDays: 56,
+    baseline,
+    latest,
+    changes,
+    conclusion: ready
+      ? (bits.length ? `Last month vs first: ${bits.join(' · ')}.` : 'Last month matches the first month — no learned drift yet.')
+      : 'Not enough history for a first-month vs latest-month comparison yet.',
+  };
+};
+
 /** Shops with no plan coverage that week count as unplanned. */
 const unplannedShopsFrom = (shops = [], plan = {}) => {
   const plannedDates = new Set(Object.keys(plan || {}));
@@ -33,7 +118,6 @@ const unplannedShopsFrom = (shops = [], plan = {}) => {
 };
 
 export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
-  void today;
   const shops = Array.isArray(state.shops) ? state.shops : [];
   const waste = Array.isArray(state.waste) ? state.waste : [];
   const cooked = Array.isArray(state.cooked) ? state.cooked : [];
@@ -125,6 +209,7 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
     recommendationAcceptance: recommendationAcceptanceMetric,
     portionAccuracy,
     autopilotUndoRate,
+    trend: evaluateHouseholdTrend(state, { today }),
     assumptions,
   };
 };

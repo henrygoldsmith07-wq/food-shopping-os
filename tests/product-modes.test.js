@@ -47,8 +47,8 @@ describe('product modes', () => {
     const applied = applyProductMode('shopping_budget', { name: 'Ada' });
     expect(applied.productMode).toBe('shopping_budget');
     expect(applied.entryGoal).toBe('shop');
-    expect(applied.widgets).toContain('water');
-    expect(applied.widgets).toContain('pantry');
+    expect(applied.widgets).toContain('numbers');
+    expect(applied.widgets).not.toContain('log');
     expect(applied.advancedToolsVisible).toEqual([]);
     expect(applied.name).toBe('Ada');
   });
@@ -135,10 +135,9 @@ describe('product modes', () => {
       widgets: null,
       advancedToolsVisible: null,
     });
-    // widgets null falls back to mode widgets via resolve
     expect(app.productMode).toBe('shopping_budget');
     expect(app.navTabs[1]).toBe('shop');
-    expect(app.homeWidgets).toContain('pantry');
+    expect(app.homeWidgets).toContain('numbers');
     expect(app.advancedToolsVisible).toEqual([]);
   });
 

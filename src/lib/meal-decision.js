@@ -19,7 +19,29 @@ import { evaluateFoodSuitability } from './food-suitability.js';
 import { tasteScore } from './taste.js';
 import { dayStamp, daysUntil } from './kitchen-dates.js';
 
+const DEFAULT_WEIGHTS = {
+  coverage: 0.42,
+  preference: 0.14,
+  time: 0.12,
+  budget: 0.1,
+  waste: 0.12,
+  leftover: 0.6,
+};
+
+const confidences = new Set(['none', 'low', 'medium', 'high']);
+const confidencesToNumber = { none: 0, low: 0.25, medium: 0.55, high: 1 };
 const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+const fact = (value) => {
+  const next = (value && typeof value === 'object') ? value : {};
+  const valid = confidences.has(next.confidence) ? next.confidence : 'none';
+  return {
+    ...next,
+    confidence: valid,
+    evidenceCount: Number(next.evidenceCount) || 0,
+    level: confidencesToNumber[valid],
+  };
+};
+const byConfidence = (value, fallback = 0) => fact(value).level;
 
 /** How recently was this recipe cooked? 0 = long ago, 1 = yesterday. */
 const recencyPenalty = (recipeId, cooked = [], today = dayStamp()) => {
@@ -54,6 +76,7 @@ export const rankMealsForTonight = ({
   pantry = [],
   leftovers = [],
   taste = null,
+  householdModel = null,
   diets = [],
   allergies = [],
   intolerances = [],
@@ -72,6 +95,22 @@ export const rankMealsForTonight = ({
   const pantryNames = pantry.map((p) => p.name);
   const wasteNames = new Set((waste || []).filter((w) => w.reason === 'disliked').map((w) => String(w.name || '').toLowerCase()));
   const m = month || Number(String(today).slice(5, 7)) || new Date().getMonth() + 1;
+  const model = householdModel || {};
+  const preferences = fact(model.preferences);
+  const effort = fact(model.effortTolerance);
+  const wasteLearning = fact(model.wasteProbability);
+  const pricing = fact(model.priceSensitivity);
+  const weights = {
+    ...DEFAULT_WEIGHTS,
+    coverage: DEFAULT_WEIGHTS.coverage
+      - 0.06 * preferences.level
+      - 0.05 * effort.level
+      - 0.04 * pricing.level,
+    preference: DEFAULT_WEIGHTS.preference + 0.06 * preferences.level,
+    time: DEFAULT_WEIGHTS.time + 0.05 * effort.level,
+    budget: DEFAULT_WEIGHTS.budget + 0.04 * pricing.level,
+    waste: DEFAULT_WEIGHTS.waste + 0.04 * wasteLearning.level,
+  };
 
   const rows = (recipes || []).map((recipe) => {
     const suitability = (() => {
@@ -109,20 +148,21 @@ export const rankMealsForTonight = ({
     const wasteRisk = clamp01(1 - (coverage.pct / 100) * 0.6 - Math.min(0.4, expiring.length * 0.12));
 
     const score = Math.round((
-      explanation.score * 0.42
-      + (0.5 + taste01) * 0.14
-      + timeFit * 0.12
-      + budgetFit * 0.1
-      + (1 - wasteRisk) * 0.12
-      + leftover * 0.6
+      explanation.score * weights.coverage
+      + (0.5 + taste01) * weights.preference
+      + timeFit * weights.time
+      + budgetFit * weights.budget
+      + (1 - wasteRisk) * weights.waste
+      + leftover * weights.leftover
       - repeat * 0.8
       - (disliked ? 0.5 : 0)
       - (suitability.warnings?.length ? 0.06 * suitability.warnings.length : 0)
     ) * 1000) / 1000;
 
-    const evidence = (coverage.have || 0) + expiring.length + (taste?.rated ? 1 : 0) + (cooked.length ? 1 : 0);
-    const confidence = !pantry.length && !taste?.rated ? 'low'
-      : evidence >= 6 ? 'high' : evidence >= 3 ? 'medium' : 'low';
+    const evidence = (coverage.have || 0) + expiring.length + (taste?.rated ? 1 : 0) + (cooked.length ? 1 : 0)
+      + byConfidence(model.preferences) + byConfidence(model.mealAcceptance) + byConfidence(model.wasteProbability);
+    const confidence = !pantry.length && !taste?.rated && !householdModel ? 'low'
+      : evidence >= 7 ? 'high' : evidence >= 4 ? 'medium' : 'low';
 
     const reasons = [
       `${coverage.pct}% already in your kitchen`,
@@ -134,7 +174,17 @@ export const rankMealsForTonight = ({
       disliked ? 'Uses something this household disliked before' : null,
     ].filter(Boolean);
 
-    return { recipe, score, confidence, reasons, explanation, suitability, blocked: false, wasteRisk: Math.round(wasteRisk * 100) / 100 };
+    return {
+      recipe, score, confidence, reasons, explanation, suitability, blocked: false,
+      wasteRisk: Math.round(wasteRisk * 100) / 100,
+      learning: {
+        used: Boolean(householdModel),
+        preferenceConfidence: preferences.confidence,
+        effortConfidence: effort.confidence,
+        wasteConfidence: wasteLearning.confidence,
+        priceConfidence: pricing.confidence,
+      },
+    };
   });
 
   rows.sort((a, b) => {
@@ -159,5 +209,12 @@ export const decideTonight = (options = {}) => {
     reasons: pick?.reasons || (ranked.length ? ['No suitable recipe in the current book — try relaxing time or budget.'] : ['Recipe book is empty.']),
     alternatives: viable.slice(1, 4).map((r) => r.recipe),
     blockedCount: ranked.length - viable.length,
+    learning: pick?.learning || {
+      used: false,
+      preferenceConfidence: 'none',
+      effortConfidence: 'none',
+      wasteConfidence: 'none',
+      priceConfidence: 'none',
+    },
   };
 };

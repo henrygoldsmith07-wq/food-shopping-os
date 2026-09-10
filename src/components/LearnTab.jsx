@@ -34,10 +34,8 @@ const stageIcon = (id) => ({
 /**
  * Learn is the last stage of the product loop, not a second analytics home.
  * It explains what the household actually did, what that changes next, and
- * gives the next plan a single, evidence-backed way forward.
- *
- * NOTE: spaced-repetition flashcards / knowledge map (Revise) are legacy and
- * quarantined under src/legacy/revise-domain. Learn shows food learning only.
+ * gives the next plan a single, evidence-backed way forward. Food learning
+ * only — the legacy flashcard/knowledge-map surface is gone entirely.
  */
 export default function LearnTab({ goTab, openGuidance }) {
   const app = useApp();

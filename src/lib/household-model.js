@@ -30,6 +30,28 @@ export const MODEL_SOURCES = [
   'shopping',
 ];
 
+/**
+ * Not all evidence is equally strong. An explicit rating says more than one
+ * cooked meal; a pantry row says less than a receipt. These weights turn a
+ * raw observation count into an evidence score, so confidence reflects the
+ * strength of what was observed rather than merely how often.
+ */
+const SOURCE_EVIDENCE_WEIGHTS = {
+  'taste-ratings': 1.15,
+  'member-profile': 1,
+  'waste': 0.9,
+  'meal-events': 0.8,
+  'receipts': 0.8,
+  'shopping': 0.65,
+  'cooked': 0.55,
+  'plan': 0.5,
+  'pantry': 0.4,
+};
+
+const evidenceScoreFor = (count = 0, source = 'cooked') =>
+  (Number(count) || 0) * (SOURCE_EVIDENCE_WEIGHTS[source] ?? 0.5);
+
+/** Back-compatible count-only confidence, used by simple callers and tests. */
 export const confidenceForCount = (count = 0) => {
   const n = Number(count) || 0;
   if (n <= 0) return 'none';
@@ -38,9 +60,24 @@ export const confidenceForCount = (count = 0) => {
   return 'high';
 };
 
+/**
+ * Source-aware confidence:
+ *   none  → no usable evidence
+ *   low   → a first signal, not yet a pattern
+ *   medium→ enough independent observations to steer a suggestion
+ *   high  → repeated, weighted evidence the household can rely on
+ */
+export const confidenceForEvidence = (count = 0, source = 'cooked') => {
+  const score = evidenceScoreFor(count, source);
+  if (score <= 0) return 'none';
+  if (score < 1.2) return 'low';
+  if (score < 4) return 'medium';
+  return 'high';
+};
+
 export const makeFact = (value, { confidence, evidenceCount = 0, source = 'cooked', updatedAt = null } = {}) => ({
   value,
-  confidence: confidence || confidenceForCount(evidenceCount),
+  confidence: confidence || confidenceForEvidence(evidenceCount, source),
   evidenceCount: Number(evidenceCount) || 0,
   source,
   updatedAt: updatedAt || dayStamp(),
@@ -105,6 +142,10 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   });
   const typicalPortions = learnedPrefs.portions?.typical ?? householdSize;
   const portionEvidence = learnedPrefs.portions?.observations || 0;
+  const portionConfidence = portionEvidence >= 3
+    || Math.abs((typicalPortions || 0) - householdSize) <= 1
+    ? confidenceForEvidence(portionEvidence, 'cooked')
+    : confidenceForEvidence(Math.max(0, portionEvidence - 1), 'cooked');
 
   // --- preferences / dislikes ----------------------------------------------
   const taste = buildTasteProfile(recipes, tasteRatings, favourites, cooked);
@@ -113,6 +154,9 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   const dislikedIds = Object.entries(tasteRatings).filter(([, v]) => v === 'nope').map(([id]) => id);
   const memberDislikes = members.flatMap((m) => (m.dislikes || []).map(text)).filter(Boolean);
   const wasteDislikes = waste.filter((w) => w.reason === 'disliked').map((w) => text(w.name)).filter(Boolean);
+  const tasteEvidence = Object.keys(tasteRatings).length + favourites.length + cooked.length;
+  const explicitTasteEvidence = Object.keys(tasteRatings).length + favourites.length;
+  const preferenceConfidence = confidenceForEvidence(explicitTasteEvidence, 'taste-ratings');
 
   // --- dietary constraints (hard lines from profiles + household) -----------
   const memberDiets = [...new Set(members.flatMap((m) => m.diets || []))];
@@ -120,6 +164,9 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   const allergies = [...new Set([...(state.allergies || []), ...members.flatMap((m) => m.allergies || [])])];
   const intolerances = [...new Set([...(state.intolerances || []), ...members.flatMap((m) => m.intolerances || [])])];
   const religious = [...new Set([...(state.religious || []), ...members.flatMap((m) => m.religious || [])])];
+  const constraintCount = diets.length + allergies.length + intolerances.length + religious.length;
+  const constraintEvidence = constraintCount + members.length;
+  const constraintConfidence = confidenceForEvidence(constraintEvidence, 'member-profile');
 
   // --- meal acceptance + portion accuracy -----------------------------------
   let adherence = null;
@@ -131,6 +178,7 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     ? Math.round(((adherence.completed ?? adherence.cooked ?? 0) / Math.max(1, adherence.planned)) * 100) / 100
     : null;
   const acceptanceEvidence = (adherence?.planned || 0) + (adherence?.completed ?? adherence?.cooked ?? 0);
+  const acceptanceConfidence = confidenceForEvidence(acceptanceEvidence, 'meal-events');
   let fatigue = [];
   try {
     const dates = weekDates(today);
@@ -160,9 +208,13 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   const wasteByIngredient = {};
   for (const row of wasteProfile) {
     wasteByIngredient[row.key] = makeFact(row.wasteRate, {
-      evidenceCount: row.wasteEvents + row.purchases, source: 'waste', updatedAt: row.lastWasteDate || at,
+      evidenceCount: row.wasteEvents + row.purchases,
+      source: 'waste',
+      updatedAt: row.lastWasteDate || at,
     });
   }
+  const wasteEvidence = wasteProfile.reduce((sum, row) => sum + row.wasteEvents + row.purchases, 0);
+  const wasteConfidence = confidenceForEvidence(wasteEvidence, 'waste');
   const topWaste = wasteProfile.slice(0, 8).map((r) => r.key);
   // Consumption rates only for ingredients the household actually buys.
   const ingredientConsumption = {};
@@ -179,6 +231,8 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
 
   // --- shopping cadence + price sensitivity --------------------------------------
   const cadence = shoppingCadenceFrom(shops);
+  const cadenceEvidence = cadence.trips || 0;
+  const cadenceConfidence = confidenceForEvidence(cadenceEvidence, 'receipts');
   const offersUsed = (state.offers || []).filter((o) => o.used || o.appliedCount > 0).length;
   const couponsUsed = (state.coupons || []).filter((c) => c.used).length;
   const priceEvidence = shops.length + offersUsed + couponsUsed;
@@ -194,13 +248,29 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
   return {
     version: 1,
     updatedAt: at,
+    evidenceScore: Math.round(([
+      preferenceConfidence === 'high' ? 1 : preferenceConfidence === 'medium' ? 0.5 : 0,
+      acceptanceConfidence === 'high' ? 1 : acceptanceConfidence === 'medium' ? 0.5 : 0,
+      wasteConfidence === 'high' ? 1 : wasteConfidence === 'medium' ? 0.5 : 0,
+      cadenceConfidence === 'high' ? 1 : cadenceConfidence === 'medium' ? 0.5 : 0,
+    ].reduce((sum, value) => sum + value, 0) / 4) * 100) / 100,
     appetite: makeFact(
       { householdSize, typicalPortions, portionsOverride: state.portionsOverride || 'auto' },
-      { evidenceCount: portionEvidence + members.length, source: members.length ? 'member-profile' : 'cooked', updatedAt: at },
+      {
+        confidence: portionConfidence,
+        evidenceCount: portionEvidence + members.length,
+        source: members.length ? 'member-profile' : 'cooked',
+        updatedAt: at,
+      },
     ),
     preferences: makeFact(
       { cuisines: likedCuisines, tags: likedTags, learned: learnedPrefs },
-      { evidenceCount: taste.rated + cooked.length, source: 'taste-ratings', updatedAt: at },
+      {
+        confidence: preferenceConfidence,
+        evidenceCount: tasteEvidence,
+        source: explicitTasteEvidence ? 'taste-ratings' : 'cooked',
+        updatedAt: at,
+      },
     ),
     dislikes: makeFact(
       { recipes: dislikedIds, ingredients: [...new Set([...memberDislikes, ...wasteDislikes])] },
@@ -209,14 +279,20 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     dietaryConstraints: makeFact(
       { diets, allergies, intolerances, religious },
       {
-        evidenceCount: diets.length + allergies.length + intolerances.length + religious.length + members.length,
+        confidence: constraintConfidence,
+        evidenceCount: constraintEvidence,
         source: 'member-profile',
         updatedAt: at,
       },
     ),
     mealAcceptance: makeFact(
       acceptanceRate === null ? null : { rate: acceptanceRate, planned: adherence.planned, cooked: adherence.completed ?? adherence.cooked ?? 0, skipped: adherence.skipped },
-      { evidenceCount: acceptanceEvidence, source: 'meal-events', updatedAt: at },
+      {
+        confidence: acceptanceConfidence,
+        evidenceCount: acceptanceEvidence,
+        source: 'meal-events',
+        updatedAt: at,
+      },
     ),
     portionAccuracy: makeFact(
       portionSamples ? { overcookWasteEvents: portionErrors, samples: portionSamples } : null,
@@ -236,13 +312,23 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     ),
     wasteProbability: makeFact(
       wasteByIngredient,
-      { evidenceCount: waste.length, source: 'waste', updatedAt: at },
+      {
+        confidence: wasteConfidence,
+        evidenceCount: wasteEvidence,
+        source: 'waste',
+        updatedAt: at,
+      },
     ),
     topWasteRisk: makeFact(topWaste, { evidenceCount: waste.length, source: 'waste', updatedAt: at }),
     repeatFatigue: makeFact(fatigue.slice(0, 12), { evidenceCount: cooked.length, source: 'cooked', updatedAt: at }),
     shoppingCadence: makeFact(
       cadence.trips ? cadence : null,
-      { evidenceCount: cadence.trips, source: 'receipts', updatedAt: at },
+      {
+        confidence: cadenceConfidence,
+        evidenceCount: cadence.trips,
+        source: 'receipts',
+        updatedAt: at,
+      },
     ),
     priceSensitivity: priceSensitivity === null ? emptyFact('shopping')
       : makeFact(
@@ -254,7 +340,11 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
 };
 
 export const householdModelReady = (model) =>
-  Boolean(model && (model.preferences?.evidenceCount > 0 || model.mealAcceptance?.evidenceCount > 0));
+  Boolean(model
+    && (model.preferences?.evidenceCount > 0
+      || model.mealAcceptance?.evidenceCount > 0
+      || model.wasteProbability?.evidenceCount > 0
+      || model.shoppingCadence?.evidenceCount > 0));
 
 /** One-line honest summary for Learn/Home. Never invents a fact. */
 export const householdModelSummary = (model) => {

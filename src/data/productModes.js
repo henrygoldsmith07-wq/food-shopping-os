@@ -47,7 +47,7 @@ export const PRODUCT_MODES = [
     label: 'Meal Planning',
     blurb: 'Decide what to cook — the list comes from the plan.',
     entryGoal: 'plan',
-    widgets: ['rings', 'setup', 'meals', 'recipe', 'leftovers', 'reminders'],
+    widgets: ['rings', 'setup', 'loop', 'numbers'],
     primaryTabs: ['home', 'plan', 'recipes', 'shop', 'log'],
     setupOrder: ['plan', 'cook', 'pantry', 'shop', 'log', 'targets'],
     recommendationBoost: {
@@ -74,7 +74,7 @@ export const PRODUCT_MODES = [
     label: 'Shopping and Budgeting',
     blurb: 'One list from the plan, spend tracking, fewer impulse buys.',
     entryGoal: 'shop',
-    widgets: ['rings', 'setup', 'water', 'pantry', 'leftovers', 'reminders'],
+    widgets: ['rings', 'setup', 'numbers'],
     primaryTabs: ['home', 'shop', 'plan', 'recipes', 'log'],
     setupOrder: ['shop', 'pantry', 'plan', 'cook', 'log', 'targets'],
     recommendationBoost: {
@@ -101,7 +101,7 @@ export const PRODUCT_MODES = [
     label: 'Nutrition',
     blurb: 'Diary, targets and macros first — planning supports the numbers.',
     entryGoal: 'plan',
-    widgets: ['rings', 'setup', 'goals', 'log', 'meals', 'water', 'reminders'],
+    widgets: ['rings', 'setup', 'log', 'numbers', 'report'],
     primaryTabs: ['home', 'log', 'plan', 'recipes', 'shop'],
     setupOrder: ['targets', 'log', 'plan', 'cook', 'pantry', 'shop'],
     recommendationBoost: {
@@ -127,7 +127,7 @@ export const PRODUCT_MODES = [
     label: 'Household Organisation',
     blurb: 'Pantry, people, shared lists and less food going off.',
     entryGoal: 'pantry',
-    widgets: ['rings', 'setup', 'pantry', 'leftovers', 'water', 'reminders'],
+    widgets: ['rings', 'setup', 'loop', 'numbers', 'reminders'],
     primaryTabs: ['home', 'shop', 'plan', 'recipes', 'log'],
     setupOrder: ['pantry', 'shop', 'plan', 'cook', 'log', 'targets'],
     recommendationBoost: {

@@ -18,9 +18,9 @@ import { householdActions } from './household-actions.js';
 import { smartActions } from './smart-actions.js';
 import { HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY } from './health-vault.js';
 import { householdPermission } from './household.js';
+import { createLedgerEvent } from './event-ledger.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
-import { reviewActions } from './review-actions.js';
 import { offerActions } from './offer-actions.js';
 import { planActions } from './plan-actions.js';
 import { pantryFlowActions } from './pantry-flow-actions.js';
@@ -362,8 +362,20 @@ export function useStoreApi({
               conflicts: reconciled.conflicts.length,
             }
             : null;
+          // One replayable purchase event per recorded shop.
+          const ledger = [...(Array.isArray(s.householdLedger) ? s.householdLedger : []), createLedgerEvent(
+            'IngredientPurchased',
+            {
+              shopId: shop.id,
+              store: shop.store,
+              total: shop.total,
+              items: shop.items.map((i) => i.name),
+            },
+            { origin: 'user', at: `${s.day}T12:00:00.000Z` },
+          )].slice(-500);
           return {
             shops: [...s.shops, shop],
+            householdLedger: ledger,
             shoppingList: s.shoppingList.filter((i) => !bought.some((item) => item.id === i.id)),
             storeRoutes: route.length > 1 ? { ...s.storeRoutes, [shop.store]: route } : s.storeRoutes,
             pantry: reconciled ? reconciled.pantry : s.pantry,
@@ -394,7 +406,6 @@ export function useStoreApi({
       ...preferenceActions(set),
       ...advancedActions(set, uid),
       ...diaryActions(set),
-      ...reviewActions(set, latest),
       // Plan → Shop → Eat domain slices: one verb per intent + ledger events.
       // Legacy slice actions above stay for backwards compatibility.
       ...buildDomainCommands(set),

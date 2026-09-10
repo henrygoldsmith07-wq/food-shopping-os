@@ -9,10 +9,10 @@ import ProfileTab from './components/ProfileTab.jsx';
 import DemoWalkthrough, { DemoBanner } from './components/DemoWalkthrough.jsx';
 import { Sheet } from './components/ui.jsx';
 import AppHeader from './components/AppHeader.jsx';
+import GeofenceWatcher from './components/GeofenceWatcher.jsx';
 import JourneyNav from './components/JourneyNav.jsx';
 import { cx } from './lib/utils.js';
-import { distanceMetres } from './lib/smart.js';
-import { downloadFile, showNotification } from './lib/notify.js';
+import { downloadFile } from './lib/notify.js';
 import { haptic } from './lib/haptics.js';
 import { flushProductEvents, recordProductEvent } from './lib/product-analytics.js';
 import { pulseForq } from './lib/pulse.js';
@@ -73,43 +73,6 @@ export const SCREENS = {
   profile: { title: 'You' },
   // pantry is a sheet, not a tab, but conceptually primary — see HomeTab pantry card + AppHeader button
 };
-
-function GeofenceWatcher() {
-  const app = useApp();
-  const inside = useRef(new Map());
-
-  useEffect(() => {
-    const places = app.placeReminders.filter((place) => place.on);
-    if (!places.length || !navigator.geolocation?.watchPosition) return undefined;
-    const activeIds = new Set(places.map((place) => place.id));
-    [...inside.current.keys()].forEach((id) => {
-      if (!activeIds.has(id)) inside.current.delete(id);
-    });
-    const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        places.forEach((place) => {
-          const nowInside = distanceMetres(coords, place) <= place.radius;
-          const wasInside = inside.current.get(place.id);
-          inside.current.set(place.id, nowInside);
-          if (nowInside && wasInside === false) {
-            showNotification(place.label, {
-              body: 'You entered the saved area. Open your shopping list.',
-              tag: `place-${place.id}`,
-            });
-          }
-        });
-      },
-      () => showNotification('Location reminder paused', {
-        body: 'Forq could not read your location. Check site permissions before relying on this reminder.',
-        tag: 'place-location-error',
-      }),
-      { enableHighAccuracy: false, maximumAge: 30000, timeout: 20000 },
-    );
-    return () => navigator.geolocation.clearWatch?.(watchId);
-  }, [app.placeReminders]);
-
-  return null;
-}
 
 function StorageRecovery() {
   const app = useApp();
@@ -177,7 +140,6 @@ function Shell() {
   const tabs = TABS.filter((item) => item.id !== 'log' && app.visibleTabs(TABS.map((t) => t.id)).includes(item.id));
   // A mode turned off while standing on the screen it hides lands on Home.
   const activeTab = app.visibleTabs(TABS.map((t) => t.id)).includes(tab) ? tab : 'home';
-  const journeyActive = ['plan', 'shop', 'cook', 'learn'].includes(activeTab) ? activeTab : null;
   const [recipe, setRecipe] = useState(null);
   const [recipeStartCooking, setRecipeStartCooking] = useState(false);
   const [pantryOpen, setPantryOpen] = useState(false);
@@ -195,19 +157,15 @@ function Shell() {
   const [pantryAdd, setPantryAdd] = useState(0);
   const [pantryQuery, setPantryQuery] = useState('');
   const [planFocus, setPlanFocus] = useState(null);
-  const [planItem, setPlanItem] = useState(null); // a pantry item the planner should favour
-  const [tonightItem, setTonightItem] = useState(null); // a pantry item → tonight's dinner picker
+  const [planItem, setPlanItem] = useState(null);
+  const [tonightItem, setTonightItem] = useState(null);
   const noticeTimer = useRef(null);
   const completedGoals = useRef(null);
   const analyticsOpened = useRef(false);
   const pulseTimer = useRef(null);
   // Which logging sheet the diary should open with, when arriving from Home.
   const [logIntent, setLogIntent] = useState(null);
-
-  const openRecipe = (r, options = null) => {
-    setRecipeStartCooking(Boolean(options?.startCooking));
-    setRecipe(r);
-  };
+  const openRecipe = (r, options = null) => { setRecipeStartCooking(Boolean(options?.startCooking)); setRecipe(r); };
   const goLog = (intent = null) => {
     setLogIntent(intent);
     setTab('log');
@@ -269,7 +227,6 @@ function Shell() {
     pulseTimer.current = setTimeout(() => pulseForq(app), 600);
     return () => clearTimeout(pulseTimer.current);
   });
-
   useEffect(() => {
     if (!app.onboarded) return undefined;
     const onKey = (event) => {
@@ -323,7 +280,6 @@ function Shell() {
     recordProductEvent('screen_viewed', { screen: id });
     window.scrollTo({ top: 0 });
   };
-
   if (app.storageIssue?.kind === 'corrupt') return <StorageRecovery />;
 
   // Nothing is pre-filled, so the first run asks for the little it needs.
@@ -346,7 +302,7 @@ function Shell() {
           onProfile={() => setProfileOpen(true)}
           onGuidance={() => { setGuidanceView('next'); setGuidanceOpen(true); }}
         />
-        <JourneyNav active={journeyActive} onNavigate={goTab} />
+        <JourneyNav active={['plan', 'shop', 'cook', 'learn'].includes(activeTab) ? activeTab : null} onNavigate={goTab} />
 
         {/* Room at the foot for the tab bar and the screen's primary action. */}
         <main id="main" tabIndex={-1} className="app-main pb-44" onFocus={(event) => {

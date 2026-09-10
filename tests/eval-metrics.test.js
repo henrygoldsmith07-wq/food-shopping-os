@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateHousehold } from '../src/lib/eval-metrics.js';
+import { evaluateHousehold, evaluateHouseholdTrend } from '../src/lib/eval-metrics.js';
 
 describe('household evaluation', () => {
   it('is honest when empty', () => {
@@ -50,11 +50,50 @@ describe('household evaluation', () => {
 
   it('every metric carries confidence, evidence and an assumption', () => {
     const evalResult = evaluateHousehold({ shops: [{ date: '2026-08-28' }] }, { today: '2026-09-01' });
-    for (const key of ['predictionError', 'wasteReduction', 'unplannedShops', 'recommendationAcceptance', 'portionAccuracy', 'autopilotUndoRate']) {
+    for (const key of ['predictionError', 'wasteReduction', 'unplannedShops', 'recommendationAcceptance', 'portionAccuracy', 'autopilotUndoRate', 'trend']) {
       expect(evalResult[key]).toHaveProperty('value');
       expect(evalResult[key]).toHaveProperty('confidence');
       expect(evalResult[key]).toHaveProperty('evidence');
       expect(evalResult[key]).toHaveProperty('assumption');
     }
+  });
+
+  it('compares the household’s first month with its latest month', () => {
+    const state = {
+      cooked: [
+        { date: '2026-06-20' }, { date: '2026-06-21' }, { date: '2026-06-22' },
+        { date: '2026-08-20' }, { date: '2026-08-21' }, { date: '2026-08-22' }, { date: '2026-08-23' },
+      ],
+      waste: [
+        { date: '2026-06-21' }, { date: '2026-06-22' },
+        { date: '2026-08-21' },
+      ],
+      shops: [
+        { date: '2026-06-20' }, { date: '2026-06-25' },
+        { date: '2026-08-20' },
+      ],
+      mealPlanEvents: [
+        { date: '2026-06-22', status: 'skipped' },
+        { date: '2026-08-22', status: 'cooked' },
+      ],
+    };
+    const trend = evaluateHouseholdTrend(state, { today: '2026-09-01' });
+    expect(trend.ready).toBe(true);
+    expect(trend.windowDays).toBe(56);
+    expect(trend.baseline.cooked).toBe(3);
+    expect(trend.latest.cooked).toBe(4);
+    expect(trend.changes.planCompletion).toBeGreaterThan(0);
+    expect(trend.changes.wastePerCooked).toBeLessThan(0);
+    expect(trend.conclusion).toMatch(/plan completion up/i);
+  });
+
+  it('does not invent a trend before there is a full window', () => {
+    const trend = evaluateHouseholdTrend({
+      cooked: [{ date: '2026-08-30' }],
+      waste: [{ date: '2026-08-30' }],
+      shops: [{ date: '2026-08-30' }],
+    }, { today: '2026-09-01' });
+    expect(trend.ready).toBe(false);
+    expect(trend.conclusion).toMatch(/not enough history/i);
   });
 });

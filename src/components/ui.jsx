@@ -45,7 +45,7 @@ export const Card = ({ children, className, onClick, style, label }) => (
   </div>
 );
 
-export const Chip = ({ active, children, onClick, tone }) => (
+export const Chip = ({ active, children, onClick, tone, ...props }) => (
   <button
     onClick={onClick}
     aria-pressed={active}
@@ -55,6 +55,7 @@ export const Chip = ({ active, children, onClick, tone }) => (
         ? { background: 'var(--accent)', color: 'var(--on-accent)', borderColor: 'var(--accent)' }
         : { background: 'var(--card)', color: tone || 'var(--muted)', borderColor: 'var(--line)' }
     }
+    {...props}
   >
     {children}
   </button>
@@ -217,7 +218,6 @@ export const Empty = ({ Icon, title, children, action, onAction, note }) => (
     {note && <p className="mt-2.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--faint)' }}>{note}</p>}
   </Card>
 );
-
 /* ---------- Data viz ---------- */
 
 /** Circular progress ring with centred label. */

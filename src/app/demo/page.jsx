@@ -3,9 +3,9 @@
 import Link from 'next/link';
 
 /**
- * Forq instant demo — the food loop, not a debate demo.
+ * Forq instant demo — the food loop.
  * Seeded week lives in the isolated demo sandbox (`?demo=1`); nothing here
- * touches the real kitchen. (Daily Debate quarantine: src/legacy/debate.)
+ * touches the real kitchen.
  */
 export default function DemoPage() {
   return (

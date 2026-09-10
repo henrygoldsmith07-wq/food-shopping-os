@@ -33,29 +33,6 @@ export default function SettingsPanel() {
   const [dataStatus, setDataStatus] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
-  // Kitchen flashcards as a preference: the same clear-out the Learn queue
-  // offers, reachable from Settings without hunting through the deck first.
-  const autoCards = (Array.isArray(app.cards) ? app.cards : []).filter((c) => c.origin === 'auto').length;
-  const seedCount = app.kitchenSeedCount();
-  const [confirmKitchenOff, setConfirmKitchenOff] = useState(false);
-  const toggleKitchenCards = () => {
-    if (app.kitchenCardsForgotten) {
-      app.set({ kitchenCardsForgotten: false });
-      return;
-    }
-    // Turning off with cards to remove needs the same confirm the Learn tab shows.
-    if (autoCards > 0) setConfirmKitchenOff(true);
-    else app.set({ kitchenCardsForgotten: true });
-  };
-  // The one-tap way back in for someone who turned cards off: seeding lifts
-  // the opt-out and builds the deck from current activity in the same write.
-  const rebuildKitchenCards = () => {
-    app.seedCardsFromActivity();
-    setConfirmKitchenOff(false);
-  };
-  // Questions the user kept as-is in a refresh preview: durable until they
-  // are restored here — this row is the single place the offer comes back.
-  const keptFronts = Array.isArray(app.kitchenKeptFronts) ? app.kitchenKeptFronts : [];
 
   /** Your data, as the JSON it is stored as — yours to keep or move. */
   const exportData = () => {
@@ -123,96 +100,6 @@ export default function SettingsPanel() {
               Three more arrive at levels 4, 8 and 12. The five you started with never go away.
             </p>
           </div>
-        </Card>
-      </Section>
-
-      <Section title="Kitchen cards" className="rise rise-2">
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-bold text-[0.875rem]">Kitchen flashcards</p>
-              <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Cards the app builds from what you buy, cook and log. Turning them off clears those cards — your own stay.
-              </p>
-            </div>
-            <Toggle label="Kitchen flashcards" on={!app.kitchenCardsForgotten} onChange={toggleKitchenCards} />
-          </div>
-          {confirmKitchenOff && (
-            <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 6%, transparent)' }}>
-              <p className="text-[0.8125rem] font-extrabold">
-                Remove {autoCards} kitchen card{autoCards === 1 ? '' : 's'}? Your own cards stay.
-              </p>
-              <p className="mt-0.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                You can turn them back on here any time.
-              </p>
-              <div className="mt-2 flex items-center gap-3">
-                <button
-                  type="button"
-                  aria-label="Confirm removing kitchen cards"
-                  onClick={() => { app.forgetKitchenCards(); setConfirmKitchenOff(false); }}
-                  className="press rounded-xl border px-3 py-2 text-[0.78125rem] font-extrabold"
-                  style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
-                >
-                  Remove
-                </button>
-                <button
-                  type="button"
-                  aria-label="Keep kitchen cards"
-                  onClick={() => setConfirmKitchenOff(false)}
-                  className="press text-[0.78125rem] font-bold"
-                  style={{ color: 'var(--faint)' }}
-                >
-                  Keep
-                </button>
-              </div>
-            </div>
-          )}
-          {app.kitchenCardsForgotten && (
-            <div
-              className="rounded-2xl border px-4 py-3"
-              style={{ borderColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}
-            >
-              <p className="text-[0.78125rem] font-extrabold">Cards are turned off.</p>
-              <p className="mt-0.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Build a fresh deck from what you buy, cook and log — your own cards are untouched.
-              </p>
-              <button
-                type="button"
-                aria-label="Build kitchen cards from your activity"
-                onClick={rebuildKitchenCards}
-                className="press mt-2 rounded-xl px-3 py-2 text-[0.78125rem] font-extrabold"
-                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-              >
-                {seedCount > 0
-                  ? `Build ${seedCount} question${seedCount === 1 ? '' : 's'} from your kitchen`
-                  : 'Rebuild from your kitchen'}
-              </button>
-            </div>
-          )}
-          {keptFronts.length > 0 && (
-            <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-              <p className="text-[0.78125rem] font-extrabold">Refresh kept as-is</p>
-              <p className="mt-0.5 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                You kept these questions in a refresh preview, so the app leaves their answers alone. Restoring one offers its refresh again.
-              </p>
-              <ul className="mt-2 space-y-1">
-                {keptFronts.map((front) => (
-                  <li key={front} className="flex items-center justify-between gap-3">
-                    <span className="min-w-0 truncate text-[0.71875rem] font-semibold" style={{ color: 'var(--ink)' }}>{front}</span>
-                    <button
-                      type="button"
-                      aria-label={`Restore refresh offer for ${front}`}
-                      onClick={() => app.set({ kitchenKeptFronts: keptFronts.filter((f) => f !== front) })}
-                      className="press shrink-0 text-[0.6875rem] font-extrabold"
-                      style={{ color: 'var(--accent)' }}
-                    >
-                      Restore
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </Card>
       </Section>
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildHouseholdModel, confidenceForCount, householdModelSummary, makeFact } from '../src/lib/household-model.js';
+import {
+  buildHouseholdModel, confidenceForCount, confidenceForEvidence, householdModelReady, householdModelSummary,
+  makeFact,
+} from '../src/lib/household-model.js';
 
 const state = {
   day: '2026-09-01',
@@ -54,7 +57,7 @@ describe('unified household model', () => {
   it('every fact carries confidence, evidence count, source and time', () => {
     const model = buildHouseholdModel(state, { recipes, today: '2026-09-01' });
     for (const [key, fact] of Object.entries(model)) {
-      if (key === 'version' || key === 'updatedAt') continue;
+      if (key === 'version' || key === 'updatedAt' || key === 'evidenceScore') continue;
       expect(fact, key).toHaveProperty('value');
       expect(fact, key).toHaveProperty('confidence');
       expect(['high', 'medium', 'low', 'none']).toContain(fact.confidence);
@@ -93,5 +96,45 @@ describe('unified household model', () => {
   it('makeFact defaults confidence from evidence', () => {
     expect(makeFact('x', { evidenceCount: 0 }).confidence).toBe('none');
     expect(makeFact('x', { evidenceCount: 5 }).confidence).toBe('medium');
+  });
+
+  it('weighs stronger evidence more than weaker evidence', () => {
+    expect(confidenceForEvidence(0, 'taste-ratings')).toBe('none');
+    expect(confidenceForEvidence(1, 'taste-ratings')).toBe('low');
+    expect(confidenceForEvidence(1, 'pantry')).toBe('low');
+    expect(confidenceForEvidence(4, 'taste-ratings')).toBe('high');
+    expect(confidenceForEvidence(4, 'pantry')).toBe('medium');
+    expect(confidenceForEvidence(6, 'receipts')).toBe('high');
+  });
+
+  it('raises confidence once enough independent evidence exists', () => {
+    const model = buildHouseholdModel({
+      ...state,
+      tasteRatings: { r1: 'love', r2: 'like', r3: 'like', r4: 'love' },
+      favourites: ['r1', 'r3'],
+      shops: [
+        { date: '2026-08-20', items: [{ name: 'Milk' }] },
+        { date: '2026-08-27', items: [{ name: 'Milk' }] },
+        { date: '2026-09-01', items: [{ name: 'Milk' }] },
+        { date: '2026-09-02', items: [{ name: 'Bread' }] },
+      ],
+    }, { recipes, today: '2026-09-01' });
+    expect(model.preferences.confidence).toBe('high');
+    expect(model.shoppingCadence.confidence).toBe('medium');
+    expect(model.evidenceScore).toBeGreaterThan(0);
+    expect(householdModelReady(model)).toBe(true);
+  });
+
+  it('does not let weak pantry evidence claim high confidence', () => {
+    const model = buildHouseholdModel({
+      ...state,
+      pantry: [{ id: 'p1', name: 'Rice' }, { id: 'p2', name: 'Beans' }, { id: 'p3', name: 'Pasta' }, { id: 'p4', name: 'Bread' }],
+      cooked: [],
+      tasteRatings: {},
+      favourites: [],
+      shops: [],
+    }, { recipes, today: '2026-09-01' });
+    expect(model.preferences.confidence).toBe('none');
+    expect(model.appetite.confidence).toBe('none');
   });
 });

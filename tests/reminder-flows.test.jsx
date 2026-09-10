@@ -182,15 +182,28 @@ describe('when one comes due', () => {
     expect(within(sheet).getByText('Due now')).toBeTruthy();
   });
 
-  it('reaches you on Home, where you will actually see it', () => {
+  it('reaches you on Home when its optional panel is on', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     atTime(9, 10);
     onboard();
+    openProfile();
+    const profile = screen.getByText('Guidance & you').closest('section');
+    fireEvent.click(within(profile).getByText('Preferences'));
+    await act(async () => {});
+    const prefsSheet = [...document.querySelectorAll('[role="dialog"]')]
+      .filter((d) => d.getAttribute('aria-hidden') !== 'true')
+      .find((d) => d.querySelector('h2')?.textContent === 'Preferences');
+    const homeChip = within(prefsSheet).getAllByText('Home')[0].closest('button');
+    console.log('HOME CHIP', homeChip?.outerHTML);
+    fireEvent.click(homeChip);
+    await act(async () => {});
+    fireEvent.click(within(prefsSheet).getByLabelText('Show Reminders due'));
+    fireEvent.click(within(prefsSheet).getByLabelText('Close'));
     const sheet = openReminders();
     addReminder(sheet, { kind: 'Water', text: 'Glass of water', time: '09:00' });
     fireEvent.click(within(sheet).getByLabelText('Close'));
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
-    const section = within(document.querySelector('main')).getAllByText('Reminders')[0].closest('section');
-    expect(within(section).getByText('Glass of water')).toBeTruthy();
+    const homeSection = within(document.querySelector('main')).getAllByText('Reminders due')[0].closest('section');
+    expect(within(homeSection).getByText(/Glass of water/)).toBeTruthy();
   });
 });

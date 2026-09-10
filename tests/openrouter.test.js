@@ -27,22 +27,22 @@ beforeEach(() => {
   vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
 });
 
-describe('the bundled NVIDIA key', () => {
-  it('makes the app work with no environment configuration at all', () => {
+describe('the NVIDIA key (environment only)', () => {
+  it('ships no credential — no key means no provider, said plainly', () => {
     vi.stubEnv('NVIDIA_API_KEY', undefined);
     vi.stubEnv('OPENROUTER_API_KEY', '');
-    expect(nvidiaKey()).toMatch(/^nvapi-/);
-    expect(isOpenRouterConfigured()).toBe(true);
-    expect(activeProvider()).toMatchObject({ id: 'nvidia' });
+    expect(nvidiaKey()).toBe('');
+    expect(activeProvider()).toBeNull();
+    expect(isOpenRouterConfigured()).toBe(false);
   });
 
-  it('lets a deployment override it, so a self-host uses its own key', () => {
+  it('lets a deployment bring its own key', () => {
     vi.stubEnv('NVIDIA_API_KEY', 'nvapi-someone-elses-key');
     expect(nvidiaKey()).toBe('nvapi-someone-elses-key');
     expect(activeProvider()).toMatchObject({ id: 'nvidia', key: 'nvapi-someone-elses-key' });
   });
 
-  it('treats an explicitly empty value as "off" rather than falling back to it', () => {
+  it('treats an explicitly empty value as "off" rather than half-configured', () => {
     vi.stubEnv('NVIDIA_API_KEY', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');
     expect(nvidiaKey()).toBe('');
@@ -88,8 +88,8 @@ describe('freeChat — failover walks down the intelligence ranking', () => {
   });
 
   it('says plainly when no key or no free slot exists', async () => {
-    // The app ships a bundled NVIDIA key, so "no key" now means both
-    // providers explicitly emptied — an empty value is honoured as "off".
+    // No credential ships with the app, so "no key" means neither provider
+    // is configured — freeChat refuses rather than calling anywhere.
     vi.stubEnv('NVIDIA_API_KEY', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');
     await expect(freeChat({ system: 's', user: 'u', fetchImpl: vi.fn() })).rejects.toThrow('no-free-model');
@@ -158,9 +158,10 @@ describe('freeVision — the models that can actually see', () => {
     const textOnly = { data: [{ id: 'z-ai/glm-5.2:free' }] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonRes(textOnly));
     // The catalog cache belongs to a provider, so a different base is a fresh
-    // catalog rather than the previous one's answer. The bundled NVIDIA key
-    // makes NVIDIA the active provider here, so it is NVIDIA's base to move.
-    vi.stubEnv('NVIDIA_BASE_URL', 'https://other.test/api/v1');
+    // catalog rather than the previous one's answer. The OPENROUTER_API_KEY in
+    // beforeEach makes OpenRouter the active provider, so it is OpenRouter's
+    // base to move.
+    vi.stubEnv('OPENROUTER_BASE_URL', 'https://other.test/api/v1');
     await expect(freeVision({
       system: 's', user: 'u', image: 'data:image/png;base64,zz', fetchImpl,
     })).rejects.toThrow('no-vision-model');

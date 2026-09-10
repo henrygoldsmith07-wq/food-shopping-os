@@ -1,14 +1,15 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Forq food-loop boundary: Revise / Daily Debate code is quarantined under
- * src/legacy/** and must not leak back into Plan → Shop → Eat.
+ * Forq food-loop boundary: the legacy Revise / Daily Debate code (SRS
+ * flashcards, exam outlook, knowledge/deck graphs, argument graphs) was
+ * removed completely — it now must not come back in any form: no src/legacy
+ * directory, no bridge module, no orphaned UI components, no imports.
  *
- * Quarantined: exam, flashcard/SRS, debate, argument-graph, grade prediction.
- * The single sanctioned bridge is src/lib/review-actions.js (existing deck
- * support) plus the legacy UI components themselves.
+ * Forq is a food-shopping OS: Plan → Shop → Eat. If someone needs
+ * Revise/Debate again, it belongs in its own app, not wired back in here.
  */
 
 const root = process.cwd();
@@ -32,32 +33,26 @@ const importsOf = (file) => {
   return specs.filter((s) => s && s.startsWith('.'));
 };
 
-const resolveTarget = (file, spec) => {
-  const base = join(dirname(file), spec);
-  const candidates = [base, `${base}.js`, `${base}.jsx`, `${base}.ts`, `${base}.tsx`, join(base, 'index.js')];
-  for (const c of candidates) {
-    try { if (statSync(c).isFile()) return c; } catch { /* try next */ }
-  }
-  return null;
-};
-
 const slash = (p) => p.split(sep).join('/');
-const isLegacy = (p) => slash(p).includes('/src/legacy/');
-const isBridge = (p) => {
-  const s = slash(p);
-  return s.endsWith('/src/lib/review-actions.js')
-    || s.includes('/src/legacy/')
-    || s.includes('/src/components/ReviewQueueCard.jsx')
-    || s.includes('/src/components/KnowledgeMap')
-    || s.includes('/src/components/NewCardSection.jsx')
-    || s.includes('/src/components/SkipReasonsCard.jsx')
-    || s.includes('/src/components/SkipReasonReflection.jsx')
-    || s.includes('/src/components/WeekAheadForecast.jsx')
-    || s.includes('/src/components/AddCardForm.jsx')
-    || s.includes('/src/components/KitchenForgetConfirm.jsx')
-    || s.includes('/src/components/KitchenRefreshPreview.jsx')
-    || s.includes('/src/components/TopicStatusTag.jsx');
-};
+
+const REMOVED_PATHS = [
+  'src/legacy',
+  'src/lib/review-actions.js',
+  'src/components/ReviewQueueCard.jsx',
+  'src/components/KnowledgeMap.tsx',
+  'src/components/KnowledgeMapSection.jsx',
+  'src/components/NewCardSection.jsx',
+  'src/components/SkipReasonsCard.jsx',
+  'src/components/SkipReasonReflection.jsx',
+  'src/components/WeekAheadForecast.jsx',
+  'src/components/AddCardForm.jsx',
+  'src/components/KitchenForgetConfirm.jsx',
+  'src/components/KitchenRefreshPreview.jsx',
+  'src/components/KitchenSeedStrip.jsx',
+  'src/components/TopicStatusTag.jsx',
+];
+
+const REMOVED_TERMS = /argGraph|demoDebate|DemoDebate|revise-domain|kitchenSeed|kitchenCardsForgotten|kitchenKeptFronts|kitchenBootRefresh|reviewDueReasonGroups|reviewDueCards|gradeReview|deck-graph|knowledge-graph|skip-profile|topic-labels|topic-status|card-gen\b|src\/legacy|\/legacy\/|review-actions/;
 
 // New food-loop core must stay clean.
 const CORE = [
@@ -77,7 +72,13 @@ const CORE = [
 ];
 
 describe('forq food-loop boundaries', () => {
-  it('keeps src/domain/ gone (moved to src/legacy/revise-domain/)', () => {
+  it('the removed legacy files and directories stay gone', () => {
+    for (const rel of REMOVED_PATHS) {
+      expect(existsSync(join(root, rel)), `${rel} has crept back`).toBe(false);
+    }
+  });
+
+  it('keeps src/domain/ gone too (nothing silently re-imports it)', () => {
     let exists = false;
     try { statSync(join(src, 'domain')); exists = true; } catch { exists = false; }
     expect(exists).toBe(false);
@@ -89,44 +90,46 @@ describe('forq food-loop boundaries', () => {
     expect(page).toMatch(/Plan.*Shop.*Eat|example week/i);
   });
 
-  it('WeekAheadForecast no longer imports the SRS domain', () => {
-    const file = join(src, 'components', 'WeekAheadForecast.jsx');
-    const text = readFileSync(file, 'utf8');
-    expect(text).not.toMatch(/from\s+['"]\.\.\/domain\//);
-    expect(text).toMatch(/kitchen-dates/);
-  });
-
-  it('new food-loop core never imports legacy revise/debate code', () => {
-    const leaks = [];
-    for (const rel of CORE) {
-      const file = join(root, rel);
-      let targets = [];
-      try { targets = importsOf(file); } catch { continue; }
-      for (const spec of targets) {
-        if (/legacy|domain\/|argGraph|demoDebate|DemoDebate/.test(spec)) {
-          leaks.push(`${rel} → ${spec}`);
-          continue;
-        }
-        const target = resolveTarget(file, spec);
-        if (target && isLegacy(target) && !isBridge(file)) {
-          leaks.push(`${rel} → ${slash(target)}`);
-        }
-      }
-    }
-    expect(leaks).toEqual([]);
-  });
-
-  it('no food-loop file outside the bridge imports the SRS domain', () => {
-    const leaks = [];
+  it('no source file references the removed legacy surface by name', () => {
+    const hits = [];
     for (const file of allFiles(src)) {
-      if (isLegacy(file) || isBridge(file)) continue;
-      if (slash(file).includes('/src/app/api/') || slash(file).includes('/src/server/')) continue;
+      const text = readFileSync(file, 'utf8');
+      if (REMOVED_TERMS.test(text)) hits.push(slash(file));
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it('no source file imports anything that no longer exists', () => {
+    const resolveTarget = (file, spec) => {
+      const base = join(dirname(file), spec);
+      const candidates = [base, `${base}.js`, `${base}.jsx`, `${base}.ts`, `${base}.tsx`, join(base, 'index.js')];
+      for (const c of candidates) {
+        try { if (statSync(c).isFile()) return c; } catch { /* try next */ }
+      }
+      return null;
+    };
+    const dangling = [];
+    for (const file of allFiles(src)) {
       for (const spec of importsOf(file)) {
-        if (spec.includes('../domain/') || spec.includes('/domain/') || spec.includes('argGraph') || spec.includes('demoDebate') || spec.includes('DemoDebate')) {
-          leaks.push(`${slash(file)} → ${spec}`);
-        }
+        const target = resolveTarget(file, spec);
+        if (target === null) dangling.push(`${slash(file)} → ${spec}`);
       }
     }
-    expect(leaks).toEqual([]);
+    expect(dangling).toEqual([]);
+  });
+
+  it('new food-loop core never mentions the removed legacy surface', () => {
+    for (const rel of CORE) {
+      const text = readFileSync(join(root, rel), 'utf8');
+      expect(text, rel).not.toMatch(/argGraph|demoDebate|DemoDebate|revise-domain|src\/legacy|\/legacy\/|review-actions/);
+    }
+  });
+
+  it('the SRS state keys left the store (skip reflections stay for the planner)', () => {
+    const text = readFileSync(join(src, 'lib', 'state.js'), 'utf8');
+    for (const key of ['cards:', 'kitchenCardsForgotten:', 'kitchenKeptFronts:', 'kitchenBootRefresh:']) {
+      expect(text, key).not.toMatch(new RegExp(key));
+    }
+    expect(text).toMatch(/skipReasonProfile:/); // planner reads confirmed reasons
   });
 });

@@ -37,13 +37,14 @@ describe('the five product modes', () => {
     expect(moduleOn('plan', ['plan-shop'])).toBe(true);
     expect(visibleTabs(['plan-shop'], TABS)).toEqual(['home', 'plan', 'shop', 'recipes']);
     expect(visibleTabs(['nutrition'], TABS)).toEqual(['home', 'log']);
-    expect(visibleWidgets(DEFAULT_WIDGETS, ['nutrition'])).not.toContain('pantry');
+    expect(visibleWidgets(DEFAULT_WIDGETS, ['nutrition'])).not.toContain('numbers');
   });
 
   it('keeps Home whatever is chosen, so there is always somewhere to be', () => {
     for (const mode of PRODUCT_MODES) {
       expect(visibleTabs([mode.id], TABS)).toContain('home');
       expect(visibleWidgets(DEFAULT_WIDGETS, [mode.id])).toContain('rings');
+      expect(visibleWidgets(DEFAULT_WIDGETS, [mode.id])).toContain('setup');
     }
   });
 

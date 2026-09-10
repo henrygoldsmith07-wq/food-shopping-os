@@ -68,7 +68,7 @@ import { predictUnusedIngredients } from './waste-prediction.js';
 import { predictionCalibration, predictionLearningProfile } from './prediction-feedback.js';
 import { buildHouseholdModel, householdModelSummary } from './household-model.js';
 import { decideTonight } from './meal-decision.js';
-import { recoverWeek } from './week-recovery.js';
+import { inferWeekRecoveryTrigger, recoverWeek } from './week-recovery.js';
 import { evaluateHousehold } from './eval-metrics.js';
 import { ledgerCounts } from './event-ledger.js';
 
@@ -195,6 +195,10 @@ export const deriveApp = (state) => {
       ? 'regular'
       : 'established';
   const footprint = periodFootprint(state.log, { today: state.day });
+  const householdModel = memoIntelligence(state, 'householdModel', () => {
+    try { return buildHouseholdModel(state, { recipes: recipeBook, today: state.day }); }
+    catch { return null; }
+  });
 
   return {
     catalogue,
@@ -351,10 +355,7 @@ export const deriveApp = (state) => {
     // Each is computed defensively (one failing learner must not break Home)
     // and memoized per state: ranking the recipe book is the heaviest derive
     // here, and most renders never change state in between.
-    householdModel: memoIntelligence(state, 'householdModel', () => {
-      try { return buildHouseholdModel(state, { recipes: recipeBook, today: state.day }); }
-      catch { return null; }
-    }),
+    householdModel,
     householdModelSummary() {
       try { return householdModelSummary(this.householdModel); }
       catch { return 'Household learning unavailable.'; }
@@ -364,7 +365,7 @@ export const deriveApp = (state) => {
         return decideTonight({
           recipes: filterBySuitability(recipeBook, suitabilityCtx).filter((r) => r.meal === 'dinner'),
           pantry: state.pantry, leftovers: leftoverItems(state.pantry),
-          taste: tasteProfile, diets: planDiets,
+          taste: tasteProfile, householdModel, diets: planDiets,
           allergies: [...new Set([...state.allergies, ...memberAllergies])],
           intolerances: [...new Set([...state.intolerances, ...memberIntolerances])],
           religious: state.religious, members: state.members, cooked: state.cooked,
@@ -375,7 +376,10 @@ export const deriveApp = (state) => {
       } catch { return { pick: null, ranked: [], confidence: 'none', reasons: [] }; }
     }),
     weekRecovery: memoIntelligence(state, 'weekRecovery', () => {
-      try { return recoverWeek(state, { today: state.day, catalogue: recipeBook }); }
+      try {
+        const trigger = inferWeekRecoveryTrigger(state, recipeBook);
+        return recoverWeek(state, { today: state.day, catalogue: recipeBook, trigger });
+      }
       catch { return null; }
     }),
     householdEval: memoIntelligence(state, 'householdEval', () => {

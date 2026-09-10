@@ -10,6 +10,12 @@ import { reconcilePurchase } from './pantry-intelligence.js';
 import { householdPermission } from './household.js';
 import { LEFTOVER_CAT } from './mealplan.js';
 import { uid } from './state.js';
+import { createLedgerEvent } from './event-ledger.js';
+
+const withLedger = (state, events) => {
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  return { ...state, householdLedger: [...ledger, ...events].slice(-500) };
+};
 
 export const pantryFlowActions = (set) => ({
   /** Finish what a shop started: run a recorded trip's items into the pantry. */
@@ -84,10 +90,15 @@ export const pantryFlowActions = (set) => ({
         date: s.day,
         at: Date.now(),
       }));
-      return {
+      return withLedger({
         pantry: s.pantry.filter((p) => !ids.has(p.id)),
         waste: [...s.waste, ...wasteRows],
         pantryEvents: [...(s.pantryEvents || []), ...events].slice(-100),
-      };
+      }, expired.map((item) => createLedgerEvent('IngredientWasted', {
+        name: String(item.name || '').replace(/ \(leftovers\)$/, ''),
+        reason: 'expired',
+        cost: 0,
+        leftover: true,
+      }, { origin: 'user' })));
     }),
 });

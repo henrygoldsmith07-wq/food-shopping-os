@@ -2,10 +2,14 @@
  * Household event ledger — one append-only timeline for everything the
  * Week Recovery Engine, Meal Decision Engine and evaluation need to know.
  *
- * Event types (stable, lowercase-hyphen not needed — PascalCase matches the
- * spec): MealPlanned, MealCooked, MealSkipped, IngredientPurchased,
- * IngredientWasted, LeftoverCreated, PantryCorrected,
- * RecommendationAccepted, RecommendationRejected.
+ * Event types (stable, PascalCase): MealPlanned, MealCooked, MealSkipped,
+ * IngredientPurchased, IngredientWasted, LeftoverCreated, PantryCorrected,
+ * RecommendationAccepted, RecommendationRejected, WeekRecovered.
+ *
+ * Every event carries provenance: `origin` says what caused it (user,
+ * autopilot, recovery, sync, import) and `actor` who did it. Events are
+ * replayable — `replayLedger` folds them back into a projection of what
+ * happened, so evaluation and audits read one story, not two.
  *
  * Pure + offline. Stored at `state.householdLedger` (capped). Legacy arrays
  * (mealPlanEvents, pantryEvents, preferenceEvents …) are left untouched for
@@ -25,15 +29,22 @@ export const LEDGER_EVENT_TYPES = [
   'PantryCorrected',
   'RecommendationAccepted',
   'RecommendationRejected',
+  'WeekRecovered',
 ];
+
+/** Where an event came from — provenance for audits and replay. */
+export const LEDGER_ORIGINS = ['user', 'autopilot', 'recovery', 'sync', 'import'];
 
 export const LEDGER_MAX = 500;
 const TYPE_SET = new Set(LEDGER_EVENT_TYPES);
+const ORIGIN_SET = new Set(LEDGER_ORIGINS);
 
 export const isLedgerType = (type) => TYPE_SET.has(type);
+export const isLedgerOrigin = (origin) => ORIGIN_SET.has(origin);
 
-export const createLedgerEvent = (type, payload = {}, { actor = null, at = null, id = null } = {}) => {
+export const createLedgerEvent = (type, payload = {}, { actor = null, at = null, id = null, origin = 'user' } = {}) => {
   if (!isLedgerType(type)) throw new Error(`Unknown ledger event type: ${type}`);
+  if (!isLedgerOrigin(origin)) throw new Error(`Unknown ledger event origin: ${origin}`);
   const stamp = at || new Date().toISOString();
   return {
     id: id || (typeof uid === 'function' ? uid('e') : `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
@@ -41,6 +52,7 @@ export const createLedgerEvent = (type, payload = {}, { actor = null, at = null,
     at: stamp,
     day: String(stamp).slice(0, 10),
     actor,
+    origin,
     ...payload,
   };
 };
@@ -53,11 +65,15 @@ export const appendLedgerEvent = (state = {}, event) => {
   return { ...state, householdLedger: next };
 };
 
-export const ledgerEvents = (state = {}, { type = null, since = null, until = null, limit = null } = {}) => {
+export const ledgerEvents = (state = {}, { type = null, since = null, until = null, limit = null, origin = null } = {}) => {
   let rows = Array.isArray(state.householdLedger) ? state.householdLedger : [];
   if (type) {
     const types = Array.isArray(type) ? type : [type];
     rows = rows.filter((e) => types.includes(e.type));
+  }
+  if (origin) {
+    const origins = Array.isArray(origin) ? origin : [origin];
+    rows = rows.filter((e) => origins.includes(e.origin || 'user'));
   }
   if (since) rows = rows.filter((e) => String(e.day || e.at || '') >= String(since));
   if (until) rows = rows.filter((e) => String(e.day || e.at || '') <= String(until));
@@ -67,10 +83,76 @@ export const ledgerEvents = (state = {}, { type = null, since = null, until = nu
 
 export const ledgerCounts = (state = {}) => {
   const counts = Object.fromEntries(LEDGER_EVENT_TYPES.map((t) => [t, 0]));
-  for (const e of ledgerEvents(state)) {
+  const all = ledgerEvents(state);
+  for (const e of all) {
     if (counts[e.type] !== undefined) counts[e.type] += 1;
   }
-  return { ...counts, total: ledgerEvents(state).length };
+  return { ...counts, total: all.length };
+};
+
+/**
+ * Replay the ledger: fold events (oldest first) into a projection of what
+ * happened. The projection is the audit view — counts and last-touch stamps
+ * per Plan → Shop → Eat stage, recomputed from events alone so evaluation,
+ * recovery and the Household Model read one story.
+ */
+export const replayLedger = (events = []) => {
+  const rows = [...(Array.isArray(events) ? events : [])].sort((a, b) => String(a.at).localeCompare(String(a.at)));
+  const projection = {
+    total: rows.length,
+    planned: 0,
+    cooked: 0,
+    skipped: 0,
+    purchased: 0,
+    wasted: 0,
+    leftovers: 0,
+    pantryCorrections: 0,
+    recommendationsAccepted: 0,
+    recommendationsRejected: 0,
+    weeksRecovered: 0,
+    lastEvent: null,
+    byDay: {},
+  };
+  for (const e of rows) {
+    if (!isLedgerType(e.type)) continue;
+    const day = String(e.day || String(e.at || '').slice(0, 10));
+    projection.byDay[day] = projection.byDay[day] || { events: 0 };
+    projection.byDay[day].events += 1;
+    switch (e.type) {
+      case 'MealPlanned': projection.planned += 1; break;
+      case 'MealCooked': projection.cooked += 1; break;
+      case 'MealSkipped': projection.skipped += 1; break;
+      case 'IngredientPurchased': projection.purchased += 1; break;
+      case 'IngredientWasted': projection.wasted += 1; break;
+      case 'LeftoverCreated': projection.leftovers += 1; break;
+      case 'PantryCorrected': projection.pantryCorrections += 1; break;
+      case 'RecommendationAccepted': projection.recommendationsAccepted += 1; break;
+      case 'RecommendationRejected': projection.recommendationsRejected += 1; break;
+      case 'WeekRecovered': projection.weeksRecovered += 1; break;
+      default: break;
+    }
+    projection.lastEvent = { id: e.id, type: e.type, at: e.at, origin: e.origin || 'user' };
+  }
+  return projection;
+};
+
+/**
+ * Ledger integrity for audits: duplicate ids, unknown types, missing stamps
+ * and missing provenance are all named, never silently tolerated.
+ */
+export const ledgerAudit = (state = {}) => {
+  const rows = ledgerEvents(state);
+  const seen = new Set();
+  const problems = [];
+  for (const e of rows) {
+    if (!isLedgerType(e.type)) problems.push({ id: e.id, kind: 'unknown-type', detail: e.type });
+    if (!e.id) problems.push({ kind: 'missing-id', detail: e.type });
+    else if (seen.has(e.id)) problems.push({ id: e.id, kind: 'duplicate-id' });
+    else seen.add(e.id);
+    if (!e.at) problems.push({ id: e.id, kind: 'missing-at' });
+    if (!isLedgerOrigin(e.origin || 'user')) problems.push({ id: e.id, kind: 'unknown-origin', detail: e.origin });
+  }
+  return { total: rows.length, uniqueIds: seen.size, ok: problems.length === 0, problems };
 };
 
 /** Acceptance rate for recommendations — the eval input. */

@@ -60,26 +60,21 @@ let cachedAt = 0;
 let cachedFor = '';
 
 /**
- * Shipped NVIDIA key, used when the environment sets none.
+ * The NVIDIA key in force — environment only.
  *
- * Embedded at the repo owner's explicit instruction: the key is free, carries
- * no billing, and shipping it means the app works with no setup. Anyone
- * self-hosting should still set NVIDIA_API_KEY, which always wins over this —
- * a key in a public repo is one anybody can spend the rate limit on, and it
- * cannot be rotated without a release.
- */
-const BUNDLED_NVIDIA_KEY = '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';
-
-/**
- * The NVIDIA key in force: environment first, bundled key as the fallback.
+ * No credential ships in source. A key in a public repo is one anybody can
+ * spend the rate limit on, it cannot be rotated without a release, and a
+ * secret scanner (CI gitleaks) rightly blocks the merge. A deployment that
+ * wants NVIDIA sets the NVIDIA_API_KEY environment variable; everything else
+ * falls through to OpenRouter or says plainly that AI is not configured.
  *
- * Setting NVIDIA_API_KEY to an empty string is honoured as "no NVIDIA" rather
- * than falling back to the bundled key, so a deployment can turn the shipped
- * credential off without editing source.
+ * An explicitly empty NVIDIA variable is honoured as "no NVIDIA" rather than
+ * being re-read from anywhere else, so a deployment can turn the provider off
+ * without editing source.
  */
 export const nvidiaKey = () => {
   const configured = process.env.NVIDIA_API_KEY;
-  return configured === undefined || configured === null ? BUNDLED_NVIDIA_KEY : configured;
+  return configured === undefined || configured === null ? '' : configured;
 };
 
 export const activeProvider = () => {

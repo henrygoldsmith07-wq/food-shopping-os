@@ -1,0 +1,39 @@
+# Gitleaks configuration — extends the default ruleset.
+#
+# The app stores everything locally first, so localStorage keys are constants
+# like `STORAGE_KEY = 'forq-state-v2'`. The generic-api-key rule reads the word
+# "key" next to a quoted token and flags those constants as secrets. They are
+# identifiers, not credentials — allowlisted here by path + value shape so the
+# scanner stays meaningful for real findings.
+#
+# A real credential (a bundled nvapi-… NVIDIA key) was removed from source and
+# must be revoked on its provider dashboard — it stays visible in old commits,
+# which full-history CI scans still read. The retired commit is allowlisted by
+# fingerprint only; never add allowlist entries for live secrets — fix the
+# source instead.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Retired commits: the removed bundled NVIDIA key (revoked; historic commits only)"
+commits = [
+  "0ab14d166161316dea29299b8abdc90fc0093cbc",
+  "bd2d8cd80a9313cee92c54511da55f4b3281993e",
+  "a79e552c300530f67b2ce45c7a54c9f1e5e026d3",
+  "46b03d595efd21cf3ceb93a63c514484be323f61",
+]
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "forq.* localStorage key constants — identifiers, not credentials"
+regexes = [
+  '''forq[-.][A-Za-z0-9._-]+''',
+]
+paths = [
+  '''^src/lib/(monid-rollup|live-prices|health-vault|observed-prices|store-persistence)\.js$''',
+  '''^src/lib/state\.js$''',
+]
+

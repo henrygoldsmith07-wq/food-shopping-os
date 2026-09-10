@@ -66,4 +66,28 @@ describe('meal decision engine', () => {
     expect(pick).toBeNull();
     expect(reasons.join(' ')).toMatch(/empty/i);
   });
+
+  it('uses household evidence to adapt its scoring and say so', () => {
+    const model = {
+      preferences: { confidence: 'high', evidenceCount: 8 },
+      effortTolerance: { confidence: 'high', evidenceCount: 8 },
+      wasteProbability: { confidence: 'medium', evidenceCount: 4 },
+      priceSensitivity: { confidence: 'medium', evidenceCount: 4 },
+    };
+    const without = rankMealsForTonight({ recipes, pantry, today: '2026-09-01' });
+    const withModel = rankMealsForTonight({ recipes, pantry, householdModel: model, today: '2026-09-01' });
+    expect(withModel.some((row) => row.score !== without.find((r) => r.recipe.id === row.recipe.id).score)).toBe(true);
+    expect(withModel[0].learning.used).toBe(true);
+    expect(withModel[0].learning.preferenceConfidence).toBe('high');
+    expect(withModel[0].learning.effortConfidence).toBe('high');
+  });
+
+  it('never lets learned preferences override a hard dietary line', () => {
+    const model = { preferences: { confidence: 'high', evidenceCount: 20 } };
+    const { pick, blockedCount } = decideTonight({
+      recipes, pantry, householdModel: model, allergies: ['peanuts'], today: '2026-09-01',
+    });
+    expect(blockedCount).toBe(1);
+    expect(pick.recipe.id).not.toBe('peanut-noodles');
+  });
 });

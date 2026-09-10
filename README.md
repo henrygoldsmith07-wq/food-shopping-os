@@ -37,7 +37,7 @@ The `/demo` route is the canonical visual walkthrough. Add a short screen record
 ![Forq demo: from meal plan to pantry-aware shopping list](public/demo/forq-demo.gif)
 ```
 
-The demo itself includes the two important product screenshots in an accessible, responsive form: the **Argument Graph**-style relationship view (claims, evidence, rebuttals and dropped claims) and the **judge explanation** (signals, confidence and uncertainty).
+The demo itself centres on the product loop: the meal decision, the pantry-aware list, and the closed loop after cooking.
 
 
 One app for planning, shopping, cooking, nutrition, budgeting and reducing
@@ -760,6 +760,32 @@ npm run dev      # local dev server
 npm run build    # production build to .next/ (installable PWA with service worker)
 npm test         # vitest suite
 ```
+
+## Release gates and branch protection
+
+The quality workflow runs the same gates as `npm run verify`, plus Playwright E2E, accessibility, security audit and gitleaks:
+
+1. lint
+2. typecheck
+3. unit and integration tests
+4. production build
+5. production dependency audit (`npm audit --omit=dev --audit-level=high`)
+6. performance budgets
+7. Playwright E2E and accessibility
+8. gitleaks secret scan
+
+Protect `main` on GitHub with:
+
+- **Require a pull request before merging**
+- **Require approvals:** 1 for a normal repository, 2 for a public production repository
+- **Dismiss stale pull request approvals when new commits are pushed**
+- **Require review from Code Owners** once a `CODEOWNERS` file is added
+- **Require status checks to pass:** `Food Shopping OS / quality`
+- **Require branches to be up to date before merging**
+- **Require linear history**
+- **Restrict pushes that create matching branches** to maintainers only
+
+After the first protected PR, pin the workflow to a protected Git ref (or use a pinned commit SHA) so future workflow changes cannot silently alter the release gate.
 
 ## Structure
 

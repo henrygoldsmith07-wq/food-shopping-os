@@ -280,7 +280,7 @@ export default function PreferencesPanel() {
     <div className="px-5 pb-10 space-y-4">
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {VIEWS.map(([key, label, Icon]) => (
-          <Chip key={key} active={view === key} onClick={() => setView(key)}>
+          <Chip key={key} active={view === key} onClick={() => setView(key)} aria-label={`${label} preferences`}>
             <span className="inline-flex items-center gap-1.5"><Icon size={13} /> {label}</span>
           </Chip>
         ))}

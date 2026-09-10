@@ -3,10 +3,18 @@
  *
  * Part of the store decomposition (see store-slices.js): the pantry slice owns
  * bin / consume / lifecycle transitions. Pure command creators over `set`;
- * no React, no network, offline-safe.
+ * no React, no network, offline-safe. Every waste write appends one
+ * IngredientWasted ledger event so Plan → Shop → Eat stays replayable.
  */
 
+import { createLedgerEvent } from './event-ledger.js';
+
 export const PANTRY_LIFECYCLE_STATES = ['opened', 'partially_consumed', 'leftover', 'expired', 'consumed', 'discarded'];
+
+const withLedger = (state, event) => {
+  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  return { ...state, householdLedger: [...ledger, event].slice(-500) };
+};
 
 export const pantryLifecycleActions = (set, { householdPermission, uid }) => ({
   binPantryItem: (id, { qty, value, reason } = {}) =>
@@ -28,7 +36,7 @@ export const pantryLifecycleActions = (set, { householdPermission, uid }) => ({
         date: s.day,
         at: Date.now(),
       };
-      return {
+      return withLedger({
         pantry: s.pantry
           .map((p) => (p.id === id ? { ...p, lifecycleState: 'discarded', discardedAt: s.day } : p))
           .filter((p) => p.id !== id),
@@ -44,7 +52,11 @@ export const pantryLifecycleActions = (set, { householdPermission, uid }) => ({
         }],
         pantryEvents: [...(s.pantryEvents || []), lifecycleEvent].slice(-100),
         lastPantryEvent: lifecycleEvent,
-      };
+      }, createLedgerEvent('IngredientWasted', {
+        name: item.name,
+        reason: reason || 'expired',
+        cost: Math.round(wasteValue * 100) / 100,
+      }, { origin: 'user' }));
     }),
   consumePantryItem: (id, { qty } = {}) =>
     set((s) => {
