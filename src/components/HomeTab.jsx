@@ -64,13 +64,16 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   const rankedTonight = (app.tonightDecision?.ranked || []).filter((row) => !row.blocked);
   const tonight = rankedTonight.find((row) => !dismissedTonight.includes(row.recipe.id)) || null;
   const acceptTonight = (row) => {
+    // One stable id for this decision: it rides the acceptance event AND the
+    // cook session it starts, so follow-through is attributed exactly.
+    const recommendationId = `tonight-${app.day}-${row.recipe.id}`;
     app.respondToRecommendation?.({
-      recommendationId: `tonight-${app.day}-${row.recipe.id}`,
+      recommendationId,
       accepted: true,
       recipeId: row.recipe.id,
       context: { source: 'tonight-card', confidence: row.confidence },
     });
-    openRecipe(row.recipe, { startCooking: true });
+    openRecipe(row.recipe, { startCooking: true, recommendationId });
   };
   const dismissTonight = (row) => {
     app.respondToRecommendation?.({

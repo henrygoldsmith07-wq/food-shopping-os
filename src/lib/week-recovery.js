@@ -29,6 +29,7 @@
 
 import { dayStamp, daysUntil, weekDates } from './kitchen-dates.js';
 import { expiringSoon } from './kitchen.js';
+import { compareLedgerEvents } from './event-ledger.js';
 import { inferWeekRecoveryTrigger, inferWeekRecoveryTriggers } from './week-recovery-triggers.js';
 import { pantryCoverageOf } from './pantry-coverage.js';
 
@@ -75,13 +76,13 @@ export const plannedUsesOf = (plan = {}, recipesById = {}, ingredientName, dates
  * cuisine with the broken recipe. Deterministic: coverage desc, shared
  * ingredients desc, time asc, id asc.
  */
-export const bestPantrySwap = ({ catalogue = [], avoidIds = [], pantryNames = new Set(), expiringNames = new Set(), wasRecipe = null, pantry = null, today = dayStamp() }) => {
+export const bestPantrySwap = ({ catalogue = [], avoidIds = [], pantryNames = new Set(), expiringNames = new Set(), wasRecipe = null, pantry = null, today = dayStamp(), learnedAliases = {} }) => {
   const wasIngredients = new Set(ingredientsOf(wasRecipe));
   const wasCuisine = norm(wasRecipe?.cuisine);
   const rows = [];
   for (const recipe of catalogue) {
     if (!recipe?.id || avoidIds.includes(recipe.id) || recipe.id === wasRecipe?.id) continue;
-    const coverage = pantryCoverageOf(recipe, pantryNames, { pantry, today });
+    const coverage = pantryCoverageOf(recipe, pantryNames, { pantry, today, learnedAliases });
     if (coverage.total === 0 || coverage.missing.length > 0) continue; // must be fully covered
     const expiringHits = ingredientsOf(recipe).filter((n) => expiringNames.has(n)).length;
     const shared = ingredientsOf(recipe).filter((n) => wasIngredients.has(n)).length;
@@ -145,6 +146,9 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
   const leftoverReuse = [];
   const pantryNames = new Set(pantry.map((p) => norm(p.name)));
   const listNames = new Set(shoppingList.map((r) => norm(r.name)));
+  // Learned ingredient aliases, so coverage reads rows the way the
+  // household actually names them.
+  const learnedAliases = state.aliasMemory || {};
 
   const expiring = expiringSoon(pantry, 3, today);
   const expiringNames = new Set(expiring.map((p) => norm(p.name)));
@@ -152,12 +156,13 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
     name: p.name, expiry: p.expiry, daysLeft: daysUntil(p.expiry, today),
   }));
 
-  // A trigger list, oldest first; a lone `trigger` still works.
+  // A trigger list, oldest first by the canonical ledger order; a lone
+  // `trigger` still works.
   const triggerList = (Array.isArray(triggers) && triggers.length
     ? [...triggers]
     : (trigger ? [trigger] : []))
     .filter((t) => t && t.kind)
-    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')) || String(a.id ?? '').localeCompare(String(b.id ?? '')));
+    .sort(compareLedgerEvents);
 
   /** Leftovers not already promised to a slot, urgent first. */
   const availableLeftovers = (urgentOnly = false) => leftovers
@@ -205,7 +210,7 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
 
     // Option 1: a catalogue recipe the pantry already fully covers â€”
     // quantity-aware, so "covered" means enough of everything, not the name.
-    const swap = bestPantrySwap({ catalogue, avoidIds: [], pantryNames, expiringNames, wasRecipe, pantry, today });
+    const swap = bestPantrySwap({ catalogue, avoidIds: [], pantryNames, expiringNames, wasRecipe, pantry, today, learnedAliases });
     if (swap) {
       options.push({
         kind: 'pantry-swap',
@@ -220,7 +225,7 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
     // Option 2: keep the planned recipe, buy what's missing (only when the
     // plan has a real recipe and the missing rows are not already listed).
     if (wasRecipeId && byId.has(wasRecipeId)) {
-      const missing = pantryCoverageOf(wasRecipe, pantryNames, { pantry, today }).missing
+      const missing = pantryCoverageOf(wasRecipe, pantryNames, { pantry, today, learnedAliases }).missing
         .filter((n) => !pantryNames.has(norm(n?.name || n)) && !listNames.has(norm(n?.name || n)));
       if (missing.length) {
         options.push({
@@ -298,12 +303,12 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
       if (repairedSlots.has(slotKey)) continue; // already repaired by another trigger
       // Prefer a pantry-covered swap; only if none exists does it become a buy.
       const wasRecipe = byId.get(use.recipeId);
-      const coverage = pantryCoverageOf(wasRecipe, pantryNames, { pantry, today });
+      const coverage = pantryCoverageOf(wasRecipe, pantryNames, { pantry, today, learnedAliases });
       const wastedNowMissing = coverage.missing.some((n) => {
         const nn = norm(n?.name || n);
         return nn.includes(norm(name)) || norm(name).includes(nn);
       });
-      const swap = bestPantrySwap({ catalogue, avoidIds: [use.recipeId], pantryNames, expiringNames, wasRecipe, pantry, today });
+      const swap = bestPantrySwap({ catalogue, avoidIds: [use.recipeId], pantryNames, expiringNames, wasRecipe, pantry, today, learnedAliases });
       if (swap && wastedNowMissing) {
         repairedSlots.add(slotKey);
         planPatch[use.date] = { ...(planPatch[use.date] || plan[use.date] || {}), [use.slot]: swap.recipe.id };

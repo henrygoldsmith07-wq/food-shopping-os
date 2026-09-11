@@ -48,8 +48,9 @@ test('rollover capture surfaces last week\'s silent misses on the waste card', a
   const pantry = page.getByRole('dialog', { name: 'Smart pantry' });
 
   // The two unmarked dinners from last week became missed events at rollover,
-  // and the waste card must name them — the cause, not just a count.
-  await expect(pantry.getByText('Your waste, by cause')).toBeVisible();
+  // and the waste card must name them — the cause, not just a count. The
+  // pantry sheet fills lazily after boot, so the first wait rides with it.
+  await expect(pantry.getByText('Your waste, by cause')).toBeVisible({ timeout: 15000 });
   await expect(pantry.getByText('Never cooked')).toBeVisible();
   await expect(pantry.getByText(/2 of those slipped by with nothing recorded/)).toBeVisible();
   await expect(pantry.getByText('Lemon Chicken Traybake')).toBeVisible();

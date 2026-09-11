@@ -38,7 +38,9 @@ test('form controls never trigger iOS focus zoom', async ({ page }) => {
   expect(await fontSize(page.getByLabel('Your name'))).toBeGreaterThanOrEqual(16);
 
   await onboard(page);
-  await page.getByRole('button', { name: 'Recipes' }).click();
+  // exact: the nav button is "Recipes", but Home's empty-pantry button also
+  // CONTAINS the word ("...what recipes need.") and a bare name match hits both.
+  await page.getByRole('button', { name: 'Recipes', exact: true }).click();
   expect(await fontSize(page.getByLabel('Search recipes'))).toBeGreaterThanOrEqual(16);
 });
 
@@ -120,7 +122,9 @@ test('preserves corrupt storage and offers recovery', async ({ page }) => {
 test('home, recipes and Guidance have no automatically detectable accessibility violations', async ({ page }) => {
   await onboard(page);
   for (const screen of ['Today', 'Recipes']) {
-    if (screen !== 'Today') await page.getByRole('button', { name: screen }).click();
+    // exact: the nav button is "Recipes"; Home's empty-pantry button also
+    // contains the word, and a bare match resolves to two buttons.
+    if (screen !== 'Today') await page.getByRole('button', { name: screen, exact: true }).click();
     await page.waitForTimeout(400);
     await page.evaluate(() => document.getAnimations()
       .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
@@ -130,7 +134,9 @@ test('home, recipes and Guidance have no automatically detectable accessibility 
   }
   await page.getByRole('button', { name: 'Guidance — what matters now' }).click();
   const guidance = page.getByRole('dialog', { name: 'Guidance' });
-  await expect(guidance.getByText('What matters now')).toBeVisible();
+  // The sheet's panels load lazily; on a cold device they can trail the
+  // dialog itself by more than the default 5s.
+  await expect(guidance.getByText('What matters now')).toBeVisible({ timeout: 15000 });
   await guidance.evaluate((element) => { element.dataset.axeTarget = 'guidance'; });
   const results = await new AxeBuilder({ page }).include('[data-axe-target="guidance"]').analyze();
   expect(results.violations, `Guidance: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);

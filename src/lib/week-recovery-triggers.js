@@ -12,11 +12,11 @@
  * correction in the same week each name a different problem.
  */
 
+import { sortLedgerEvents } from './event-ledger.js';
+
 const norm = (s) => String(s || '').trim().toLowerCase();
 
-const ingredientsOf = (recipe) => (recipe?.ingredients || []).map((i) => norm(i.name || i));
-
-/**
+const ingredientsOf = (recipe) => (recipe?.ingredients || []).map((i) => norm(i.name || i));/**
  * Infer the newest unresolved Plan → Shop → Eat event that needs recovery.
  * Back-compatible single-trigger view over `inferWeekRecoveryTriggers`.
  */
@@ -35,9 +35,9 @@ export const inferWeekRecoveryTriggers = (state = {}, recipeBook = []) => {
   const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
   const recipesById = Object.fromEntries((recipeBook || []).filter((r) => r?.id).map((r) => [r.id, r]));
   const pantryById = new Map((Array.isArray(state.pantry) ? state.pantry : []).filter((p) => p?.id).map((p) => [p.id, p]));
-  // Replay order (at, then id) — array position is not chronology.
-  const rows = [...ledger]
-    .sort((a, b) => String(a?.at ?? '').localeCompare(String(b?.at ?? '')) || String(a?.id ?? '').localeCompare(String(b?.id ?? '')));
+  // The one canonical ledger order (see event-ledger.js) — array position
+  // is not chronology, and recovery must read the same story replay reads.
+  const rows = sortLedgerEvents(ledger);
   const recoveryIndex = rows.map((e) => e?.type).lastIndexOf('WeekRecovered');
   const unresolved = recoveryIndex >= 0 ? rows.slice(recoveryIndex + 1) : rows;
 

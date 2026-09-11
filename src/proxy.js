@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
-export function middleware(request) {
+// Next 16 renamed the middleware convention to proxy — same job, same
+// matcher config: one strict Content-Security-Policy for every response.
+export function proxy(request) {
   const nonce = btoa(crypto.randomUUID());
   // React Refresh, which `next dev` needs to hot-reload, evaluates strings —
   // something the production policy must never allow. So dev gets the one

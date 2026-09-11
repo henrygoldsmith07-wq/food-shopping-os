@@ -142,6 +142,9 @@ function Shell() {
   const activeTab = app.visibleTabs(TABS.map((t) => t.id)).includes(tab) ? tab : 'home';
   const [recipe, setRecipe] = useState(null);
   const [recipeStartCooking, setRecipeStartCooking] = useState(false);
+  // The recommendation this cook session answers, when it came from the
+  // tonight card — carried to the ledger event so follow-through is exact.
+  const [recipeRecommendation, setRecipeRecommendation] = useState(null);
   const [pantryOpen, setPantryOpen] = useState(false);
   // The guided week loop — the sheet the plan guidance's "Run the week loop"
   // opens. `weekLoopStep` remembers which step sent you away to cook, so
@@ -165,7 +168,11 @@ function Shell() {
   const pulseTimer = useRef(null);
   // Which logging sheet the diary should open with, when arriving from Home.
   const [logIntent, setLogIntent] = useState(null);
-  const openRecipe = (r, options = null) => { setRecipeStartCooking(Boolean(options?.startCooking)); setRecipe(r); };
+  const openRecipe = (r, options = null) => {
+    setRecipeStartCooking(Boolean(options?.startCooking));
+    setRecipeRecommendation(typeof options?.recommendationId === 'string' ? options.recommendationId : null);
+    setRecipe(r);
+  };
   const goLog = (intent = null) => {
     setLogIntent(intent);
     setTab('log');
@@ -384,7 +391,7 @@ function Shell() {
       {/* Overlays */}
       <Sheet open={!!recipe} onClose={() => { setRecipe(null); setRecipeStartCooking(false); }} full>
         <Suspense fallback={<ScreenFallback />}>
-          {recipe && <RecipeDetail recipe={recipe} onClose={() => { setRecipe(null); setRecipeStartCooking(false); }} goTab={goTab} startCooking={recipeStartCooking} />}
+          {recipe && <RecipeDetail recipe={recipe} onClose={() => { setRecipe(null); setRecipeStartCooking(false); setRecipeRecommendation(null); }} goTab={goTab} startCooking={recipeStartCooking} recommendationId={recipeRecommendation} />}
         </Suspense>
       </Sheet>
       <Sheet open={pantryOpen} onClose={() => { setPantryOpen(false); setPantryQuery(''); }} title="Smart pantry">

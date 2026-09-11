@@ -18,7 +18,7 @@ import { householdActions } from './household-actions.js';
 import { smartActions } from './smart-actions.js';
 import { HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY } from './health-vault.js';
 import { householdPermission } from './household.js';
-import { createLedgerEvent } from './event-ledger.js';
+import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
 import { offerActions } from './offer-actions.js';
@@ -362,20 +362,26 @@ export function useStoreApi({
               conflicts: reconciled.conflicts.length,
             }
             : null;
-          // One replayable purchase event per recorded shop.
-          const ledger = [...(Array.isArray(s.householdLedger) ? s.householdLedger : []), createLedgerEvent(
+          // One replayable purchase event per recorded shop. A shop with no
+          // planned meal within ±3 days is honestly marked off-plan — that is
+          // the flag week recovery reads to clear the rows it covered.
+          const plannedDatesNear = Object.keys(s.plan || {})
+            .filter((d) => Object.keys(s.plan[d] || {}).length)
+            .some((d) => Math.abs(new Date(`${d}T12:00:00`) - new Date(`${s.day}T12:00:00`)) <= 3 * 86400000);
+          const withPurchase = appendLedgerEvent(s, createLedgerEvent(
             'IngredientPurchased',
             {
               shopId: shop.id,
               store: shop.store,
               total: shop.total,
               items: shop.items.map((i) => i.name),
+              unplanned: !plannedDatesNear || undefined,
             },
             { origin: 'user', at: `${s.day}T12:00:00.000Z` },
-          )].slice(-500);
+          ));
           return {
+            ...withPurchase,
             shops: [...s.shops, shop],
-            householdLedger: ledger,
             shoppingList: s.shoppingList.filter((i) => !bought.some((item) => item.id === i.id)),
             storeRoutes: route.length > 1 ? { ...s.storeRoutes, [shop.store]: route } : s.storeRoutes,
             pantry: reconciled ? reconciled.pantry : s.pantry,

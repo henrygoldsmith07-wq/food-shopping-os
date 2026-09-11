@@ -18,13 +18,15 @@ import { consumptionRateFor } from './consumption-predictions.js';
 import { mealPlanAdherence, repeatFatigue, cookingTimeLearning } from './planning-intelligence.js';
 import { dayStamp, weekDates } from './kitchen-dates.js';
 import {
-  calibratedConfidence, confidenceCalibration, confidenceForCount, confidenceForEvidence, decayEvidence,
+  applyCalibration, calibratedConfidence, confidenceCalibration, confidenceForCount,
+  confidenceForEvidence, decayEvidence,
 } from './confidence-calibration.js';
 
 // Calibration lives in its own module now; re-exported here so every
 // existing import (tests, store, model callers) keeps working.
 export {
-  calibratedConfidence, confidenceCalibration, confidenceForCount, confidenceForEvidence, decayEvidence,
+  applyCalibration, calibratedConfidence, confidenceCalibration, confidenceForCount,
+  confidenceForEvidence, decayEvidence,
 };
 
 export const MODEL_SOURCES = [
@@ -247,22 +249,42 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     from, to, confidence: 'medium', evidenceCount: 1, source: 'pantry', updatedAt: at,
   }));
 
+  // --- close the calibration loop ----------------------------------------------------
+  // How the app's stated confidence has resolved historically nudges the
+  // confidence it states now: overconfident levels read one step lower,
+  // underconfident ones one step higher — but only with enough resolved
+  // predictions at that level to be a track record, and never more than
+  // one step. Every adjustment is named here so it can be explained.
+  const predictions = confidenceCalibration(state.predictionSnapshots || [], at);
+  const adjust = (name, level) => {
+    const next = applyCalibration(level, predictions);
+    if (next !== level) adjustments.push({ fact: name, from: level, to: next });
+    return next;
+  };
+  const adjustments = [];
+  const calibratedPreferenceConfidence = adjust('preferences', preferenceConfidence);
+  const calibratedAcceptanceConfidence = adjust('acceptance', acceptanceConfidence);
+  const calibratedWasteConfidence = adjust('waste', wasteConfidence);
+  const calibratedCadenceConfidence = adjust('cadence', cadenceConfidence);
+
   return {
     version: 2,
     updatedAt: at,
     evidenceScore: Math.round(([
-      preferenceConfidence === 'high' ? 1 : preferenceConfidence === 'medium' ? 0.5 : 0,
-      acceptanceConfidence === 'high' ? 1 : acceptanceConfidence === 'medium' ? 0.5 : 0,
-      wasteConfidence === 'high' ? 1 : wasteConfidence === 'medium' ? 0.5 : 0,
-      cadenceConfidence === 'high' ? 1 : cadenceConfidence === 'medium' ? 0.5 : 0,
+      calibratedPreferenceConfidence === 'high' ? 1 : calibratedPreferenceConfidence === 'medium' ? 0.5 : 0,
+      calibratedAcceptanceConfidence === 'high' ? 1 : calibratedAcceptanceConfidence === 'medium' ? 0.5 : 0,
+      calibratedWasteConfidence === 'high' ? 1 : calibratedWasteConfidence === 'medium' ? 0.5 : 0,
+      calibratedCadenceConfidence === 'high' ? 1 : calibratedCadenceConfidence === 'medium' ? 0.5 : 0,
     ].reduce((sum, value) => sum + value, 0) / 4) * 100) / 100,
-    // Calibration: which facts the decay/conflict rules actually moved.
+    // Calibration: which facts the decay/conflict rules actually moved,
+    // plus any level the prediction track record adjusted.
     calibration: {
       preferences: prefCalibration,
       acceptance: acceptCalibration,
       waste: wasteCalibration,
       cadence: cadenceCalibration,
-      predictions: confidenceCalibration(state.predictionSnapshots || [], at),
+      predictions,
+      adjustments,
     },
     appetite: makeFact(
       { householdSize, typicalPortions, portionsOverride: state.portionsOverride || 'auto' },
@@ -276,7 +298,7 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     preferences: makeFact(
       { cuisines: likedCuisines, tags: likedTags, learned: learnedPrefs },
       {
-        confidence: preferenceConfidence,
+        confidence: calibratedPreferenceConfidence,
         evidenceCount: tasteEvidence,
         source: explicitTasteEvidence ? 'taste-ratings' : 'cooked',
         updatedAt: at,
@@ -298,7 +320,7 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     mealAcceptance: makeFact(
       acceptanceRate === null ? null : { rate: acceptanceRate, planned: adherence.planned, cooked: adherence.completed ?? adherence.cooked ?? 0, skipped: adherence.skipped },
       {
-        confidence: acceptanceConfidence,
+        confidence: calibratedAcceptanceConfidence,
         evidenceCount: acceptanceEvidence,
         source: 'meal-events',
         updatedAt: at,
@@ -323,7 +345,7 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     wasteProbability: makeFact(
       wasteByIngredient,
       {
-        confidence: wasteConfidence,
+        confidence: calibratedWasteConfidence,
         evidenceCount: wasteEvidence,
         source: 'waste',
         updatedAt: at,
@@ -334,7 +356,7 @@ export const buildHouseholdModel = (state = {}, { recipes = [], today = dayStamp
     shoppingCadence: makeFact(
       cadence.trips ? cadence : null,
       {
-        confidence: cadenceConfidence,
+        confidence: calibratedCadenceConfidence,
         evidenceCount: cadence.trips,
         source: 'receipts',
         updatedAt: at,

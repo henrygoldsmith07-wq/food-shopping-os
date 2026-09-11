@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildHouseholdModel, calibratedConfidence, confidenceCalibration, confidenceForCount,
+  applyCalibration, buildHouseholdModel, calibratedConfidence, confidenceCalibration, confidenceForCount,
   confidenceForEvidence, decayEvidence, householdModelReady, householdModelSummary,
   makeFact,
 } from '../src/lib/household-model.js';
@@ -193,5 +193,58 @@ describe('confidence calibration', () => {
     expect(model.calibration.waste).toHaveProperty('level');
     expect(model.calibration.cadence).toHaveProperty('level');
     expect(model.calibration.predictions).toHaveProperty('ready');
+    // No resolved predictions in this fixture → nothing second-guessed.
+    expect(model.calibration.adjustments).toEqual([]);
+  });
+});
+
+describe('closing the calibration loop', () => {
+  const snap = (confidence, probability, outcome) => ({
+    type: 'prediction_snapshot', confidence, probability, outcome, date: '2026-08-30',
+  });
+  // 'high' predictions that mostly did NOT come true; 'low' ones that did.
+  const overconfident = {
+    ready: true,
+    byConfidence: {
+      high: { predicted: 10, cameTrue: 3, actualRate: 0.3, meanProbability: 0.9, gap: -0.6, verdict: 'overconfident' },
+      low: { predicted: 8, cameTrue: 6, actualRate: 0.75, meanProbability: 0.25, gap: 0.5, verdict: 'underconfident' },
+    },
+  };
+
+  it('past accuracy adjusts stated confidence — one bounded step', () => {
+    expect(applyCalibration('high', overconfident)).toBe('medium');
+    expect(applyCalibration('low', overconfident)).toBe('medium');
+    // Never above high, never below low, never off the scale.
+    expect(applyCalibration('medium', overconfident)).toBe('medium'); // no track record at medium
+    expect(applyCalibration('high', { ready: false })).toBe('high');
+  });
+
+  it('a thin track record is not allowed to second-guess a level', () => {
+    const thin = {
+      ready: true,
+      byConfidence: { high: { predicted: 2, cameTrue: 0, actualRate: 0, meanProbability: 0.9, gap: -0.9, verdict: 'overconfident' } },
+    };
+    expect(applyCalibration('high', thin)).toBe('high');
+    expect(applyCalibration('high', thin, { minEvidence: 2 })).toBe('medium');
+  });
+
+  it('the model applies its prediction track record and names what moved', () => {
+    const model = buildHouseholdModel({
+      ...state,
+      predictionSnapshots: [
+        snap('high', 0.9, true), snap('high', 0.9, false), snap('high', 0.9, false),
+        snap('high', 0.9, false), snap('high', 0.9, false), snap('high', 0.9, false),
+        snap('low', 0.2, true), snap('low', 0.2, true), snap('low', 0.2, true),
+        snap('low', 0.2, true), snap('low', 0.2, true), snap('low', 0.2, true),
+      ],
+    }, { recipes, today: '2026-09-01' });
+    expect(model.calibration.predictions.ready).toBe(true);
+    // Only levels with a real track record move, and the moves are named.
+    for (const adjustment of model.calibration.adjustments) {
+      expect(adjustment).toHaveProperty('fact');
+      expect(adjustment).toHaveProperty('from');
+      expect(adjustment).toHaveProperty('to');
+      expect(adjustment.from).not.toBe(adjustment.to);
+    }
   });
 });

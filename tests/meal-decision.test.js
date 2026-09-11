@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideTonight, learnMealDecisionProfile, rankMealsForTonight } from '../src/lib/meal-decision.js';
+import { decideTonight, learnMealDecisionProfile, rankMealsForTonight, weeklyBudgetReality } from '../src/lib/meal-decision.js';
 
 const recipes = [
   {
@@ -177,5 +177,62 @@ describe('meal decision learning', () => {
     const curry = learned.find((r) => r.recipe.id === 'quick-curry');
     // 20 min book time, but this household takes ~50 — the reason says 30+.
     expect(curry.reasons.join(' ')).toMatch(/min is longer than your 30 min window/);
+  });
+});
+
+describe('weekly budget reality', () => {
+  it('judges whole weeks of spend, not single big trips', () => {
+    const state = {
+      day: '2026-09-01', // a Tuesday; the week started Mon 2026-08-31
+      weeklyBudget: 60,
+      shops: [
+        { date: '2026-08-31', total: 35 }, // this week: two small shops
+        { date: '2026-09-01', total: 30 }, // …which together blow the budget
+        { date: '2026-08-20', total: 55 }, // last week under budget in one trip
+      ],
+    };
+    const reality = weeklyBudgetReality(state, { today: '2026-09-01' });
+    expect(reality.weeks).toBe(2); // only weeks with spend count
+    // The old proxy would have called the £55 trip overspend; the weekly
+    // truth is the opposite.
+    expect(reality.overBudgetWeeks).toBe(1);
+    expect(reality.rows[0].start).toBe('2026-08-17'); // the week holding the 20 Aug shop
+    expect(reality.rows[0].variance).toBeLessThan(0);
+    expect(reality.rows[1].start).toBe('2026-08-31');
+    expect(reality.rows[1].variance).toBeGreaterThan(0);
+    expect(reality.meanVariance).toBeCloseTo((55 - 60 + 65 - 60) / 2, 2);
+  });
+
+  it('compares actual spend with what the plan implied, where it can', () => {
+    const state = {
+      day: '2026-09-01',
+      weeklyBudget: 60,
+      household: 2,
+      shops: [{ date: '2026-09-01', total: 42 }],
+      plan: { '2026-09-01': { dinner: 'quick-curry' } }, // £1.50/serving × 2
+    };
+    const reality = weeklyBudgetReality(state, { today: '2026-09-01', recipes });
+    expect(reality.rows[0].planned).toBeCloseTo(3, 2);
+    expect(reality.rows[0].plannedVariance).toBeCloseTo(39, 2);
+  });
+
+  it('no budget means no budget claims', () => {
+    expect(weeklyBudgetReality({ shops: [{ date: '2026-09-01', total: 99 }] }, { today: '2026-09-01' }).weeks).toBe(0);
+  });
+
+  it('a profile bends its weights when whole weeks run over', () => {
+    const monday = (d) => d; // clarity
+    const state = {
+      day: '2026-09-22',
+      weeklyBudget: 50,
+      shops: [
+        { date: '2026-09-01', total: 70 },
+        { date: '2026-09-08', total: 65 },
+        { date: '2026-09-15', total: 72 },
+      ],
+    };
+    const profile = learnMealDecisionProfile(state, { today: '2026-09-22' });
+    expect(profile.budget.overBudgetWeeks).toBe(3);
+    expect(profile.overBudgetWeeks).toBe(3);
   });
 });

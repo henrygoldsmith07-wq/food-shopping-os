@@ -10,13 +10,13 @@
  * and recovery can subscribe without importing React or the store.
  */
 
-import { createLedgerEvent } from './event-ledger.js';
-import { LEDGER_MAX } from './event-ledger.js';
+import { createLedgerEvent, appendLedgerEvent } from './event-ledger.js';
 
-const withLedger = (state, event) => {
-  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
-  return { ...state, householdLedger: [...ledger, event].slice(-LEDGER_MAX) };
-};
+/**
+ * One event onto the household's history via the shared append path, so
+ * commands get the same compaction guarantee as every other writer.
+ */
+const withLedger = (state, event) => appendLedgerEvent(state, event);
 
 export const DOMAIN_COMMANDS = [
   'planMeals',

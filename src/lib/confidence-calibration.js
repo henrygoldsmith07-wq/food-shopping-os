@@ -130,6 +130,30 @@ export const calibratedConfidence = ({
 };
 
 /**
+ * Close the calibration loop: how the app's STATED confidence has resolved
+ * in the past nudges the confidence it states in the future.
+ *
+ * A level is only second-guessed when there is enough resolved history at
+ * that level (`minEvidence` — two lucky guesses are not a track record),
+ * and the adjustment is bounded to a single step: a 'high' that keeps
+ * coming true 40% of the time reads 'medium' next time; a 'low' that keeps
+ * surprising reads 'medium'. Nothing jumps straight to 'high' off history
+ * alone, and nothing is adjusted without evidence.
+ */
+const LEVELS = ['none', 'low', 'medium', 'high'];
+
+export const applyCalibration = (level, calibration, { minEvidence = 5 } = {}) => {
+  if (!LEVELS.includes(level) || level === 'none') return level;
+  if (!calibration?.ready) return level;
+  const bucket = calibration.byConfidence?.[level];
+  if (!bucket || (Number(bucket.predicted) || 0) < minEvidence) return level;
+  const index = LEVELS.indexOf(level);
+  if (bucket.verdict === 'overconfident') return LEVELS[Math.max(1, index - 1)];
+  if (bucket.verdict === 'underconfident') return LEVELS[Math.min(LEVELS.length - 1, index + 1)];
+  return level;
+};
+
+/**
  * Prediction-vs-outcome calibration: how often the app's stated confidence
  * matched what actually happened, from resolved prediction snapshots.
  * A 'high' that comes true 40% of the time is a number worth correcting.

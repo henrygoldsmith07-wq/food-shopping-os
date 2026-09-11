@@ -13,12 +13,15 @@
 import { applyEntries, clearDates, LEFTOVER_CAT, leftoverEntry, moveMeal } from './mealplan.js';
 import { householdPermission } from './household.js';
 import { uid } from './state.js';
-import { createLedgerEvent } from './event-ledger.js';
+import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 
-const withEvent = (state, event) => {
-  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
-  return { ...state, householdLedger: [...ledger, event].slice(-500) };
-};
+/**
+ * One event onto the household's history. The ledger always comes from the
+ * real app state — never from the patch — so a patch that happens not to
+ * carry a ledger can never erase one. Compaction (archive of the oldest
+ * events once the ledger outgrows its cap) lives in appendLedgerEvent.
+ */
+const withEvent = (s, patch, event) => appendLedgerEvent({ ...s, ...patch }, event);
 
 export const planActions = (set) => ({
   markMealPlanOutcome: ({ date, slot, status = 'skipped', reason = null, actualRecipeId = null } = {}) =>
@@ -52,7 +55,7 @@ export const planActions = (set) => ({
       const ledgerType = event.status === 'cooked' ? 'MealCooked'
         : event.status === 'skipped' ? 'MealSkipped'
           : 'MealCooked'; // substituted: a meal was cooked, just not the planned one
-      return withEvent({ ...s, ...base }, createLedgerEvent(ledgerType, {
+      return withEvent(s, base, createLedgerEvent(ledgerType, {
         date, slot,
         recipeId: event.actualRecipeId || plannedRecipeId,
         plannedRecipeId,
@@ -75,10 +78,8 @@ export const planActions = (set) => ({
         note: String(note || '').slice(0, 120),
         at: Date.now(),
       };
-      return withEvent(
-        { ...s, mealPlanEvents: [...(s.mealPlanEvents || []), event].slice(-500) },
-        createLedgerEvent('MealSkipped', { date: d, slot: 'unplanned', reason: reason || 'takeaway', note: event.note, takeaway: true }, { origin: 'user' }),
-      );
+      return withEvent(s, { mealPlanEvents: [...(s.mealPlanEvents || []), event].slice(-500) },
+        createLedgerEvent('MealSkipped', { date: d, slot: 'unplanned', reason: reason || 'takeaway', note: event.note, takeaway: true }, { origin: 'user' }));
     }),
   setPlanSlot: (date, slot, recipeId) =>
     set((s) => {
@@ -89,41 +90,36 @@ export const planActions = (set) => ({
       if (Object.keys(day).length) plan[date] = day;
       else delete plan[date];
       const changed = (s.plan?.[date]?.[slot] || null) !== (recipeId || null);
-      const next = { ...s, plan };
-      return changed
-        ? withEvent(next, createLedgerEvent('MealPlanned', { date, slot, recipeId }, { origin: 'user' }))
-        : next;
+      if (!changed) return { ...s, plan };
+      return withEvent(s, { plan }, createLedgerEvent('MealPlanned', { date, slot, recipeId }, { origin: 'user' }));
     }),
   clearPlanWeek: (dates) => set((s) => {
     const removed = (dates || []).reduce(
       (n, d) => n + Object.keys(s.plan?.[d] || {}).length, 0,
     );
-    const next = { ...s, plan: clearDates(s.plan, dates) };
-    return removed
-      ? withEvent(next, createLedgerEvent('MealPlanned', { clearedDates: dates || [], removed }, { origin: 'user' }))
-      : next;
+    if (!removed) return { ...s, plan: clearDates(s.plan, dates) };
+    return withEvent(s, { plan: clearDates(s.plan, dates) },
+      createLedgerEvent('MealPlanned', { clearedDates: dates || [], removed }, { origin: 'user' }));
   }),
   moveMealSlot: (from, to) => set((s) => {
-    const next = { ...s, plan: moveMeal(s.plan, from, to) };
-    const moved = next.plan?.[to?.date]?.[to?.slot] || null;
-    return (moved && moved !== (s.plan?.[from?.date]?.[from?.slot] || null))
-      ? withEvent(next, createLedgerEvent('MealPlanned', { date: to?.date, slot: to?.slot, recipeId: moved, movedFrom: from }, { origin: 'user' }))
-      : next;
+    const nextPlan = moveMeal(s.plan, from, to);
+    const moved = nextPlan?.[to?.date]?.[to?.slot] || null;
+    if (!moved || moved === (s.plan?.[from?.date]?.[from?.slot] || null)) return { ...s, plan: nextPlan };
+    return withEvent(s, { plan: nextPlan },
+      createLedgerEvent('MealPlanned', { date: to?.date, slot: to?.slot, recipeId: moved, movedFrom: from }, { origin: 'user' }));
   }),
   applyPlanEntries: (entries) => set((s) => {
     const plan = applyEntries(s.plan, entries);
     const added = (entries || []).filter((e) => e?.date && e?.slot && e?.recipeId).length;
-    return added
-      ? withEvent({ ...s, plan }, createLedgerEvent('MealPlanned', { batch: added }, { origin: 'user' }))
-      : { ...s, plan };
+    if (!added) return { ...s, plan };
+    return withEvent(s, { plan }, createLedgerEvent('MealPlanned', { batch: added }, { origin: 'user' }));
   }),
   saveLeftovers: (recipe, portions) =>
     set((s) => {
       if (!householdPermission(s, 'pantry') || !(portions > 0) || !recipe) return {};
-      return withEvent(
-        { ...s, pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, portions, s.day) }] },
-        createLedgerEvent('LeftoverCreated', { name: recipe.name, recipeId: recipe.id, portions }, { origin: 'user' }),
-      );
+      return withEvent(s,
+        { pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, portions, s.day) }] },
+        createLedgerEvent('LeftoverCreated', { name: recipe.name, recipeId: recipe.id, portions }, { origin: 'user' }));
     }),
   useLeftover: (id) =>
     set((s) => {
@@ -135,20 +131,20 @@ export const planActions = (set) => ({
       // But the meal itself IS recorded: a leftover eaten is the outcome the
       // whole leftovers system exists for, and evaluation reads the ledger.
       const portions = (Number(row.portions) || 1) - 1;
-      const next = { pantry: s.pantry
+      return withEvent(s, { pantry: s.pantry
         .map((p) => {
           if (p.id !== id) return p;
           return { ...p, portions, qty: `${portions} portion${portions === 1 ? '' : 's'}` };
         })
-        .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0) };
-      return withEvent(next, createLedgerEvent('MealCooked', {
-        date: s.day,
-        slot: null,
-        recipeId: row.recipeId || null,
-        leftover: true,
-        leftoverId: row.id,
-        name: row.name,
-      }, { origin: 'user' }));
+        .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0) },
+        createLedgerEvent('MealCooked', {
+          date: s.day,
+          slot: null,
+          recipeId: row.recipeId || null,
+          leftover: true,
+          leftoverId: row.id,
+          name: row.name,
+        }, { origin: 'user' }));
     }),
   /**
    * Reconcile today's saved portions for one dish to exactly `portions` —

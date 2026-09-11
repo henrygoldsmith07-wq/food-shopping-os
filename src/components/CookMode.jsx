@@ -45,7 +45,7 @@ function Timer({ mins, state, onChange }) {
   );
 }
 
-export default function CookMode({ recipe, onExit, onClose }) {
+export default function CookMode({ recipe, onExit, onClose, recommendationId = null }) {
   const app = useApp();
   const [step, setStep] = useState(0);
   const [finished, setFinished] = useState(false);
@@ -109,10 +109,13 @@ export default function CookMode({ recipe, onExit, onClose }) {
   const finish = () => {
     // One write: log the meal, spend the pantry it used, mark the planned
     // slot cooked and save what's left over — the step the loop used to
-    // silently drop between cooking and the next plan.
+    // silently drop between cooking and the next plan. The recommendation
+    // id, when this cook answers a suggestion, rides along so the eval
+    // layer can attribute the outcome to the decision that caused it.
     app.completeRecipe(recipe, {
       leftovers: spare,
       actualMins: Math.max(1, Math.round((Date.now() - startedAt) / 60000)),
+      recommendationId,
     });
     recordProductEvent('recipe_cooked', { leftovers: spare });
     setAuto(false);

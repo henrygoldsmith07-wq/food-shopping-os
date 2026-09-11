@@ -47,7 +47,9 @@ test('the Shop-tab pantry sheet shows the prediction block in the built app', as
 
   // The prediction block renders through the real derive chain: heading, the
   // at-risk row with its quantity, the risk band, and the concrete action.
-  await expect(sheet.getByText('Likely to go unused')).toBeVisible();
+  // The sheet's panels load lazily and the first derive of a cold boot can
+  // trail the dialog by seconds — hence the generous first wait.
+  await expect(sheet.getByText('Likely to go unused')).toBeVisible({ timeout: 15000 });
   const row = sheet.getByRole('button', { name: 'Plan a meal using Spinach' });
   await expect(row).toBeVisible();
   await expect(row.getByText('Spinach · 200 g', { exact: true })).toBeVisible();
@@ -84,8 +86,9 @@ test('the tonight affordance opens the dinner picker pre-searched in the built a
   const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
   await expect(sheet).toBeVisible();
 
-  // The row's second affordance asks for tonight's dinner slot.
-  await sheet.getByRole('button', { name: 'Cook Spinach tonight' }).click();
+  // The row's second affordance asks for tonight's dinner slot. The row
+  // renders lazily on a cold boot, so the click waits with it.
+  await sheet.getByRole('button', { name: 'Cook Spinach tonight' }).click({ timeout: 15000 });
 
   // The Plan tab opens the dinner picker already searched on the ingredient:
   // the query is typed, only spinach-matching dishes are listed, and the
@@ -148,11 +151,13 @@ test('the prediction block stays quiet when the week plan covers the expiring st
 
   // The spinach is genuinely on the shelf and near its date, yet the plan is
   // what keeps it out of the prediction: no warning heading, row or summary.
+  // Wait positively first — a cold boot fills the sheet lazily, and an
+  // absence assertion alone would pass against an empty sheet.
+  await expect(sheet.getByText('Covered by the plan')).toBeVisible({ timeout: 15000 });
   await expect(sheet.getByText('Likely to go unused')).toHaveCount(0);
   await expect(sheet.getByRole('button', { name: 'Plan a meal using Spinach' })).toHaveCount(0);
   await expect(sheet.getByText(/ingredient may go unused/)).toHaveCount(0);
   // Seen-but-covered reads as covered, not ignored, in the real app too.
-  await expect(sheet.getByText('Covered by the plan')).toBeVisible();
   await expect(sheet.getByText('Spinach · 300 g — used by 2 planned meals before its date', { exact: true })).toBeVisible();
 });
 
@@ -200,8 +205,9 @@ test('a plan that only half-uses the expiring stock still flags the leftover', a
   const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
   await expect(sheet).toBeVisible();
 
-  // The item stays on the warning list — coverage was only partial.
-  await expect(sheet.getByText('Likely to go unused')).toBeVisible();
+  // The item stays on the warning list — coverage was only partial. The
+  // first wait is cold-boot tolerant, like its sibling journeys above.
+  await expect(sheet.getByText('Likely to go unused')).toBeVisible({ timeout: 15000 });
   await expect(sheet.getByText(/ingredient may go unused/)).toBeVisible();
   // Only the remainder is at risk, and the row names it by quantity…
   await expect(sheet.getByText('Spinach · 100 g', { exact: true })).toBeVisible();

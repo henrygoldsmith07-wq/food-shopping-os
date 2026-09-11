@@ -9,7 +9,7 @@
 
 import { predictionLearningProfile } from './prediction-feedback.js';
 import { householdWasteMetrics } from './waste-metrics.js';
-import { recommendationAcceptance } from './event-ledger.js';
+import { recommendationAcceptance, sortLedgerEvents } from './event-ledger.js';
 import { dayStamp } from './kitchen-dates.js';
 
 const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = {}) => ({
@@ -43,32 +43,39 @@ export const recommendationFunnel = (state = {}, { today = dayStamp() } = {}) =>
   const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
   // A leftover eaten is a meal, but it is not the recommendation being
   // cooked — follow-through means the suggested dish itself was made.
-  const cookedAfter = (recipeId, at) => ledger.some((e) =>
+  // Attribution is exact where the app can be exact: an acceptance carrying
+  // a recommendationId is resolved by a MealCooked carrying the SAME id
+  // (the cook session it started), never by an unrelated later cook of the
+  // same dish. Only legacy acceptances — recorded before ids existed —
+  // fall back to the recipe-and-time heuristic, and say so.
+  const cookedWithId = (recommendationId, at) => ledger.some((e) =>
+    e.type === 'MealCooked' && !e.leftover && e.recommendationId === recommendationId
+    && String(e.at || '') > String(at || ''));
+  const cookedRecipeAfter = (recipeId, at) => ledger.some((e) =>
     e.type === 'MealCooked' && !e.leftover && e.recipeId === recipeId && String(e.at || '') > String(at || ''));
 
-  // Chronological walk: an acceptance stays "open" until something resolves
-  // it — a cook of that recipe (acted on) or the next skip (which belongs to
-  // the most recent still-open acceptance, not to every earlier one).
-  const rows = [...ledger]
+  // The one canonical ledger order (see event-ledger.js).
+  const rows = sortLedgerEvents(ledger)
     .filter((e) => e.type === 'RecommendationAccepted' || e.type === 'RecommendationRejected'
-      || e.type === 'MealCooked' || e.type === 'MealSkipped')
-    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')) || String(a.id ?? '').localeCompare(String(b.id ?? '')));
+      || e.type === 'MealCooked' || e.type === 'MealSkipped');
   const accepted = [];
   const rejectedCount = rows.filter((e) => e.type === 'RecommendationRejected').length;
+  const actedOnExact = (a) => (a.recommendationId
+    ? cookedWithId(a.recommendationId, a.at)
+    : Boolean(a.recipeId && cookedRecipeAfter(a.recipeId, a.at)));
   let actedOn = 0;
   let acceptedThenSkipped = 0;
   for (const e of rows) {
     if (e.type === 'RecommendationAccepted') {
       accepted.push(e);
-      if (e.recipeId && cookedAfter(e.recipeId, e.at)) actedOn += 1;
+      if (actedOnExact(e)) actedOn += 1;
     } else if (e.type === 'MealSkipped') {
       // The skip resolves the most recent still-open acceptance, if any.
-      const openIdx = [...accepted].reverse().findIndex((a) =>
-        !(a.recipeId && cookedAfter(a.recipeId, a.at)) && !a.resolved);
+      const openIdx = [...accepted].reverse().findIndex((a) => !actedOnExact(a) && !a.resolved);
       if (openIdx >= 0) accepted[accepted.length - 1 - openIdx].resolved = 'skipped';
     }
   }
-  const open = accepted.filter((a) => !a.resolved && !(a.recipeId && cookedAfter(a.recipeId, a.at))).length;
+  const open = accepted.filter((a) => !a.resolved && !actedOnExact(a)).length;
   acceptedThenSkipped = accepted.filter((a) => a.resolved === 'skipped').length;
   void today;
 
@@ -83,7 +90,7 @@ export const recommendationFunnel = (state = {}, { today = dayStamp() } = {}) =>
     acceptanceRate: rateFor(accepted.length, total),
     /** Of the accepted, how many became a real cooked meal. */
     followThrough: rateFor(actedOn, accepted.length),
-    assumption: 'Accepted → a later MealCooked of the same recipe; a skip resolves the most recent still-open acceptance.',
+    assumption: 'Accepted → cooked is matched on the recommendation id the cook session carried; only legacy events without ids fall back to recipe-and-time.',
     confidence: total >= 8 ? 'high' : total >= 3 ? 'medium' : total > 0 ? 'low' : 'none',
     evidence: total,
   };

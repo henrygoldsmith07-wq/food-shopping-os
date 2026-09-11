@@ -35,7 +35,7 @@ const scheduleDays = (today) =>
     return { date, label };
   });
 
-export default function RecipeDetail({ recipe: original, onClose, goTab, startCooking = false }) {
+export default function RecipeDetail({ recipe: original, onClose, goTab, startCooking = false, recommendationId = null }) {
   const app = useApp();
   const [cooking, setCooking] = useState(startCooking);
   const [addedMissingKey, setAddedMissingKey] = useState('');
@@ -122,7 +122,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
   };
 
   if (cooking) {
-    return <CookMode recipe={recipe} onExit={() => setCooking(false)} onClose={onClose} />;
+    return <CookMode recipe={recipe} onExit={() => setCooking(false)} onClose={onClose} recommendationId={recommendationId} />;
   }
 
   return (

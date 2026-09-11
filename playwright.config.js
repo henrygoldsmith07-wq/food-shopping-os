@@ -22,6 +22,9 @@ export default defineConfig({
     command: 'npm run build && npm run preview -- --hostname 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
-    timeout: 120000,
+    // The production build regularly takes over two minutes locally and can
+    // take far longer on a cold CI runner — 120s aborted the server before
+    // the first test ever ran.
+    timeout: 600000,
   },
 });

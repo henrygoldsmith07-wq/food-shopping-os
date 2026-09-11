@@ -367,7 +367,7 @@ export const deriveApp = (state) => {
           pantry: state.pantry, leftovers: leftoverItems(state.pantry),
           taste: tasteProfile, householdModel,
           decisionProfile: memoIntelligence(state, 'decisionProfile', () => {
-            try { return learnMealDecisionProfile(state, { today: state.day }); }
+            try { return learnMealDecisionProfile(state, { today: state.day, recipes: recipeBook }); }
             catch { return null; }
           }),
           diets: planDiets,

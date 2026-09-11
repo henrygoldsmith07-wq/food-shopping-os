@@ -17,7 +17,7 @@
 import { explainRecommendation, pantryCoverage, expiringIngredients } from './recommend.js';
 import { evaluateFoodSuitability } from './food-suitability.js';
 import { tasteScore } from './taste.js';
-import { dayStamp, daysUntil } from './kitchen-dates.js';
+import { dayStamp, daysUntil, addDays, weekStart } from './kitchen-dates.js';
 
 const DEFAULT_WEIGHTS = {
   coverage: 0.42,
@@ -65,6 +65,59 @@ const leftoverBonus = (recipe, leftovers = []) => {
     return [...names].some((l) => l && (l.includes(n) || n.includes(l)));
   }).length;
   return Math.min(0.25, hits * 0.08);
+};
+
+/**
+ * What the budget actually did, week by week: recorded spend against the
+ * budget, and — where the week's plan named priced recipes — what the plan
+ * implied the spend should be. The last four Monday-first weeks; a week
+ * with no shops and no plan contributes nothing. This replaces the old
+ * "one big trip" proxy, which punished a single well-planned stock-up and
+ * never saw a month of small overspends.
+ */
+export const weeklyBudgetReality = (state = {}, { today = dayStamp(), recipes = [] } = {}) => {
+  const empty = { weeks: 0, overBudgetWeeks: 0, meanVariance: null, meanPlannedVariance: null, rows: [] };
+  const weeklyBudget = Number(state.weeklyBudget) || 0;
+  if (!weeklyBudget) return empty;
+  const shops = Array.isArray(state.shops) ? state.shops : [];
+  const plan = state.plan || {};
+  const recipesById = recipes instanceof Map
+    ? recipes
+    : new Map((Array.isArray(recipes) ? recipes : []).filter((r) => r?.id).map((r) => [r.id, r]));
+  const portions = Math.max(1, Math.round(Number(state.household) || Number(state.portions) || 1));
+  const rows = [];
+  for (let i = 3; i >= 0; i -= 1) {
+    const start = weekStart(addDays(today, -7 * i));
+    const end = addDays(start, 7);
+    const actual = shops
+      .filter((s) => { const d = String(s?.date || '').slice(0, 10); return d >= start && d < end; })
+      .reduce((sum, s) => sum + (Number(s?.total) || 0), 0);
+    const planned = Object.entries(plan)
+      .filter(([d]) => d >= start && d < end)
+      .reduce((sum, [, day]) => sum + Object.values(day).reduce((n, recipeId) => {
+        const recipe = recipesById.get(recipeId);
+        return n + (recipe ? (Number(recipe.costPerServing) || 0) * portions : 0);
+      }, 0), 0);
+    if (actual <= 0 && planned <= 0) continue; // an empty week is not evidence
+    rows.push({
+      start,
+      actual: Math.round(actual * 100) / 100,
+      planned: Math.round(planned * 100) / 100,
+      budget: weeklyBudget,
+      variance: Math.round((actual - weeklyBudget) * 100) / 100,
+      plannedVariance: planned > 0 ? Math.round((actual - planned) * 100) / 100 : null,
+    });
+  }
+  if (!rows.length) return empty;
+  return {
+    weeks: rows.length,
+    overBudgetWeeks: rows.filter((row) => row.actual > weeklyBudget).length,
+    meanVariance: Math.round((rows.reduce((s, r) => s + r.variance, 0) / rows.length) * 100) / 100,
+    meanPlannedVariance: rows.some((r) => r.plannedVariance != null)
+      ? Math.round((rows.reduce((s, r) => s + (r.plannedVariance ?? 0), 0) / rows.filter((r) => r.plannedVariance != null).length) * 100) / 100
+      : null,
+    rows,
+  };
 };
 
 /**
@@ -140,14 +193,13 @@ export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recip
   }
   const wasteWeightTotal = Object.values(wasteByIngredient).reduce((s, v) => s + v, 0);
 
-  // Budget discipline: weeks where the list+spend exceeded the budget.
-  const weeklyBudget = Number(state.weeklyBudget) || 0;
-  const overBudgetWeeks = weeklyBudget
-    ? shops.filter((s) => {
-      const spend = Number(s?.total) || 0;
-      return spend > weeklyBudget * 0.6 && spend > 0; // a single trip over 60% of the weekly budget counts
-    }).length
-    : 0;
+  // Budget discipline — the real thing, not a proxy. A big single shop
+  // says nothing; what matters is how whole WEEKS actually went: recorded
+  // spend per week against the budget, and against what the plan implied
+  // where the plan had recipes with prices. Deterministic, honest, and
+  // empty weeks never count as evidence.
+  const budget = weeklyBudgetReality(state, { today, recipes: recipesById });
+  const overBudgetWeeks = budget.overBudgetWeeks;
 
   // Time accuracy: how far actual minutes sit from estimates, decayed.
   let timeDelta = 0;
@@ -174,6 +226,7 @@ export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recip
     substitutionWeight,
     wasteByIngredient,
     wasteWeightTotal,
+    budget,
     overBudgetWeeks,
     timeBias,
     timeSamples,

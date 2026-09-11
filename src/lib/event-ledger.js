@@ -36,11 +36,34 @@ export const LEDGER_EVENT_TYPES = [
 export const LEDGER_ORIGINS = ['user', 'autopilot', 'recovery', 'sync', 'import'];
 
 export const LEDGER_MAX = 500;
+/** Detailed events kept in the live ledger; the rest compact to the archive. */
+export const LEDGER_KEEP_RECENT = 400;
+/** Archive batches kept on state — each names what it folded away. */
+export const LEDGER_ARCHIVE_MAX = 24;
 const TYPE_SET = new Set(LEDGER_EVENT_TYPES);
 const ORIGIN_SET = new Set(LEDGER_ORIGINS);
 
 export const isLedgerType = (type) => TYPE_SET.has(type);
 export const isLedgerOrigin = (origin) => ORIGIN_SET.has(origin);
+
+/**
+ * The ONE canonical order for ledger events, used by replay, recovery
+ * inference and evaluation alike: `at` ascending, events with no readable
+ * stamp last (an unstamped event claiming to precede everything is exactly
+ * the lie ordering must not tell), `id` as the tiebreak so the same set of
+ * events folds identically no matter what order the array holds them in.
+ */
+export const compareLedgerEvents = (a, b) => {
+  const atA = a?.at != null && String(a.at).trim() !== '' ? String(a.at) : null;
+  const atB = b?.at != null && String(b.at).trim() !== '' ? String(b.at) : null;
+  if (atA === null && atB !== null) return 1;
+  if (atB === null && atA !== null) return -1;
+  if (atA !== null && atB !== null && atA !== atB) return atA.localeCompare(atB);
+  return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+};
+
+export const sortLedgerEvents = (events = []) =>
+  [...(Array.isArray(events) ? events : [])].sort(compareLedgerEvents);
 
 export const createLedgerEvent = (type, payload = {}, { actor = null, at = null, id = null, origin = 'user' } = {}) => {
   if (!isLedgerType(type)) throw new Error(`Unknown ledger event type: ${type}`);
@@ -57,12 +80,50 @@ export const createLedgerEvent = (type, payload = {}, { actor = null, at = null,
   };
 };
 
-/** Append (immutable). Caps at LEDGER_MAX, oldest first out. */
+/**
+ * Fold a batch of evicted events into one honest archive summary: what
+ * happened, in aggregate, with the window it covers — never the events
+ * themselves, which are gone.
+ */
+const compactArchiveBatch = (events) => {
+  const ordered = sortLedgerEvents(events);
+  const counts = {};
+  for (const e of ordered) counts[e.type] = (counts[e.type] || 0) + 1;
+  return {
+    id: `arch-${ordered[0]?.id ?? '0'}`,
+    from: ordered[0]?.day || String(ordered[0]?.at || '').slice(0, 10) || null,
+    to: ordered.at(-1)?.day || String(ordered.at(-1)?.at || '').slice(0, 10) || null,
+    archivedAt: new Date().toISOString(),
+    eventCount: ordered.length,
+    counts,
+  };
+};
+
+/**
+ * Append (immutable) — the single write path for the ledger, so every
+ * caller gets the same history guarantee:
+ *
+ *   1. The event joins the existing ledger. A patch object that happens to
+ *      carry no ledger of its own can never erase one (that was a real bug:
+ *      eating a leftover replaced five hundred events with one).
+ *   2. When the ledger outgrows LEDGER_MAX, the OLDEST events compact into
+ *      `state.ledgerArchive` — batch summaries with counts and the window
+ *      they covered — and the LEDGER_KEEP_RECENT most recent stay detailed
+ *      and replayable. Nothing is silently dropped: the archive names what
+ *      it folded, and counts stay reconcilable.
+ */
 export const appendLedgerEvent = (state = {}, event) => {
   if (!event || !isLedgerType(event.type)) return state;
   const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
-  const next = [...ledger, event].slice(-LEDGER_MAX);
-  return { ...state, householdLedger: next };
+  const archive = Array.isArray(state.ledgerArchive) ? state.ledgerArchive : [];
+  let nextLedger = [...ledger, event];
+  let nextArchive = archive;
+  if (nextLedger.length > LEDGER_MAX) {
+    const evicted = nextLedger.slice(0, nextLedger.length - LEDGER_KEEP_RECENT);
+    nextLedger = nextLedger.slice(nextLedger.length - LEDGER_KEEP_RECENT);
+    nextArchive = [...archive, compactArchiveBatch(evicted)].slice(-LEDGER_ARCHIVE_MAX);
+  }
+  return { ...state, householdLedger: nextLedger, ledgerArchive: nextArchive };
 };
 
 export const ledgerEvents = (state = {}, { type = null, since = null, until = null, limit = null, origin = null } = {}) => {
@@ -87,7 +148,16 @@ export const ledgerCounts = (state = {}) => {
   for (const e of all) {
     if (counts[e.type] !== undefined) counts[e.type] += 1;
   }
-  return { ...counts, total: all.length };
+  // Archived history keeps counting: compaction folds detail, not fact.
+  const archive = Array.isArray(state.ledgerArchive) ? state.ledgerArchive : [];
+  let archivedTotal = 0;
+  for (const batch of archive) {
+    archivedTotal += Number(batch?.eventCount) || 0;
+    for (const [type, count] of Object.entries(batch?.counts || {})) {
+      if (counts[type] !== undefined) counts[type] += count;
+    }
+  }
+  return { ...counts, archivedTotal, total: all.length + archivedTotal };
 };
 
 /**
@@ -96,29 +166,14 @@ export const ledgerCounts = (state = {}) => {
  * per Plan → Shop → Eat stage, recomputed from events alone so evaluation,
  * recovery and the Household Model read one story.
  *
- * Ordering is total and deterministic: `at` first, then `id` as the
- * tiebreak, so two events stamped in the same instant (or the same ledger
- * arriving in different array orders) always fold the same way. Duplicate
- * ids are replayed once — first occurrence wins — and the projection
- * reports `duplicates` so audits see what was skipped rather than silently
- * double-counting. Unknown event types never enter the fold at all, and an
- * event with no readable `at` sorts last, not first: an unstamped event
- * claiming to precede everything is exactly the lie replay must not tell.
+ * Ordering is `compareLedgerEvents` — the one canonical order every
+ * ledger reader shares. Duplicate ids are replayed once — first occurrence
+ * wins — and the projection reports `duplicates` so audits see what was
+ * skipped rather than silently double-counting. Unknown event types never
+ * enter the fold at all.
  */
-const eventStampOf = (e) => (e?.at != null && String(e.at).trim() !== '' ? String(e.at) : null);
-
-export const replayLedger = (events = []) => {
-  const ordered = [...(Array.isArray(events) ? events : [])]
-    .filter((e) => isLedgerType(e?.type))
-    .sort((a, b) => {
-      const atA = eventStampOf(a);
-      const atB = eventStampOf(b);
-      if (atA === null && atB !== null) return 1;
-      if (atB === null && atA !== null) return -1;
-      if (atA !== null && atB !== null && atA !== atB) return atA.localeCompare(atB);
-      // Same instant (or both unstamped): the id tiebreak keeps replay stable.
-      return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-    });
+export const replayLedger = (events = [], { archive = [] } = {}) => {
+  const ordered = sortLedgerEvents(events).filter((e) => isLedgerType(e?.type));
   const seen = new Set();
   const duplicates = [];
   const rows = [];
@@ -163,6 +218,31 @@ export const replayLedger = (events = []) => {
       default: break;
     }
     projection.lastEvent = { id: e.id, type: e.type, at: e.at, origin: e.origin || 'user' };
+  }
+  // The archive folds events away, not the fact that they happened: every
+  // summary's counts roll up so a projection can speak for all of history.
+  let archived = 0;
+  const archivedCounts = {};
+  for (const batch of Array.isArray(archive) ? archive : []) {
+    archived += Number(batch?.eventCount) || 0;
+    for (const [type, count] of Object.entries(batch?.counts || {})) {
+      archivedCounts[type] = (archivedCounts[type] || 0) + count;
+    }
+  }
+  if (archived > 0) {
+    projection.archived = archived;
+    projection.archivedCounts = archivedCounts;
+    for (const [type, count] of Object.entries(archivedCounts)) {
+      const key = ({
+        MealPlanned: 'planned', MealCooked: 'cooked', MealSkipped: 'skipped',
+        IngredientPurchased: 'purchased', IngredientWasted: 'wasted',
+        LeftoverCreated: 'leftovers', PantryCorrected: 'pantryCorrections',
+        RecommendationAccepted: 'recommendationsAccepted',
+        RecommendationRejected: 'recommendationsRejected', WeekRecovered: 'weeksRecovered',
+      })[type];
+      if (key) projection[key] += count;
+    }
+    projection.total += archived;
   }
   return projection;
 };

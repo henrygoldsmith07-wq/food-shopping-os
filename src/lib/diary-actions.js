@@ -18,7 +18,7 @@ import { inferConsumption } from './pantry-intelligence.js';
 import { leftoverEntry } from './mealplan.js';
 import { createLeftover } from './leftover-planning.js';
 import { householdPermission } from './household.js';
-import { createLedgerEvent } from './event-ledger.js';
+import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { uid } from './state.js';
 
 export const diaryActions = (set) => {
@@ -31,10 +31,13 @@ export const diaryActions = (set) => {
       };
     });
 
-  const withEvent = (state, event) => {
-    const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
-    return { ...state, householdLedger: [...ledger, event].slice(-500) };
-  };
+  /**
+   * One event onto the household's history. The ledger always comes from
+   * the real app state — never from the patch — so a patch that happens
+   * not to carry a ledger can never erase one. Compaction lives in
+   * appendLedgerEvent, shared with every other writer.
+   */
+  const withEvent = (s, patch, event) => appendLedgerEvent({ ...s, ...patch }, event);
 
   return {
     logEntries: addEntries,
@@ -88,7 +91,7 @@ export const diaryActions = (set) => {
           ? s.favouriteFoods.filter((x) => x !== id)
           : [...s.favouriteFoods, id],
       })),
-    completeRecipe: (recipe, { leftovers = 0, actualMins = null } = {}) =>
+    completeRecipe: (recipe, { leftovers = 0, actualMins = null, recommendationId = null } = {}) =>
       set((s) => {
         const entry = buildEntry(recipeFood(recipe, [...CATALOGUE, ...s.customFoods]), { source: 'recipe' });
         // Cooking a 4-serving dish for a household of 2 uses half of it.
@@ -107,8 +110,14 @@ export const diaryActions = (set) => {
           enabled: householdPermission(s, 'pantry') && s.autoUsePantry,
         });
         const pantryEvent = { id: uid('pe'), ...inference };
+        // A cook only claims a planned slot when the flow actually cooked the
+        // dish that slot named. An off-plan dinner does not silently become a
+        // "substitution" for the first meal of the day — that read invented a
+        // substitution the household never made, and the learning layer
+        // believed it. Deliberate swaps go through markMealPlanOutcome, which
+        // knows the slot it is replacing.
         const plannedSlots = Object.entries(s.plan?.[s.day] || {});
-        const plannedSlot = plannedSlots.find(([, recipeId]) => recipeId === recipe.id) || plannedSlots[0] || null;
+        const plannedSlot = plannedSlots.find(([, recipeId]) => recipeId === recipe.id) || null;
         const plannedRecipeId = plannedSlot?.[1] || null;
         const mealPlanEvent = plannedSlot ? {
           id: uid('mpe'),
@@ -116,8 +125,8 @@ export const diaryActions = (set) => {
           slot: plannedSlot[0],
           plannedRecipeId,
           actualRecipeId: recipe.id,
-          status: plannedRecipeId === recipe.id ? 'cooked' : 'substituted',
-          reason: plannedRecipeId === recipe.id ? null : 'cooked-a-different-meal',
+          status: 'cooked',
+          reason: null,
           at: Date.now(),
         } : null;
         const elapsed = Number(actualMins);
@@ -128,7 +137,10 @@ export const diaryActions = (set) => {
           estimatedMins: Number(recipe.time) || null,
           actualMins: Math.round(elapsed * 10) / 10,
         } : null;
-        return withEvent({
+        // recommendationId ties this cook to the exact suggestion it answered
+        // (see respondToRecommendation), so follow-through is attributed to
+        // the decision that caused it — not to any later cook of the dish.
+        return withEvent(s, {
           cooked: [...s.cooked, { recipeId: recipe.id, date: s.day }],
           log: { ...s.log, [s.day]: [...(s.log[s.day] || []), entry] },
           mealPlanEvents: mealPlanEvent
@@ -150,7 +162,7 @@ export const diaryActions = (set) => {
           slot: plannedSlot?.[0] || null,
           recipeId: recipe.id,
           plannedRecipeId,
-          substituted: plannedRecipeId != null && plannedRecipeId !== recipe.id || undefined,
+          recommendationId: recommendationId || null,
           leftoverPortions: leftovers > 0 ? leftovers : undefined,
           actualMins: timeEvent?.actualMins ?? null,
         }, { origin: 'user' }));

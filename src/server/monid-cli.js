@@ -139,14 +139,20 @@ export const cliErrorBody = (run) => {
  */
 const monidStateFile = () => process.env.MONID_STATE_FILE || join(homedir(), '.forq', 'monid-state.json');
 
+/**
+ * This machine's learned-facts file. The path is resolved at RUNTIME (an env
+ * override or the user's home directory) — it is never a bundled asset, so
+ * the reads are marked turbopackIgnore to keep the deploy tracer from
+ * sweeping the whole project for a file that will not exist there anyway.
+ */
 export const readMonidState = () => {
-  try { return JSON.parse(readFileSync(monidStateFile(), 'utf8')) || {}; } catch { return {}; }
+  try { return JSON.parse(readFileSync(/* turbopackIgnore: true */ monidStateFile(), 'utf8')) || {}; } catch { return {}; }
 };
 
 export const writeMonidState = (patch) => {
   try {
     mkdirSync(dirname(monidStateFile()), { recursive: true });
-    writeFileSync(monidStateFile(), JSON.stringify({ ...readMonidState(), ...patch }, null, 2));
+    writeFileSync(/* turbopackIgnore: true */ monidStateFile(), JSON.stringify({ ...readMonidState(), ...patch }, null, 2));
   } catch { /* state is an optimization, never a dependency */ }
 };
 

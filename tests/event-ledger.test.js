@@ -19,13 +19,40 @@ describe('household event ledger', () => {
     expect(isLedgerType('Nope')).toBe(false);
   });
 
-  it('appends immutably and caps at 500', () => {
+  it('appends immutably, keeps recent detail and archives the overflow', () => {
     let state = {};
     for (let i = 0; i < 505; i++) {
-      state = appendLedgerEvent(state, createLedgerEvent('MealCooked', { recipeId: `r${i}` }));
+      state = appendLedgerEvent(state, createLedgerEvent('MealCooked', { recipeId: `r${i}` }, { at: `2026-09-01T10:${String(i % 60).padStart(2, '0')}:00.000Z`, id: `e${i}` }));
     }
-    expect(state.householdLedger).toHaveLength(500);
-    expect(state.householdLedger[0].recipeId).toBe('r5');
+    // Recent history stays detailed and replayable…
+    expect(state.householdLedger).toHaveLength(404);
+    expect(state.householdLedger[0].recipeId).toBe('r101');
+    expect(state.householdLedger.at(-1).recipeId).toBe('r504');
+    // …and nothing is silently dropped: the archive names what it folded.
+    expect(state.ledgerArchive).toHaveLength(1);
+    const batch = state.ledgerArchive[0];
+    expect(batch.eventCount).toBe(101);
+    expect(batch.counts.MealCooked).toBe(101);
+    expect(batch.from).toBe('2026-09-01');
+    // Counts reconcile: detail + archive = every event ever appended.
+    const counts = ledgerCounts(state);
+    expect(counts.MealCooked).toBe(505);
+    expect(counts.archivedTotal).toBe(101);
+    expect(counts.total).toBe(505);
+  });
+
+  it('never replaces history: an append always extends the existing ledger', () => {
+    // The regression this pins: writers that pass a patch object without a
+    // ledger used to REPLACE history with a single event.
+    let state = {};
+    for (let i = 0; i < 300; i++) {
+      state = appendLedgerEvent(state, createLedgerEvent('MealPlanned', { n: i }, { id: `p${i}`, at: `2026-09-01T08:${String(i % 60).padStart(2, '0')}:00.000Z` }));
+    }
+    const before = state.householdLedger.length;
+    state = appendLedgerEvent(state, createLedgerEvent('MealCooked', { recipeId: 'x' }));
+    expect(state.householdLedger).toHaveLength(before + 1);
+    expect(state.householdLedger[0].type).toBe('MealPlanned'); // history intact
+    expect(state.householdLedger.at(-1).recipeId).toBe('x');
   });
 
   it('ignores invalid appends', () => {
