@@ -41,8 +41,10 @@ const rateFor = (count, total) => (total ? Math.round((count / total) * 100) / 1
  */
 export const recommendationFunnel = (state = {}, { today = dayStamp() } = {}) => {
   const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  // A leftover eaten is a meal, but it is not the recommendation being
+  // cooked — follow-through means the suggested dish itself was made.
   const cookedAfter = (recipeId, at) => ledger.some((e) =>
-    e.type === 'MealCooked' && e.recipeId === recipeId && String(e.at || '') > String(at || ''));
+    e.type === 'MealCooked' && !e.leftover && e.recipeId === recipeId && String(e.at || '') > String(at || ''));
 
   // Chronological walk: an acceptance stays "open" until something resolves
   // it — a cook of that recipe (acted on) or the next skip (which belongs to

@@ -18,6 +18,7 @@ import { inferConsumption } from './pantry-intelligence.js';
 import { leftoverEntry } from './mealplan.js';
 import { createLeftover } from './leftover-planning.js';
 import { householdPermission } from './household.js';
+import { createLedgerEvent } from './event-ledger.js';
 import { uid } from './state.js';
 
 export const diaryActions = (set) => {
@@ -29,6 +30,11 @@ export const diaryActions = (set) => {
         log: { ...s.log, [day]: [...(s.log[day] || []), ...entries] },
       };
     });
+
+  const withEvent = (state, event) => {
+    const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+    return { ...state, householdLedger: [...ledger, event].slice(-500) };
+  };
 
   return {
     logEntries: addEntries,
@@ -122,7 +128,7 @@ export const diaryActions = (set) => {
           estimatedMins: Number(recipe.time) || null,
           actualMins: Math.round(elapsed * 10) / 10,
         } : null;
-        return {
+        return withEvent({
           cooked: [...s.cooked, { recipeId: recipe.id, date: s.day }],
           log: { ...s.log, [s.day]: [...(s.log[s.day] || []), entry] },
           mealPlanEvents: mealPlanEvent
@@ -139,7 +145,15 @@ export const diaryActions = (set) => {
             : s.leftovers || [],
           pantryEvents: [...(s.pantryEvents || []), pantryEvent].slice(-100),
           lastPantryEvent: pantryEvent,
-        };
+        }, createLedgerEvent('MealCooked', {
+          date: s.day,
+          slot: plannedSlot?.[0] || null,
+          recipeId: recipe.id,
+          plannedRecipeId,
+          substituted: plannedRecipeId != null && plannedRecipeId !== recipe.id || undefined,
+          leftoverPortions: leftovers > 0 ? leftovers : undefined,
+          actualMins: timeEvent?.actualMins ?? null,
+        }, { origin: 'user' }));
       }),
   };
 };

@@ -128,15 +128,27 @@ export const planActions = (set) => ({
   useLeftover: (id) =>
     set((s) => {
       if (!householdPermission(s, 'pantry')) return {};
+      const row = (s.pantry || []).find((p) => p.id === id);
+      if (!row) return {};
       // Consuming a saved portion is the Eat stage of a LeftoverCreated that
       // already exists — the cook flow logs the MealCooked, so no second event.
-      return { pantry: s.pantry
+      // But the meal itself IS recorded: a leftover eaten is the outcome the
+      // whole leftovers system exists for, and evaluation reads the ledger.
+      const portions = (Number(row.portions) || 1) - 1;
+      const next = { pantry: s.pantry
         .map((p) => {
           if (p.id !== id) return p;
-          const portions = (Number(p.portions) || 1) - 1;
           return { ...p, portions, qty: `${portions} portion${portions === 1 ? '' : 's'}` };
         })
         .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0) };
+      return withEvent(next, createLedgerEvent('MealCooked', {
+        date: s.day,
+        slot: null,
+        recipeId: row.recipeId || null,
+        leftover: true,
+        leftoverId: row.id,
+        name: row.name,
+      }, { origin: 'user' }));
     }),
   /**
    * Reconcile today's saved portions for one dish to exactly `portions` —

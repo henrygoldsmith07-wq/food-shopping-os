@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AlarmClock, CheckCircle2, ChevronRight, ClipboardList, CookingPot, CalendarDays } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { gbp, expiryStatus } from '../lib/utils.js';
@@ -58,7 +58,29 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   }, [app.calendarBusy]);
 
   // Single decision engine first; legacy pantry-hero as fallback.
-  const tonight = app.tonightDecision?.pick || null;
+  // "Not tonight" cycles to the next suggestion for the session — the
+  // rejection is logged, so the engine learns from it either way.
+  const [dismissedTonight, setDismissedTonight] = useState([]);
+  const rankedTonight = (app.tonightDecision?.ranked || []).filter((row) => !row.blocked);
+  const tonight = rankedTonight.find((row) => !dismissedTonight.includes(row.recipe.id)) || null;
+  const acceptTonight = (row) => {
+    app.respondToRecommendation?.({
+      recommendationId: `tonight-${app.day}-${row.recipe.id}`,
+      accepted: true,
+      recipeId: row.recipe.id,
+      context: { source: 'tonight-card', confidence: row.confidence },
+    });
+    openRecipe(row.recipe, { startCooking: true });
+  };
+  const dismissTonight = (row) => {
+    app.respondToRecommendation?.({
+      recommendationId: `tonight-${app.day}-${row.recipe.id}`,
+      accepted: false,
+      recipeId: row.recipe.id,
+      context: { source: 'tonight-card', reason: 'not-tonight' },
+    });
+    setDismissedTonight((current) => [...current, row.recipe.id]);
+  };
   const pantryHero = useMemo(() => {
     if (tonight || !app.pantry.length || !app.safeRecipes.length) return null;
     const dinners = app.safeRecipes.filter((r) => r.meal === 'dinner');
@@ -176,6 +198,26 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                   <p className="mt-1.5 text-[0.6875rem] font-bold" style={{ color: 'var(--faint)' }}>
                     {tonightConfidence === 'low' ? 'Low confidence — based on limited evidence.' : 'Medium confidence.'}
                   </p>
+                )}
+                {tonight && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => acceptTonight(tonight)}
+                      className="press flex-1 rounded-xl px-3 py-2.5 text-[0.8125rem] font-extrabold"
+                      style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+                    >
+                      Cook this tonight
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissTonight(tonight)}
+                      className="press rounded-xl border px-3 py-2.5 text-[0.8125rem] font-extrabold"
+                      style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+                    >
+                      Not tonight
+                    </button>
+                  </div>
                 )}
               </div>
             </>

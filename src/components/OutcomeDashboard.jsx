@@ -5,6 +5,7 @@ import { Card, Pill, Section } from './ui.jsx';
 export default function OutcomeDashboard() {
   const app = useApp();
   const d = app.dashboard;
+  const funnel = app.householdEval?.recommendationFunnel || null;
   if (!d || !d.ready) {
     return (
       <Section title="Your outcomes" className="rise">
@@ -79,6 +80,40 @@ export default function OutcomeDashboard() {
             <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Long-term learning</p>
             <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
               {app.householdEval.trend.conclusion}
+            </p>
+          </Card>
+        )}
+        {app.householdEval?.recommendationFunnel?.total > 0 && (
+          <Card>
+            <div className="flex items-center justify-between">
+              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Suggestions</p>
+              <Pill tone={funnel.followThrough != null && funnel.followThrough >= 0.5 ? 'good' : 'muted'}>
+                {funnel.followThrough == null ? 'no data' : `${Math.round(funnel.followThrough * 100)}% cooked`}
+              </Pill>
+            </div>
+            <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {funnel.accepted} accepted · {funnel.rejected} passed over · {funnel.actedOn} became a meal · {funnel.open} still open
+            </p>
+            <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>{funnel.assumption}</p>
+          </Card>
+        )}
+        {app.householdEval?.learningStage && (
+          <Card>
+            <div className="flex items-center justify-between">
+              <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Where the learning is</p>
+              <Pill tone={app.householdEval.learningStage === 'established' ? 'good' : 'muted'}>
+                {app.householdEval.learningStage === 'cold-start' ? 'just started'
+                  : app.householdEval.learningStage === 'early' ? 'early days'
+                    : 'established'}
+              </Pill>
+            </div>
+            {app.householdEval.learningStages?.ready && (
+              <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                {app.householdEval.learningStages.conclusion}
+              </p>
+            )}
+            <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {app.householdEval.learningStages?.assumption || 'Stages read from your history, never from install dates.'}
             </p>
           </Card>
         )}
