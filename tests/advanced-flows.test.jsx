@@ -9,8 +9,8 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
-  // The list lands first now; these flows drive the dashboard.
-  fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+  // The week is the home screen now; these flows drive the dashboard.
+  fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
 };
 
 const dialogFor = (title) => {
@@ -293,8 +293,8 @@ describe('reading a receipt', () => {
     goTab('List');
     fireEvent.click(screen.getByText('Shops'));
     expect(screen.getByText('No shops recorded')).toBeTruthy();
-    goTab('Today');
-    fireEvent.click(screen.getByText('Open pantry →'));
+    goTab('Week');
+    fireEvent.click(within(document.querySelector('main')).getByText('Open pantry →'));
     expect(within(dialogFor('Smart pantry')).getByText('Your pantry is empty')).toBeTruthy();
   });
 

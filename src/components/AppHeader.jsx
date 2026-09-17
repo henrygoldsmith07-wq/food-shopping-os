@@ -8,7 +8,7 @@ import { downloadFile } from '../lib/notify.js';
 import { Pill } from './ui.jsx';
 
 const TITLES = {
-  home: null, // Home says hello instead — it's the one screen that greets you
+  home: null, // This week says hello instead — it's the one screen that greets you
   plan: { title: 'Meal planner', eyebrow: 'Build your week' },
   log: { title: 'Food diary', eyebrow: 'Track meals and nutrition' },
   shop: { title: 'Shop', eyebrow: 'Your list, history and stores' },

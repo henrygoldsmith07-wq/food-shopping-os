@@ -38,7 +38,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
-  fireEvent.click(screen.getByText('Today')); // the list lands first now
+  fireEvent.click(screen.getByText('Week')); // the week is the home screen now
 };
 
 const dialogFor = (title) => {
@@ -78,14 +78,14 @@ describe('the weekly planner', () => {
   it('walks forwards and back through the weeks', () => {
     onboard();
     openPlan();
-    expect(screen.getByText('This week')).toBeDefined();
+    expect(within(screen.getByRole('button', { name: 'Previous week' }).closest('div').parentElement).getByText('Week')).toBeDefined();
 
     fireEvent.click(screen.getByLabelText('Next week'));
     expect(screen.getAllByText(/^Week of /).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Back to this week' })).toBeDefined(); // the way back
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to this week' }));
-    expect(screen.getByText('This week')).toBeDefined();
+    expect(within(screen.getByRole('button', { name: 'Previous week' }).closest('div').parentElement).getByText('Week')).toBeDefined();
   });
 
   it('counts and costs only the range you are looking at', () => {

@@ -268,8 +268,12 @@ const completedIds = (state, today = dayStamp()) => ({
   missions: missions(state, today).filter((m) => m.done).length,
 });
 
-/** Challenge progress without the XP loop reading back into itself. */
-function weeklyChallengesRaw(state, today) {
+/**
+ * Challenge progress without the XP loop reading back into itself. Exported so
+ * tests and callers that award XP can simulate against exactly the three
+ * weekly challenges XP counts — the seasonal event is shown but never paid.
+ */
+export function weeklyChallengesRaw(state, today) {
   const metrics = questMetrics(state, today);
   const pool = challengePool(state);
   const start = (weekIndex(today) * 3) % pool.length;

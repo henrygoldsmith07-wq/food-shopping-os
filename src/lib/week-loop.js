@@ -208,13 +208,14 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
     const neededRow = needed.get(key);
     if (auto && neededRow) {
       const untouched = row.lastAutoQty != null ? row.qty === row.lastAutoQty : row.qty === neededRow.qty;
-      if (untouched && (row.qty !== neededRow.qty || row.wasteNote !== neededRow.wasteNote)) {
+      if (untouched && (row.qty !== neededRow.qty || row.wasteNote !== neededRow.wasteNote || (row.autoReduction || null) !== (neededRow.autoReduction || null))) {
         changed = true;
         nextList.push({
           ...row,
           qty: neededRow.qty,
           lastAutoQty: neededRow.qty,
           wasteNote: neededRow.wasteNote,
+          autoReduction: neededRow.autoReduction || null,
           binnedCount: neededRow.binnedCount,
           lastBinnedAt: neededRow.lastBinnedAt,
         });

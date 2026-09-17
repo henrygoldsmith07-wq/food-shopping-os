@@ -152,6 +152,7 @@ export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recip
   const rejected = {};
   const cookedCount = {};
   const skippedWithReason = {};
+  const acceptedStamps = [];
   let acceptedWeight = 0;
   let rejectedWeight = 0;
   let substitutionWeight = 0;
@@ -164,6 +165,7 @@ export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recip
       accepted[e.recipeId] = (accepted[e.recipeId] || 0) + w;
       acceptedWeight += w;
       responseTotalRaw += 1;
+      acceptedStamps.push({ recipeId: e.recipeId, at: e.at, w });
     } else if (e.type === 'RecommendationRejected' && e.recipeId) {
       rejected[e.recipeId] = (rejected[e.recipeId] || 0) + w;
       rejectedWeight += w;
@@ -180,6 +182,25 @@ export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recip
   // Acceptance of what we suggested — the headline learning signal.
   const responseTotal = acceptedWeight + rejectedWeight;
   const acceptanceRate = responseTotal > 0 ? acceptedWeight / responseTotal : null;
+
+  // Follow-through: of the weight we suggested and they accepted, how much
+  // became a cooked meal? An accepted suggestion never cooked is a shrug,
+  // not a win — so how much influence acceptance buys depends on this.
+  // Only legacy acceptances without a recommendationId fall back to
+  // recipe-and-time matching; ids match exactly when present.
+  let followedWeight = 0;
+  for (const a of acceptedStamps) {
+    const cooked = ledger.some((e) => e.type === 'MealCooked' && !e.leftover && e.recipeId === a.recipeId
+      && (a.recommendationId
+        ? e.recommendationId === a.recommendationId
+        : String(e.at || '') > String(a.at || '')));
+    if (cooked) followedWeight += a.w;
+  }
+  const followThroughRate = acceptedWeight > 0 ? followedWeight / acceptedWeight : null;
+  // Influence: the share of learned preference the engine may lean on.  // Full when nothing is known yet (no change), decaying as acceptances
+  // pile up without follow-through — down to a floor of half, so a
+  // shy-but-engaged household is tempered, not ignored.
+  const influence = followThroughRate == null ? 1 : 0.5 + 0.5 * followThroughRate;
 
   // Waste: disliked/overcooked ingredients the household threw away recently.
   const waste = Array.isArray(state.waste) ? state.waste : [];
@@ -219,6 +240,10 @@ export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recip
 
   return {
     acceptanceRate,
+    /** Share of accepted suggestions that became cooked meals (decayed). */
+    followThroughRate,
+    /** How much influence learned taste earns: 1 → 0.5 as follow-through drops. */
+    influence,
     acceptedByRecipe: accepted,
     rejectedByRecipe: rejected,
     cookedCount,
@@ -296,8 +321,12 @@ export const rankMealsForTonight = ({
   if (profile) {
     const learnable = profile.confidence === 'high' ? 1 : profile.confidence === 'medium' ? 0.6 : profile.confidence === 'low' ? 0.3 : 0;
     if (learnable) {
-      // Accepted suggestions say we can lean on learned taste harder.
-      if (profile.acceptanceRate != null) preferenceDelta += learnable * 0.05 * (profile.acceptanceRate - 0.5) * 2;
+      // Accepted suggestions say we can lean on learned taste harder —
+      // but only as far as follow-through earns: influence decays when
+      // acceptances stop becoming cooked meals.
+      if (profile.acceptanceRate != null) {
+        preferenceDelta += learnable * 0.05 * (profile.acceptanceRate - 0.5) * 2 * (profile.influence ?? 1);
+      }
       // Frequent substitutions say our pantry reasoning misses — trust coverage more, taste less.
       if (profile.substitutionWeight > 0.5) { coverageDelta += learnable * 0.03; preferenceDelta -= learnable * 0.02; }
       // Skipping for time reasons says the time fit matters more here.
@@ -367,8 +396,9 @@ export const rankMealsForTonight = ({
       ? clamp01(1 - Math.abs(kcal - 600) / 600)
       : 0.5; // unknown nutrition is neutral, never punished or rewarded
     // Household-specific affinity: did they accept, cook or reject this
-    // exact recipe before?
-    const affinity = profile ? profile.affinityFor(recipe.id) : 0;
+    // exact recipe before? Tempered by follow-through influence.
+    const affinityRaw = profile ? profile.affinityFor(recipe.id) : 0;
+    const affinity = profile ? affinityRaw * (profile.influence ?? 1) : 0;
 
     const score = Math.round((
       explanation.score * weights.coverage

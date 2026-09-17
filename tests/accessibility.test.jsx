@@ -176,14 +176,15 @@ describe('every screen names its main action', () => {
     expect(new Set(Object.values(labels)).size).toBe(3);
   });
 
-  it('leads with a named action on the list-first landing', () => {
+  it('leads with a named action on the week-first landing', () => {
     onboard();
-    // The list is the landing screen now, and its fixed action names the first
-    // move (adding something) rather than leaving the screen to read as empty.
-    const bar = [...main().querySelectorAll('div.fixed')]
-      .filter((el) => el.querySelector('button'));
-    expect(bar.length).toBe(1);
-    const label = bar[0].querySelector('button').textContent.trim();
-    expect(label.length).toBeGreaterThan(3);
+    // The week is the landing screen now, and it opens with the autopilot's
+    // named next action — never a bare screen, never an unlabeled button.
+    const heading = main().querySelector('section[aria-labelledby] h2');
+    expect(heading).toBeTruthy();
+    expect(heading.textContent.trim().length).toBeGreaterThan(3);
+    const landingButton = main().querySelector('section[aria-labelledby] button');
+    expect(landingButton).toBeTruthy();
+    expect(landingButton.textContent.trim().length).toBeGreaterThan(3);
   });
 });

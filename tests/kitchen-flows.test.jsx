@@ -9,7 +9,7 @@ const onboard = ({ budget = '60' } = {}) => {
   if (budget) fireEvent.change(screen.getByLabelText(/Weekly food budget/), { target: { value: budget } });
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
-  fireEvent.click(screen.getByText('Today')); // the list lands first now
+  fireEvent.click(screen.getByText('Week')); // the week is the home screen now
 };
 
 const dialogFor = (title) => {
@@ -196,7 +196,7 @@ describe('shopping and spending', () => {
     fireEvent.change(within(dialogFor('Finish shop')).getByLabelText(/Total paid/), { target: { value: '42' } });
     fireEvent.click(within(dialogFor('Finish shop')).getByText('Record this shop'));
 
-    fireEvent.click(screen.getByText('Today'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     enableNumbersWidget();
     expect(screen.getAllByText('£42.00').length).toBeGreaterThan(0);
     expect(screen.getByText('£18.00 left')).toBeDefined();
@@ -227,7 +227,7 @@ describe('meal plan', () => {
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Coconut Chickpea Curry'));
 
     // The planner marks today's column, so the tab label is not the only match.
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     const planned = screen.queryAllByText('Coconut Chickpea Curry');
     // Only asserts when today is the first day of the week; otherwise the slot
     // belongs to another day and Home rightly shows nothing planned.

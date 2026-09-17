@@ -8,7 +8,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
-  fireEvent.click(screen.getByText('Today')); // the list lands first now
+  fireEvent.click(screen.getByText('Week')); // the week is the home screen now
 };
 
 const dialogFor = (title) => {
@@ -55,7 +55,7 @@ describe('product modes', () => {
   it('starts with every module shown', () => {
     onboard();
     // Log is reachable but off the bar in the list-first nav; Cook is a tab now.
-    for (const label of ['List', 'Plan', 'Cook', 'Today', 'Recipes']) {
+    for (const label of ['Week', 'List', 'Plan', 'Cook', 'Recipes']) {
       expect(nav().getByText(label)).toBeTruthy();
     }
     const sheet = openModes();
@@ -70,7 +70,7 @@ describe('product modes', () => {
     expect(nav().queryByText('List')).toBeNull(); // the shop module is hidden
     expect(nav().queryByText('Plan')).toBeNull();
     expect(nav().getByText('Cook')).toBeTruthy(); // independent of the hidden modules
-    expect(nav().getByText('Today')).toBeTruthy(); // always somewhere to be
+    expect(nav().getByText('Week')).toBeTruthy(); // always somewhere to be
   });
 
   it('says what each hidden module is still holding', () => {
@@ -96,7 +96,7 @@ describe('product modes', () => {
     fireEvent.click(within(sheet).getByText('Show every module again'));
     expect(within(sheet).getByText('Everything is shown')).toBeTruthy();
     closeSheets();
-    for (const label of ['List', 'Plan', 'Cook', 'Today', 'Recipes']) {
+    for (const label of ['Week', 'List', 'Plan', 'Cook', 'Recipes']) {
       expect(nav().getByText(label)).toBeTruthy();
     }
   });

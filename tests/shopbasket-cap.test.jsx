@@ -32,6 +32,14 @@ const cap = {
   unpriced: 0, ordered: [],
 };
 
+
+// The week is the landing screen now; the basket cap lives on the List tab.
+const goList = () => {
+  const nav = document.querySelector('nav[aria-label="Main navigation"]');
+  const listBtn = within(nav).queryByText('List');
+  if (listBtn && listBtn.getAttribute('aria-current') !== 'page') fireEvent.click(listBtn);
+};
+
 describe('the affordable cap on the basket projection', () => {
   afterEach(() => {
     cleanup();
@@ -84,6 +92,7 @@ describe('the cap in the ranked list, row by row', () => {
       ],
     }));
     render(<App />);
+    goList();
 
     // The list is home for a returning household; the basket is over budget,
     // so the cap names what fits and offers the rank.
@@ -119,6 +128,7 @@ describe('the cap in the ranked list, row by row', () => {
       ],
     }));
     render(<App />);
+    goList();
 
     expect(screen.getByText(/What you can afford now:/)).toBeDefined();
 

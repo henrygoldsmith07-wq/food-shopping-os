@@ -11,7 +11,7 @@ const onboard = ({ budget = '60' } = {}) => {
   if (budget) fireEvent.change(screen.getByLabelText(/Weekly food budget/), { target: { value: budget } });
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
-  fireEvent.click(screen.getByText('Today')); // the list lands first now
+  fireEvent.click(screen.getByText('Week')); // the week is the home screen now
 };
 
 const dialogFor = (title) => {
@@ -144,8 +144,8 @@ describe('a list that learns', () => {
     // Bought twice and put away — nothing to restock while you still have it.
     expect(screen.queryByText('Frequently bought')).toBeNull();
 
-    fireEvent.click(screen.getByText('Today'));
-    fireEvent.click(screen.getByText('Open pantry →'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
+    fireEvent.click(within(document.querySelector('main')).getByText('Open pantry →'));
     const pantry = dialogFor('Smart pantry');
     for (const button of within(pantry).getAllByLabelText('Remove Milk')) fireEvent.click(button);
     fireEvent.click(within(pantry).getByLabelText('Close'));
@@ -168,8 +168,8 @@ describe('a list that learns', () => {
       }
     }
 
-    fireEvent.click(screen.getByText('Today'));
-    fireEvent.click(screen.getByText('Open pantry →'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
+    fireEvent.click(within(document.querySelector('main')).getByText('Open pantry →'));
     const pantry = dialogFor('Smart pantry');
     for (const name of ['Milk', 'Bread']) {
       for (const button of within(pantry).getAllByLabelText(`Remove ${name}`)) fireEvent.click(button);
@@ -424,8 +424,8 @@ describe('expiry and waste', () => {
   afterEach(cleanup);
 
   const openPantry = () => {
-    fireEvent.click(screen.getByText('Today'));
-    fireEvent.click(screen.getByText('Open pantry →'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
+    fireEvent.click(within(document.querySelector('main')).getByText('Open pantry →'));
     return dialogFor('Smart pantry');
   };
 

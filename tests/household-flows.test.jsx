@@ -11,7 +11,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
-  fireEvent.click(screen.getByText('Today')); // the list lands first now
+  fireEvent.click(screen.getByText('Week')); // the week is the home screen now
 };
 
 const dialogFor = (title) => [...document.querySelectorAll('[role="dialog"]')]

@@ -46,24 +46,25 @@ const ScreenFallback = () => (
 /**
  * Closed loop: PANTRY → PLAN → SHOP → PURCHASE → CONSUMPTION → LEFTOVERS/WASTE → LEARNING → BETTER NEXT PLAN
  *
- * List-first navigation: the list is the home screen, Plan and Cook the
- * primary tabs, the dashboard (Today) beside them. Log stays a destination
- * (flows, palette, keyboard) off the bar; pantry is a sheet everywhere.
- * Feature reduction is progressive disclosure, never deletion.
+ * Week-first navigation: This Week is the home screen — the one surface that
+ * answers what to do next, what's for dinner, what to buy, what to use soon
+ * and what Forq changed — with List and Plan beside it. Log stays a
+ * destination (flows, palette, keyboard) off the bar; pantry is a sheet
+ * everywhere. Feature reduction is progressive disclosure, never deletion.
  */
 const TABS = [
-  { id: 'shop', label: 'List', Icon: ShoppingCart }, // the shopping list IS home
+  { id: 'home', label: 'Week', Icon: Home }, // the week IS home: plan + list + use soon + changes
+  { id: 'shop', label: 'List', Icon: ShoppingCart },
   { id: 'plan', label: 'Plan', Icon: CalendarDays },
   { id: 'cook', label: 'Cook', Icon: UtensilsCrossed },
   { id: 'learn', label: 'Learn', Icon: ClipboardList },
-  { id: 'home', label: 'Today', Icon: Home }, // dashboard: pantry truth + plan + outcomes
   { id: 'recipes', label: 'Recipes', Icon: ChefHat },
   { id: 'log', label: 'Log', Icon: ClipboardList }, // diary — reachable via flows, not the bar
 ];
 
-/** What each screen is called, and the one thing it is mainly for. Primary loop is Today/Plan/Shop/Pantry. */
+/** What each screen is called, and the one thing it is mainly for. Primary loop is This week/List/Plan/Cook. */
 export const SCREENS = {
-  home: { title: 'Today' }, // Today = pantry truth + plan + shop progress + outcomes
+  home: { title: 'This week' }, // the week = next step + plan + list + use soon + what changed
   plan: { title: 'Meal planner' },
   cook: { title: 'Cook' },
   learn: { title: 'Learn' },
@@ -133,8 +134,8 @@ function StorageRecovery() {
 
 function Shell() {
   const app = useApp();
-  // The shopping list is the home screen: this is where the app opens.
-  const [tab, setTab] = useState('shop');
+  // This Week is the home screen: the week's food, one surface.
+  const [tab, setTab] = useState('home');
   // Modes take screens off the bar; Home is never one, so there is always
   // somewhere to be. Log stays reachable through flows, palette, keyboard.
   const tabs = TABS.filter((item) => item.id !== 'log' && app.visibleTabs(TABS.map((t) => t.id)).includes(item.id));

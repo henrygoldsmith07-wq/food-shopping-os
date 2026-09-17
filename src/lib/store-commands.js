@@ -29,6 +29,8 @@ export const DOMAIN_COMMANDS = [
   'respondToRecommendation',
   'applyWeekRecovery',
   'reflectSkipReason',
+  'resolveMealOutcome',
+  'undoAdaptation',
 ];
 
 /** Fold one skip reflection, exactly as the legacy SRS writer did. */
@@ -184,6 +186,59 @@ export const buildDomainCommands = (set) => ({
     const reason = String(reasonId || '').trim();
     if (!reason) return s;
     return { ...s, skipReasonProfile: foldSkipReflection(s.skipReasonProfile, reason, Boolean(stillApplies)) };
+  }),
+  // Loop closure: one tap resolves a planned meal the week left open. Both
+  // branches ride the existing writers, so the ledger, the undo stack and
+  // the learning see exactly what a manual log would have. When the
+  // rollover had stamped the slot as silently missed, the household's
+  // answer corrects that record — the newest event per slot wins, so the
+  // correction reads cleanly in plan-outcome and the waste log.
+  resolveMealOutcome: ({ date, slot, recipeId, cooked = true, reason = null, actor = null, origin = 'user' } = {}) => set((s) => {
+    if (!date || !slot) return {};
+    if (cooked) {
+      const mealPlanEvents = [...(s.mealPlanEvents || []), {
+        id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId || null, actualRecipeId: recipeId || null, status: 'cooked', at: Date.now(),
+      }].slice(-500);
+      const cookedRows = recipeId ? [...(s.cooked || []), { recipeId, date, portions: null }] : (s.cooked || []);
+      const next = { ...s, mealPlanEvents, cooked: cookedRows };
+      return recipeId
+        ? withLedger(next, createLedgerEvent('MealCooked', { date, slot, recipeId, portions: null, inferred: true }, { actor, origin }))
+        : next;
+    }
+    const mealPlanEvents = [...(s.mealPlanEvents || []), {
+      id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId || null, status: 'skipped', reason: reason || 'not-cooked', at: Date.now(),
+    }].slice(-500);
+    return withLedger({ ...s, mealPlanEvents }, createLedgerEvent('MealSkipped', { date, slot, recipeId, reason: reason || 'not-cooked' }, { actor, origin }));
+  }),
+  // Taking back an adaptation: the quantity goes back, the household's
+  // choice lands in the ledger as a rejection carrying the adaptation key,
+  // and repeated reversals make that change lose its influence
+  // (see adaptations.js adaptationPressure).
+  undoAdaptation: (adaptation) => set((s) => {
+    if (!adaptation?.undo) return {};
+    const { undo } = adaptation;
+    if (undo.kind === 'waste-qty') {
+      const shoppingList = (s.shoppingList || []).map((item) => (item.id === undo.itemId
+        ? { ...item, qty: undo.fromQty, autoReduction: null, wasteNote: null }
+        : item));
+      return withLedger(
+        { ...s, shoppingList },
+        createLedgerEvent('RecommendationRejected', {
+          recommendationId: `adaptation:${undo.key}`,
+          context: { kind: 'adaptation', key: undo.key, undo: 'waste-qty' },
+        }, { origin: 'user' }),
+      );
+    }
+    if (undo.kind === 'portions') {
+      return withLedger(
+        { ...s, portionsOverride: undo.override },
+        createLedgerEvent('RecommendationRejected', {
+          recommendationId: 'adaptation:portions',
+          context: { kind: 'adaptation', key: 'portions', undo: 'portions' },
+        }, { origin: 'user' }),
+      );
+    }
+    return {};
   }),
 });
 

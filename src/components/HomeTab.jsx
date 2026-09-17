@@ -15,6 +15,8 @@ import { Section, Card, Pill, Meter, FoodArt } from './ui.jsx';
 import { Glyph } from './icons.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
+import LoopConfirmCard from './LoopConfirmCard.jsx';
+import AdaptationsCard from './AdaptationsCard.jsx';
 import GuidancePreview from './GuidancePreview.jsx';
 import HomeNumbers from './HomeNumbers.jsx';
 import HomeFoodLoop from './HomeFoodLoop.jsx';
@@ -23,13 +25,16 @@ import OutcomeDashboard from './OutcomeDashboard.jsx';
 import WeekRecoveryPreview from './WeekRecoveryPreview.jsx';
 
 /**
- * Home — reduced to Plan → Shop → Eat.
+ * This Week — the one surface that answers the product promise.
  *
- * Shows, in order: the best next action (Autopilot), tonight's meal (single
- * Meal Decision Engine), items to buy / use soon, and a concise weekly
- * outlook. Everything else lives under “Explore more” so progress, loop
- * health and the full dashboard stay one tap away without cluttering the
- * default view. Offline-first, no fetching, fully keyboard navigable.
+ * In order: the best next action (Autopilot), one lightweight loop check
+ * (confirmations instead of manual logging), tonight's meal (single Meal
+ * Decision Engine), what to buy / use soon, what Forq changed based on what
+ * actually happened (adaptations — learning shown only where it changes
+ * something), and a concise weekly outlook. Everything else lives under
+ * “Explore more” so progress, loop health and the full dashboard stay one
+ * tap away without cluttering the default view. Offline-first, no fetching,
+ * fully keyboard navigable.
  */
 export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, goLog }) {
   const app = useApp();
@@ -127,6 +132,10 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     <div className="pb-6 space-y-6">
       {/* 1 — Best next action */}
       <AutopilotCard onOpenPantry={openPantry} goTab={goTab} />
+
+      {/* 1.5 — The loop's one confirmation step: “did this happen?” instead
+          of manual logging, and the plan's missing rows in one tap. */}
+      <LoopConfirmCard goTab={goTab} />
 
       {/* Setup gates: what unlocks the rest, ticking off as you do it */}
       <Section className="rise rise-1">
@@ -366,6 +375,10 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           )}
         </Card>
       </section>
+
+      {/* 5 — What Forq changed, said plainly and undoable. Learning only
+          shows when it changed something; hidden when it hasn't. */}
+      <AdaptationsCard />
 
       {widgets.has('reminders') && app.remindersDue?.length > 0 && (
         <section className="px-5" aria-label="Reminders due">

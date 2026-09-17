@@ -23,10 +23,10 @@ const onboard = ({ age = null, consent = true } = {}) => {
   }
   if (!(age !== null && age < 18 && !consent)) {
     fireEvent.click(screen.getByText('Start using Forq'));
-    // The list lands first now; these flows drive the dashboard.
+    // The week is the home screen now; these flows drive the dashboard.
     const navBar = document.querySelector('nav[aria-label="Main navigation"]');
-    const today = navBar ? within(navBar).queryByText('Today') : null;
-    if (today) fireEvent.click(today);
+    const thisWeek = navBar ? within(navBar).queryByText('Week') : null;
+    if (thisWeek) fireEvent.click(thisWeek);
   }
 };
 

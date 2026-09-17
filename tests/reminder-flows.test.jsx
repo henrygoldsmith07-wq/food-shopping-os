@@ -202,7 +202,7 @@ describe('when one comes due', () => {
     const sheet = openReminders();
     addReminder(sheet, { kind: 'Water', text: 'Glass of water', time: '09:00' });
     fireEvent.click(within(sheet).getByLabelText('Close'));
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     const homeSection = within(document.querySelector('main')).getAllByText('Reminders due')[0].closest('section');
     expect(within(homeSection).getByText(/Glass of water/)).toBeTruthy();
   });

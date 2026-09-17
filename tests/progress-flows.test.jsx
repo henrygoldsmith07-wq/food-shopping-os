@@ -1,16 +1,29 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import App from '../src/App.jsx';
-import { weeklyChallenges } from '../src/lib/progress.js';
+import { weeklyChallengesRaw } from '../src/lib/progress.js';
 
 /** The XP a fresh household earns from its first cook, whatever week it is.
  *  60 for the cook, 4 for the diary entry it logs, plus 40 for every weekly
  *  challenge that a first cook happens to complete — the rotation is picked
- *  by the week itself, so the test reads it rather than guessing at it. */
+ *  by the week itself, so the test reads it rather than guessing at it.
+ *  XP counts the three weekly challenges only (the seasonal event is shown,
+ *  never paid), so this reads the raw rotation rather than the displayed one.
+ *  The state must mirror what a real first cook leaves behind: the recipe's
+ *  id, and the leftovers cooking mode files into the pantry — otherwise the
+ *  simulation misses challenges a real household genuinely completes. */
 const xpAfterFirstCook = (state, today) => {
-  const challenges = weeklyChallenges(state, today).filter((c) => c.done);
+  const challenges = weeklyChallengesRaw(state, today).filter((c) => c.done);
   return 60 + 4 + challenges.reduce((sum, c) => sum + c.xp, 0);
 };
+
+/** The state a first cook of the coconut chickpea curry actually produces. */
+const stateAfterFirstCook = (today) => ({
+  cooked: [{ recipeId: 'chickpea-curry', date: today }],
+  log: {},
+  day: today,
+  pantry: [{ id: 'leftover-1', name: 'Coconut Chickpea Curry (leftovers)', cat: 'Leftovers' }],
+});
 
 const onboard = () => {
   render(<App />);
@@ -18,7 +31,7 @@ const onboard = () => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
-  fireEvent.click(screen.getByText('Today')); // the list lands first now
+  fireEvent.click(screen.getByText('Week')); // the week is the home screen now
 };
 
 const dialogFor = (title) => {
@@ -96,8 +109,8 @@ describe('earning it', () => {
     // is chosen by the week itself, so the expectation is computed from
     // the same metrics the header reads — the test holds for any week.
     const today = new Date().toISOString().slice(0, 10);
-    const expectedXp = xpAfterFirstCook({ cooked: [{ recipeId: 'coconut-chickpea-curry', date: today }], log: {}, day: today }, today);
-    fireEvent.click(screen.getByText('Today'));
+    const expectedXp = xpAfterFirstCook(stateAfterFirstCook(today), today);
+    fireEvent.click(screen.getByText('Week'));
     expect(screen.getByText(new RegExp(`Level 1 · ${expectedXp} XP`))).toBeDefined();
 
     const sheet = openProgress();
@@ -145,13 +158,13 @@ describe('earning it', () => {
     fireEvent.click(screen.getAllByText('+ Dinner')[0]);
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Coconut Chickpea Curry'));
     // The planner marks today's column, so the tab label is not the only match.
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     expect(screen.getByText(/Level 1 · 2 XP/)).toBeDefined(); // a planned meal is worth 2
 
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     fireEvent.click(screen.getAllByText('Coconut Chickpea Curry')[0]);
     fireEvent.click(within(dialogFor('Plan a meal')).getByText(/Clear this slot/));
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     expect(screen.queryByText(/Level 1 ·/)).toBeNull(); // back to nothing earned
   });
 });

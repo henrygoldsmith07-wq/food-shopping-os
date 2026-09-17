@@ -51,7 +51,7 @@ const openReports = async () => {
   const guidance = dialogFor('Guidance');
   fireEvent.click(within(guidance).getByText('Review'));
   fireEvent.click(within(guidance).getByText('Reports & export'));
-  await within(guidance).findByText('Week');
+  await within(guidance).findByText('Week', { selector: 'div, span, p, li, td, th, button, a, summary, h1, h2, h3, h4' });
   return guidance;
 };
 
@@ -171,7 +171,7 @@ describe('the Home layout', () => {
 
   it('hides an optional panel without touching the number behind it', () => {
     onboard();
-    goTab('Today');
+    goTab('Week');
     // Optional panels start hidden — reports are off until asked for.
     fireEvent.click(screen.getByText('Explore more'));
     expect(screen.queryByText('Your outcomes')).toBeNull();
@@ -208,7 +208,7 @@ describe('the Home layout', () => {
     fireEvent.click(within(row).getByRole('switch'));
     fireEvent.click(within(sheet).getByText(/Back to the default layout/));
     fireEvent.click(within(sheet).getByLabelText('Close'));
-    goTab('Today');
+    goTab('Week');
     expect(within(document.querySelector('main')).getAllByText(/This week/).length).toBeGreaterThan(0);
     // The default layout is the quiet one: no loop diagnostics, no numbers.
     const again = openPrefs('Home');

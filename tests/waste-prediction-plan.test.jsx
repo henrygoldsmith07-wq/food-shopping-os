@@ -12,6 +12,14 @@ vi.setConfig({ testTimeout: 15_000 });
  * an item as likely to go unused taps the row and lands on the plan generator
  * already focused on that item, so the generator favours dishes that use it.
  */
+
+// The week is the landing screen now; these journeys shop from the List tab.
+const goList = () => {
+  const nav = document.querySelector('nav[aria-label="Main navigation"]');
+  const listBtn = within(nav).queryByText('List');
+  if (listBtn && listBtn.getAttribute('aria-current') !== 'page') fireEvent.click(listBtn);
+};
+
 const DAY = '2026-07-28';
 
 const seedReturningUser = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -38,8 +46,9 @@ describe('the prediction row routes to the planner', () => {
 
   it('a tap plans a meal around the at-risk item', async () => {
     render(<App />);
-    // Returning users land on the shopping list; the dashboard holds the pantry.
-    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Today'));
+    goList();
+    // Returning users land on This week; the dashboard holds the pantry.
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     fireEvent.click(screen.getByText('Open pantry →'));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
       .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
@@ -76,6 +85,7 @@ describe('the prediction block in the app shell', () => {
 
   it('opens the Smart pantry sheet from the Shop tab and shows the block', () => {
     render(<App />);
+    goList();
     // Returning users land on the shopping list — no navigation needed.
     expect(within(document.querySelector('nav[aria-label="Main navigation"]')).getByRole('button', { name: 'List' }).getAttribute('aria-current')).toBe('page');
 
@@ -107,6 +117,7 @@ describe('the prediction row can open tonight\'s picker', () => {
 
   it('skips the generator and opens tonight\'s dinner picker pre-searched on the item', async () => {
     render(<App />);
+    goList();
     // Returning users land on the list; the basket opens the same sheet.
     fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
@@ -170,6 +181,7 @@ describe('the prediction block respects the plan', () => {
 
   it('stays quiet when the week plan already uses the expiring stock', () => {
     render(<App />);
+    goList();
     fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
       .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
@@ -222,6 +234,7 @@ describe('the prediction block names partial coverage', () => {
 
   it('flags the leftover with its partly-covered reason, not silence', () => {
     render(<App />);
+    goList();
     fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
       .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
@@ -276,6 +289,7 @@ describe('the covered row opens tonight\'s picker', () => {
 
   it('a tap on a covered row offers to keep or replace the meal that saves the item', async () => {
     render(<App />);
+    goList();
     const sheet = openSheet();
     // Covered, not flagged — one planned meal uses all of it before the date.
     expect(within(sheet).queryByText('Likely to go unused')).toBeNull();
@@ -301,6 +315,7 @@ describe('the covered row opens tonight\'s picker', () => {
 
   it('replacing from a covered row opens the picker pre-searched on the item', async () => {
     render(<App />);
+    goList();
     const sheet = openSheet();
     fireEvent.click(within(sheet).getByRole('button', { name: 'Swap or confirm the meal using Spinach' }));
     const dialog = [...document.querySelectorAll('[role="dialog"]')]
@@ -348,6 +363,7 @@ describe('the tonight picker surfaces an already-planned dinner first', () => {
 
   it('opens on the planned dinner with Keep, leaving the plan untouched', async () => {
     render(<App />);
+    goList();
     fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
       .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
@@ -371,6 +387,7 @@ describe('the tonight picker surfaces an already-planned dinner first', () => {
 
   it('replaces the planned dinner only after the explicit choice', async () => {
     render(<App />);
+    goList();
     fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
       .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
@@ -416,6 +433,7 @@ describe('the just-picked dinner offers the missing shop', () => {
 
   it('offers to add the missing ingredients after tonight\'s dinner is picked', async () => {
     render(<App />);
+    goList();
     fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
       .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');
@@ -454,6 +472,7 @@ describe('the just-picked dinner offers the missing shop', () => {
       ],
     }));
     render(<App />);
+    goList();
     fireEvent.click(screen.getByRole('button', { name: /Check pantry before buying/ }));
     const sheet = [...document.querySelectorAll('[role="dialog"]')]
       .find((d) => d.querySelector('h2')?.textContent === 'Smart pantry');

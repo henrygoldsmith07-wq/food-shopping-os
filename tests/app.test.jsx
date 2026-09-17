@@ -15,7 +15,7 @@ export const onboard = ({ name = 'Sam', budget = '60' } = {}) => {
   fireEvent.click(screen.getByText('Continue'));
   fireEvent.click(screen.getByText('Start using Forq'));
   // The shopping list is the landing screen now; the dashboard is one tap on.
-  fireEvent.click(screen.getByText('Today'));
+  fireEvent.click(screen.getByText('Week'));
 };
 
 /** Diary left the bar in the list-first nav; the command palette still finds it. */
@@ -69,7 +69,7 @@ describe('first run', () => {
     // Profile and Log left the tab bar (header avatar / flows & palette), so the
     // five bar items are the list-first loop: List, Plan, Cook, Today, Recipes.
     expect(screen.getByRole('button', { name: /^You — profile/ })).toBeTruthy();
-    for (const label of ['List', 'Plan', 'Cook', 'Today', 'Recipes']) {
+    for (const label of ['Week', 'List', 'Plan', 'Cook', 'Recipes']) {
       expect(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText(label)).toBeDefined();
     }
     expect(within(document.querySelector('nav[aria-label="Main navigation"]')).queryByText('Log')).toBeNull();
@@ -160,7 +160,7 @@ describe('goal-led first entry', () => {
     screen.getAllByText('Choose').slice(0, 2)
       .forEach((label) => fireEvent.click(label.closest('button')));
     fireEvent.click(screen.getByText('Start using Forq'));
-    fireEvent.click(screen.getByText('Today'));
+    fireEvent.click(screen.getByText('Week'));
 
     expect(screen.getByText('Your first meals are ready')).toBeDefined();
     expect(screen.getByText(/2 dinners planned/)).toBeDefined();
@@ -201,7 +201,7 @@ describe('goal-led first entry', () => {
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Start using Forq'));
-    fireEvent.click(screen.getByText('Today')); // the dashboard carries the goal CTA
+    fireEvent.click(screen.getByText('Week')); // the dashboard carries the goal CTA
 
     // The goal CTA lives in the loop panel — optional, so turn it on through
     // Preferences first, then the CTA is right there on Home.
