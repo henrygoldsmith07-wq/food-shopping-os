@@ -11,6 +11,7 @@
  */
 
 import { createLedgerEvent, appendLedgerEvent } from './event-ledger.js';
+import { buildShopRecord } from './shopping-predictions.js';
 
 /**
  * One event onto the household's history via the shared append path, so
@@ -155,10 +156,21 @@ export const buildDomainCommands = (set) => ({
     return withLedger({ ...s, mealPlanEvents }, createLedgerEvent('MealSkipped', { date, slot, recipeId, reason, source: 'user-confirmed' }, { actor, origin }));
   }),
   purchaseIngredients: ({ items = [], store = null, total = null, actor = null, origin = 'user' } = {}) => set((s) => {
-    const shops = [...(s.shops || []), {
-      id: `s${Date.now().toString(36)}`, date: new Date().toISOString().slice(0, 10), store, total, items,
-    }];
-    return withLedger({ ...s, shops }, createLedgerEvent('IngredientPurchased', { items: items.map((i) => i.name || i), store, total }, { actor, origin }));
+    // One shared purchase-recording shape (see shopping-predictions.js): the
+    // same frozen basket prediction and row snapshots as recordShop, so no
+    // sanctioned path can write a shop evaluation cannot read.
+    const normalised = (Array.isArray(items) ? items : []).map((item) => (item && typeof item === 'object'
+      ? { ...item }
+      : { id: null, name: String(item || ''), qty: null, price: 0 }));
+    const shop = buildShopRecord({
+      state: s,
+      items: normalised,
+      store,
+      total,
+      id: `s${Date.now().toString(36)}`,
+      day: s.day,
+    });
+    return withLedger({ ...s, shops: [...(s.shops || []), shop] }, createLedgerEvent('IngredientPurchased', { items: normalised.map((i) => i.name), store, total }, { actor, origin }));
   }),
   wasteIngredients: ({ name, reason = 'expired', cost = null, actor = null, origin = 'user' } = {}) => set((s) => {
     const waste = [...(s.waste || []), { name, reason, cost, date: new Date().toISOString().slice(0, 10) }];
@@ -223,32 +235,42 @@ export const buildDomainCommands = (set) => ({
   undoAdaptation: (adaptation) => set((s) => {
     if (!adaptation?.undo) return {};
     const { undo } = adaptation;
-    const stampSuppression = (next, key) => {
+    const stampSuppression = (next, key, eventId = null) => {
       const day = String(next.day || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
       const existing = next.adaptationSuppression?.[key];
-      const rejections = [...(Array.isArray(existing?.rejections) ? existing.rejections : []), day]
-        .filter((d, i, all) => d && all.indexOf(d) === i).sort().slice(-10);
-      return { ...next, adaptationSuppression: { ...(next.adaptationSuppression || {}), [key]: { rejections, lastRejectedAt: day } } };
+      // One rejection is one event: its ledger id rides the stamp, so the
+      // ledger copy and the stamp copy can never be counted as two. Legacy
+      // stamps (days only) keep working through the day-coverage fallback.
+      const events = [...(Array.isArray(existing?.events) ? existing.events : []), ...(eventId ? [{ id: String(eventId), day }] : [])]
+        .filter((e, i, all) => e && e.day && all.findIndex((x) => x.id === e.id) === i)
+        .slice(-10);
+      const rejections = [...new Set([
+        ...(Array.isArray(existing?.rejections) ? existing.rejections : []),
+        ...events.map((e) => e.day),
+      ])].filter(Boolean).sort().slice(-10);
+      return { ...next, adaptationSuppression: { ...(next.adaptationSuppression || {}), [key]: { events, rejections, lastRejectedAt: day } } };
     };
     if (undo.kind === 'waste-qty') {
       const shoppingList = (s.shoppingList || []).map((item) => (item.id === undo.itemId
         ? { ...item, qty: undo.fromQty, autoReduction: null, wasteNote: null, lastAutoQty: null }
         : item));
+      const event = createLedgerEvent('RecommendationRejected', {
+        recommendationId: `adaptation:${undo.key}`,
+        context: { kind: 'adaptation', key: undo.key, undo: 'waste-qty' },
+      }, { origin: 'user' });
       return withLedger(
-        stampSuppression({ ...s, shoppingList }, undo.key),
-        createLedgerEvent('RecommendationRejected', {
-          recommendationId: `adaptation:${undo.key}`,
-          context: { kind: 'adaptation', key: undo.key, undo: 'waste-qty' },
-        }, { origin: 'user' }),
+        stampSuppression({ ...s, shoppingList }, undo.key, event.id),
+        event,
       );
     }
     if (undo.kind === 'portions') {
+      const event = createLedgerEvent('RecommendationRejected', {
+        recommendationId: 'adaptation:portions',
+        context: { kind: 'adaptation', key: 'portions', undo: 'portions' },
+      }, { origin: 'user' });
       return withLedger(
-        stampSuppression({ ...s, portionsOverride: undo.override }, 'portions'),
-        createLedgerEvent('RecommendationRejected', {
-          recommendationId: 'adaptation:portions',
-          context: { kind: 'adaptation', key: 'portions', undo: 'portions' },
-        }, { origin: 'user' }),
+        stampSuppression({ ...s, portionsOverride: undo.override }, 'portions', event.id),
+        event,
       );
     }
     return {};

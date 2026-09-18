@@ -12,6 +12,7 @@ import { aisleFor, compareStores, groupForStore, savingsAvailable } from './shop
 import { WEEK_LOOP_STEPS } from '../data/weekLoop.js';
 import { wasteAwareList } from './loop-learning.js';
 import { heldAdaptationKeys } from './adaptation-suppression.js';
+import { attachPredictions } from './shopping-predictions.js';
 import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
 import { emojiFor, uid } from './state.js';
@@ -164,6 +165,9 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   const list = Array.isArray(state.shoppingList) ? state.shoppingList : [];
   const plan = state.plan || {};
   const aliasMemory = state.aliasMemory || {};
+  // The household's "not for me" set — read once, used both to hold the
+  // rows and to label the prediction snapshots below.
+  const held = heldAdaptationKeys(state, { today: state.day });
 
   // What this week's plan needs, after the pantry, the leftovers and the
   // household's own waste pattern have had their say.
@@ -176,7 +180,7 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
     // "Not for me" outlives regeneration: a rejected adaptation's row
     // arrives untouched here, so the refresh below can never overwrite the
     // household's undo with a fresh reduction (see adaptation-suppression.js).
-    held: heldAdaptationKeys(state, { today: state.day }),
+    held,
   });
   const keyOf = (name) => canonicalName(name, aliasMemory);
   const needed = new Map();
@@ -253,7 +257,19 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   }
 
   if (!changed) return {};
-  return { shoppingList: nextList };
+  // The prediction book rides with the list: every row on screen gets its
+  // exact displayed quantity frozen as the store updates — the evaluation
+  // layer scores this, never a post-hoc reconstruction from the recipes.
+  return {
+    shoppingList: nextList,
+    shoppingPredictions: attachPredictions(nextList, state.shoppingPredictions, {
+      portionsDecision: householdPortionsFor(state),
+      suppressedKeys: held,
+      pantry: state.pantry || [],
+      learnedAliases: aliasMemory,
+      day: state.day,
+    }),
+  };
 };
 
 /**
@@ -272,7 +288,9 @@ export const withAutoListSync = (state, changes) => {
   const nextState = { ...state, ...changes };
   const follow = reconcileListWithPlan(nextState, undefined, { planChanged: keys.includes('plan') });
   if (follow.shoppingList && follow.shoppingList !== changes.shoppingList) {
-    return { ...changes, shoppingList: follow.shoppingList };
+    // The follow patch carries the refreshed list AND its prediction
+    // snapshots — one write, no bookkeeping step to forget.
+    return { ...changes, ...follow };
   }
   return changes;
 };

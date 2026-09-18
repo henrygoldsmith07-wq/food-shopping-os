@@ -18,6 +18,7 @@ import { householdActions } from './household-actions.js';
 import { smartActions } from './smart-actions.js';
 import { HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY } from './health-vault.js';
 import { householdPermission } from './household.js';
+import { householdPortionsFor } from './portions.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
@@ -34,7 +35,7 @@ import { COUPON_KINDS, LOYALTY_PROGRAMMES, normaliseCoupon } from './coupons.js'
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
-import { snapshotCosts } from './eval-metrics.js';
+import { buildShopRecord, attachPredictions } from './shopping-predictions.js';
 import { predictionActions } from './prediction-feedback.js';
 import { buildDomainCommands } from './store-commands.js';
 import { ledgerCommands } from './event-ledger.js';
@@ -268,7 +269,19 @@ export function useStoreApi({
             learnedAliases: s.aliasMemory || {},
           });
           const learnedFresh = applyWasteLearning(fresh, learned);
-          return learnedFresh.length ? { shoppingList: [...s.shoppingList, ...learnedFresh] } : {};
+          if (!learnedFresh.length) return {};
+          return {
+            shoppingList: [...s.shoppingList, ...learnedFresh],
+            // Top-ups and hand-added rows get their own snapshots, so even
+            // the add-manual path is evaluable — the prediction is what the
+            // list shows at that moment.
+            shoppingPredictions: attachPredictions(learnedFresh, s.shoppingPredictions, {
+              portionsDecision: householdPortionsFor(s),
+              pantry: s.pantry || [],
+              learnedAliases: s.aliasMemory || {},
+              day: s.day,
+            }),
+          };
         }),
       repeatLastShop: () =>
         set((s) => {
@@ -338,19 +351,24 @@ export function useStoreApi({
               idFactory: () => uid('p'),
             })
             : null;
+          // One shared purchase-recording shape (see shopping-predictions.js):
+          // the basket prediction frozen pre-till, and the prediction
+          // snapshots for the exact rows bought, captured from the list's
+          // prediction book while it still exists. Quantity evaluation reads
+          // THESE — never a reconstruction from recipes.
           const shop = {
-            id: uid('h'),
-            date: s.day,
-            store: shopStore,
-            total: Math.round((Number(total) || 0) * 100) / 100,
-            // The basket prediction, frozen at the moment of purchase: what
-            // the list rows cost before the till had its say. Spend accuracy
-            // compares THIS against the recorded total — never the other way
-            // round.
-            predicted: snapshotCosts(bought),
+            ...buildShopRecord({
+              state: s,
+              items: bought,
+              store: shopStore,
+              total,
+              id: uid('h'),
+              day: s.day,
+            }),
             saved,
             pantryReconciled: Boolean(reconciled),
-            items: bought.map(({ name, price, qty, emoji }) => ({
+            items: bought.map(({ id: itemId, name, price, qty, emoji }) => ({
+              id: itemId,
               name,
               price: Number(price) || 0,
               priceSource: 'receipt',
@@ -389,6 +407,9 @@ export function useStoreApi({
             ...withPurchase,
             shops: [...s.shops, shop],
             shoppingList: s.shoppingList.filter((i) => !bought.some((item) => item.id === i.id)),
+            // The bought rows' snapshots now live on the shop record — the
+            // book only describes rows currently on show.
+            shoppingPredictions: (s.shoppingPredictions || []).filter((p) => !bought.some((item) => item.id === p.id)),
             storeRoutes: route.length > 1 ? { ...s.storeRoutes, [shop.store]: route } : s.storeRoutes,
             pantry: reconciled ? reconciled.pantry : s.pantry,
             pantryConflicts: reconciled

@@ -8,9 +8,19 @@ import {
   heldAdaptationKeys,
   suppressedAdaptations,
   adaptationRejections,
+  suppressionDecision,
+  recoveryEvidenceFor,
+  EVIDENCE_RECOVERY_THRESHOLD,
   ADAPTATION_SUPPRESS_THRESHOLD,
   ADAPTATION_REJECTION_HOLD_DAYS,
 } from '../src/lib/adaptation-suppression.js';
+import {
+  shoppingPrediction,
+  attachPredictions,
+  buildShopRecord,
+  weekStamp,
+  evaluablePredictions,
+} from '../src/lib/shopping-predictions.js';
 import { inferListTopUp } from '../src/lib/loop-inference.js';
 import { learnMealDecisionProfile } from '../src/lib/meal-decision.js';
 import { spendAccuracy, basketReconciliation, shoppingQuantityError, snapshotCosts } from '../src/lib/eval-metrics.js';
@@ -286,40 +296,40 @@ describe('spend accuracy: prediction snapshot vs recorded total', () => {
 describe('shopping quantity error: one normalized measurement', () => {
   it('compares compatible quantities through the measurement engine', () => {
     const state = household({
+      // The prediction frozen onto the shop record at purchase time — the
+      // quantity the list actually showed — not a recipe reconstruction.
       shops: [{
-        date: '2026-09-16', total: 5,
-        items: [{ name: 'Rice', price: 1.2, qty: '450g' }],
+        date: '2026-09-16', total: 5, predicted: 1.2,
+        items: [{ id: 's1', name: 'Rice', price: 1.2, qty: '450g' }],
+        predictions: [{ id: 's1', predictionKey: 'rice', name: 'Rice', qty: '300g' }],
       }],
-      plan: { '2026-09-16': { dinner: 'chickpea-curry' } },
-      __allRecipes: [{ id: 'chickpea-curry', ingredients: [{ name: 'Rice', qty: '300g' }] }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
-    expect(result.value).toBe(0.5); // bought 450g vs planned 300g
-    expect(result.assumption).toMatch(/measurement engine/i);
+    expect(result.value).toBe(0.5); // bought 450g vs predicted 300g
+    expect(result.assumption).toMatch(/prediction snapshots/i);
   });
 
   it('excludes incompatible quantities instead of inventing comparability', () => {
     const state = household({
       shops: [{
-        date: '2026-09-16', total: 5,
-        items: [{ name: 'Chickpeas (tins)', price: 1.5, qty: '400g' }], // grams vs tins
+        date: '2026-09-16', total: 5, predicted: 1.5,
+        items: [{ id: 's3', name: 'Chickpeas (tins)', price: 1.5, qty: '400g' }], // grams vs tins
+        predictions: [{ id: 's3', predictionKey: 'chickpeas (tins)', name: 'Chickpeas (tins)', qty: '2' }],
       }],
-      plan: { '2026-09-16': { dinner: 'chickpea-curry' } },
-      __allRecipes: [{ id: 'chickpea-curry', ingredients: [{ name: 'Chickpeas (tins)', qty: '2' }] }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
     expect(result.value).toBeNull();
     expect(result.evidence).toBe(0);
+    expect(result.excluded.some((e) => e.reason === 'incompatible-dimensions')).toBe(true);
   });
 
   it('accepts density conversions the engine vouches for', () => {
     const state = household({
       shops: [{
-        date: '2026-09-16', total: 5,
-        items: [{ name: 'Coconut milk', price: 1, qty: '1 tin' }],
+        date: '2026-09-16', total: 5, predicted: 1,
+        items: [{ id: 's2', name: 'Coconut milk', price: 1, qty: '1 tin' }],
+        predictions: [{ id: 's2', predictionKey: 'coconut milk', name: 'Coconut milk', qty: '392g' }],
       }],
-      plan: { '2026-09-16': { dinner: 'chickpea-curry' } },
-      __allRecipes: [{ id: 'chickpea-curry', ingredients: [{ name: 'Coconut milk', qty: '392g' }] }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
     expect(result.value).toBe(0); // 1 tin → 392 ml/g for coconut milk

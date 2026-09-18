@@ -45,6 +45,11 @@ export const hydrate = (stored = {}) => {
   state.predictionSnapshots = (Array.isArray(state.predictionSnapshots) ? state.predictionSnapshots : [])
     .filter((snapshot) => snapshot?.type === 'prediction_snapshot')
     .slice(-500);
+  // The prediction book survives offline storage like the list it describes;
+  // malformed or junk entries are dropped rather than carried into metrics.
+  state.shoppingPredictions = (Array.isArray(state.shoppingPredictions) ? state.shoppingPredictions : [])
+    .filter((p) => p && typeof p === 'object' && p.id && typeof p.name === 'string')
+    .slice(-500);
   state.autopilotOutcomes = (Array.isArray(state.autopilotOutcomes) ? state.autopilotOutcomes : []).slice(-500);
   const rolled = rolloverDay(state);
   // A day actually passed since this household last opened the app: any

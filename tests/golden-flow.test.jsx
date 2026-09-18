@@ -7,6 +7,8 @@ import { ledgerEvents } from '../src/lib/event-ledger.js';
 import { shoppingListForPlan } from '../src/lib/loop-learning.js';
 import { collectAdaptations } from '../src/lib/adaptations.js';
 import { loopInference } from '../src/lib/loop-inference.js';
+import { attachPredictions, buildShopRecord } from '../src/lib/shopping-predictions.js';
+import { shoppingQuantityError } from '../src/lib/eval-metrics.js';
 import { buildDomainCommands } from '../src/lib/store-commands.js';
 import { weekDates } from '../src/lib/kitchen.js';
 
@@ -66,12 +68,17 @@ const runGoldenFlow = (start = baseState()) => {
   expect(rice).toBeDefined(); // curry's rice is written for 4; household eats 4
   expect(rice.qty).toBe('300g'); // the recipe's native 4-serving amount
 
-  // 3. SHOP — the buy is recorded (store command, ledger event).
+  // 3. SHOP — the buy is recorded (store command, ledger event). The shop
+  //    record freezes the basket prediction and the per-row snapshots it
+  //    was given — what evaluation will score the purchase against.
   commands.purchaseIngredients({
     items: [{ name: 'Rice', price: 1.2, qty: '300g' }, { name: 'Chickpeas (tins)', price: 1.5, qty: '2' }],
     store: 'Tesco', total: 2.7,
   });
   expect(ledgerEvents(state, { type: 'IngredientPurchased' })).toHaveLength(1);
+  const shop = state.shops.at(-1);
+  expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, frozen
+  expect(shop.items.every((item) => item.qty && Number(item.price) > 0)).toBe(true);
 
   // 4. COOK — tonight's planned dinner is cooked.
   commands.cookPlannedMeal({ date: d1, slot: 'dinner', recipeId: 'chickpea-curry' });
@@ -113,6 +120,37 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
   afterEach(() => {
     cleanup();
     localStorage.clear();
+  });
+
+  it('evaluates the exact prediction the list showed — snapshot vs purchase', () => {
+    // The list row the household was shown gets its snapshot written in the
+    // same state update; the purchase is then scored against THAT — never
+    // against a recipe reconstruction.
+    let state = baseState();
+    const list = shoppingListForPlan(
+      { '2026-09-16': { dinner: 'chickpea-curry' } }, ['2026-09-16'],
+      { pantry: [], waste: [], cooked: [], today: TODAY, app: state, state },
+    );
+    const row = list.find((r) => r.name === 'Rice');
+    state = {
+      ...state,
+      shoppingPredictions: attachPredictions(list, [], {
+        day: TODAY,
+        portionsDecision: { portions: 4, source: 'configured' },
+        learnedAliases: state.aliasMemory || {},
+      }),
+    };
+    const snap = state.shoppingPredictions.find((p) => p.predictionKey === 'rice');
+    expect(snap.qty).toBe(row.qty);
+    expect(snap.sourceRecipes).toContain('Coconut Chickpea Curry');
+
+    // The household buys a different amount than advised — 600g against the
+    // shown 300g — and the metric reports the 100% error from the snapshot.
+    const shop = buildShopRecord({ state, items: [{ ...row, id: snap.id, qty: '600g', price: 1.2 }], store: 'Tesco', total: 1.2, id: 'h9', day: TODAY });
+    const evaluated = shoppingQuantityError({ ...state, shops: [shop] }, { today: TODAY });
+    expect(evaluated.value).toBe(1); // |600 − 300| / 300
+    expect(evaluated.samples).toBe(1);
+    expect(evaluated.signedBias).toBe(1); // bought more than predicted
   });
 
   it('closes the loop in pure domain code and learns for the next plan', () => {
