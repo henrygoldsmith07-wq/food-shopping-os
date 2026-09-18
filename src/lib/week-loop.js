@@ -11,6 +11,7 @@ import { canonicalName } from './aliases.js';
 import { aisleFor, compareStores, groupForStore, savingsAvailable } from './shopping.js';
 import { WEEK_LOOP_STEPS } from '../data/weekLoop.js';
 import { wasteAwareList } from './loop-learning.js';
+import { heldAdaptationKeys } from './adaptation-suppression.js';
 import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
 import { emojiFor, uid } from './state.js';
@@ -172,6 +173,10 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
     cooked: state.cooked || [],
     today: state.day,
     learnedAliases: aliasMemory,
+    // "Not for me" outlives regeneration: a rejected adaptation's row
+    // arrives untouched here, so the refresh below can never overwrite the
+    // household's undo with a fresh reduction (see adaptation-suppression.js).
+    held: heldAdaptationKeys(state, { today: state.day }),
   });
   const keyOf = (name) => canonicalName(name, aliasMemory);
   const needed = new Map();

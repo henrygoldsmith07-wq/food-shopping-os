@@ -14,6 +14,7 @@ import { shoppingForPlan } from './mealplan.js';
 import { planEntries } from './mealplan.js';
 import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from './portions.js';
 import { scrapAdjustedQty, scrapIngredientRates } from './scrap-factors.js';
+import { heldAdaptationKeys } from './adaptation-suppression.js';
 import { allRecipes } from '../data/recipes.js';
 
 /** How far back "you keep binning this" looks. */
@@ -77,8 +78,14 @@ export const reduceCountQty = (qty) => {
  * Direct bins win when both apply — first-hand evidence outranks evidence
  * derived from dish scraps. Where the evidence supports nothing, rows pass
  * through untouched.
+ *
+ * Suppression: a key the household has rejected (see
+ * adaptation-suppression.js) is passed through untouched — one explicit
+ * rejection holds the change for the holding period, two inside the window
+ * remove its influence entirely. The rejection is the household speaking;
+ * regenerating the list must not out-shout them.
  */
-export const wasteAwareList = (items = [], { waste = [], cooked = null, recipes, today, learnedAliases = {} } = {}) => {
+export const wasteAwareList = (items = [], { waste = [], cooked = null, recipes, today, learnedAliases = {}, held = null } = {}) => {
   const profile = recentWasteProfile(waste, { today, learnedAliases });
   const pool = recipes === undefined ? allRecipes() : recipes;
   const scraps = cooked
@@ -87,6 +94,11 @@ export const wasteAwareList = (items = [], { waste = [], cooked = null, recipes,
   return (Array.isArray(items) ? items : []).map((item) => {
     if (!item?.name) return item;
     const key = canonicalName(item.name, learnedAliases) || String(item.name).toLowerCase();
+    // Rejected key: the household undid this adaptation. Quantities pass
+    // through untouched — no reduction, no scrap trim, no annotation that
+    // could read as an applied change. Recovery comes only from the
+    // rejection's own clock or genuinely new behaviour.
+    if (held && held.has(key)) return item;
     const row = profile.get(key);
     if (row && row.count >= 2) {
       const reduced = reduceCountQty(item.qty);
@@ -149,18 +161,24 @@ export const wasteAwareList = (items = [], { waste = [], cooked = null, recipes,
 export const shoppingListForPlan = (
   plan,
   dates,
-  { pantry = [], waste = [], cooked = [], today, learnedAliases = {}, app = null } = {},
+  { pantry = [], waste = [], cooked = [], today, learnedAliases = {}, app = null, state = null } = {},
 ) => {
   const household = app ? householdPortionsFor(app) : { portions: 1, source: 'configured' };
   const raw = shoppingForPlan(plan, dates, { pantry, today, learnedAliases });
   const entries = planEntries(plan, dates);
   const scaled = scaleListToPortions(raw, household.portions, recipePortionFactors(entries, household.portions));
+  // One authoritative Plan → Shopping calculation: the same household
+  // decision, the same waste learning, and the same suppression memory —
+  // "not for me" outlives regeneration — everywhere the plan becomes a
+  // list.
+  const source = state || app;
   return wasteAwareList(scaled, {
     waste,
     cooked: app?.cooked || cooked,
     recipes: allRecipes(),
     today,
     learnedAliases,
+    held: source ? heldAdaptationKeys(source, { today }) : null,
   });
 };
 

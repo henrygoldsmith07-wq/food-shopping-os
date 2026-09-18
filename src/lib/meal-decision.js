@@ -165,7 +165,10 @@ export const learnMealDecisionProfile = (state = {}, { today = dayStamp(), recip
       accepted[e.recipeId] = (accepted[e.recipeId] || 0) + w;
       acceptedWeight += w;
       responseTotalRaw += 1;
-      acceptedStamps.push({ recipeId: e.recipeId, at: e.at, w });
+      // The recommendation id rides along: follow-through is attributed to
+      // the EXACT cook that answered this suggestion, never to an unrelated
+      // later cook of the same dish (see the matching below).
+      acceptedStamps.push({ recipeId: e.recipeId, at: e.at, w, recommendationId: e.recommendationId || null });
     } else if (e.type === 'RecommendationRejected' && e.recipeId) {
       rejected[e.recipeId] = (rejected[e.recipeId] || 0) + w;
       rejectedWeight += w;

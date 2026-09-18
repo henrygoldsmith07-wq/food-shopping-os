@@ -10,6 +10,8 @@
  * week loop cannot disagree about how much to buy.
  */
 
+import { isAdaptationHeld } from './adaptation-suppression.js';
+
 /** Portion numbers from recorded cooks, in order. */
 export const portionsFromCooked = (cooked = []) => (Array.isArray(cooked) ? cooked : [])
   .map((event) => Number(event?.portionsEaten ?? event?.portions))
@@ -28,24 +30,30 @@ export const portionsFromCooked = (cooked = []) => (Array.isArray(cooked) ? cook
  * (`autoPortions`, `autoLearned`) either way, so a UI can show how far the
  * learning has got and what is being overridden.
  */
-export const householdPortionsFor = (app = {}) => {
-  const configured = Math.max(1, Number(app.portions) || Number(app.household) || 1);
-  const learned = app.householdPreferences?.portions;
+export const householdPortionsFor = (source = {}) => {
+  const configured = Math.max(1, Number(source.portions) || Number(source.household) || 1);
+  const learned = source.householdPreferences?.portions;
   let observations = Number(learned?.observations) || 0;
   let typical = Number(learned?.typical);
   if (!observations) {
-    const patterns = portionsFromCooked(app.cooked);
+    const patterns = portionsFromCooked(source.cooked);
     observations = patterns.length;
     typical = patterns.length ? patterns.reduce((sum, n) => sum + n, 0) / patterns.length : NaN;
   }
   const evidence = { observations, typical: Number.isFinite(typical) ? typical : null };
-  const learnedApplies = observations >= 3 && evidence.typical > 0
+  // Suppression: a household that undid the learned-appetite change gets
+  // the configured portions until the rejection's own clock clears it —
+  // regeneration never re-applies a rejected adaptation (see
+  // adaptation-suppression.js). Callers pass state (or a derived app view
+  // of it) with `.day` for the recency clock.
+  const suppressed = isAdaptationHeld(source, 'portions', { today: source?.day || null });
+  const learnedApplies = !suppressed && observations >= 3 && evidence.typical > 0
     && Math.abs(evidence.typical - configured) >= 0.5;
   const autoPortions = learnedApplies ? Math.max(1, Math.round(evidence.typical * 2) / 2) : configured;
   const autoLearned = learnedApplies && autoPortions !== configured;
-  const override = app.portionsOverride === 'auto' || app.portionsOverride == null
+  const override = source.portionsOverride === 'auto' || source.portionsOverride == null
     ? 'auto'
-    : Math.max(1, Math.round(Number(app.portionsOverride)));
+    : Math.max(1, Math.round(Number(source.portionsOverride)));
   if (override !== 'auto') {
     return { portions: override, source: 'configured', configured, override, evidence, autoPortions, autoLearned };
   }

@@ -10,6 +10,13 @@
 import { predictionLearningProfile } from './prediction-feedback.js';
 import { householdWasteMetrics } from './waste-metrics.js';
 import { recommendationAcceptance, sortLedgerEvents } from './event-ledger.js';
+import {
+  spendAccuracy,
+  basketReconciliation,
+  shoppingQuantityError,
+} from './spend-metrics.js';
+
+export { spendAccuracy, basketReconciliation, shoppingQuantityError, snapshotCosts } from './spend-metrics.js';
 import { dayStamp } from './kitchen-dates.js';
 
 const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = {}) => ({
@@ -261,99 +268,6 @@ export const evaluateHouseholdTrend = (state = {}, { today = dayStamp() } = {}) 
 };
 
 /**
- * Shopping quantity error: how far the bought quantities sit from what the
- * plan asked for, where both sides recorded them. Only rows with a numeric
- * plan qty and a recorded bought qty count; anything else is honest
- * silence, not a zero. Uses the prediction-correction stream when present
- * (type 'shopping-qty'), otherwise compares plan-derived rows with what
- * the shop actually recorded for the same item within ±2 days.
- */
-export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) => {
-  void today;
-  // Direct corrections: the household told us the number was wrong.
-  const corrections = (Array.isArray(state.predictionCorrections) ? state.predictionCorrections : [])
-    .filter((c) => c?.type === 'prediction_correction' && c.predictionType === 'shopping-qty');
-  const direct = corrections.reduce((s, c) => s + Math.abs((Number(c.actual) || 0) - (Number(c.predicted) || 0)), 0);
-  const directSamples = corrections.length;
-
-  // Observed: plan rows vs recorded purchase lines, same name, ±2 days.
-  const shops = Array.isArray(state.shops) ? state.shops : [];
-  const purchased = [];
-  for (const shop of shops) {
-    for (const item of Array.isArray(shop?.items) ? shop.items : []) {
-      if (item?.name) purchased.push({ name: String(item.name), qty: Number(item.qty), date: String(shop.date || '').slice(0, 10) });
-    }
-  }
-  const planRows = [];
-  const plan = state.plan || {};
-  for (const [date, slots] of Object.entries(plan)) {
-    for (const recipeId of Object.values(slots || {})) {
-      const recipe = (Array.isArray(state.myRecipes) ? state.myRecipes : [])
-        .concat(Array.isArray(state.__allRecipes) ? state.__allRecipes : [])
-        .find((r) => r?.id === recipeId);
-      for (const ing of recipe?.ingredients || []) {
-        planRows.push({ name: String(ing?.name || ing), qty: Number(ing?.qty), date });
-      }
-    }
-  }
-  let observedError = 0;
-  let observedSamples = 0;
-  if (planRows.length && purchased.length) {
-    const norm = (s) => String(s || '').trim().toLowerCase();
-    for (const row of planRows) {
-      if (!Number.isFinite(row.qty) || row.qty <= 0) continue;
-      const match = purchased.find((p) => norm(p.name) === norm(row.name)
-        && Number.isFinite(p.qty) && p.qty > 0
-        && Math.abs(daysBetween(p.date, row.date)) <= 2);
-      if (!match) continue;
-      observedError += Math.abs(match.qty - row.qty) / Math.max(1, row.qty);
-      observedSamples += 1;
-    }
-  }
-  const samples = directSamples + observedSamples;
-  const value = samples
-    ? Math.round(((direct + observedError * Math.max(1, observedSamples)) / samples) * 100) / 100
-    : null;
-  return metric(value, {
-    confidence: samples >= 10 ? 'high' : samples >= 4 ? 'medium' : samples > 0 ? 'low' : 'none',
-    evidence: samples,
-    assumption: 'Bought quantity vs planned quantity, same item within ±2 days, plus direct household corrections.',
-  });
-};
-
-/**
- * Predicted vs actual spend: the list's estimated total against what the
- * recorded shop cost, for weeks where both exist. |error| as a share of
- * the prediction, averaged — the number that tells the household whether
- * the number on the list can be trusted.
- */
-export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
-  const shops = (Array.isArray(state.shops) ? state.shops : [])
-    .filter((s) => Number(s?.total) > 0);
-  const samples = shops.length;
-  if (!samples) {
-    return metric(null, { assumption: 'No recorded shop totals yet.' });
-  }
-  // Without a stored list snapshot the best honest prediction available is
-  // the sum of recorded item prices for that shop vs its declared total —
-  // an internal consistency check, plus budget-vs-actual per week.
-  const budget = Number(state.weeklyBudget) || 0;
-  const errors = shops.map((s) => {
-    const itemsTotal = (Array.isArray(s.items) ? s.items : []).reduce((sum, i) => sum + (Number(i?.price) || 0), 0);
-    if (itemsTotal > 0) return Math.abs(s.total - itemsTotal) / Math.max(1, s.total);
-    return budget > 0 ? Math.abs(s.total - budget) / Math.max(1, budget) : null;
-  }).filter((e) => e != null);
-  const value = errors.length
-    ? Math.round((errors.reduce((s, e) => s + e, 0) / errors.length) * 100) / 100
-    : null;
-  return metric(value, {
-    confidence: samples >= 8 ? 'high' : samples >= 3 ? 'medium' : 'low',
-    evidence: samples,
-    assumption: 'Recorded shop totals vs itemised prices (or the weekly budget) across recent shops.',
-  });
-};
-
-/**
  * Override pressure: how often the household overrode what the app set —
  * portion overrides, quantity edits to plan-derived rows, substitutions.
  * Rising override pressure is the honest signal that a recommendation
@@ -485,6 +399,7 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
     learningStage: householdLearningStage(state, { today }).stage,
     shoppingQuantityError: shoppingQuantityError(state, { today }),
     spendAccuracy: spendAccuracy(state, { today }),
+    basketReconciliation: basketReconciliation(state, { today }),
     overridePressure: overridePressure(state, { today }),
     portionAccuracy,
     autopilotUndoRate,

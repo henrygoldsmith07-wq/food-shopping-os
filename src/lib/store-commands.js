@@ -145,13 +145,14 @@ export const buildDomainCommands = (set) => ({
   }),
   cookPlannedMeal: ({ date, slot, recipeId, portions = null, actor = null, origin = 'user' } = {}) => set((s) => {
     const cooked = [...(s.cooked || []), { recipeId, date, portions }].filter((c) => c.recipeId);
-    return withLedger({ ...s, cooked }, createLedgerEvent('MealCooked', { date, slot, recipeId, portions }, { actor, origin }));
+    // Provenance is explicit: the household did this, Forq did not guess it.
+    return withLedger({ ...s, cooked }, createLedgerEvent('MealCooked', { date, slot, recipeId, portions, source: 'user-confirmed' }, { actor, origin }));
   }),
   skipPlannedMeal: ({ date, slot, recipeId = null, reason = null, actor = null, origin = 'user' } = {}) => set((s) => {
     const mealPlanEvents = [...(s.mealPlanEvents || []), {
-      id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId, status: 'skipped', reason, at: new Date().toISOString(),
+      id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId, status: 'skipped', reason, source: 'user-confirmed', at: new Date().toISOString(),
     }].slice(-500);
-    return withLedger({ ...s, mealPlanEvents }, createLedgerEvent('MealSkipped', { date, slot, recipeId, reason }, { actor, origin }));
+    return withLedger({ ...s, mealPlanEvents }, createLedgerEvent('MealSkipped', { date, slot, recipeId, reason, source: 'user-confirmed' }, { actor, origin }));
   }),
   purchaseIngredients: ({ items = [], store = null, total = null, actor = null, origin = 'user' } = {}) => set((s) => {
     const shops = [...(s.shops || []), {
@@ -197,32 +198,44 @@ export const buildDomainCommands = (set) => ({
     if (!date || !slot) return {};
     if (cooked) {
       const mealPlanEvents = [...(s.mealPlanEvents || []), {
-        id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId || null, actualRecipeId: recipeId || null, status: 'cooked', at: Date.now(),
+        id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId || null, actualRecipeId: recipeId || null, status: 'cooked', source: 'user-confirmed', at: Date.now(),
       }].slice(-500);
       const cookedRows = recipeId ? [...(s.cooked || []), { recipeId, date, portions: null }] : (s.cooked || []);
       const next = { ...s, mealPlanEvents, cooked: cookedRows };
+      // The household answered the one-tap question — user-confirmed, never
+      // inferred. Forq did not guess this outcome; it asked.
       return recipeId
-        ? withLedger(next, createLedgerEvent('MealCooked', { date, slot, recipeId, portions: null, inferred: true }, { actor, origin }))
+        ? withLedger(next, createLedgerEvent('MealCooked', { date, slot, recipeId, portions: null, source: 'user-confirmed' }, { actor, origin }))
         : next;
     }
     const mealPlanEvents = [...(s.mealPlanEvents || []), {
-      id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId || null, status: 'skipped', reason: reason || 'not-cooked', at: Date.now(),
+      id: `m${Date.now().toString(36)}`, date, slot, plannedRecipeId: recipeId || null, status: 'skipped', reason: reason || 'not-cooked', source: 'user-confirmed', at: Date.now(),
     }].slice(-500);
-    return withLedger({ ...s, mealPlanEvents }, createLedgerEvent('MealSkipped', { date, slot, recipeId, reason: reason || 'not-cooked' }, { actor, origin }));
+    return withLedger({ ...s, mealPlanEvents }, createLedgerEvent('MealSkipped', { date, slot, recipeId, reason: reason || 'not-cooked', source: 'user-confirmed' }, { actor, origin }));
   }),
   // Taking back an adaptation: the quantity goes back, the household's
   // choice lands in the ledger as a rejection carrying the adaptation key,
-  // and repeated reversals make that change lose its influence
-  // (see adaptations.js adaptationPressure).
+  // and an explicit suppression stamp records the day — so regenerating the
+  // list never re-applies a change the household undid (see
+  // adaptation-suppression.js). Repeated reversals reach the suppression
+  // threshold, and the change stops being applied until its window ages
+  // out or new evidence earns it back.
   undoAdaptation: (adaptation) => set((s) => {
     if (!adaptation?.undo) return {};
     const { undo } = adaptation;
+    const stampSuppression = (next, key) => {
+      const day = String(next.day || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+      const existing = next.adaptationSuppression?.[key];
+      const rejections = [...(Array.isArray(existing?.rejections) ? existing.rejections : []), day]
+        .filter((d, i, all) => d && all.indexOf(d) === i).sort().slice(-10);
+      return { ...next, adaptationSuppression: { ...(next.adaptationSuppression || {}), [key]: { rejections, lastRejectedAt: day } } };
+    };
     if (undo.kind === 'waste-qty') {
       const shoppingList = (s.shoppingList || []).map((item) => (item.id === undo.itemId
-        ? { ...item, qty: undo.fromQty, autoReduction: null, wasteNote: null }
+        ? { ...item, qty: undo.fromQty, autoReduction: null, wasteNote: null, lastAutoQty: null }
         : item));
       return withLedger(
-        { ...s, shoppingList },
+        stampSuppression({ ...s, shoppingList }, undo.key),
         createLedgerEvent('RecommendationRejected', {
           recommendationId: `adaptation:${undo.key}`,
           context: { kind: 'adaptation', key: undo.key, undo: 'waste-qty' },
@@ -231,7 +244,7 @@ export const buildDomainCommands = (set) => ({
     }
     if (undo.kind === 'portions') {
       return withLedger(
-        { ...s, portionsOverride: undo.override },
+        stampSuppression({ ...s, portionsOverride: undo.override }, 'portions'),
         createLedgerEvent('RecommendationRejected', {
           recommendationId: 'adaptation:portions',
           context: { kind: 'adaptation', key: 'portions', undo: 'portions' },

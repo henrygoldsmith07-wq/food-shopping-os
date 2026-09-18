@@ -34,6 +34,7 @@ import { COUPON_KINDS, LOYALTY_PROGRAMMES, normaliseCoupon } from './coupons.js'
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
+import { snapshotCosts } from './eval-metrics.js';
 import { predictionActions } from './prediction-feedback.js';
 import { buildDomainCommands } from './store-commands.js';
 import { ledgerCommands } from './event-ledger.js';
@@ -342,6 +343,11 @@ export function useStoreApi({
             date: s.day,
             store: shopStore,
             total: Math.round((Number(total) || 0) * 100) / 100,
+            // The basket prediction, frozen at the moment of purchase: what
+            // the list rows cost before the till had its say. Spend accuracy
+            // compares THIS against the recorded total — never the other way
+            // round.
+            predicted: snapshotCosts(bought),
             saved,
             pantryReconciled: Boolean(reconciled),
             items: bought.map(({ name, price, qty, emoji }) => ({

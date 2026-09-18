@@ -21,10 +21,15 @@
 
 import { canonicalName } from './aliases.js';
 import { householdPortionsFor } from './portions.js';
+import {
+  adaptationRejections,
+  suppressedAdaptations as suppressedAdaptationRecords,
+  isAdaptationHeld,
+} from './adaptation-suppression.js';
 
 /** How far back a correction keeps counting against a change. */
 export const ADAPTATION_LOOKBACK_DAYS = 28;
-/** Corrections needed before a change stops being applied for a key. */
+/** Rejections (inside the window) before a change stops being applied. */
 export const ADAPTATION_UNDO_LIMIT = 2;
 
 const NOON = 'T12:00:00';
@@ -41,25 +46,25 @@ const dayOf = (stamp) => String(stamp || '').slice(0, 10);
  * timeline of what really happened. Undos arrive as RecommendationRejected
  * ledger events whose context names the adaptation (`kind: 'adaptation'`,
  * `key: '<adaptation id>'`), so a reversal teaches exactly like a rejected
- * recommendation does. Counts decay by age the same way the rest of the
- * learning does: last month's undo weighs half of this week's.
+ * recommendation does.
+ *
+ * The count is a plain whole number of rejections inside the recency
+ * window — never a decayed weight, which once made two real corrections
+ * sum to 1.99 and miss the threshold by accident (see adaptation-suppression.js
+ * for the fix). The returned map is `key → { rejections: string[], latest }`.
  */
 export const adaptationPressure = (state = {}, { today = null, lookbackDays = ADAPTATION_LOOKBACK_DAYS } = {}) => {
-  const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  const byKey = adaptationRejections(state);
   const pressure = new Map();
-  const weightFor = (day) => {
-    const age = today ? daysBetweenStamps(dayOf(day), dayOf(today)) : null;
-    if (age === null) return 1;
-    if (age < 0 || age > lookbackDays) return 0;
-    return Math.pow(0.5, age / 28);
-  };
-  for (const event of ledger) {
-    if (event?.type !== 'RecommendationRejected') continue;
-    const context = event.context;
-    if (context?.kind !== 'adaptation' || !context.key) continue;
-    const w = weightFor(event.day || event.at);
-    if (w <= 0) continue;
-    pressure.set(context.key, (pressure.get(context.key) || 0) + w);
+  for (const [key, entry] of byKey) {
+    const rejections = today
+      ? entry.rejections.filter((day) => {
+        const age = daysBetweenStamps(dayOf(day), dayOf(today));
+        return age != null && age >= 0 && age <= lookbackDays;
+      })
+      : entry.rejections.slice();
+    if (!rejections.length) continue;
+    pressure.set(key, { rejections, latest: rejections[rejections.length - 1] });
   }
   return pressure;
 };
@@ -68,16 +73,21 @@ export const adaptationPressure = (state = {}, { today = null, lookbackDays = AD
  * Keys whose change the household has repeatedly undone. These changes stay
  * visible as annotations but stop being applied — the recommendation that
  * users repeatedly correct becomes less influential, which is the whole
- * point of listening.
+ * point of listening. Count + recency: N rejections inside the window,
+ * so the threshold is met by exactly N corrections, never by decay.
  */
 export const suppressedAdaptationKeys = (state = {}, options = {}) => {
   const minUndos = Number.isFinite(options.minUndos) ? options.minUndos : ADAPTATION_UNDO_LIMIT;
-  const pressure = adaptationPressure(state, options);
-  const suppressed = new Set();
-  for (const [key, weight] of pressure) {
-    if (weight >= minUndos) suppressed.add(key);
+  if (minUndos === ADAPTATION_UNDO_LIMIT) {
+    return new Set(suppressedAdaptationRecords(state, options).keys());
   }
-  return suppressed;
+  // A caller with its own bar counts whole rejections directly — still
+  // count + recency, just a different threshold.
+  const keys = new Set();
+  for (const [key, entry] of adaptationPressure(state, options)) {
+    if (entry.rejections.length >= minUndos) keys.add(key);
+  }
+  return keys;
 };
 
 const confidenceFrom = (count, { high = 3, medium = 2 } = {}) =>
@@ -188,7 +198,7 @@ export const collectAdaptations = (state = {}, { today = state?.day || null } = 
     ...recoveryAdaptations(state, { today }),
   ].filter(Boolean);
   const adaptations = live
-    .filter((row) => !suppressed.has(row.key))
+    .filter((row) => !suppressed.has(row.key) && !isAdaptationHeld(state, row.key, { today }))
     .sort((a, b) => {
       const rank = { high: 0, medium: 1, low: 2 };
       if (rank[a.confidence] !== rank[b.confidence]) return rank[a.confidence] - rank[b.confidence];

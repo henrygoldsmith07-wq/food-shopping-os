@@ -15,8 +15,8 @@ const onboard = async (page, name = 'Ada') => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start using Forq' }).click();
-  // The shopping list is the landing screen now — the greeting lives on Today.
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  // The app lands on the Week screen — the greeting lives there.
+  await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByText(new RegExp(`Good (morning|afternoon|evening), ${name}`))).toBeVisible({ timeout: 15000 });
 };
 
@@ -95,7 +95,7 @@ test('applies a pasted receipt onto the list and into the pantry', async ({ page
     } catch { /* a storage-blocked browser is a different test's problem */ }
   });
   await page.reload();
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 
   await page.getByRole('button', { name: 'List', exact: true }).click();

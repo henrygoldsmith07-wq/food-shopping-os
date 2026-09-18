@@ -255,6 +255,75 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       e.type === 'MealCooked' && e.date === pastDate && e.recipeId === 'salmon-teriyaki')).toBe(true);
   });
 
+  it('learns, adapts, is corrected, regenerates — and the correction is respected', () => {
+    // The full trust journey on top of the golden flow: the learned
+    // reduction appears, the household rejects it, the list regenerates —
+    // and the reduction stays gone. A correction that cannot change future
+    // behaviour is not learning, it is gaslighting.
+    const { state } = runGoldenFlow();
+    const nextWeek = '2026-09-23';
+    const listFor = (source, today = TODAY) => shoppingListForPlan(
+      { [nextWeek]: { dinner: 'chickpea-curry' } }, [nextWeek],
+      {
+        pantry: (source.pantry || []).filter((p) => p.cat !== 'Leftovers'),
+        waste: source.waste, cooked: source.cooked || [], today,
+        app: { ...source, portions: 4, portionsOverride: 'auto' }, state: source,
+      },
+    );
+
+    // LEARN + ADAPT: two binned tins → next week asks for one fewer.
+    const adapted = listFor(state);
+    const adaptedRow = adapted.find((r) => r.name === 'Chickpeas (tins)');
+    expect(adaptedRow.qty).toBe('1');
+    expect(adaptedRow.wasteNote).toMatch(/binned 2× recently/i);
+
+    // CORRECT: the household rejects the change, through the same command
+    // the adaptation card's undo button drives — ledger rejection with the
+    // stable canonical key, plus the explicit suppression stamp.
+    const rejectionDay = TODAY;
+    const corrected = {
+      ...state,
+      day: TODAY,
+      householdLedger: [...(state.householdLedger || []), {
+        id: 'e-golden-reject',
+        type: 'RecommendationRejected',
+        at: `${rejectionDay}T12:00:00.000Z`,
+        day: rejectionDay,
+        origin: 'user',
+        recommendationId: 'adaptation:chickpeas',
+        context: { kind: 'adaptation', key: 'chickpeas', undo: 'waste-qty' },
+      }],
+      adaptationSuppression: {
+        chickpeas: { rejections: [rejectionDay], lastRejectedAt: rejectionDay },
+      },
+    };
+
+    // REGENERATE: the same plan, the same evidence, a fresh list.
+    const regenerated = listFor(corrected);
+    const heldRow = regenerated.find((r) => r.name === 'Chickpeas (tins)');
+    // RESPECTED: the quantity is back to the unlearned amount, with no
+    // reduction applied over the household's no.
+    expect(heldRow.qty).toBe('2');
+    expect(heldRow.autoReduction).toBeUndefined();
+    expect(heldRow.wasteNote).toBeUndefined();
+
+    // The reversal is on the record, attributed to the adaptation key.
+    expect(corrected.householdLedger.some((e) =>
+      e.type === 'RecommendationRejected'
+      && e.context?.key === 'chickpeas')).toBe(true);
+
+    // ...and the learning engine reads the same story: the adaptation for
+    // this key is held back, not shown as a live change.
+    const listed = {
+      ...corrected,
+      shoppingList: regenerated.map((row, i) => ({
+        id: `s-regen-${i}`, fromRecipe: 'chickpea-curry', checked: false, price: 0, ...row,
+      })),
+    };
+    const { adaptations } = collectAdaptations(listed, { today: TODAY });
+    expect(adaptations.find((a) => a.kind === 'waste-qty' && a.key === 'chickpeas')).toBeUndefined();
+  });
+
   it('keeps the loop honest: an empty household gets nothing invented', () => {
     const empty = deriveApp({ ...EMPTY_STATE, onboarded: true, day: TODAY });
     const { adaptations } = collectAdaptations(empty, { today: TODAY });

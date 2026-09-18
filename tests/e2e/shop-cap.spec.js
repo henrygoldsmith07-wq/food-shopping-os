@@ -31,10 +31,10 @@ test('the cap banner ranks an over-budget list and back, marking the rows it pus
 
   await page.goto('/');
 
-  // The shopping list is home for a returning household; leave it and come
+  // The app now opens on the Week screen; go to the list and come
   // back through the main navigation, the way the journey is walked.
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
-  await nav.getByRole('button', { name: 'Today', exact: true }).click();
+  await nav.getByRole('button', { name: 'Week', exact: true }).click();
   await nav.getByRole('button', { name: 'List', exact: true }).click();
 
   // The basket is over budget, so the cap banner names what fits and offers

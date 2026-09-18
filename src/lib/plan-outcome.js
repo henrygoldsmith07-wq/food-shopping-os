@@ -85,6 +85,10 @@ export const captureMissedMeals = (state = {}) => {
     status: 'skipped',
     reason: 'missed',
     missed: true,
+    // Provenance: this stamp is Forq's inference, not the household's word —
+    // the loop's confirmation card exists precisely so the household can
+    // correct it (see loop-inference.js). Labelled, never presented as fact.
+    source: 'inferred',
     at: Date.now(),
   }));
   return { ...state, mealPlanEvents: [...events, ...stamps].slice(-500) };

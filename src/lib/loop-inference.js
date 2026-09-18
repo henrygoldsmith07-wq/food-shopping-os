@@ -131,12 +131,28 @@ export const inferOutcomeProposals = (state = {}, options = {}) => {
  * canonical name. Only proposed when the household already drives the list
  * from the plan (at least one fromRecipe row) — a stray plan edit must
  * never conjure a list out of nothing.
+ *
+ * The need is computed by the ONE authoritative Plan → Shopping
+ * calculation — shoppingListForPlan with the same household decision
+ * (configured + learned portions), waste history, cooked history, aliases,
+ * pantry and date every other list path uses — so a top-up can never
+ * disagree with the list the app would have generated itself. Suppressed
+ * adaptations are honoured by that same call: a quantity the household
+ * undid is not re-proposed here either.
  */
 export const inferListTopUp = (state = {}, { today = state?.day } = {}) => {
   const list = Array.isArray(state.shoppingList) ? state.shoppingList : [];
   if (!list.some((row) => row.fromRecipe)) return [];
   if (!today) return [];
-  const need = shoppingListForPlan(state.plan, weekDates(today), { pantry: state.pantry || [] });
+  const need = shoppingListForPlan(state.plan, weekDates(today), {
+    pantry: Array.isArray(state.pantry) ? state.pantry : [],
+    waste: Array.isArray(state.waste) ? state.waste : [],
+    cooked: Array.isArray(state.cooked) ? state.cooked : [],
+    today,
+    learnedAliases: state.aliasMemory || {},
+    app: state,
+    state,
+  });
   const keyOf = (name) => canonicalName(name, state.aliasMemory) || String(name || '').toLowerCase();
   const have = new Set(list.filter((row) => !row.checked).map((row) => keyOf(row.name)));
   const seen = new Set();

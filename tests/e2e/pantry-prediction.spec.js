@@ -38,6 +38,7 @@ test('the Shop-tab pantry sheet shows the prediction block in the built app', as
   });
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'List', exact: true }).click();
 
   // A returning household lands on the shopping list, no onboarding. The
   // basket offers the pantry before buying.
@@ -82,6 +83,7 @@ test('the tonight affordance opens the dinner picker pre-searched in the built a
   });
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'List', exact: true }).click();
   await page.getByRole('button', { name: /Check pantry before buying/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
   await expect(sheet).toBeVisible();
@@ -145,6 +147,7 @@ test('the prediction block stays quiet when the week plan covers the expiring st
   });
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'List', exact: true }).click();
   await page.getByRole('button', { name: /Check pantry before buying/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
   await expect(sheet).toBeVisible();
@@ -201,6 +204,7 @@ test('a plan that only half-uses the expiring stock still flags the leftover', a
   });
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'List', exact: true }).click();
   await page.getByRole('button', { name: /Check pantry before buying/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
   await expect(sheet).toBeVisible();
@@ -240,6 +244,7 @@ test('the week-plan affordance opens the generator focused on the at-risk item',
   });
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'List', exact: true }).click();
   await page.getByRole('button', { name: /Check pantry before buying/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Smart pantry' });
   await expect(sheet).toBeVisible();

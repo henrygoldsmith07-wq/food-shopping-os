@@ -127,6 +127,7 @@ export const diaryActions = (set) => {
           actualRecipeId: recipe.id,
           status: 'cooked',
           reason: null,
+          source: 'user-confirmed',
           at: Date.now(),
         } : null;
         const elapsed = Number(actualMins);
@@ -163,6 +164,9 @@ export const diaryActions = (set) => {
           recipeId: recipe.id,
           plannedRecipeId,
           recommendationId: recommendationId || null,
+          // The household cooked this in the app — a user-confirmed outcome,
+          // never an inference. Provenance rides the ledger intact.
+          source: 'user-confirmed',
           leftoverPortions: leftovers > 0 ? leftovers : undefined,
           actualMins: timeEvent?.actualMins ?? null,
         }, { origin: 'user' }));

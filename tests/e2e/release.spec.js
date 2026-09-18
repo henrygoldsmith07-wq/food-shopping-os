@@ -7,8 +7,8 @@ const onboard = async (page, name = 'Ada') => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start using Forq' }).click();
-  // The shopping list is the landing screen now — the greeting lives on Today.
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  // The app lands on the Week screen — the greeting lives there.
+  await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByText(new RegExp(`Good (morning|afternoon|evening), ${name}`))).toBeVisible({ timeout: 15000 });
 };
 
@@ -80,7 +80,7 @@ test('honours increased contrast and forced system colours', async ({ page }) =>
 
   await page.emulateMedia({ contrast: 'no-preference', forcedColors: 'active' });
   expect(await page.evaluate(() => matchMedia('(forced-colors: active)').matches)).toBe(true);
-  const forced = await page.getByRole('button', { name: 'Today' }).evaluate((element) => ({
+  const forced = await page.getByRole('button', { name: 'Week', exact: true }).evaluate((element) => ({
     adjustment: getComputedStyle(element).forcedColorAdjust,
     background: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
     foreground: getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
@@ -194,7 +194,7 @@ test('exposes collaboration and calendar planning controls', async ({ page }) =>
   await onboard(page);
   // Coach access lives behind the 'coach' tool and is off for new users.
   await enableTool(page, 'coach');
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 
   await page.getByRole('button', { name: 'Plan', exact: true }).click();
@@ -218,6 +218,6 @@ test('reopens offline after the service worker is ready', async ({ page, context
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await page.reload();
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 });
