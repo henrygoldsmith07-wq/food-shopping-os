@@ -89,7 +89,8 @@ test('reopening the same day does not invent new misses', async ({ page }) => {
   await page.keyboard.press('Enter');
   const pantry = page.getByRole('dialog', { name: 'Smart pantry' });
 
-  await expect(pantry.getByText('Your waste, by cause')).toBeVisible();
+  // The pantry sheet fills lazily after boot, same as the capture journey above.
+  await expect(pantry.getByText('Your waste, by cause')).toBeVisible({ timeout: 15000 });
   // Still exactly the two seeded misses — never three.
   await expect(pantry.getByText(/2 of those slipped by with nothing recorded/)).toBeVisible();
 });

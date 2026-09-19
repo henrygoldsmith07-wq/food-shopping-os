@@ -26,16 +26,29 @@
  *
  * Recovery is evidence-aware, in one explainable model:
  *
- *   rejection → hold → new contradictory evidence → cautiously eligible
+ *   rejection → held → evidence accumulated → reconsideration eligible
  *
  * A rejection holds for its holding period. It ends early only when
- * genuinely new evidence about the same ingredient arrives AFTER the
- * rejection (more of it binned, cooked, corrected) — enough events to meet
- * EVIDENCE_RECOVERY_THRESHOLD make the key eligible again. Eligibility is
- * not reapplication: the ordinary learning thresholds still decide whether
- * any new adaptation is earned, now with the fresh evidence in hand. The
- * mere passage of list regenerations clears nothing. Every decision names
- * its state and the counts behind it, so callers can explain the answer.
+ * genuinely new, ATTRIBUTABLE evidence about the same subject arrives
+ * AFTER the rejection — enough events to meet EVIDENCE_RECOVERY_THRESHOLD
+ * make the key eligible again. Eligibility is not reapplication: the
+ * ordinary learning thresholds still decide whether any new adaptation is
+ * earned, now with the fresh evidence in hand. The mere passage of list
+ * regenerations clears nothing. Every decision names its state, its
+ * recovery stage and the counts behind it, so callers can explain the
+ * answer.
+ *
+ * Attribution is domain-specific, because evidence that cannot be tied to
+ * the suppressed adaptation is noise, not recovery:
+ *
+ *   - ingredient quantity adaptations recover on the ingredient's own
+ *     record: further waste events for it, purchase outcomes that name it,
+ *     pantry corrections resolved to it BY ID, and direct shopping-quantity
+ *     corrections for it. A MealCooked names a recipe, never an ingredient,
+ *     so it NEVER counts as recovery evidence for an ingredient key;
+ *   - the learned-portions adaptation recovers on portion evidence: cooked
+ *     meals that actually recorded a portion count, and explicit household
+ *     portion corrections.
  *
  * Import-free by design: the list builder, the portions decision and the
  * eval layer all read this module; it must never reach back into them.
@@ -53,9 +66,6 @@ export const ADAPTATION_SUPPRESSION_WINDOW_DAYS = 28;
 export const ADAPTATION_REJECTION_HOLD_DAYS = 7;
 /** Distinct new evidence events after a rejection that earn reconsideration. */
 export const EVIDENCE_RECOVERY_THRESHOLD = 2;
-
-/** Ledger events that count as new evidence about an ingredient. */
-const EVIDENCE_EVENT_TYPES = ['IngredientWasted', 'MealCooked', 'PantryCorrected'];
 
 import { canonicalName } from './aliases.js';
 
@@ -143,57 +153,168 @@ export const adaptationRejections = (state = {}) => {
 };
 
 /**
- * New contradictory evidence about an ingredient, AFTER its latest
- * rejection: waste events (it kept being binned anyway), cooked meals and
- * pantry corrections — behaviour that contradicts the rejection rather than
- * confirming it. Each event counts once (unique ledger ids).
+ * The portion adaptation's key — the one recovery subject that is not an
+ * ingredient. Its evidence speaks portions, not ingredient names.
+ */
+const PORTIONS_KEY = 'portions';
+
+/**
+ * The calendar day of any dated record. Writers differ: ledger events carry
+ * `day` (and an ISO `at`), prediction corrections carry `date` and a
+ * NUMERIC `at` (epoch millis). All three must resolve to YYYY-MM-DD or the
+ * event says nothing about when it happened.
+ */
+const eventDay = (event) => {
+  const day = dayOf(event?.day || event?.date);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  const at = event?.at;
+  if (typeof at === 'number' && Number.isFinite(at)) return new Date(at).toISOString().slice(0, 10);
+  const stamp = dayOf(at);
+  return /^\d{4}-\d{2}-\d{2}$/.test(stamp) ? stamp : '';
+};
+
+/**
+ * Does this ingredient-named event speak about `key`? Both sides resolve
+ * through the same alias table the rest of the app speaks: "Chickpeas
+ * (tins)" binned after rejecting "chickpeas" is the same conversation.
+ */
+const namesIngredient = (raw, names, aliasMemory) => {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return false;
+  const subject = canonicalName(trimmed, aliasMemory) || trimmed.toLowerCase();
+  return subject && names.has(subject);
+};
+
+/**
+ * New contradictory evidence for one suppressed adaptation, AFTER its
+ * latest rejection — only events that can be RELIABLY ATTRIBUTED to the
+ * adaptation's subject count. Each event counts once (unique ledger ids).
+ *
+ * Ingredient keys accept: IngredientWasted naming the ingredient,
+ * IngredientPurchased outcomes naming it, PantryCorrected events whose
+ * correction ids resolve through `state.pantry` to the ingredient (id-based
+ * attribution — the event payload carries ids, not names), and direct
+ * 'shopping-qty' prediction corrections for it. MealCooked names a recipe,
+ * never an ingredient, and is deliberately NOT ingredient evidence.
+ *
+ * The 'portions' key accepts: MealCooked events that actually recorded a
+ * portion count (a cook without a recorded portion says nothing about
+ * portions), and explicit household portion corrections.
+ *
+ * Future events (relative to `today`) are not evidence yet.
  */
 export const recoveryEvidenceFor = (state = {}, key, { today = null } = {}) => {
-  if (!key) return { events: 0, latestDay: null };
+  if (!key) return { events: 0, latestDay: null, kinds: {} };
   const entry = adaptationRejections(state).get(String(key));
   const since = entry?.latestDay || null;
   const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
   const aliasMemory = state.aliasMemory || {};
-  // Both sides resolve through the same alias table the rest of the app
-  // speaks: "Chickpeas (tins)" binned after rejecting "chickpeas" is the
-  // same conversation.
-  const canonical = canonicalName(key, aliasMemory) || String(key).trim().toLowerCase();
+  const isPortions = String(key) === PORTIONS_KEY;
+  // Both sides meet on the canonical name so a raw key still matches its row.
+  const canonical = isPortions ? PORTIONS_KEY
+    : (canonicalName(key, aliasMemory) || String(key).trim().toLowerCase());
   const names = new Set([String(key).trim().toLowerCase(), canonical]);
+  const pantryById = new Map((Array.isArray(state.pantry) ? state.pantry : [])
+    .filter((p) => p && p.id != null).map((p) => [String(p.id), p]));
   const seen = new Set();
+  const kinds = {};
   let latestDay = null;
-  for (const event of ledger) {
-    if (!EVIDENCE_EVENT_TYPES.includes(event?.type)) continue;
-    const raw = String(event?.name || event?.payload?.name || '').trim();
-    const subject = (canonicalName(raw, aliasMemory) || raw.toLowerCase());
-    if (!subject || !names.has(subject)) continue;
-    if (since && dayOf(event.day || event.at) <= since) continue; // before the rejection: not new
-    if (today) {
-      const age = daysBetween(dayOf(event.day || event.at), dayOf(today));
-      if (age == null || age < 0) continue; // future events are not evidence yet
-    }
-    if (seen.has(event.id)) continue;
-    seen.add(event.id);
-    const day = dayOf(event.day || event.at);
+  const count = (event, kind) => {
+    const id = String(event?.id || `ledger:${event?.at}`);
+    if (seen.has(id)) return;
+    seen.add(id);
+    kinds[kind] = (kinds[kind] || 0) + 1;
+    const day = eventDay(event);
     if (day && (!latestDay || day > latestDay)) latestDay = day;
+  };
+  const isFresh = (event) => {
+    const day = eventDay(event);
+    if (since && day <= since) return false; // before the rejection: not new
+    if (today) {
+      const age = daysBetween(day, dayOf(today));
+      if (age == null || age < 0) return false; // future events are not evidence yet
+    }
+    return Boolean(day);
+  };
+  for (const event of ledger) {
+    if (!event || !isFresh(event)) continue;
+    if (isPortions) {
+      // Portion evidence only: a cook that recorded HOW MANY it made, or an
+      // explicit household portion correction. Everything else is noise.
+      if (event.type === 'MealCooked' && event.portions != null
+        && Number.isFinite(Number(event.portions))) count(event, 'cooked-portion-observation');
+      else if (event.type === 'prediction_correction'
+        && String(event.predictionType || '') === 'portions') count(event, 'portion-correction');
+      continue;
+    }
+    if (event.type === 'IngredientWasted' && namesIngredient(event.name, names, aliasMemory)) {
+      count(event, 'ingredient-wasted');
+    } else if (event.type === 'IngredientPurchased') {
+      // Purchase outcome: the household bought it again. The event carries
+      // the bought names (recordShop and purchaseIngredients both write them).
+      const boughtNames = Array.isArray(event.items) ? event.items : [event.name];
+      if (boughtNames.some((n) => namesIngredient(n, names, aliasMemory))) count(event, 'purchase-outcome');
+    } else if (event.type === 'PantryCorrected') {
+      // The payload names correction IDS, not ingredients — resolve each
+      // through the pantry it corrected. An id that no longer resolves, or
+      // resolves to a different ingredient, is NOT attributable evidence.
+      const corrections = Array.isArray(event.corrections) ? event.corrections : [];
+      if (corrections.some((id) => {
+        const item = pantryById.get(String(id));
+        return item && namesIngredient(item.name, names, aliasMemory);
+      })) count(event, 'pantry-correction');
+    } else if (event.type === 'prediction_correction'
+      && String(event.predictionType || '') === 'shopping-qty'
+      && namesIngredient(event.predictionKey, names, aliasMemory)) {
+      count(event, 'quantity-correction');
+    }
+    // Deliberately unmatched: MealCooked (recipe-scoped, cannot name an
+    // ingredient), MealSkipped, leftovers — none can be attributed to this
+    // ingredient without guessing, and a guess is not recovery.
   }
-  return { events: seen.size, latestDay };
+  return { events: seen.size, latestDay, kinds };
+};
+
+/**
+ * The recovery ladder, in one explainable field alongside `state`:
+ *
+ *   'rejected'                 — inside the hold, no new evidence yet.
+ *   'held'                     — influence-suppressed, no new evidence yet.
+ *   'evidence-accumulated'     — some attributable evidence has arrived
+ *                                since the rejection, but not enough to
+ *                                earn reconsideration.
+ *   'reconsideration-eligible' — enough attributable evidence arrived; the
+ *                                ordinary learning thresholds now decide.
+ *
+ * `state` keeps its coarser vocabulary ('rejected' | 'suppressed' |
+ * 'recovery-eligible' | 'clear') for existing callers; `recoveryStage` is
+ * the fine-grained answer to "where is this key on the recovery path?".
+ */
+const recoveryStageFor = ({ influenceSuppressed, evidenceEvents }) => {
+  if (evidenceEvents >= EVIDENCE_RECOVERY_THRESHOLD) return 'reconsideration-eligible';
+  if (evidenceEvents > 0) return 'evidence-accumulated';
+  return influenceSuppressed ? 'held' : 'rejected';
 };
 
 /**
  * The full, explainable suppression decision for one key — the single
  * function callers can quote when asked "why is this change not applied?".
- * Returns `{ state, ... }` where state is one of:
+ * Returns `{ state, recoveryStage, ... }` where state is one of:
  *
  *   - 'clear'                — no rejection stands; nothing held.
  *   - 'rejected'             — inside the rejection hold; days left named.
  *   - 'suppressed'           — influence removed for the window; rejections
  *                              named.
  *   - 'recovery-eligible'    — the hold would still run, but enough new
- *                              contradictory evidence arrived after the
+ *                              attributable evidence arrived after the
  *                              rejection to earn reconsideration. This is
  *                              ELIGIBILITY, not reapplication: the ordinary
  *                              learning thresholds still decide whether any
  *                              new adaptation is actually earned.
+ *
+ * `recoveryStage` carries the fine-grained ladder: rejected → held →
+ * evidence-accumulated → reconsideration-eligible, with the per-kind
+ * evidence breakdown that earned the stage.
  */
 export const suppressionDecision = (state = {}, key, { today = state?.day || null } = {}) => {
   const entry = adaptationRejections(state).get(String(key));
@@ -209,42 +330,28 @@ export const suppressionDecision = (state = {}, key, { today = state?.day || nul
   const influenceSuppressed = Boolean(suppressionFor(state, key, { today }));
   const evidence = recoveryEvidenceFor(state, key, { today });
   const recovered = evidence.events >= EVIDENCE_RECOVERY_THRESHOLD;
-  if (influenceSuppressed) {
-    return {
-      state: recovered ? 'recovery-eligible' : 'suppressed',
-      key: String(key),
-      rejections,
-      rejectionCount: entry.rejectionCount,
-      latestRejection: latest,
-      recoveryEvidence: evidence.events,
-      recoveryEvidenceNeeded: EVIDENCE_RECOVERY_THRESHOLD,
-      recoveryLatestDay: evidence.latestDay,
-    };
-  }
-  if (!holdActive) return { state: 'clear', key: String(key), rejections, rejectionCount: entry.rejectionCount, note: 'rejection hold expired' };
-  if (recovered) {
-    return {
-      state: 'recovery-eligible',
-      key: String(key),
-      rejections,
-      rejectionCount: entry.rejectionCount,
-      latestRejection: latest,
-      recoveryEvidence: evidence.events,
-      recoveryEvidenceNeeded: EVIDENCE_RECOVERY_THRESHOLD,
-      recoveryLatestDay: evidence.latestDay,
-    };
-  }
-  const age = today ? daysBetween(latest, today) : null;
-  return {
-    state: 'rejected',
+  const stage = recoveryStageFor({ influenceSuppressed, evidenceEvents: evidence.events });
+  const explain = (extra = {}) => ({
     key: String(key),
     rejections,
     rejectionCount: entry.rejectionCount,
     latestRejection: latest,
-    holdDaysLeft: age == null ? null : Math.max(0, ADAPTATION_REJECTION_HOLD_DAYS - age),
+    recoveryStage: stage,
     recoveryEvidence: evidence.events,
     recoveryEvidenceNeeded: EVIDENCE_RECOVERY_THRESHOLD,
+    recoveryKinds: evidence.kinds || {},
     recoveryLatestDay: evidence.latestDay,
+    ...extra,
+  });
+  if (influenceSuppressed) {
+    return { state: recovered ? 'recovery-eligible' : 'suppressed', ...explain() };
+  }
+  if (!holdActive) return { state: 'clear', key: String(key), rejections, rejectionCount: entry.rejectionCount, note: 'rejection hold expired' };
+  if (recovered) return { state: 'recovery-eligible', ...explain() };
+  const age = today ? daysBetween(latest, today) : null;
+  return {
+    state: 'rejected',
+    ...explain({ holdDaysLeft: age == null ? null : Math.max(0, ADAPTATION_REJECTION_HOLD_DAYS - age) }),
   };
 };
 
@@ -254,7 +361,9 @@ export const suppressionDecision = (state = {}, key, { today = state?.day || nul
  * reconsideration? One explicit rejection holds the change for
  * ADAPTATION_REJECTION_HOLD_DAYS; influence-suppressed keys (see
  * suppressionFor) are held for as long as their rejections stay inside the
- * longer window. Genuinely new contradictory evidence ends the hold early.
+ * longer window. Genuinely new ATTRIBUTABLE evidence (see
+ * recoveryEvidenceFor) ends the hold early; a MealCooked that cannot be
+ * tied to the ingredient never does.
  */
 export const isAdaptationHeld = (state = {}, key, { today = state?.day || null } = {}) => {
   const decision = suppressionDecision(state, key, { today });

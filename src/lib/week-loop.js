@@ -12,7 +12,7 @@ import { aisleFor, compareStores, groupForStore, savingsAvailable } from './shop
 import { WEEK_LOOP_STEPS } from '../data/weekLoop.js';
 import { wasteAwareList } from './loop-learning.js';
 import { heldAdaptationKeys } from './adaptation-suppression.js';
-import { attachPredictions } from './shopping-predictions.js';
+import { replacePredictionsForList } from './shopping-predictions.js';
 import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
 import { emojiFor, uid } from './state.js';
@@ -262,7 +262,7 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   // layer scores this, never a post-hoc reconstruction from the recipes.
   return {
     shoppingList: nextList,
-    shoppingPredictions: attachPredictions(nextList, state.shoppingPredictions, {
+    shoppingPredictions: replacePredictionsForList(nextList, state.shoppingPredictions, {
       portionsDecision: householdPortionsFor(state),
       suppressedKeys: held,
       pantry: state.pantry || [],

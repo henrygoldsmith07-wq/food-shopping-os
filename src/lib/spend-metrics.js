@@ -139,32 +139,44 @@ export const basketReconciliation = (state = {}, { today = dayStamp() } = {}) =>
 
 /**
  * Shopping quantity error — ONE normalized measurement: the relative gap
- * between the quantity Forq actually displayed on the list and what was
- * actually bought, computed through the shared measurement engine.
+ * between the quantity Forq actually displayed on the list and what actually
+ * happened, computed through the shared measurement engine.
  *
- * The predicted side comes from prediction snapshots, in priority order:
+ * THE ONE PIPELINE. Two provenance routes enter the exact same aggregation,
+ * each as one canonical observation row:
  *
- *   1. the shop record's own frozen copies (`shop.predictions`) — captured
- *      from the list at the moment of purchase, the exact advice the till
- *      run answered;
- *   2. the live prediction book (`state.shoppingPredictions`), which the
- *      list builder refreshes in the same write that shows the list.
+ *   { relativeError, signedError, absoluteDiff, dimension,
+ *     source: 'purchase' | 'correction', predictionId, shopId, outcomeId }
  *
- * Both sides are parsed (measure.js), brought onto the same scale — mass
- * with mass, volume with volume, counts with counts — and the error is
- * reported as a fraction of the predicted amount. A gram gap and a tin gap
- * are never added together raw, and an incompatible pair is honestly
- * EXCLUDED (and counted) rather than forced into comparability. Recipe
- * ingredients are never consulted: the recommendation is what the snapshot
- * says the household was shown, not what a recipe line implies.
+ *   - purchase observations — the shop record's own FROZEN prediction
+ *     (`shop.predictions`, captured by buildShopRecord at purchase time):
+ *     the exact advice the till run answered;
+ *   - correction observations — direct household corrections
+ *     (predictionCorrections, type 'shopping-qty'), the household telling
+ *     us the number was wrong.
  *
- * Direct household corrections (predictionCorrections, type 'shopping-qty')
- * contribute the same relative measure where both sides are numeric.
+ * HISTORICAL TRUTH RULE: a purchase is evaluated ONLY against the
+ * prediction frozen for that purchase. The live prediction book
+ * (`state.shoppingPredictions`) describes the CURRENT list on screen — UI
+ * state, not history — and is never consulted for an old shop. A purchase
+ * with no frozen prediction is EXCLUDED and counted
+ * (`no-frozen-prediction`), never matched against the live book by
+ * ingredient name and never reconstructed from recipes.
  *
- * Only shops inside RECENT_SHOP_WINDOW_DAYS are scored: a shop from months
- * ago measures a prediction rule the household has long since moved past —
- * and it keeps this metric, which runs on every derive, off unbounded
- * history.
+ * DETERMINISTIC TIME: the supplied `today` decides everything. Shop age is
+ * SIGNED (today − shop date): future shops, malformed dates and shops
+ * outside RECENT_SHOP_WINDOW_DAYS are excluded and counted. Backtests with
+ * a historical `today` see exactly what that day could see.
+ *
+ * Both sides are parsed (measure.js) and brought onto the same scale —
+ * mass with mass, volume with volume, counts with counts; only the
+ * engine's own density table may bridge scales. Absolute error is computed
+ * PER DIMENSION over that dimension's own samples only (mean grams over
+ * gram observations, mean tins over tin observations) — never a
+ * dimension-specific total divided by the global sample count.
+ *
+ * Every observation is guarded: non-finite results (NaN, Infinity) never
+ * enter the aggregation — they are excluded and counted.
  */
 export const RECENT_SHOP_WINDOW_DAYS = 56;
 
@@ -180,64 +192,125 @@ const parseOnce = (qty, ingredient) => {
   return parsed;
 };
 
-export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) => {
-  void today;
-  const errors = [];
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const noonOf = (day) => new Date(`${day}T12:00:00`);
 
-  // Direct corrections: the household told us the number was wrong.
+export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) => {
+  // The ONE clock: the supplied `today`, never a fresh read of the real
+  // date inside the calculation. A malformed `today` cannot place any
+  // sample in time, so nothing is scored.
+  const todayStamp = DAY.test(String(today || '').slice(0, 10)) ? String(today).slice(0, 10) : null;
+  // Signed age in days: today − day. Negative = the day is in the future.
+  const ageFromToday = (day) => (todayStamp && DAY.test(day)
+    ? Math.round((noonOf(todayStamp) - noonOf(day)) / 86400000)
+    : null);
+
+  const observations = [];
+  const excluded = [];
+
+  // The guard at the door: a malformed observation never reaches the
+  // aggregation — it is excluded and counted, so the sample size cannot
+  // silently flatter itself.
+  const pushObservation = (o) => {
+    if (![o.relativeError, o.signedError, o.absoluteDiff].every((n) => Number.isFinite(n))) {
+      excluded.push({ reason: 'non-finite-observation', name: o.name ?? null, predictionId: o.predictionId ?? null, shopId: o.shopId ?? null, outcomeId: o.outcomeId ?? null });
+      return;
+    }
+    observations.push(o);
+  };
+
+  // --- direct corrections: the household told us the number was wrong ------
+  // Same pipeline, same observation shape, same guards as purchases.
   const corrections = (Array.isArray(state.predictionCorrections) ? state.predictionCorrections : [])
     .filter((c) => c?.type === 'prediction_correction' && c.predictionType === 'shopping-qty');
   for (const c of corrections) {
+    const outcomeId = c?.id || null;
+    const day = String(c?.date || '').slice(0, 10);
+    if (!DAY.test(day) || ageFromToday(day) == null) {
+      excluded.push({ reason: 'undated-observation', name: c?.predictionKey || null, outcomeId, shopId: null });
+      continue;
+    }
+    if (ageFromToday(day) < 0) {
+      excluded.push({ reason: 'future-observation', name: c?.predictionKey || null, outcomeId, shopId: null });
+      continue;
+    }
     const predicted = Number(c.predicted);
     const actual = Number(c.actual);
-    if (!Number.isFinite(predicted) || !Number.isFinite(actual) || predicted <= 0) continue;
-    errors.push(Math.abs(actual - predicted) / predicted);
+    if (c.predicted == null || !Number.isFinite(predicted)) {
+      excluded.push({ reason: 'missing-predicted-qty', name: c?.predictionKey || null, outcomeId, shopId: null });
+      continue;
+    }
+    if (!(predicted > 0)) {
+      excluded.push({ reason: 'non-positive-predicted-qty', name: c?.predictionKey || null, outcomeId, shopId: null });
+      continue;
+    }
+    if (c.actual == null || !Number.isFinite(actual) || actual < 0) {
+      excluded.push({ reason: 'unreadable-purchased-qty', name: c?.predictionKey || null, qty: c?.actual, outcomeId, shopId: null });
+      continue;
+    }
+    const delta = actual - predicted;
+    pushObservation({
+      relativeError: Math.abs(delta) / predicted,
+      signedError: delta / predicted,
+      absoluteDiff: Math.abs(delta),
+      dimension: 'count', // corrections are the household's 0–3+ count answer
+      source: 'correction',
+      predictionId: null, // the correction event names its key, not a snapshot id
+      shopId: null,
+      outcomeId,
+      name: c.predictionKey || null,
+      shownAt: day,
+    });
   }
 
-  // Snapshot-sourced comparisons. Frozen shop copies win; the live book is
-  // the fallback for rows a shop consumed before freezing existed.
-  const shops = Array.isArray(state.shops) ? state.shops : [];
-  const book = Array.isArray(state.shoppingPredictions) ? state.shoppingPredictions : [];
-  const newest = (a, b) => (!a || (b && Number(b.at || 0) > Number(a.at || 0)) ? b : a);
-  const byKey = new Map();
-  for (const p of book) {
-    if (!p?.predictionKey || p?.qty == null || p?.qty === '') continue;
-    const prev = byKey.get(p.predictionKey);
-    if (String(p.at || 0) >= String(prev?.at || 0)) byKey.set(p.predictionKey, p);
-  }
-  const excluded = [];
-  const todayNoon = new Date(`${dayStamp()}T12:00:00`);
-  for (const shop of shops) {
+  // --- purchases: evaluated ONLY against each shop's own frozen predictions --
+  for (const shop of Array.isArray(state.shops) ? state.shops : []) {
+    const shopId = shop?.id || null;
+    const items = Array.isArray(shop?.items) ? shop.items : [];
+    const excludeShop = (reason) => {
+      if (!items.length) excluded.push({ reason, name: null, shopId });
+      for (const item of items) excluded.push({ reason, name: item?.name || null, shopId });
+    };
     const day = String(shop?.date || '').slice(0, 10);
-    const age = /^\d{4}-\d{2}-\d{2}$/.test(day)
-      ? Math.abs(Math.round((new Date(`${day}T12:00:00`) - todayNoon) / 86400000))
-      : null;
-    if (age != null && age > RECENT_SHOP_WINDOW_DAYS) continue;
-    const frozen = new Map((Array.isArray(shop?.predictions) ? shop.predictions : []).map((p) => [p.id, p]));
-    for (const item of Array.isArray(shop?.items) ? shop.items : []) {
+    const age = DAY.test(day) ? ageFromToday(day) : null;
+    if (age == null) {
+      excludeShop(todayStamp ? 'malformed-shop-date' : 'invalid-evaluation-today');
+      continue;
+    }
+    if (age < 0) {
+      excludeShop('future-shop');
+      continue;
+    }
+    if (age > RECENT_SHOP_WINDOW_DAYS) {
+      excludeShop('outside-evaluation-window');
+      continue;
+    }
+    // The frozen book for THIS shop — the advice the till run answered.
+    // The live prediction book is deliberately not consulted here.
+    const frozen = new Map(
+      (Array.isArray(shop?.predictions) ? shop.predictions : [])
+        .filter((p) => p && p.id != null)
+        .map((p) => [p.id, p]),
+    );
+    for (const item of items) {
       if (!item?.name) continue;
       if (item?.qty == null || item?.qty === '') {
-        excluded.push({ reason: 'unrecorded-purchase-quantity', name: item.name });
+        excluded.push({ reason: 'unrecorded-purchase-quantity', name: item.name, shopId });
         continue;
       }
-      const key = canonicalName(item.name) || String(item.name).trim().toLowerCase();
-      // A row whose id matches no snapshot is the household's own hand-typed
-      // line, not Forq's advice — nothing to score, skipped silently.
-      if (item.id && !frozen.has(item.id) && !byKey.has(key)) continue;
-      const prediction = (item.id && frozen.get(item.id)) || null;
-      const predictedQty = prediction?.qty ?? byKey.get(key)?.qty ?? null;
-      if (predictedQty == null) {
-        excluded.push({ reason: 'no-prediction-snapshot', name: item.name });
+      const prediction = (item.id != null && frozen.get(item.id)) || null;
+      if (!prediction) {
+        excluded.push({ reason: 'no-frozen-prediction', name: item.name, shopId });
         continue;
       }
-      const planned = parseOnce(predictedQty, item.name);
+      const planned = parseOnce(prediction.qty, item.name);
       if (!planned || !(planned.amount > 0)) {
-        excluded.push({ reason: 'unreadable-predicted-qty', name: item.name, qty: predictedQty });
+        excluded.push({ reason: 'unreadable-predicted-qty', name: item.name, qty: prediction.qty, shopId });
         continue;
       }
       let bought = parseOnce(item.qty, item.name);
       if (!bought || !(bought.amount > 0)) {
-        excluded.push({ reason: 'unreadable-purchased-qty', name: item.name, qty: item.qty });
+        excluded.push({ reason: 'unreadable-purchased-qty', name: item.name, qty: item.qty, shopId });
         continue;
       }
       if (bought.dim !== planned.dim) {
@@ -245,42 +318,59 @@ export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) =
         // it (e.g. "1 tin" → 400 ml → 392 g of coconut milk). No bridge:
         // excluded and counted, never guessed into comparability.
         const converted = convert(bought, planned.dim, { ingredient: item.name });
-        if (!converted) {
-          excluded.push({ reason: 'incompatible-dimensions', name: item.name, predicted: planned.dim, purchased: bought.dim });
+        if (!converted || !(converted.amount > 0)) {
+          excluded.push({ reason: 'incompatible-dimensions', name: item.name, predicted: planned.dim, purchased: bought.dim, shopId });
           continue;
         }
         bought = converted;
       }
-      errors.push({
-        relative: Math.abs(bought.amount - planned.amount) / planned.amount,
-        signed: (bought.amount - planned.amount) / planned.amount,
-        absolute: Math.abs(bought.amount - planned.amount),
-        dim: planned.dim,
+      const delta = bought.amount - planned.amount;
+      pushObservation({
+        relativeError: Math.abs(delta) / planned.amount,
+        signedError: delta / planned.amount,
+        absoluteDiff: Math.abs(delta),
+        dimension: planned.dim,
+        source: 'purchase',
+        predictionId: prediction.id,
+        shopId,
+        outcomeId: null,
+        name: item.name,
+        shownAt: prediction.day || prediction.at || null, // when this advice was on show
       });
     }
   }
 
-  const samples = errors.length;
-  const meanOf = (pick) => (samples ? errors.reduce((s, e) => s + pick(e), 0) / samples : null);
+  const samples = observations.length;
+  const meanOf = (rows, pick) => (rows.length ? rows.reduce((s, r) => s + pick(r), 0) / rows.length : null);
   const round = (n) => (n == null ? null : Math.round(n * 100) / 100);
-  const value = round(meanOf((e) => e.relative));
-  const signedBias = round(meanOf((e) => e.signed));
-  // Absolute error only means something within one scale — reported per
-  // dimension (mean grams, mean tins…), never summed across them.
+  const value = round(meanOf(observations, (o) => o.relativeError));
+  const signedBias = round(meanOf(observations, (o) => o.signedError));
+  // Absolute error only means something within one scale — computed PER
+  // DIMENSION over that dimension's own samples: mass MAE over mass
+  // observations, volume MAE over volume observations, count MAE over count
+  // observations. Never a dimension's error total over the global count.
   const absoluteErrorsByDim = Object.fromEntries(
     ['mass', 'volume', 'count']
-      .map((dim) => [dim, round(meanOf((e) => (e.dim === dim ? e.absolute : null)))])
+      .map((dim) => {
+        const rows = observations.filter((o) => o.dimension === dim);
+        return [dim, round(meanOf(rows, (o) => o.absoluteDiff))];
+      })
       .filter(([, v]) => v != null),
+  );
+  const samplesByDim = Object.fromEntries(
+    ['mass', 'volume', 'count'].map((dim) => [dim, observations.filter((o) => o.dimension === dim).length]),
   );
   return {
     ...metric(value, {
       confidence: samples >= 10 ? 'high' : samples >= 4 ? 'medium' : samples > 0 ? 'low' : 'none',
       evidence: samples,
-      assumption: 'Relative error |bought − predicted| ÷ predicted, on a shared scale via the measurement engine, against the prediction snapshots shown on the list; incompatible quantities are excluded and counted, plus direct household corrections.',
+      assumption: 'Relative error |outcome − predicted| ÷ predicted, on a shared scale via the measurement engine, against each shop\'s frozen prediction snapshots (never the live list book) plus direct household corrections; incompatible quantities, unfrozen rows and out-of-window or future shops are excluded and counted.',
     }),
     samples,
+    samplesByDim,
     signedBias,
     absoluteErrorsByDim,
+    observations,
     excluded,
   };
 };

@@ -153,6 +153,71 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
     expect(evaluated.signedBias).toBe(1); // bought more than predicted
   });
 
+  it('freezes the snapshot, records the purchase, survives list removal — and scores the exact prediction', () => {
+    // The full snapshot lifecycle in one story: shown → frozen → purchased →
+    // the list row removed → the frozen prediction STILL scores, exactly as
+    // it was shown, against what was bought.
+    let state = baseState();
+    const list = shoppingListForPlan(
+      { '2026-09-16': { dinner: 'chickpea-curry' } }, ['2026-09-16'],
+      { pantry: [], waste: [], cooked: [], today: TODAY, app: state, state },
+    );
+    const riceRow = list.find((r) => r.name === 'Rice');
+    const chickpeaRow = list.find((r) => r.name === 'Chickpeas (tins)');
+    // 1. PREDICTION SHOWN → 2. SNAPSHOT FROZEN (same write that shows it).
+    state = {
+      ...state,
+      shoppingPredictions: attachPredictions(list, [], {
+        day: TODAY,
+        portionsDecision: { portions: 4, source: 'configured' },
+        learnedAliases: state.aliasMemory || {},
+      }),
+    };
+    expect(state.shoppingPredictions.length).toBeGreaterThanOrEqual(2);
+
+    // 3. PURCHASE RECORDED: the household buys the advised rice but ONE tin
+    //    against the shown two, through the shared buildShopRecord helper —
+    //    the exact predictions (matched by list row id) ride the shop record.
+    const riceSnap = state.shoppingPredictions.find((p) => p.predictionKey === 'rice');
+    const chickpeaSnap = state.shoppingPredictions.find((p) => p.predictionKey === 'chickpeas');
+    const shop = buildShopRecord({
+      state,
+      items: [
+        { ...riceRow, id: riceSnap.id, qty: '300g', price: 1.2 },
+        { ...chickpeaRow, id: chickpeaSnap.id, qty: '1', price: 1.5 },
+      ],
+      store: 'Tesco', total: 2.7, id: 'h-golden', day: TODAY,
+    });
+    expect(shop.predictions.map((p) => p.id).sort()).toEqual([chickpeaSnap.id, riceSnap.id]);
+    expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, frozen
+    state = { ...state, shops: [shop] };
+
+    // 4. SNAPSHOT SURVIVES LIST REMOVAL: the whole list is deleted after the
+    //    buy. The book may forget rows that left the screen — the frozen
+    //    copies on the shop record do not, and evaluation reads those.
+    state = { ...state, shoppingList: [], shoppingPredictions: [] };
+
+    // 5. EXACT PREDICTION EVALUATED: rice scored at 0% (bought what was
+    //    shown), chickpeas at 50% (1 tin vs the 2 shown) — each observation
+    //    names the exact frozen prediction, the shop and when it was shown.
+    const evaluated = shoppingQuantityError(state, { today: TODAY });
+    expect(evaluated.samples).toBe(2);
+    expect(evaluated.value).toBe(0.25); // (0 + 0.5) / 2
+    const rice = evaluated.observations.find((o) => o.predictionId === riceSnap.id);
+    const chickpeas = evaluated.observations.find((o) => o.predictionId === chickpeaSnap.id);
+    expect(rice).toBeDefined();
+    expect(chickpeas).toBeDefined();
+    expect(rice.relativeError).toBe(0);
+    expect(chickpeas.signedError).toBe(-0.5); // bought fewer than advised
+    expect(evaluated.absoluteErrorsByDim.count).toBe(1); // |1 tin − 2 tins|, count rows only
+    expect(evaluated.absoluteErrorsByDim.mass).toBe(0); // rice bought exactly as shown
+    for (const o of [rice, chickpeas]) {
+      expect(o.shopId).toBe('h-golden');
+      expect(o.source).toBe('purchase');
+      expect(o.shownAt).toBe(TODAY); // the when-it-was-shown provenance field
+    }
+  });
+
   it('closes the loop in pure domain code and learns for the next plan', () => {
     const { state } = runGoldenFlow();
 

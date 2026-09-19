@@ -16,6 +16,18 @@
  * list have their snapshot evicted; `buildShopRecord` freezes the bought
  * rows' snapshots onto the shop record, where evaluation keeps reading them
  * even after the list has moved on.
+ *
+ * The lifecycle API is explicit so a caller cannot accidentally evict
+ * snapshots it never mentioned:
+ *
+ *   - `upsertPredictions(rows, previous, context)`      — add/refresh ONLY the
+ *     rows named; every other snapshot survives untouched. Use when rows are
+ *     added or edited (top-ups, manual rows, single-row updates).
+ *   - `replacePredictionsForList(fullList, previous, context)` — the full
+ *     visible list is the input; rows that left it are evicted. Use ONLY when
+ *     the caller genuinely passed the complete list (regeneration, week loop).
+ *   - `attachPredictions(list, previous, context)`       — retained alias for
+ *     `replacePredictionsForList`, for existing callers and tests.
  */
 
 import { canonicalName } from './aliases.js';
@@ -103,20 +115,17 @@ const decisionFor = (row, {
 });
 
 /**
- * Attach (or refresh) the prediction snapshots for a whole derived list, in
- * the same write that shows the list. The store keeps at most one snapshot
- * per list row id — a regenerated row overwrites its own prediction instead
- * of accumulating history no evaluation reads.
+ * Upsert: add or refresh ONLY the snapshots for the rows named. Snapshots
+ * for rows not named here are preserved untouched — adding one item must
+ * never evict the snapshots of items already on the list, and updating one
+ * row must never disturb its neighbours. Shared implementation for both
+ * entry points below.
  *
  * `context` carries the household decision and the suppression set so each
  * row's record says what shaped it: { portionsDecision, suppressedKeys,
  * pantry, learnedAliases, day }.
  */
-export const attachPredictions = (list = [], previous = [], context = {}) => {
-  const rows = Array.isArray(list) ? list : [];
-  // NOTE: no early return on an empty list — an emptied list means every
-  // row left the screen, so every book entry is evicted (frozen copies
-  // survive on the shop records that consumed them).
+const upsertInto = (rows, previous, context) => {
   const {
     portionsDecision = null,
     suppressedKeys = null,
@@ -133,7 +142,7 @@ export const attachPredictions = (list = [], previous = [], context = {}) => {
   );
   const week = weekStamp(day);
   const keep = new Map((Array.isArray(previous) ? previous : []).map((p) => [p.id, p]));
-  for (const row of rows) {
+  for (const row of Array.isArray(rows) ? rows : []) {
     if (!row?.name || !row?.id) continue;
     const key = canonicalName(row.name, learnedAliases) || String(row.name).trim().toLowerCase();
     keep.set(row.id, shoppingPrediction({
@@ -156,12 +165,35 @@ export const attachPredictions = (list = [], previous = [], context = {}) => {
       day,
     }));
   }
-  // Evict: a snapshot describes a row currently on show. Rows that left the
-  // list lose their book entry — the frozen copies that matter live on the
-  // shop records that consumed them.
-  const onList = new Set(rows.filter((r) => r?.id).map((r) => r.id));
-  return [...keep.values()].filter((p) => onList.has(p.id)).slice(-500);
+  return [...keep.values()];
 };
+
+export const upsertPredictions = (rows = [], previous = [], context = {}) =>
+  upsertInto(Array.isArray(rows) ? rows : [], previous, context).slice(-500);
+
+/**
+ * Replace: the caller asserts `list` is the COMPLETE visible list, so a
+ * snapshot for a row no longer on it is evicted — a snapshot describes a row
+ * currently on show, and the frozen copies that matter live on the shop
+ * records that consumed them. Regeneration and the week loop pass the whole
+ * list here; anything less must use `upsertPredictions`.
+ */
+export const replacePredictionsForList = (list = [], previous = [], context = {}) => {
+  const rows = Array.isArray(list) ? list : [];
+  // NOTE: no early return on an empty list — an emptied list means every
+  // row left the screen, so every book entry is evicted (frozen copies
+  // survive on the shop records that consumed them).
+  const next = upsertInto(rows, previous, context);
+  const onList = new Set(rows.filter((r) => r?.id).map((r) => r.id));
+  return next.filter((p) => onList.has(p.id)).slice(-500);
+};
+
+/**
+ * Retained alias for `replacePredictionsForList`. Existing callers and
+ * tests use it; new code should name its intent with the explicit API.
+ */
+export const attachPredictions = (list, previous, context) =>
+  replacePredictionsForList(list, previous, context);
 
 const basketPrediction = (items = []) => Math.round((Array.isArray(items) ? items : [])
   .reduce((sum, row) => sum + (Number(row?.price) || 0), 0) * 100) / 100;
@@ -184,8 +216,13 @@ const basketPrediction = (items = []) => Math.round((Array.isArray(items) ? item
 export const buildShopRecord = ({ state = {}, items = [], store = null, total = null, predictedCost = null, id, day }) => {
   const book = Array.isArray(state.shoppingPredictions) ? state.shoppingPredictions : [];
   const byId = new Map(book.map((p) => [p.id, p]));
+  // Only snapshots that pass the canonical schema are frozen onto the shop
+  // record — evaluation must never meet a frozen row it cannot read.
   const predictions = (Array.isArray(items) ? items : [])
-    .map((row) => byId.get(row?.id) || null)
+    .map((row) => {
+      const snap = byId.get(row?.id) || null;
+      return snap && validatePredictionSnapshot(snap) ? snap : null;
+    })
     .filter(Boolean);
   return {
     id,
@@ -201,9 +238,61 @@ export const buildShopRecord = ({ state = {}, items = [], store = null, total = 
 };
 
 /**
+ * The CANONICAL snapshot schema, validated centrally. Every consumer of a
+ * frozen prediction — evaluation, the shop record, the evaluable filter —
+ * goes through this one gate; nobody re-derives what a snapshot is.
+ *
+ * A snapshot is VALID when it names its row (`id`), carries a non-empty
+ * displayed quantity (`qty`), and that quantity resolves to a measurement
+ * dimension — either through the engine-signed `normalized` block the
+ * snapshot was written with, or a fresh exact parse. Hedged quantities
+ * ("a few", "some") have no dimension and are invalid for evaluation:
+ * relative error against them would be a guess.
+ *
+ * Returns a normalized copy (dimension resolved, types coerced) or null.
+ * Callers are rejected, not coerced into guessing.
+ */
+export const validatePredictionSnapshot = (snap) => {
+  if (!snap || typeof snap !== 'object') return null;
+  const id = snap.id == null ? null : String(snap.id);
+  if (!id) return null;
+  if (snap.qty == null || snap.qty === '') return null;
+  const at = snap.at == null || !Number.isFinite(Number(snap.at)) ? null : Number(snap.at);
+  const normalized = snap.normalized
+    && Number.isFinite(Number(snap.normalized.amount))
+    && ['mass', 'volume', 'count'].includes(snap.normalized.dim)
+    ? { amount: Number(snap.normalized.amount), dim: snap.normalized.dim, unit: String(snap.normalized.unit || '') }
+    : null;
+  const parsed = normalized ? null : parseQuantity(snap.qty, { ingredient: snap.name });
+  const dimension = normalized?.dim || (parsed && parsed.confidence === 'exact' ? parsed.dim : null);
+  if (!dimension) return null;
+  return {
+    id,
+    predictionKey: String(snap.predictionKey || ''),
+    name: String(snap.name || ''),
+    qty: String(snap.qty),
+    normalized,
+    dimension,
+    sourceRecipes: Array.isArray(snap.sourceRecipes) ? snap.sourceRecipes.filter(Boolean) : [],
+    portionsDecision: snap.portionsDecision ?? null,
+    pantryDeduction: snap.pantryDeduction ?? null,
+    wasteAdjustment: snap.wasteAdjustment ?? null,
+    suppressed: Boolean(snap.suppressed),
+    week: snap.week == null ? null : String(snap.week),
+    day: snap.day == null ? null : String(snap.day).slice(0, 10),
+    at,
+  };
+};
+
+/**
  * Snapshots usable for evaluation: a displayed quantity that is not a
- * manual row (no fromRecipe → the household's own line, not Forq's advice)
- * and carries a readable amount.
+ * manual row (no sourceRecipes → the household's own line, not Forq's
+ * advice) and carries a readable quantity. The plan-derived test reads the
+ * canonical snapshot fields — `sourceRecipes` and `wasteAdjustment` (the
+ * waste adaptation frozen at snapshot time). A row whose ONLY claim is a
+ * waste adjustment is still Forq's advice: the reduction changed what the
+ * list showed. Every row passes the canonical schema gate first.
  */
 export const evaluablePredictions = (store = []) => (Array.isArray(store) ? store : [])
-  .filter((p) => p && p.qty != null && p.qty !== '' && (p.sourceRecipes?.length || p.autoReduction));
+  .map(validatePredictionSnapshot)
+  .filter((p) => p && (p.sourceRecipes.length || p.wasteAdjustment));

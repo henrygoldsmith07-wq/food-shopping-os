@@ -155,22 +155,36 @@ export const buildDomainCommands = (set) => ({
     }].slice(-500);
     return withLedger({ ...s, mealPlanEvents }, createLedgerEvent('MealSkipped', { date, slot, recipeId, reason, source: 'user-confirmed' }, { actor, origin }));
   }),
-  purchaseIngredients: ({ items = [], store = null, total = null, actor = null, origin = 'user' } = {}) => set((s) => {
+  purchaseIngredients: ({ items = [], store = null, total = null, id = null, actor = null, origin = 'user' } = {}) => set((s) => {
     // One shared purchase-recording shape (see shopping-predictions.js): the
     // same frozen basket prediction and row snapshots as recordShop, so no
-    // sanctioned path can write a shop evaluation cannot read.
+    // sanctioned path can write a shop evaluation cannot read. The FULL
+    // recordShop lifecycle rides along: build through the one helper, freeze
+    // per-row predictions and the basket cost, append the purchase event, and
+    // consume the bought rows' snapshots from the live book (they now live on
+    // the shop record, exactly as the checked-rows path leaves them).
     const normalised = (Array.isArray(items) ? items : []).map((item) => (item && typeof item === 'object'
       ? { ...item }
       : { id: null, name: String(item || ''), qty: null, price: 0 }));
+    if (!normalised.length) return {};
+    const shopId = id || `s${Date.now().toString(36)}`;
+    // Idempotent replay: a shop id already recorded IS the same purchase —
+    // appending it again would let evaluation count one till run twice.
+    if ((s.shops || []).some((h) => h?.id === shopId)) return {};
     const shop = buildShopRecord({
       state: s,
       items: normalised,
       store,
       total,
-      id: `s${Date.now().toString(36)}`,
+      id: shopId,
       day: s.day,
     });
-    return withLedger({ ...s, shops: [...(s.shops || []), shop] }, createLedgerEvent('IngredientPurchased', { items: normalised.map((i) => i.name), store, total }, { actor, origin }));
+    return {
+      ...withLedger({ ...s, shops: [...(s.shops || []), shop] }, createLedgerEvent('IngredientPurchased', { shopId: shop.id, items: normalised.map((i) => i.name), store, total }, { actor, origin })),
+      // The bought rows' snapshots now live on the shop record — the book
+      // only describes rows currently on show (same consume as recordShop).
+      shoppingPredictions: (s.shoppingPredictions || []).filter((p) => !normalised.some((i) => i.id != null && i.id === p.id)),
+    };
   }),
   wasteIngredients: ({ name, reason = 'expired', cost = null, actor = null, origin = 'user' } = {}) => set((s) => {
     const waste = [...(s.waste || []), { name, reason, cost, date: new Date().toISOString().slice(0, 10) }];

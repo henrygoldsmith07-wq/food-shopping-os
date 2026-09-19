@@ -35,7 +35,7 @@ import { COUPON_KINDS, LOYALTY_PROGRAMMES, normaliseCoupon } from './coupons.js'
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
-import { buildShopRecord, attachPredictions } from './shopping-predictions.js';
+import { buildShopRecord, upsertPredictions } from './shopping-predictions.js';
 import { predictionActions } from './prediction-feedback.js';
 import { buildDomainCommands } from './store-commands.js';
 import { ledgerCommands } from './event-ledger.js';
@@ -274,8 +274,10 @@ export function useStoreApi({
             shoppingList: [...s.shoppingList, ...learnedFresh],
             // Top-ups and hand-added rows get their own snapshots, so even
             // the add-manual path is evaluable — the prediction is what the
-            // list shows at that moment.
-            shoppingPredictions: attachPredictions(learnedFresh, s.shoppingPredictions, {
+            // list shows at that moment. UPSERT, not replace: `learnedFresh`
+            // is only the newly added rows, and the snapshots of every row
+            // already on the list must survive this write untouched.
+            shoppingPredictions: upsertPredictions(learnedFresh, s.shoppingPredictions, {
               portionsDecision: householdPortionsFor(s),
               pantry: s.pantry || [],
               learnedAliases: s.aliasMemory || {},

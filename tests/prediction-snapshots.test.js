@@ -234,43 +234,53 @@ describe('prediction snapshots: what the list actually showed', () => {
 });
 
 describe('quantity error against snapshots: prediction vs purchase', () => {
-  it('scores the snapshotted recommendation against the purchase through the book', () => {
+  it('scores the purchase against the prediction FROZEN onto the shop record', () => {
     const state = household({
       shoppingPredictions: [
-        { id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g', at: 5 },
+        { id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '900g', at: 99 }, // live book lies — must be ignored
       ],
-      shops: [{ date: '2026-09-17', total: 3, items: [{ id: 'b1', name: 'Rice', qty: '600g' }] }],
+      shops: [{
+        id: 'h1', date: '2026-09-15', total: 3,
+        items: [{ id: 'b1', name: 'Rice', qty: '600g' }],
+        predictions: [{ id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g' }], // frozen at purchase
+      }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
     expect(result.value).toBe(1); // bought double what was shown
     expect(result.samples).toBe(1);
+    expect(result.observations[0].predictionId).toBe('b1');
+    expect(result.observations[0].source).toBe('purchase');
   });
 
   it('mean error and exclusions are reported separately', () => {
     const state = household({
-      shoppingPredictions: [
-        { id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g', at: 5 },
-        { id: 'b2', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2', at: 6 },
-      ],
-      shops: [{ date: '2026-09-17', total: 5, items: [
-        { id: 'b1', name: 'Rice', qty: '600g' },             // +100% over
-        { id: 'b2', name: 'Chickpeas (tins)', qty: '1' },     // 50% under
-        { name: 'Basil', qty: '' },                           // no quantity recorded
-        { name: 'Mystery', qty: '2' },                        // never predicted
-      ] }],
+      shops: [{
+        id: 'h2', date: '2026-09-15', total: 5,
+        items: [
+          { id: 'b1', name: 'Rice', qty: '600g' },             // +100% over
+          { id: 'b2', name: 'Chickpeas (tins)', qty: '1' },     // 50% under
+          { id: 'b3', name: 'Basil', qty: '' },                 // no quantity recorded
+          { id: 'b4', name: 'Mystery', qty: '2' },              // never predicted
+        ],
+        predictions: [
+          { id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g' },
+          { id: 'b2', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2' },
+        ],
+      }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
     expect(result.samples).toBe(2);
     expect(result.value).toBe(0.75); // (1 + 0.5) / 2
-    expect(result.excluded.map((e) => e.reason).sort()).toEqual(['no-prediction-snapshot', 'unrecorded-purchase-quantity']);
+    expect(result.excluded.map((e) => e.reason).sort()).toEqual(['no-frozen-prediction', 'unrecorded-purchase-quantity']);
   });
 
   it('incompatible dimensions are excluded and counted, not forced', () => {
     const state = household({
-      shoppingPredictions: [
-        { id: 'b3', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2', at: 5 },
-      ],
-      shops: [{ date: '2026-09-17', total: 2, items: [{ id: 'b3', name: 'Chickpeas (tins)', qty: '400g' }] }],
+      shops: [{
+        id: 'h3', date: '2026-09-15', total: 2,
+        items: [{ id: 'b3', name: 'Chickpeas (tins)', qty: '400g' }],
+        predictions: [{ id: 'b3', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2' }],
+      }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
     expect(result.value).toBeNull();
