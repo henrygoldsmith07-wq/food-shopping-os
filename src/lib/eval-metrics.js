@@ -314,20 +314,30 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
   const assumptions = [];
 
   // --- prediction error (MAE over corrected predictions) ----------------------
+  // Built from the REAL learning profile shape: `byType[predictionType]`
+  // rows with exactSamples/meanAbsoluteError (see prediction-feedback.js).
+  // The previous reader looked for `r.samples`/`r.mae` — fields the profile
+  // never had — so every household silently scored 0. Censored "3+" rows are
+  // excluded here by construction: the profile's error fields exist only
+  // where exactSamples > 0 (exact answers only), and rows without exact
+  // samples carry no error to average.
   let predictionError = metric(null, { assumption: 'No corrected predictions yet.' });
   try {
     const profile = predictionLearningProfile(corrections);
-    const rows = Array.isArray(profile) ? profile : profile?.byType || [];
-    const total = rows.reduce((s, r) => s + (r.samples || r.count || 0), 0);
-    const mae = rows.length
-      ? rows.reduce((s, r) => s + (Number(r.mae ?? r.meanAbsError ?? 0) || 0) * (r.samples || r.count || 0), 0) / Math.max(1, total)
-      : null;
+    const rows = Object.values(profile?.byType || {});
+    const total = rows.reduce((s, r) => s + (r.corrections || 0), 0);
+    const weighted = rows.reduce(
+      (s, r) => s + (Number.isFinite(r.meanAbsoluteError) ? r.meanAbsoluteError * r.exactSamples : 0),
+      0,
+    );
+    const exactTotal = rows.reduce((s, r) => s + (r.exactSamples || 0), 0);
+    const mae = exactTotal > 0 ? weighted / exactTotal : null;
     predictionError = metric(
       mae === null || !Number.isFinite(mae) ? null : Math.round(mae * 100) / 100,
       {
-        confidence: total >= 20 ? 'high' : total >= 8 ? 'medium' : total > 0 ? 'low' : 'none',
-        evidence: total,
-        assumption: 'Mean absolute error across user-corrected predictions.',
+        confidence: exactTotal >= 20 ? 'high' : exactTotal >= 8 ? 'medium' : exactTotal > 0 ? 'low' : 'none',
+        evidence: exactTotal,
+        assumption: 'Mean absolute error across user-corrected predictions, exact answers only (censored "3+" lower bounds excluded). Corrections are explicit feedback, not purchase accuracy — see purchaseQuantityAccuracy.',
       },
     );
   } catch { assumptions.push('Prediction profile unavailable.'); }

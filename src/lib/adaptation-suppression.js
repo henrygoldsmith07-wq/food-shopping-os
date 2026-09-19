@@ -188,14 +188,24 @@ const namesIngredient = (raw, names, aliasMemory) => {
 /**
  * New contradictory evidence for one suppressed adaptation, AFTER its
  * latest rejection — only events that can be RELIABLY ATTRIBUTED to the
- * adaptation's subject count. Each event counts once (unique ledger ids).
+ * adaptation's subject count. Each event counts once (unique ids).
+ *
+ * TWO evidence stores, ONE pipeline: `state.householdLedger` AND
+ * `state.predictionCorrections` are read together — a correction written by
+ * `correctPrediction()` lives in the corrections store and is NOT required
+ * to be copied into the ledger. Both sources pass through the identical
+ * freshness gate (dated, not before the rejection, not in the future), the
+ * identical id-deduplication, the identical alias matching and the
+ * identical attribution rules; an event id appearing in both stores is
+ * still one event.
  *
  * Ingredient keys accept: IngredientWasted naming the ingredient,
  * IngredientPurchased outcomes naming it, PantryCorrected events whose
  * correction ids resolve through `state.pantry` to the ingredient (id-based
  * attribution — the event payload carries ids, not names), and direct
- * 'shopping-qty' prediction corrections for it. MealCooked names a recipe,
- * never an ingredient, and is deliberately NOT ingredient evidence.
+ * 'shopping-qty' prediction corrections for it (from either store).
+ * MealCooked names a recipe, never an ingredient, and is deliberately NOT
+ * ingredient evidence.
  *
  * The 'portions' key accepts: MealCooked events that actually recorded a
  * portion count (a cook without a recorded portion says nothing about
@@ -208,6 +218,12 @@ export const recoveryEvidenceFor = (state = {}, key, { today = null } = {}) => {
   const entry = adaptationRejections(state).get(String(key));
   const since = entry?.latestDay || null;
   const ledger = Array.isArray(state.householdLedger) ? state.householdLedger : [];
+  // Both evidence stores flow through ONE classification loop below — the
+  // corrections store is a first-class source, never a copy of the ledger.
+  const storedCorrections = Array.isArray(state.predictionCorrections)
+    ? state.predictionCorrections
+    : [];
+  const events = [...ledger, ...storedCorrections];
   const aliasMemory = state.aliasMemory || {};
   const isPortions = String(key) === PORTIONS_KEY;
   // Both sides meet on the canonical name so a raw key still matches its row.
@@ -236,7 +252,7 @@ export const recoveryEvidenceFor = (state = {}, key, { today = null } = {}) => {
     }
     return Boolean(day);
   };
-  for (const event of ledger) {
+  for (const event of events) {
     if (!event || !isFresh(event)) continue;
     if (isPortions) {
       // Portion evidence only: a cook that recorded HOW MANY it made, or an

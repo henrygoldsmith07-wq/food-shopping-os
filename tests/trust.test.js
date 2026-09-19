@@ -301,7 +301,7 @@ describe('shopping quantity error: one normalized measurement', () => {
       shops: [{
         date: '2026-09-16', total: 5, predicted: 1.2,
         items: [{ id: 's1', name: 'Rice', price: 1.2, qty: '450g' }],
-        predictions: [{ id: 's1', predictionKey: 'rice', name: 'Rice', qty: '300g' }],
+        predictions: [{ id: 's1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-16' }],
       }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
@@ -314,7 +314,7 @@ describe('shopping quantity error: one normalized measurement', () => {
       shops: [{
         date: '2026-09-16', total: 5, predicted: 1.5,
         items: [{ id: 's3', name: 'Chickpeas (tins)', price: 1.5, qty: '400g' }], // grams vs tins
-        predictions: [{ id: 's3', predictionKey: 'chickpeas (tins)', name: 'Chickpeas (tins)', qty: '2' }],
+        predictions: [{ id: 's3', predictionKey: 'chickpeas (tins)', name: 'Chickpeas (tins)', qty: '2', day: '2026-09-16' }],
       }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
@@ -328,7 +328,7 @@ describe('shopping quantity error: one normalized measurement', () => {
       shops: [{
         date: '2026-09-16', total: 5, predicted: 1,
         items: [{ id: 's2', name: 'Coconut milk', price: 1, qty: '1 tin' }],
-        predictions: [{ id: 's2', predictionKey: 'coconut milk', name: 'Coconut milk', qty: '392g' }],
+        predictions: [{ id: 's2', predictionKey: 'coconut milk', name: 'Coconut milk', qty: '392g', day: '2026-09-16' }],
       }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });

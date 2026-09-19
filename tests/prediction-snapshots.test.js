@@ -242,7 +242,7 @@ describe('quantity error against snapshots: prediction vs purchase', () => {
       shops: [{
         id: 'h1', date: '2026-09-15', total: 3,
         items: [{ id: 'b1', name: 'Rice', qty: '600g' }],
-        predictions: [{ id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g' }], // frozen at purchase
+        predictions: [{ id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-15' }], // frozen at purchase
       }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
@@ -263,8 +263,8 @@ describe('quantity error against snapshots: prediction vs purchase', () => {
           { id: 'b4', name: 'Mystery', qty: '2' },              // never predicted
         ],
         predictions: [
-          { id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g' },
-          { id: 'b2', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2' },
+          { id: 'b1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-15' },
+          { id: 'b2', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2', day: '2026-09-15' },
         ],
       }],
     });
@@ -279,7 +279,7 @@ describe('quantity error against snapshots: prediction vs purchase', () => {
       shops: [{
         id: 'h3', date: '2026-09-15', total: 2,
         items: [{ id: 'b3', name: 'Chickpeas (tins)', qty: '400g' }],
-        predictions: [{ id: 'b3', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2' }],
+        predictions: [{ id: 'b3', predictionKey: 'chickpeas', name: 'Chickpeas (tins)', qty: '2', day: '2026-09-15' }],
       }],
     });
     const result = shoppingQuantityError(state, { today: TODAY });

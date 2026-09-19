@@ -6,6 +6,8 @@ import {
   attachPredictions,
   buildShopRecord,
   validatePredictionSnapshot,
+  validatePredictionSnapshotWithReason,
+  SNAPSHOT_REJECTION_REASONS,
   shoppingPrediction,
 } from '../src/lib/shopping-predictions.js';
 import { shoppingQuantityError } from '../src/lib/eval-metrics.js';
@@ -48,7 +50,7 @@ const frozenShop = (over = {}) => ({
   date: '2026-09-15',
   total: 3,
   items: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 1.2 }],
-  predictions: [{ id: 'row-1', predictionKey: 'rice', name: 'Rice', qty: '300g' }],
+  predictions: [{ id: 'row-1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-15' }],
   ...over,
 });
 
@@ -102,13 +104,29 @@ describe('snapshot lifecycle invariants', () => {
     const validated = validatePredictionSnapshot(good);
     expect(validated.dimension).toBe('mass');
     expect(validated.qty).toBe('300g');
+    expect(validated.subjectKey).toBe('rice'); // canonical subject identity
     // A count quantity is a real dimension…
-    expect(validatePredictionSnapshot({ id: 'g2', name: 'Eggs', qty: '6' })?.dimension).toBe('count');
+    expect(validatePredictionSnapshot({ id: 'g2', name: 'Eggs', qty: '6', at: 5 })?.dimension).toBe('count');
     // …but no id, no quantity, or an unreadable quantity is rejected, not coerced.
     expect(validatePredictionSnapshot(null)).toBeNull();
     expect(validatePredictionSnapshot({ name: 'Rice', qty: '300g' })).toBeNull();
     expect(validatePredictionSnapshot({ id: 'g3', name: 'Rice', qty: '' })).toBeNull();
     expect(validatePredictionSnapshot({ id: 'g4', name: 'Mystery', qty: 'a few' })).toBeNull();
+  });
+
+  it('a snapshot with no day and no timestamp has no provenance and is rejected for evaluation', () => {
+    const verdict = validatePredictionSnapshotWithReason({ id: 'p1', name: 'Rice', qty: '300g' });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toBe(SNAPSHOT_REJECTION_REASONS.NO_PROVENANCE);
+    // Either a day or a timestamp satisfies the provenance requirement.
+    expect(validatePredictionSnapshotWithReason({ id: 'p2', name: 'Rice', qty: '300g', day: '2026-09-15' }).ok).toBe(true);
+    expect(validatePredictionSnapshotWithReason({ id: 'p3', name: 'Rice', qty: '300g', at: 1726000000000 }).ok).toBe(true);
+  });
+
+  it('a snapshot with no subject identity is rejected — evaluation never guesses WHAT it was about', () => {
+    const verdict = validatePredictionSnapshotWithReason({ id: 'p4', qty: '300g', day: '2026-09-15', predictionKey: '  ', name: ' ' });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toBe(SNAPSHOT_REJECTION_REASONS.NO_SUBJECT);
   });
 
   it('both purchase paths freeze equivalent snapshot metadata through one helper', () => {
@@ -220,7 +238,9 @@ describe('evaluation truth invariants', () => {
     expect(reasons).toContain('missing-predicted-qty');
     expect(reasons).toContain('non-positive-predicted-qty');
     expect(reasons).toContain('undated-observation');
-    expect(reasons).toContain('unreadable-predicted-qty');
+    // The frozen snapshot with the unreadable quantity fails the CENTRAL
+    // schema gate, with the gate's own reason.
+    expect(reasons).toContain('snapshot-unreadable-quantity');
     // Every reported number is finite, whatever came in.
     for (const n of [result.value, result.signedBias, ...Object.values(result.absoluteErrorsByDim)]) {
       expect(n === null || Number.isFinite(n)).toBe(true);
@@ -287,13 +307,13 @@ describe('evaluation truth invariants', () => {
     const state = household({
       shops: [
         // Two mass observations: |600−300| = 300g and |450−300| = 150g.
-        frozenShop({ id: 'h1', items: [{ id: 'r1', name: 'Rice', qty: '600g' }], predictions: [{ id: 'r1', name: 'Rice', qty: '300g' }] }),
-        frozenShop({ id: 'h2', items: [{ id: 'r2', name: 'Rice', qty: '450g' }], predictions: [{ id: 'r2', name: 'Rice', qty: '300g' }] }),
+        frozenShop({ id: 'h1', items: [{ id: 'r1', name: 'Rice', qty: '600g' }], predictions: [{ id: 'r1', name: 'Rice', qty: '300g', day: '2026-09-15' }] }),
+        frozenShop({ id: 'h2', items: [{ id: 'r2', name: 'Rice', qty: '450g' }], predictions: [{ id: 'r2', name: 'Rice', qty: '300g', day: '2026-09-15' }] }),
         // One count observation: |3−2| = 1 tin.
         frozenShop({
           id: 'h3',
           items: [{ id: 'r3', name: 'Chickpeas (tins)', qty: '3' }],
-          predictions: [{ id: 'r3', name: 'Chickpeas (tins)', qty: '2' }],
+          predictions: [{ id: 'r3', name: 'Chickpeas (tins)', qty: '2', day: '2026-09-15' }],
         }),
       ],
     });

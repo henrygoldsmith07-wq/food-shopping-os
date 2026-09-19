@@ -21,6 +21,14 @@
 import { dayStamp } from './kitchen-dates.js';
 import { parseQuantity, convert } from './measure.js';
 import { canonicalName } from './aliases.js';
+import {
+  evaluationToday,
+  gateRecordDay,
+} from './evaluation-time.js';
+import {
+  validatePredictionSnapshotWithReason,
+} from './shopping-predictions.js';
+import { normalizeCorrectionSemantics } from './prediction-feedback.js';
 
 const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = {}) => ({
   value, confidence, evidence, assumption,
@@ -57,14 +65,29 @@ export const snapshotCosts = (rows = []) => {
  * record, not prediction quality) and lives in basketReconciliation below.
  */
 export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
-  void today;
+  // The ONE clock (see evaluation-time.js): an explicitly malformed `today`
+  // means no usable evaluation frame — dated shops cannot be placed in time
+  // and are excluded rather than scored against the system date.
+  const todayStamp = evaluationToday({ today });
   const excluded = [];
   const scored = [];
   for (const shop of Array.isArray(state.shops) ? state.shops : []) {
+    const shopId = shop?.id || null;
+    const gate = gateRecordDay(shop?.date, todayStamp, { windowDays: RECENT_SHOP_WINDOW_DAYS });
+    if (gate !== 'ok') {
+      excluded.push({
+        reason: gate === 'malformed-day' ? 'malformed-shop-date'
+          : gate === 'future' ? 'future-shop'
+          : gate === 'no-evaluation-today' ? 'invalid-evaluation-today'
+          : 'outside-evaluation-window',
+        shopId,
+      });
+      continue;
+    }
     const total = Number(shop?.total);
     const predicted = Number(shop?.predicted);
     if (shop?.total == null || !Number.isFinite(total)) {
-      excluded.push({ reason: 'malformed-total', shopId: shop?.id || null });
+      excluded.push({ reason: 'malformed-total', shopId });
       continue;
     }
     if (total <= 0) {
@@ -119,9 +142,10 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
  * about how good Forq's predictions are.
  */
 export const basketReconciliation = (state = {}, { today = dayStamp() } = {}) => {
-  void today;
+  const todayStamp = evaluationToday({ today });
   const shops = (Array.isArray(state.shops) ? state.shops : [])
-    .filter((s) => Number(s?.total) > 0);
+    .filter((s) => Number(s?.total) > 0)
+    .filter((s) => gateRecordDay(s?.date, todayStamp, { windowDays: RECENT_SHOP_WINDOW_DAYS }) === 'ok');
   const withItems = shops.filter((s) => (Array.isArray(s.items) ? s.items : []).some((i) => Number(i?.price) > 0));
   if (!withItems.length) {
     return metric(null, { assumption: 'No itemised shops to reconcile yet.' });
@@ -192,46 +216,57 @@ const parseOnce = (qty, ingredient) => {
   return parsed;
 };
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-const noonOf = (day) => new Date(`${day}T12:00:00`);
-
 export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) => {
-  // The ONE clock: the supplied `today`, never a fresh read of the real
-  // date inside the calculation. A malformed `today` cannot place any
-  // sample in time, so nothing is scored.
-  const todayStamp = DAY.test(String(today || '').slice(0, 10)) ? String(today).slice(0, 10) : null;
-  // Signed age in days: today − day. Negative = the day is in the future.
-  const ageFromToday = (day) => (todayStamp && DAY.test(day)
-    ? Math.round((noonOf(todayStamp) - noonOf(day)) / 86400000)
-    : null);
+  // The ONE clock (see evaluation-time.js): the supplied `today`, never a
+  // fresh read of the real date inside the calculation. A malformed `today`
+  // cannot place any sample in time, so nothing is scored.
+  const todayStamp = evaluationToday({ today });
+  const aliasMemory = state.aliasMemory || {};
 
-  const observations = [];
+  // Purchase accuracy and explicit-correction accuracy are answered
+  // separately (see the return shape): one comparison of advice vs till run,
+  // one of advice vs what the household said. The combined arrays below are
+  // the learning signal — kept, but never presented as one accuracy.
+  const purchaseObs = [];
+  const correctionObs = [];
   const excluded = [];
 
   // The guard at the door: a malformed observation never reaches the
   // aggregation — it is excluded and counted, so the sample size cannot
   // silently flatter itself.
-  const pushObservation = (o) => {
+  const pushObservation = (o, bucket = purchaseObs) => {
     if (![o.relativeError, o.signedError, o.absoluteDiff].every((n) => Number.isFinite(n))) {
       excluded.push({ reason: 'non-finite-observation', name: o.name ?? null, predictionId: o.predictionId ?? null, shopId: o.shopId ?? null, outcomeId: o.outcomeId ?? null });
       return;
     }
-    observations.push(o);
+    bucket.push(o);
   };
 
   // --- direct corrections: the household told us the number was wrong ------
-  // Same pipeline, same observation shape, same guards as purchases.
+  // Same pipeline, same observation shape, same guards as purchases — but
+  // CATEGORICALLY SEPARATE evidence (task: explicit feedback must not
+  // contaminate purchase accuracy). A "3+" answer is CENSORED: it asserts
+  // actual ≥ 3, never actual = 3, so it is excluded from exact scoring and
+  // counted — it still teaches learning through predictionLearningProfile.
   const corrections = (Array.isArray(state.predictionCorrections) ? state.predictionCorrections : [])
+    .map(normalizeCorrectionSemantics)
     .filter((c) => c?.type === 'prediction_correction' && c.predictionType === 'shopping-qty');
   for (const c of corrections) {
     const outcomeId = c?.id || null;
-    const day = String(c?.date || '').slice(0, 10);
-    if (!DAY.test(day) || ageFromToday(day) == null) {
-      excluded.push({ reason: 'undated-observation', name: c?.predictionKey || null, outcomeId, shopId: null });
+    const gate = gateRecordDay(c?.date, todayStamp);
+    if (gate !== 'ok') {
+      excluded.push({
+        reason: gate === 'malformed-day' ? 'undated-observation'
+          : gate === 'future' ? 'future-observation'
+          : 'invalid-evaluation-today',
+        name: c?.predictionKey || null,
+        outcomeId,
+        shopId: null,
+      });
       continue;
     }
-    if (ageFromToday(day) < 0) {
-      excluded.push({ reason: 'future-observation', name: c?.predictionKey || null, outcomeId, shopId: null });
+    if (c.responseType === 'lower-bound' || c.censored === true) {
+      excluded.push({ reason: 'censored-correction-lower-bound', name: c?.predictionKey || null, outcomeId, shopId: null, bound: c.actual });
       continue;
     }
     const predicted = Number(c.predicted);
@@ -255,12 +290,13 @@ export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) =
       absoluteDiff: Math.abs(delta),
       dimension: 'count', // corrections are the household's 0–3+ count answer
       source: 'correction',
+      responseType: 'exact',
       predictionId: null, // the correction event names its key, not a snapshot id
       shopId: null,
       outcomeId,
       name: c.predictionKey || null,
-      shownAt: day,
-    });
+      shownAt: c.date,
+    }, correctionObs);
   }
 
   // --- purchases: evaluated ONLY against each shop's own frozen predictions --
@@ -271,18 +307,16 @@ export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) =
       if (!items.length) excluded.push({ reason, name: null, shopId });
       for (const item of items) excluded.push({ reason, name: item?.name || null, shopId });
     };
-    const day = String(shop?.date || '').slice(0, 10);
-    const age = DAY.test(day) ? ageFromToday(day) : null;
-    if (age == null) {
-      excludeShop(todayStamp ? 'malformed-shop-date' : 'invalid-evaluation-today');
-      continue;
-    }
-    if (age < 0) {
-      excludeShop('future-shop');
-      continue;
-    }
-    if (age > RECENT_SHOP_WINDOW_DAYS) {
-      excludeShop('outside-evaluation-window');
+    // The shop gate rides the shared evaluation-time policy (one clock, one
+    // window, one reason vocabulary across every accuracy metric).
+    const gate = gateRecordDay(shop?.date, todayStamp, { windowDays: RECENT_SHOP_WINDOW_DAYS });
+    if (gate !== 'ok') {
+      excludeShop(
+        gate === 'malformed-day' ? 'malformed-shop-date'
+          : gate === 'future' ? 'future-shop'
+          : gate === 'no-evaluation-today' ? 'invalid-evaluation-today'
+          : 'outside-evaluation-window',
+      );
       continue;
     }
     // The frozen book for THIS shop — the advice the till run answered.
@@ -298,9 +332,36 @@ export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) =
         excluded.push({ reason: 'unrecorded-purchase-quantity', name: item.name, shopId });
         continue;
       }
-      const prediction = (item.id != null && frozen.get(item.id)) || null;
-      if (!prediction) {
+      const rawPrediction = (item.id != null && frozen.get(item.id)) || null;
+      if (!rawPrediction) {
         excluded.push({ reason: 'no-frozen-prediction', name: item.name, shopId });
+        continue;
+      }
+      // Central validation (task 5): the ONE canonical schema gate decides
+      // whether this frozen snapshot can be scored at all — id, quantity,
+      // dimension, subject identity and provenance. No partial re-derivation
+      // here; a malformed snapshot is excluded with the gate's own reason.
+      const gate = validatePredictionSnapshotWithReason(rawPrediction, { aliasMemory });
+      if (!gate.ok) {
+        excluded.push({ reason: gate.reason, name: item.name, shopId, predictionId: gate.snapshot?.id || rawPrediction.id || null });
+        continue;
+      }
+      const prediction = gate.snapshot;
+      // Substitution lineage (task 2): a row that was substituted to a
+      // DIFFERENT ingredient kept its row id — the frozen snapshot no longer
+      // describes what was bought, so scoring it would answer "how close was
+      // the Rice advice to the Quinoa till run?" It is excluded, never
+      // re-matched by name against the live book.
+      if (prediction.isSubstitution) {
+        excluded.push({ reason: 'substituted-row-not-comparable', name: item.name, shopId, predictionId: prediction.id, substitutedFrom: prediction.substitutedFrom });
+        continue;
+      }
+      // Subject identity (task 6): prediction ID + canonical subject must
+      // BOTH agree. The id locates the row; the alias-aware canonical subject
+      // proves both sides speak of the same measurable ingredient.
+      const outcomeSubject = canonicalName(String(item.name).trim(), aliasMemory) || String(item.name).trim().toLowerCase();
+      if (!outcomeSubject || outcomeSubject !== prediction.subjectKey) {
+        excluded.push({ reason: 'prediction-subject-mismatch', name: item.name, shopId, predictionId: prediction.id, predictedSubject: prediction.subjectKey, outcomeSubject });
         continue;
       }
       const planned = parseOnce(prediction.qty, item.name);
@@ -331,6 +392,7 @@ export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) =
         absoluteDiff: Math.abs(delta),
         dimension: planned.dim,
         source: 'purchase',
+        responseType: 'exact',
         predictionId: prediction.id,
         shopId,
         outcomeId: null,
@@ -340,37 +402,56 @@ export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) =
     }
   }
 
-  const samples = observations.length;
   const meanOf = (rows, pick) => (rows.length ? rows.reduce((s, r) => s + pick(r), 0) / rows.length : null);
   const round = (n) => (n == null ? null : Math.round(n * 100) / 100);
-  const value = round(meanOf(observations, (o) => o.relativeError));
-  const signedBias = round(meanOf(observations, (o) => o.signedError));
+  const samplesByDimOf = (rows) => Object.fromEntries(
+    ['mass', 'volume', 'count'].map((dim) => [dim, rows.filter((o) => o.dimension === dim).length]),
+  );
   // Absolute error only means something within one scale — computed PER
   // DIMENSION over that dimension's own samples: mass MAE over mass
   // observations, volume MAE over volume observations, count MAE over count
   // observations. Never a dimension's error total over the global count.
-  const absoluteErrorsByDim = Object.fromEntries(
+  const absoluteErrorsByDimOf = (rows) => Object.fromEntries(
     ['mass', 'volume', 'count']
       .map((dim) => {
-        const rows = observations.filter((o) => o.dimension === dim);
-        return [dim, round(meanOf(rows, (o) => o.absoluteDiff))];
+        const dimRows = rows.filter((o) => o.dimension === dim);
+        return [dim, round(meanOf(dimRows, (o) => o.absoluteDiff))];
       })
       .filter(([, v]) => v != null),
   );
-  const samplesByDim = Object.fromEntries(
-    ['mass', 'volume', 'count'].map((dim) => [dim, observations.filter((o) => o.dimension === dim).length]),
-  );
+
+  // THREE answers, never one blended number:
+  //   purchaseQuantityAccuracy — the till run vs the advice it answered;
+  //   explicitQuantityCorrectionAccuracy — the household's EXACT answers vs
+  //     that advice (censored "3+" rows never enter it);
+  //   combinedLearningSignal — both sources together, explicitly labelled so
+  //     no consumer can mistake the learning view for purchase accuracy.
+  const summarise = (rows) => {
+    const samples = rows.length;
+    return {
+      ...metric(round(meanOf(rows, (o) => o.relativeError)), {
+        confidence: samples >= 10 ? 'high' : samples >= 4 ? 'medium' : samples > 0 ? 'low' : 'none',
+        evidence: samples,
+        assumption: 'Relative error |outcome − predicted| ÷ predicted, on a shared scale via the measurement engine, against each shop\'s frozen prediction snapshots (never the live list book) — exact household corrections only where named; incompatible quantities, unfrozen rows, censored "3+" answers and out-of-window or future records are excluded and counted.',
+      }),
+      samples,
+      samplesByDim: samplesByDimOf(rows),
+      signedBias: round(meanOf(rows, (o) => o.signedError)),
+      absoluteErrorsByDim: absoluteErrorsByDimOf(rows),
+      observations: rows,
+    };
+  };
+  const purchase = summarise(purchaseObs);
+  const explicit = summarise(correctionObs);
+  const combined = summarise([...purchaseObs, ...correctionObs]);
   return {
-    ...metric(value, {
-      confidence: samples >= 10 ? 'high' : samples >= 4 ? 'medium' : samples > 0 ? 'low' : 'none',
-      evidence: samples,
-      assumption: 'Relative error |outcome − predicted| ÷ predicted, on a shared scale via the measurement engine, against each shop\'s frozen prediction snapshots (never the live list book) plus direct household corrections; incompatible quantities, unfrozen rows and out-of-window or future shops are excluded and counted.',
-    }),
-    samples,
-    samplesByDim,
-    signedBias,
-    absoluteErrorsByDim,
-    observations,
+    ...combined,
+    // Split metrics (task 4): purchase accuracy answers ONLY "how close was
+    // the quantity Forq told the household to buy to what they actually
+    // bought?" Explicit feedback informs learning without contaminating it.
+    purchaseQuantityAccuracy: purchase,
+    explicitQuantityCorrectionAccuracy: explicit,
+    combinedLearningSignal: combined,
     excluded,
   };
 };

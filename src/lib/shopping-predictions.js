@@ -32,6 +32,7 @@
 
 import { canonicalName } from './aliases.js';
 import { parseQuantity } from './measure.js';
+import { DAY_RE } from './evaluation-time.js';
 
 /**
  * One prediction row: the decision record behind the quantity on screen.
@@ -50,6 +51,8 @@ export const shoppingPrediction = ({
   pantryDeduction = null,
   wasteAdjustment = null,
   suppressed = false,
+  substitutedFrom = null,
+  substitutionWhy = '',
   week = null,
   day = null,
 } = {}) => {
@@ -69,6 +72,12 @@ export const shoppingPrediction = ({
     pantryDeduction,
     wasteAdjustment,
     suppressed: Boolean(suppressed),
+    // Substitution lineage: when this row replaced a DIFFERENT ingredient,
+    // the snapshot says so — the row id alone is not identity, and a Quinoa
+    // purchase must never be scored against a Rice prediction.
+    substitutedFrom: substitutedFrom == null ? null : String(substitutedFrom),
+    substitutionWhy: String(substitutionWhy || ''),
+    isSubstitution: Boolean(substitutedFrom),
     week: week == null ? null : String(week),
     day: day == null ? null : String(day).slice(0, 10),
     at: Date.now(),
@@ -161,6 +170,8 @@ const upsertInto = (rows, previous, context) => {
         : null,
       wasteAdjustment: row.autoReduction || null,
       suppressed: suppressedSet.has(key),
+      substitutedFrom: row.substitutedFrom == null ? null : String(row.substitutedFrom),
+      substitutionWhy: String(row.substitutionWhy || row.substitutionReason || ''),
       week,
       day,
     }));
@@ -217,11 +228,14 @@ export const buildShopRecord = ({ state = {}, items = [], store = null, total = 
   const book = Array.isArray(state.shoppingPredictions) ? state.shoppingPredictions : [];
   const byId = new Map(book.map((p) => [p.id, p]));
   // Only snapshots that pass the canonical schema are frozen onto the shop
-  // record — evaluation must never meet a frozen row it cannot read.
+  // record — evaluation must never meet a frozen row it cannot read. Alias
+  // memory rides along so the canonical subject is resolved and frozen with
+  // the snapshot.
+  const aliasMemory = state.aliasMemory || {};
   const predictions = (Array.isArray(items) ? items : [])
     .map((row) => {
       const snap = byId.get(row?.id) || null;
-      return snap && validatePredictionSnapshot(snap) ? snap : null;
+      return snap && validatePredictionSnapshot(snap, { aliasMemory }) ? snap : null;
     })
     .filter(Boolean);
   return {
@@ -242,21 +256,57 @@ export const buildShopRecord = ({ state = {}, items = [], store = null, total = 
  * frozen prediction — evaluation, the shop record, the evaluable filter —
  * goes through this one gate; nobody re-derives what a snapshot is.
  *
- * A snapshot is VALID when it names its row (`id`), carries a non-empty
- * displayed quantity (`qty`), and that quantity resolves to a measurement
- * dimension — either through the engine-signed `normalized` block the
- * snapshot was written with, or a fresh exact parse. Hedged quantities
- * ("a few", "some") have no dimension and are invalid for evaluation:
- * relative error against them would be a guess.
+ * A snapshot is VALID when ALL of these hold:
  *
- * Returns a normalized copy (dimension resolved, types coerced) or null.
- * Callers are rejected, not coerced into guessing.
+ *   - it names its row (`id`);
+ *   - it carries a non-empty displayed quantity (`qty`) that resolves to a
+ *     measurement dimension — through the engine-signed `normalized` block
+ *     or a fresh exact parse (hedged quantities like "a few" are invalid:
+ *     relative error against them would be a guess);
+ *   - it carries usable SUBJECT identity: a canonical subject key resolved
+ *     alias-aware from `predictionKey` (falling back to `name`). A snapshot
+ *     that does not say WHAT it was about cannot prove that a later outcome
+ *     measured the same thing — evaluation must not guess;
+ *   - it carries usable PROVENANCE: when it was shown, as `day`
+ *     (YYYY-MM-DD) or `at` (epoch millis). With BOTH missing the sample has
+ *     no "when" and is rejected as `missing-prediction-provenance`.
+ *
+ * `validatePredictionSnapshot` returns a normalized copy or null, so
+ * existing truthiness callers keep working; `validatePredictionSnapshotWithReason`
+ * is the explicit form evaluation uses to name WHY a snapshot was rejected.
  */
-export const validatePredictionSnapshot = (snap) => {
-  if (!snap || typeof snap !== 'object') return null;
+
+export const SNAPSHOT_REJECTION_REASONS = {
+  NOT_AN_OBJECT: 'malformed-snapshot',
+  NO_ID: 'snapshot-missing-id',
+  NO_QTY: 'snapshot-missing-qty',
+  NO_DIMENSION: 'snapshot-unreadable-quantity',
+  NO_SUBJECT: 'snapshot-missing-subject',
+  NO_PROVENANCE: 'missing-prediction-provenance',
+};
+
+/**
+ * Stable canonical subject identity: WHICH ingredient this prediction was
+ * about, resolved through the same alias table the rest of the app speaks
+ * ("Chickpeas (tins)" and "chickpeas" are one subject). Evaluation compares
+ * snapshot subject to outcome subject — prediction id alone is not identity:
+ * a substituted row keeps its id while changing ingredient.
+ */
+export const snapshotSubjectKey = (snap, aliasMemory = {}) => {
+  const raw = snap?.predictionKey != null && String(snap.predictionKey).trim() !== ''
+    ? snap.predictionKey
+    : snap?.name;
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) return null;
+  return canonicalName(trimmed, aliasMemory) || trimmed.toLowerCase();
+};
+
+export const validatePredictionSnapshotWithReason = (snap, { aliasMemory = {}, requireProvenance = true } = {}) => {
+  const reject = (reason) => ({ ok: false, reason, snapshot: null });
+  if (!snap || typeof snap !== 'object') return reject(SNAPSHOT_REJECTION_REASONS.NOT_AN_OBJECT);
   const id = snap.id == null ? null : String(snap.id);
-  if (!id) return null;
-  if (snap.qty == null || snap.qty === '') return null;
+  if (!id) return reject(SNAPSHOT_REJECTION_REASONS.NO_ID);
+  if (snap.qty == null || snap.qty === '') return reject(SNAPSHOT_REJECTION_REASONS.NO_QTY);
   const at = snap.at == null || !Number.isFinite(Number(snap.at)) ? null : Number(snap.at);
   const normalized = snap.normalized
     && Number.isFinite(Number(snap.normalized.amount))
@@ -265,24 +315,42 @@ export const validatePredictionSnapshot = (snap) => {
     : null;
   const parsed = normalized ? null : parseQuantity(snap.qty, { ingredient: snap.name });
   const dimension = normalized?.dim || (parsed && parsed.confidence === 'exact' ? parsed.dim : null);
-  if (!dimension) return null;
+  if (!dimension) return reject(SNAPSHOT_REJECTION_REASONS.NO_DIMENSION);
+  const subjectKey = snapshotSubjectKey(snap, aliasMemory);
+  if (!subjectKey) return reject(SNAPSHOT_REJECTION_REASONS.NO_SUBJECT);
+  const day = snap.day == null ? null : String(snap.day).slice(0, 10);
+  const hasDay = Boolean(day && DAY_RE.test(day));
+  if (requireProvenance && !hasDay && at == null) {
+    return reject(SNAPSHOT_REJECTION_REASONS.NO_PROVENANCE);
+  }
   return {
-    id,
-    predictionKey: String(snap.predictionKey || ''),
-    name: String(snap.name || ''),
-    qty: String(snap.qty),
-    normalized,
-    dimension,
-    sourceRecipes: Array.isArray(snap.sourceRecipes) ? snap.sourceRecipes.filter(Boolean) : [],
-    portionsDecision: snap.portionsDecision ?? null,
-    pantryDeduction: snap.pantryDeduction ?? null,
-    wasteAdjustment: snap.wasteAdjustment ?? null,
-    suppressed: Boolean(snap.suppressed),
-    week: snap.week == null ? null : String(snap.week),
-    day: snap.day == null ? null : String(snap.day).slice(0, 10),
-    at,
+    ok: true,
+    reason: null,
+    snapshot: {
+      id,
+      predictionKey: String(snap.predictionKey || ''),
+      name: String(snap.name || ''),
+      subjectKey,
+      qty: String(snap.qty),
+      normalized,
+      dimension,
+      substitutedFrom: snap.substitutedFrom == null ? null : String(snap.substitutedFrom),
+      substitutionWhy: String(snap.substitutionWhy || ''),
+      isSubstitution: Boolean(snap.substitutedFrom),
+      sourceRecipes: Array.isArray(snap.sourceRecipes) ? snap.sourceRecipes.filter(Boolean) : [],
+      portionsDecision: snap.portionsDecision ?? null,
+      pantryDeduction: snap.pantryDeduction ?? null,
+      wasteAdjustment: snap.wasteAdjustment ?? null,
+      suppressed: Boolean(snap.suppressed),
+      week: snap.week == null ? null : String(snap.week),
+      day: hasDay ? day : null,
+      at,
+    },
   };
 };
+
+export const validatePredictionSnapshot = (snap, opts = {}) =>
+  validatePredictionSnapshotWithReason(snap, opts).snapshot;
 
 /**
  * Snapshots usable for evaluation: a displayed quantity that is not a

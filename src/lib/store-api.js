@@ -309,28 +309,9 @@ export function useStoreApi({
         set((s) => ({ shoppingList: s.shoppingList.map((i) => (i.id === id
           ? { ...i, ...patch, ...(Object.prototype.hasOwnProperty.call(patch || {}, 'price') ? { priceSource: Number(patch.price) > 0 ? 'manual' : 'unknown' } : {}) }
           : i)) })),
-      substituteListItem: (id, option) =>
-        set((s) => {
-          const current = s.shoppingList.find((item) => item.id === id);
-          const name = String(option?.name || '').trim();
-          if (!current || name.length < 2 || current.name === name) return {};
-          const duplicate = s.shoppingList.find((item) => item.id !== id && shoppingNameKey(item.name) === shoppingNameKey(name));
-          if (duplicate) return {};
-          const price = Number(option.price) || 0;
-          return {
-            shoppingList: s.shoppingList.map((item) => (item.id === id ? {
-              ...item,
-              name,
-              emoji: option.emoji || emojiFor(name),
-              price,
-              priceSource: price ? (option.priceConfidence === 'receipt' ? 'receipt' : 'recorded') : 'unknown',
-              aisle: aisleFor(name, s.aisleMemory),
-              substitutedFrom: current.name,
-              substitutionWhy: option.why || option.rationale || '',
-              purchaseWarning: null,
-            } : item)),
-          };
-        }),
+      // substituteListItem lives in shopping-actions.js (with the other row
+      // actions) and writes substitution lineage onto the prediction book —
+      // a row that changed ingredient must not ride its old snapshot.
       // A confirmed purchase stocks the pantry by default. The UI still passes
       // `toPantry: false` when the shopper explicitly declines, but callers that
       // only record the purchase get the safe, expected inventory hand-off too.

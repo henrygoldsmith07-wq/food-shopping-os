@@ -1,9 +1,10 @@
 import { householdPermission } from './household.js';
-import { shoppingNameKey } from './shopping.js';
+import { aisleFor, shoppingNameKey } from './shopping.js';
 import { reconcilePurchase } from './pantry-intelligence.js';
 import { moveBefore } from './utils.js';
 import { applyListConflictResolution } from './household-concurrency.js';
-import { uid } from './state.js';
+import { emojiFor, uid } from './state.js';
+import { upsertPredictions } from './shopping-predictions.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
 
@@ -111,6 +112,56 @@ export const shoppingActions = (set) => ({
     );
     return { shoppingList: rows, listConflicts: conflicts };
   }),
+
+  // Swap one list row for a substitute. The ROW keeps its id, but the
+  // ingredient it names changes — so its frozen prediction no longer
+  // describes what will be bought. The snapshot is relabelled with explicit
+  // lineage (`substitutedFrom`) IN THE SAME WRITE, and the substitution is
+  // planned through upsertPredictions so the fresh snapshot for the NEW
+  // ingredient is written like any other row. Evaluation then either follows
+  // the lineage or excludes the row — it never scores a Rice prediction
+  // against a Quinoa purchase just because the row id matched.
+  substituteListItem: (id, option) =>
+    set((s) => {
+      if (!householdPermission(s, 'shopping')) return {};
+      const current = s.shoppingList.find((item) => item.id === id);
+      const name = String(option?.name || '').trim();
+      if (!current || name.length < 2 || current.name === name) return {};
+      const duplicate = s.shoppingList.find((item) => item.id !== id && shoppingNameKey(item.name) === shoppingNameKey(name));
+      if (duplicate) return {};
+      const price = Number(option.price) || 0;
+      const why = option.why || option.rationale || '';
+      const shoppingList = s.shoppingList.map((item) => (item.id === id ? {
+        ...item,
+        name,
+        emoji: option.emoji || emojiFor(name),
+        price,
+        priceSource: price ? (option.priceConfidence === 'receipt' ? 'receipt' : 'recorded') : 'unknown',
+        aisle: aisleFor(name, s.aisleMemory),
+        substitutedFrom: current.name,
+        substitutionWhy: why,
+        purchaseWarning: null,
+      } : item));
+      // Lineage on the prediction book: the row's old snapshot (same id) is
+      // REPLACED by a fresh snapshot for the new ingredient, carrying the
+      // substitution lineage. The Rice record cannot ride a Quinoa purchase
+      // — the snapshot on this row id is a Quinoa snapshot, marked as a
+      // substitution so evaluation can exclude it from ingredient accuracy.
+      const substitutedRow = shoppingList.find((item) => item.id === id);
+      // Recipe provenance belonged to the ORIGINAL ingredient: the fresh
+      // snapshot names the substitution lineage instead of borrowing recipes
+      // that never asked for it.
+      const book = Array.isArray(s.shoppingPredictions) ? s.shoppingPredictions : [];
+      const shoppingPredictions = upsertPredictions(
+        [{ ...substitutedRow, sourceRecipes: [], fromRecipe: null }],
+        book,
+        { day: s.day, learnedAliases: s.aliasMemory || {} },
+      );
+      return {
+        shoppingList,
+        shoppingPredictions,
+      };
+    }),
 });
 
 export { receiptActions } from './receipt-actions.js';
