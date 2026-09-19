@@ -881,6 +881,32 @@ never depends on colour); status colours (good/warn/danger) are muted and always
 paired with a label. All tokens live as CSS custom properties in `index.css`,
 with the accent defaulting to mono (ink) plus four restrained alternatives.
 
+## Cheap labels before expensive models
+
+Labelling work — which aisle a product belongs in, which slot a dish fits, what
+a line of imported recipe text is — does not need a chat model. It runs through
+three passes in cost order: deterministic keyword rules, one batched
+[classifier.dev](https://classifier.dev) request for whatever the rules could
+not place, and the general assistant only where a real answer needs one. Every
+label carries its provenance (`deterministic`, `classifier`, `cache` or
+`fallback`), a low-confidence answer degrades to `other` rather than guessing,
+and the running count of general LLM calls avoided is exposed at
+`GET /api/classify`.
+
+The classifier is never the authority on allergies, medical nutrition, food
+safety or health interpretation: those requests are routed straight to the
+assistant's constraint-aware prompt and never to a classifier. Full contract,
+boundaries and variables: [docs/CLASSIFIER.md](docs/CLASSIFIER.md).
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `CLASSIFIER_API_URL` | `https://classifier.dev/v1/classify` | Endpoint for the batched classifier. **Set to an empty string to disable it** — labels then come from the rules and `other` only. |
+| `CLASSIFIER_API_KEY` | unset | Pro bearer key. The free tier needs none. |
+| `CLASSIFIER_DISABLED` | unset | `true` turns the adapter off entirely. |
+| `CLASSIFIER_TIER` | `fast` | `fast` or `smart` (re-asks items the fast tier was unsure about). |
+| `CLASSIFIER_CONFIDENCE_FLOOR` | `0.6` | Below this, a label is discarded and the item falls back. |
+| `CLASSIFIER_TIMEOUT_MS` | `3000` | Per-request deadline; a timeout costs a batch of fallbacks, never a failed request. |
+
 ## External product data
 
 Forq keeps the source visible for every external result:

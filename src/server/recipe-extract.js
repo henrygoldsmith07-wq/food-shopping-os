@@ -16,6 +16,10 @@ export const MAX_INGREDIENTS = 60;
 export const MAX_STEPS = 40;
 export const MAX_LINE = 200;
 
+import { classifyBatch } from './classifier-adapter.js';
+import { deterministicRecipeLineKind, firstLineIsTitle } from './classify-deterministic.js';
+
+
 export const RECIPE_SYSTEM = `You extract recipes from text. Use UK English.
 
 Return ONLY a JSON object, no prose and no code fences, shaped like:
@@ -126,3 +130,95 @@ export const draftToRecipeText = (draft) => {
     ...draft.steps,
   ].filter(Boolean).join('\n');
 };
+
+/* ---------- The line-classified prepass ---------- */
+
+/**
+ * Read imported recipe text line by line before spending a model call.
+ *
+ * Lines are labelled with the `recipe-line` taxonomy (title, ingredient,
+ * quantity, instruction, metadata, noise, other) — deterministic rules first,
+ * then one batched classifier.dev request for what the rules could not place,
+ * and never a general model. When the labelled lines already contain a title
+ * and a couple of ingredients, the recipe is laid out directly and the
+ * extraction model is not called at all.
+ *
+ * The output shape is the same draft the model path produces, provenance
+ * included, so the caller can say which path was taken and why.
+ */
+
+const servingsFrom = (line) => {
+  const match = /(?:serves|servings|makes|yield)\s*:?\s*(\d{1,2})/i.exec(line);
+  return match ? wholeNumber(match[1], 24) : 0;
+};
+
+const minutesFrom = (line) => {
+  const hours = /(\d{1,2})\s*(?:hours?|hrs?)/i.exec(line);
+  const minutes = /(\d{1,3})\s*(?:min|mins|minutes?)/i.exec(line);
+  const total = (hours ? Number(hours[1]) * 60 : 0) + (minutes ? Number(minutes[1]) : 0);
+  return wholeNumber(total || 0, 600);
+};
+
+export const draftFromClassifiedLines = (classified) => {
+  if (!Array.isArray(classified) || !classified.length) return null;
+  const title = classified.find((row) => row.label === 'title');
+  const cleanTitle = clean(title?.item).slice(0, 90);
+  if (!cleanTitle) return null;
+
+  const ingredients = [];
+  let pendingQty = null;
+  for (const row of classified) {
+    if (row.label === 'quantity') {
+      pendingQty = clean(row.item);
+      continue;
+    }
+    if (row.label === 'ingredient') {
+      const line = clean(row.item);
+      const withQty = pendingQty && !line.toLowerCase().startsWith(pendingQty.toLowerCase())
+        ? `${pendingQty} ${line}` : line;
+      ingredients.push(withQty);
+      pendingQty = null;
+      if (ingredients.length >= MAX_INGREDIENTS) break;
+    } else if (row.label !== 'quantity') {
+      pendingQty = null;
+    }
+  }
+  if (ingredients.length < 2) return null;
+
+  const steps = classified
+    .filter((row) => row.label === 'instruction')
+    .map((row) => clean(row.item))
+    .slice(0, MAX_STEPS);
+  const metadata = classified.filter((row) => row.label === 'metadata').map((row) => row.item);
+  const servings = wholeNumber(metadata.map(servingsFrom).find(Boolean) || 0, 24);
+  const time = wholeNumber(metadata.map(minutesFrom).find(Boolean) || 0, 600);
+
+  return { title: cleanTitle, servings, time, ingredients, steps, notes: '' };
+};
+
+/**
+ * The whole prepass: text in, `{ results, draft }` out, or null when the text
+ * is too thin to bother classifying. `results` is labelled provenance; `draft`
+ * is null when the labelled lines did not add up to a recipe, and the caller
+ * falls back to the model as before.
+ */
+export const classifyRecipeLines = async (material, options = {}) => {
+  const lines = String(material || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 200);
+  if (lines.length < 3) return null;
+
+  const first = firstLineIsTitle(lines[0], lines);
+  const rest = first ? lines.slice(1) : lines;
+  const classified = await classifyBatch('recipe-line', rest, {
+    deterministic: deterministicRecipeLineKind,
+    ...options,
+  });
+  const results = first
+    ? [{ item: lines[0], label: 'title', confidence: first.confidence, source: 'deterministic' }, ...classified]
+    : classified;
+  return { results, draft: draftFromClassifiedLines(results) };
+};
+

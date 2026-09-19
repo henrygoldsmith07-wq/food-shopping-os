@@ -7,6 +7,8 @@ import { isOpenRouterConfigured, freeChat } from '../../../server/openrouter.js'
 import {
   releaseAiBudget, reserveAiBudget, settleAiBudget, tokenReservation,
 } from '../../../server/ai-budget.js';
+import { classifyAiRequest, deterministicAnswer } from '../../../server/classify-deterministic.js';
+import { noteLlmCallsAvoided } from '../../../server/classifier-adapter.js';
 
 const system = `You are Forq, a UK food shopping assistant. Use UK English.
 Treat allergy and health information as constraints, never diagnoses.
@@ -18,12 +20,31 @@ export async function POST(request) {
   try {
     assertSameOrigin(request);
     const user = await requireUser();
+    const { household } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
+    const input = aiRequestSchema.parse(await request.json());
+
+    // Route before spending anything. A question the taxonomy layer can answer
+    // outright — which aisle, which meal slot — is answered from the rules, no
+    // model involved, and counted as a general LLM call avoided. Everything
+    // else, including every allergy and health question, goes to the assistant
+    // below: never to the classifier.
+    const routed = classifyAiRequest(input);
+    if (routed.route === 'deterministic') {
+      const answer = deterministicAnswer(routed);
+      if (answer) {
+        noteLlmCallsAvoided(1, 'routing');
+        return NextResponse.json({
+          output: JSON.stringify({ answer, suggestions: [], warnings: [] }),
+          provider: 'deterministic',
+          routed: routed.intent,
+        });
+      }
+    }
+
     // Free-tier OpenRouter models are unmetered for the household: only a
     // light abuse guard applies, and the monthly AI budget is not touched.
     await rateLimit(`ai:${user.id}`, isOpenRouterConfigured() ? 200 : 30, 3600000);
     if (!isOpenRouterConfigured() && !process.env.OPENAI_API_KEY) throw new ApiError(503, 'AI is not configured.');
-    const { household } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
-    const input = aiRequestSchema.parse(await request.json());
 
     if (isOpenRouterConfigured()) {
       try {

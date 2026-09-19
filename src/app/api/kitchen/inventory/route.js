@@ -5,6 +5,9 @@ import {
 import { kitchenInventorySchema } from '../../../../server/schemas.js';
 import { freeChat, freeVision, isOpenRouterConfigured } from '../../../../server/openrouter.js';
 import { INVENTORY_SYSTEM, inventoryPrompt, parseInventoryList } from '../../../../server/inventory-extract.js';
+import { classifyBatch } from '../../../../server/classifier-adapter.js';
+import { deterministicProductCategory } from '../../../../server/classify-deterministic.js';
+import { aisleForProductLabel } from '../../../../server/classify-taxonomies.js';
 
 /**
  * "What's in my kitchen", read by a model.
@@ -57,12 +60,35 @@ export async function POST(request) {
         ? 'No food could be made out in that photo. Try a brighter one, or type what you have.'
         : 'Nothing in that read as food. Try listing the items one per line.');
     }
+
+    // Advisory category hints, decided by rules and — where the rules have
+    // nothing — one batched classifier.dev call. These are labelled provenance,
+    // not pantry facts: the browser's own parser still decides what the item,
+    // the quantity and the confidence are, and a hint marked `fallback` or
+    // `other` is a shrug the UI can show as a shrug. No model is ever asked
+    // for a category; the model above only ever read the lines out.
+    const hints = await classifyBatch('product', lines, {
+      deterministic: deterministicProductCategory,
+      signal: request.signal,
+    }).catch(() => null);
+
     return NextResponse.json({
       // Text, deliberately: the browser parses it and decides how sure to be.
       text: lines.join('\n'),
       lines,
       model: result.model,
       read: input.image ? 'vision' : 'text',
+      ...(hints
+        ? {
+          categoryHints: hints.map((hint) => ({
+            line: hint.item,
+            label: hint.label,
+            aisle: aisleForProductLabel(hint.label),
+            source: hint.source,
+            confidence: hint.confidence,
+          })),
+        }
+        : {}),
     });
   } catch (error) {
     return handleApiError(error);

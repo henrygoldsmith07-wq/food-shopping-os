@@ -10,7 +10,9 @@ import {
 } from '../../../../server/recipe-source.js';
 import {
   draftToRecipeText, extractionPrompt, parseRecipeDraft, RECIPE_SYSTEM,
+  classifyRecipeLines,
 } from '../../../../server/recipe-extract.js';
+import { noteLlmCallsAvoided } from '../../../../server/classifier-adapter.js';
 import { recipeTextFromMarkup } from '../../../../shared/recipe-markup.js';
 
 /**
@@ -52,6 +54,27 @@ const ai = async ({ material, image }) => {
   }
 };
 
+/**
+ * Read the material line by line before spending a model call on it.
+ *
+ * When the labelled lines already add up to a recipe — a title and a couple of
+ * ingredients — the draft is laid out directly and the extraction model is not
+ * called at all. Anything else falls through to the model exactly as before;
+ * the prepass only ever saves a call, never blocks one.
+ */
+const prepassDraft = async (material, signal) => {
+  try {
+    const prepass = await classifyRecipeLines(material, { signal });
+    if (prepass?.draft) {
+      noteLlmCallsAvoided(1, 'routing');
+      return prepass.draft;
+    }
+  } catch {
+    // A failed prepass is a model call, not a failed import.
+  }
+  return null;
+};
+
 const draftResponse = (draft, source) => NextResponse.json({
   draft,
   // The plain-text form of the draft, so the browser matches ingredients and
@@ -60,7 +83,7 @@ const draftResponse = (draft, source) => NextResponse.json({
   source,
 });
 
-const fromUrl = async (url) => {
+const fromUrl = async (url, signal) => {
   if (!isFetchableRecipeUrl(url)) {
     throw new ApiError(400, 'That link cannot be fetched. Use a public http or https recipe link.');
   }
@@ -98,6 +121,21 @@ const fromUrl = async (url) => {
     );
   }
 
+  const direct = await prepassDraft(material, signal);
+  if (direct) {
+    return draftResponse(direct, {
+      url,
+      platform: platform?.id || 'web',
+      platformLabel: platform?.label || '',
+      via: 'link',
+      read: 'line-classified',
+      author: oembed?.author || metadata.author || null,
+      datePublished: metadata.published || null,
+      model: null,
+      notes: 'Read directly from the page text — no model was used. Check the amounts against the original.',
+    });
+  }
+
   const { text, model } = await ai({ material });
   const draft = parseRecipeDraft(text);
   if (!draft) {
@@ -118,10 +156,24 @@ const fromUrl = async (url) => {
   });
 };
 
-const fromText = async (text, via) => {
+const fromText = async (text, via, signal) => {
   // Text lifted off a photo is often already a recipe; try reading it as one
   // before spending a model call on it.
   const material = sourceMaterial({ url: '', metadata: {}, pageText: text });
+  const direct = await prepassDraft(material, signal);
+  if (direct) {
+    return draftResponse(direct, {
+      url: null,
+      platform: 'photo',
+      platformLabel: 'Photo',
+      via,
+      read: 'line-classified',
+      author: null,
+      datePublished: null,
+      model: null,
+      notes: 'Read directly from the text — no model was used. Check every amount before saving.',
+    });
+  }
   const { text: output, model } = await ai({ material });
   const draft = parseRecipeDraft(output);
   if (!draft) throw new ApiError(422, 'No recipe could be read from that. Check the text and try again.');
@@ -164,8 +216,8 @@ export async function POST(request) {
     await rateLimit(`recipe-import:${user.id}`, 60, 3600000);
     const input = recipeImportSchema.parse(await request.json());
 
-    if (input.url) return await fromUrl(input.url);
-    if (input.text) return await fromText(input.text, 'photo');
+    if (input.url) return await fromUrl(input.url, request.signal);
+    if (input.text) return await fromText(input.text, 'photo', request.signal);
     return await fromImage(input.image);
   } catch (error) {
     return handleApiError(error);

@@ -53,6 +53,18 @@ export const kitchenInventorySchema = z.object({
   { message: 'Send exactly one of text or image.' },
 );
 
+/**
+ * A batched classification request — product names, meal slots or lines of
+ * imported recipe text, against a fixed taxonomy. Labels are advisory and
+ * correctable; nothing here is ever a health judgement, and health-adjacent
+ * questions belong to the assistant, not this endpoint.
+ */
+export const classifyRequestSchema = z.object({
+  taxonomy: z.enum(['product', 'recipe-meal', 'recipe-line']),
+  items: z.array(z.string().trim().min(1).max(300)).min(1).max(200),
+});
+
+
 export const coachShareSchema = z.object({
   label: z.string().trim().min(1).max(80).default('Coach'),
   scopes: z.array(z.enum(['diary', 'nutrition', 'plan', 'health'])).min(1).max(4),

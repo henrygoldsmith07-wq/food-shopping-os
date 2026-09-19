@@ -42,6 +42,14 @@ export const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   AI_MONTHLY_TOKEN_LIMIT: z.coerce.number().int().positive().optional(),
 
+  /* classifier.dev — cheap labelling between the deterministic rules and the LLM */
+  CLASSIFIER_API_URL: z.string().url().optional(),
+  CLASSIFIER_API_KEY: z.string().min(1).optional(),
+  CLASSIFIER_DISABLED: z.enum(['true', 'false']).optional(),
+  CLASSIFIER_TIER: z.enum(['fast', 'smart']).optional(),
+  CLASSIFIER_CONFIDENCE_FLOOR: z.coerce.number().min(0).max(1).optional(),
+  CLASSIFIER_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+
   /* Uploads */
   BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
 
@@ -100,6 +108,15 @@ export function envStatus(source = process.env) {
       label: 'AI relay (OpenAI)',
       ready: Boolean(source.OPENAI_API_KEY),
       detail: source.OPENAI_API_KEY ? 'Connected' : 'Add OPENAI_API_KEY',
+    },
+    classifier: {
+      // classifier.dev is free and keyless; its absence is a cost, not an outage
+      // — every label falls back to the deterministic rules and `other`.
+      label: 'Batch classifier (classifier.dev)',
+      ready: process.env.CLASSIFIER_DISABLED !== 'true' && source.CLASSIFIER_API_URL !== '',
+      detail: process.env.CLASSIFIER_DISABLED === 'true' || source.CLASSIFIER_API_URL === ''
+        ? 'Disabled — labels fall back to the deterministic rules'
+        : 'Connected (free tier, no key required)',
     },
     uploads: {
       label: 'Private receipt uploads',
