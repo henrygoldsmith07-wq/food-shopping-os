@@ -196,14 +196,21 @@ describe('evaluation truth invariants', () => {
       predictionCorrections: [
         {
           id: 'pc1', type: 'prediction_correction', predictionType: 'shopping-qty',
-          predictionKey: 'rice', predicted: 300, actual: 2, date: '2026-09-15', at: Date.now(),
+          predictionKey: 'chickpeas', predictionId: 'row-1', subjectKey: 'chickpeas',
+          predicted: 2, predictedUnit: 'tin', dimension: 'count', actual: 1,
+          date: '2026-09-15', at: Date.now(), schemaVersion: 2,
         },
       ],
       shops: [frozenShop()],
     });
     const result = shoppingQuantityError(state, { today: TODAY });
-    expect(result.samples).toBe(2);
-    for (const o of result.observations) {
+    // The root is the PURCHASE accuracy alone; the combined learning view is
+    // explicit and separate (task: no blended root metric).
+    expect(result.samples).toBe(1);
+    expect(result.observations).toHaveLength(1);
+    expect(result.combinedLearningSignal.samples).toBe(2);
+    // One canonical observation shape across BOTH provenance routes.
+    for (const o of result.combinedLearningSignal.observations) {
       expect(Object.keys(o)).toEqual(expect.arrayContaining([
         'relativeError', 'signedError', 'absoluteDiff', 'dimension', 'source',
         'predictionId', 'shopId', 'outcomeId',
@@ -213,20 +220,25 @@ describe('evaluation truth invariants', () => {
       expect(Number.isFinite(o.signedError)).toBe(true);
       expect(Number.isFinite(o.absoluteDiff)).toBe(true);
     }
-    expect(result.observations.map((o) => o.source).sort()).toEqual(['correction', 'purchase']);
-    expect(result.observations.find((o) => o.source === 'purchase').predictionId).toBe('row-1');
-    expect(result.observations.find((o) => o.source === 'purchase').shopId).toBe('h1');
-    expect(result.observations.find((o) => o.source === 'correction').outcomeId).toBe('pc1');
+    expect(result.combinedLearningSignal.observations.map((o) => o.source).sort()).toEqual(['correction', 'purchase']);
+    expect(result.observations[0].source).toBe('purchase');
+    expect(result.observations[0].predictionId).toBe('row-1');
+    expect(result.observations[0].shopId).toBe('h1');
+    const correctionRow = result.combinedLearningSignal.observations.find((o) => o.source === 'correction');
+    expect(correctionRow.outcomeId).toBe('pc1');
+    expect(correctionRow.dimension).toBe('count'); // PROVEN, never assumed
+    expect(correctionRow.predictionId).toBe('row-1'); // the frozen prediction it answers
   });
 
   it('malformed observations are excluded and counted — NaN and Infinity never enter results', () => {
     const state = household({
       predictionCorrections: [
+        // v2 rows with a proven measurement block but broken values:
         // predicted missing entirely…
-        { id: 'pc1', type: 'prediction_correction', predictionType: 'shopping-qty', predictionKey: 'flour', predicted: null, actual: 2, date: '2026-09-15', at: Date.now() },
+        { id: 'pc1', type: 'prediction_correction', predictionType: 'shopping-qty', predictionKey: 'flour', predictionId: 'row-f', subjectKey: 'flour', predictedUnit: 'tin', dimension: 'count', predicted: null, actual: 2, date: '2026-09-15', at: Date.now(), schemaVersion: 2 },
         // …predicted zero (division would blow up)…
-        { id: 'pc2', type: 'prediction_correction', predictionType: 'shopping-qty', predictionKey: 'sugar', predicted: 0, actual: 2, date: '2026-09-15', at: Date.now() },
-        // …undated.
+        { id: 'pc2', type: 'prediction_correction', predictionType: 'shopping-qty', predictionKey: 'sugar', predictionId: 'row-s', subjectKey: 'sugar', predictedUnit: 'tin', dimension: 'count', predicted: 0, actual: 2, date: '2026-09-15', at: Date.now(), schemaVersion: 2 },
+        // …undated (a legacy row — the date gate runs first).
         { id: 'pc3', type: 'prediction_correction', predictionType: 'shopping-qty', predictionKey: 'oats', predicted: 2, actual: 1 },
       ],
       shops: [frozenShop({ predictions: [{ id: 'row-1', predictionKey: 'rice', name: 'Rice', qty: 'a few' }] })],

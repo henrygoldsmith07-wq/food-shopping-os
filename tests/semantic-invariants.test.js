@@ -55,10 +55,18 @@ const correction = (over = {}) => ({
   type: 'prediction_correction',
   predictionType: 'shopping-qty',
   predictionKey: 'rice',
-  predicted: 300,
+  // v2 frozen measurement block: which prediction this answers, its frozen
+  // subject, and the unit/dimension the prediction was shown in. A count
+  // prediction ('2 tins') is the one scale the 0–3+ answer can prove.
+  predictionId: 'row-1',
+  subjectKey: 'rice',
+  predicted: 2,
+  predictedUnit: 'tin',
+  dimension: 'count',
   actual: 2,
   date: '2026-09-18',
   at: Date.now(),
+  schemaVersion: 2,
   ...over,
 });
 
@@ -275,9 +283,14 @@ describe('correction semantics: 3+ is a lower bound, never exactly 3', () => {
     const result = shoppingQuantityError(state, { today: TODAY });
     // Only the exact answer is scored: |2−2|/2 = 0 — the 3+ row would have
     // contributed 0.5 if it were misread as "exactly 3".
-    expect(result.samples).toBe(1);
+    expect(result.explicitQuantityCorrectionAccuracy.samples).toBe(1);
     expect(result.explicitQuantityCorrectionAccuracy.value).toBe(0);
     expect(result.excluded.some((e) => e.reason === 'censored-correction-lower-bound' && e.outcomeId === 'pc-3plus')).toBe(true);
+    // The censored row still yields safe DIRECTIONAL evidence for learning —
+    // a lower bound, a direction, and the minimum error it proves — never an
+    // exact-accuracy sample.
+    const directional = result.explicitQuantityCorrectionAccuracy.directionalEvidence.find((d) => d.outcomeId === 'pc-3plus');
+    expect(directional).toMatchObject({ lowerBound: 3, direction: 'prediction-too-low', minimumError: 1, minimumRelativeError: 0.5 });
   });
 
   it('censored rows still teach learning without entering error averages', () => {
@@ -301,19 +314,24 @@ describe('purchase accuracy and explicit correction accuracy are separate metric
   it('purchase accuracy answers only the till-run question; corrections never blend into it', () => {
     const state = household({
       shops: [frozenShop()], // |600−300|/300 = 1
-      predictionCorrections: [correction({ predicted: 2, actual: 0, date: '2026-09-18', id: 'pc-1' })], // |0−2|/2 = 1
+      predictionCorrections: [correction({ predicted: 2, actual: 1, date: '2026-09-18', id: 'pc-1' })], // |1−2|/2 = 0.5
     });
     const result = shoppingQuantityError(state, { today: TODAY });
     expect(result.purchaseQuantityAccuracy.value).toBe(1);
     expect(result.purchaseQuantityAccuracy.samples).toBe(1);
-    expect(result.explicitQuantityCorrectionAccuracy.value).toBe(1);
+    expect(result.explicitQuantityCorrectionAccuracy.value).toBe(0.5);
     expect(result.explicitQuantityCorrectionAccuracy.samples).toBe(1);
     // The combined view is explicit about being the LEARNING signal…
-    expect(result.combinedLearningSignal.value).toBe(1);
+    expect(result.combinedLearningSignal.value).toBe(0.75);
     expect(result.combinedLearningSignal.samples).toBe(2);
-    // …and the top-level value is the combined learning view, labelled as such.
+    // …and the top-level value is the PURCHASE ACCURACY ONLY — never the
+    // blended learning number (task: remove ambiguous blended root metrics).
     expect(result.value).toBe(1);
-    expect(result.observations).toHaveLength(2);
+    expect(result.value).toBe(result.purchaseQuantityAccuracy.value);
+    expect(result.value).not.toBe(result.combinedLearningSignal.value);
+    expect(result.observations).toHaveLength(1); // root observations = purchase only
+    expect(result.observations[0].source).toBe('purchase');
+    expect(result.combinedLearningSignal.observations).toHaveLength(2);
   });
 
   it('categorical (portions) corrections never enter quantity accuracy', () => {

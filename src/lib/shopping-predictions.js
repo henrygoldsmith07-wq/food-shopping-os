@@ -35,6 +35,22 @@ import { parseQuantity } from './measure.js';
 import { DAY_RE } from './evaluation-time.js';
 
 /**
+ * The frozen-evidence schema version (task: version frozen evidence).
+ *
+ *   1 — legacy: snapshots written before identity/schema freezing existed;
+ *       no `subjectKey`, no `schemaVersion` field. Handled DELIBERATELY at
+ *       validation (subject resolved at read time, labelled as such) — never
+ *       silently reinterpreted under modern rules.
+ *   2 — current: the validated normalized snapshot, frozen ONCE with canonical
+ *       subject identity (`subjectKey`), measurement meaning (`normalized`,
+ *       `dimension`), provenance (`day`/`at`), substitution lineage and this
+ *       version stamp. Evaluation reads the stored identity; later alias or
+ *       schema changes cannot alter what the evidence meant.
+ */
+export const SNAPSHOT_SCHEMA_VERSION = 2;
+export const SUPPORTED_SNAPSHOT_SCHEMA_VERSIONS = [1, SNAPSHOT_SCHEMA_VERSION];
+
+/**
  * One prediction row: the decision record behind the quantity on screen.
  * Every field answers "why this number" — the exact decision stack the task
  * names, in the order it applied:
@@ -46,6 +62,7 @@ export const shoppingPrediction = ({
   itemId = null,
   name = '',
   qty = null,
+  subjectKey = null,
   sourceRecipes = [],
   portionsDecision = null,
   pantryDeduction = null,
@@ -67,6 +84,10 @@ export const shoppingPrediction = ({
     normalized: parsed && parsed.confidence === 'exact'
       ? { amount: parsed.amount, dim: parsed.dim, unit: parsed.unit }
       : null,
+    // Canonical subject identity, resolved at PREDICTION time and carried on
+    // the snapshot so the freeze at purchase never has to re-derive it.
+    subjectKey: String(subjectKey || canonicalName(name) || String(name || '').trim().toLowerCase()),
+    schemaVersion: SNAPSHOT_SCHEMA_VERSION,
     sourceRecipes: Array.isArray(sourceRecipes) ? sourceRecipes.filter(Boolean) : [],
     portionsDecision,
     pantryDeduction,
@@ -158,6 +179,9 @@ const upsertInto = (rows, previous, context) => {
       itemId: row.id,
       name: row.name,
       qty: row.qty,
+      // Subject identity resolved with the alias memory as of NOW — this is
+      // the one moment the household's naming decides what the snapshot means.
+      subjectKey: key,
       sourceRecipes: decisionFor(row, { portionsDecision, suppressed: suppressedSet.has(key), pantry, learnedAliases }).sourceRecipes,
       portionsDecision,
       pantryDeduction: row.requiredQty != null
@@ -215,10 +239,28 @@ const basketPrediction = (items = []) => Math.round((Array.isArray(items) ? item
  * shop record here, so every shop carries the same prediction metadata and
  * evaluation never meets a shop it cannot read.
  *
- * The frozen `predictions` are looked up from the store's prediction book at
- * purchase time — the snapshot of each bought row, exactly as the list showed
- * it — and live on the shop record from then on, so evaluation keeps reading
- * "what we told them to buy" even after the list has moved on.
+ * The frozen `predictions` are the VALIDATED NORMALIZED snapshots looked up
+ * from the store's prediction book at purchase time — NOT the raw book rows.
+ * Freezing the normalized copy is the point: it carries exactly the fields
+ * evaluation is allowed to read (identity, measurement meaning, provenance,
+ * lineage, schema version), drops anything else the raw row happened to
+ * carry, and is `Object.freeze`d so nothing downstream can quietly rewrite
+ * what was shown. Each frozen snapshot persists:
+ *
+ *   `id` / `predictionId` — the row it advised;  `subjectKey` — canonical
+ *   subject resolved with the alias memory AS OF PURCHASE TIME (never
+ *   re-derived later);  `name`, `qty` — exactly what was displayed;
+ *   `normalized` + `dimension` — the engine-signed measurement meaning;
+ *   `day` / `at` — when it was on show;  `substitutedFrom` / `isSubstitution`
+ *   — substitution lineage;  `schemaVersion` — the frozen-evidence schema.
+ *
+ * The bought rows are stamped with `subjectKey` too: the OUTCOME side of the
+ * comparison is frozen at the same moment, so a later alias lesson cannot
+ * re-describe what was actually purchased.
+ *
+ * Snapshots that fail the canonical gate are NOT frozen silently: the record
+ * carries `predictionRejections` naming the row and the gate's reason, so
+ * evaluation can report why a row is unscoreable instead of guessing.
  *
  * `items` are the writer's final item rows (the writer keeps shaping them);
  * `predictedCost` is the writer's own pre-till basket snapshot when it has
@@ -230,14 +272,44 @@ export const buildShopRecord = ({ state = {}, items = [], store = null, total = 
   // Only snapshots that pass the canonical schema are frozen onto the shop
   // record — evaluation must never meet a frozen row it cannot read. Alias
   // memory rides along so the canonical subject is resolved and frozen with
-  // the snapshot.
+  // the snapshot, ONCE, at the moment of purchase.
   const aliasMemory = state.aliasMemory || {};
-  const predictions = (Array.isArray(items) ? items : [])
-    .map((row) => {
-      const snap = byId.get(row?.id) || null;
-      return snap && validatePredictionSnapshot(snap, { aliasMemory }) ? snap : null;
-    })
-    .filter(Boolean);
+  const predictions = [];
+  const predictionRejections = [];
+  for (const row of Array.isArray(items) ? items : []) {
+    const snap = (row?.id != null && byId.get(row.id)) || null;
+    if (!snap) continue;
+    const verdict = validatePredictionSnapshotWithReason(snap, { aliasMemory });
+    if (!verdict.ok) {
+      predictionRejections.push({ id: row.id, name: row?.name || null, reason: verdict.reason });
+      continue;
+    }
+    predictions.push(Object.freeze({
+      ...verdict.snapshot,
+      // The frozen record always conforms to the CURRENT freeze schema: the
+      // freeze is the deliberate migration moment. A legacy book row's
+      // identity is resolved HERE, at purchase time — and stamped as such —
+      // so evaluation never has to re-derive it under later alias rules.
+      schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+      sourceSchemaVersion: verdict.snapshot.schemaVersion,
+      subjectKeyProvenance: verdict.snapshot.legacy ? 'frozen-at-purchase' : verdict.snapshot.subjectKeyProvenance,
+      legacy: false,
+      // Explicit prediction id alongside the row id (same value, named for
+      // what it is — the identity evaluation must read, never re-derive).
+      predictionId: verdict.snapshot.id,
+      // The bought row's own canonical subject, resolved with the SAME alias
+      // memory at the SAME moment — outcome identity frozen at purchase.
+      outcomeSubjectKey: canonicalName(String(row?.name ?? '').trim(), aliasMemory)
+        || String(row?.name ?? '').trim().toLowerCase(),
+    }));
+  }
+  const stampedItems = (Array.isArray(items) ? items : []).map((item) => (item && typeof item === 'object'
+    ? {
+      ...item,
+      subjectKey: canonicalName(String(item?.name ?? '').trim(), aliasMemory)
+        || String(item?.name ?? '').trim().toLowerCase(),
+    }
+    : item));
   return {
     id,
     date: String(day || '').slice(0, 10),
@@ -245,9 +317,10 @@ export const buildShopRecord = ({ state = {}, items = [], store = null, total = 
     total: Math.round((Number(total) || 0) * 100) / 100,
     predicted: predictedCost != null && Number.isFinite(Number(predictedCost))
       ? Math.round(Number(predictedCost) * 100) / 100
-      : basketPrediction(items),
-    items,
-    predictions,
+      : basketPrediction(stampedItems),
+    items: stampedItems,
+    predictions: Object.freeze(predictions),
+    predictionRejections: Object.freeze(predictionRejections),
   };
 };
 
@@ -283,6 +356,9 @@ export const SNAPSHOT_REJECTION_REASONS = {
   NO_DIMENSION: 'snapshot-unreadable-quantity',
   NO_SUBJECT: 'snapshot-missing-subject',
   NO_PROVENANCE: 'missing-prediction-provenance',
+  MALFORMED_SCHEMA: 'malformed-snapshot-schema',
+  UNKNOWN_SCHEMA: 'unsupported-snapshot-schema',
+  V2_MISSING_SUBJECT: 'snapshot-v2-missing-subject',
 };
 
 /**
@@ -301,9 +377,39 @@ export const snapshotSubjectKey = (snap, aliasMemory = {}) => {
   return canonicalName(trimmed, aliasMemory) || trimmed.toLowerCase();
 };
 
+/**
+ * The frozen-evidence version gate (task: version frozen evidence). A
+ * snapshot either declares a SUPPORTED schema version or predates versioning:
+ *
+ *   - `schemaVersion` absent               → legacy v1, handled deliberately
+ *     (subject resolved at read time and labelled — v1's documented semantic,
+ *     not a silent reinterpretation);
+ *   - an integer in SUPPORTED versions     → accepted as that version;
+ *   - numeric but outside the support set  → rejected `unsupported-snapshot-schema`;
+ *   - anything else (non-numeric garbage)  → rejected `malformed-snapshot-schema`.
+ *
+ * Unknown or malformed versions are ALWAYS rejected with their named reason —
+ * evaluation must never guess what a future (or corrupted) schema meant.
+ */
+export const snapshotSchemaStatus = (snap) => {
+  if (!snap || typeof snap !== 'object') return { ok: false, reason: SNAPSHOT_REJECTION_REASONS.MALFORMED_SCHEMA };
+  const raw = snap.schemaVersion;
+  if (raw == null) return { ok: true, version: 1, legacy: true };
+  const version = Number(raw);
+  if (!Number.isInteger(version)) return { ok: false, reason: SNAPSHOT_REJECTION_REASONS.MALFORMED_SCHEMA };
+  if (!SUPPORTED_SNAPSHOT_SCHEMA_VERSIONS.includes(version)) {
+    return { ok: false, reason: SNAPSHOT_REJECTION_REASONS.UNKNOWN_SCHEMA };
+  }
+  return { ok: true, version, legacy: version < SNAPSHOT_SCHEMA_VERSION };
+};
+
 export const validatePredictionSnapshotWithReason = (snap, { aliasMemory = {}, requireProvenance = true } = {}) => {
   const reject = (reason) => ({ ok: false, reason, snapshot: null });
   if (!snap || typeof snap !== 'object') return reject(SNAPSHOT_REJECTION_REASONS.NOT_AN_OBJECT);
+  // The version gate runs FIRST: an unknown or malformed schema version means
+  // the record cannot be read under any known rules — reject, never guess.
+  const schema = snapshotSchemaStatus(snap);
+  if (!schema.ok) return reject(schema.reason);
   const id = snap.id == null ? null : String(snap.id);
   if (!id) return reject(SNAPSHOT_REJECTION_REASONS.NO_ID);
   if (snap.qty == null || snap.qty === '') return reject(SNAPSHOT_REJECTION_REASONS.NO_QTY);
@@ -316,7 +422,17 @@ export const validatePredictionSnapshotWithReason = (snap, { aliasMemory = {}, r
   const parsed = normalized ? null : parseQuantity(snap.qty, { ingredient: snap.name });
   const dimension = normalized?.dim || (parsed && parsed.confidence === 'exact' ? parsed.dim : null);
   if (!dimension) return reject(SNAPSHOT_REJECTION_REASONS.NO_DIMENSION);
-  const subjectKey = snapshotSubjectKey(snap, aliasMemory);
+  // Identity: a v2 snapshot CARRIES its frozen subjectKey (resolved when the
+  // snapshot was frozen) and it is used AS-IS — the current alias memory is
+  // never consulted for identity that was already frozen. Only legacy v1
+  // snapshots resolve their subject at read time, and say so.
+  const storedSubject = !schema.legacy && typeof snap.subjectKey === 'string' && snap.subjectKey.trim() !== ''
+    ? snap.subjectKey.trim()
+    : null;
+  if (!schema.legacy && storedSubject == null) {
+    return reject(SNAPSHOT_REJECTION_REASONS.V2_MISSING_SUBJECT);
+  }
+  const subjectKey = storedSubject || snapshotSubjectKey(snap, aliasMemory);
   if (!subjectKey) return reject(SNAPSHOT_REJECTION_REASONS.NO_SUBJECT);
   const day = snap.day == null ? null : String(snap.day).slice(0, 10);
   const hasDay = Boolean(day && DAY_RE.test(day));
@@ -331,6 +447,9 @@ export const validatePredictionSnapshotWithReason = (snap, { aliasMemory = {}, r
       predictionKey: String(snap.predictionKey || ''),
       name: String(snap.name || ''),
       subjectKey,
+      // Where the subject identity came from — frozen with the evidence, or
+      // deliberately resolved at read time for legacy rows.
+      subjectKeyProvenance: storedSubject ? 'frozen-at-prediction-time' : 'resolved-at-evaluation',
       qty: String(snap.qty),
       normalized,
       dimension,
@@ -345,6 +464,8 @@ export const validatePredictionSnapshotWithReason = (snap, { aliasMemory = {}, r
       week: snap.week == null ? null : String(snap.week),
       day: hasDay ? day : null,
       at,
+      schemaVersion: schema.version,
+      legacy: schema.legacy,
     },
   };
 };

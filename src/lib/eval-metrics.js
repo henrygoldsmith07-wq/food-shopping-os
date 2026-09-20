@@ -337,7 +337,7 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
       {
         confidence: exactTotal >= 20 ? 'high' : exactTotal >= 8 ? 'medium' : exactTotal > 0 ? 'low' : 'none',
         evidence: exactTotal,
-        assumption: 'Mean absolute error across user-corrected predictions, exact answers only (censored "3+" lower bounds excluded). Corrections are explicit feedback, not purchase accuracy — see purchaseQuantityAccuracy.',
+        assumption: 'Mean absolute error across user-corrected predictions, exact answers only: censored "3+" lower bounds excluded, and only corrections that PROVE a count measurement (the frozen measurement block) enter the math — unproven ones stay qualitative learning evidence. Corrections are explicit feedback, not purchase accuracy — see purchaseQuantityAccuracy.',
       },
     );
   } catch { assumptions.push('Prediction profile unavailable.'); }
@@ -397,7 +397,12 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
 
   const evidenceTotal = corrections.length + waste.length + shops.length + outcomes.length + cooked.length;
   return {
-    version: 2,
+    // v3: frozen subject identity (purchase accuracy reads the stored
+    // subjectKey, never re-derived through the current alias memory),
+    // measurement-proven corrections only, split quantity metrics with the
+    // ROOT value = purchase accuracy, and standardised diagnostics on every
+    // spend/quantity/reconciliation block.
+    version: 3,
     evaluatedAt: today,
     ready: evidenceTotal >= 4,
     predictionError,

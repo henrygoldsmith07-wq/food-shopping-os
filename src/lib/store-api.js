@@ -339,15 +339,21 @@ export function useStoreApi({
           // snapshots for the exact rows bought, captured from the list's
           // prediction book while it still exists. Quantity evaluation reads
           // THESE — never a reconstruction from recipes.
+          const record = buildShopRecord({
+            state: s,
+            items: bought,
+            store: shopStore,
+            total,
+            id: uid('h'),
+            day: s.day,
+          });
+          // The freeze stamps each bought row with its canonical subject
+          // resolved at purchase time; the receipt-shaped item rewrite below
+          // must carry that stamp forward, or the checked-rows path would
+          // lose the frozen outcome identity the command path keeps.
+          const stampedSubjectById = new Map(record.items.map((item) => [item?.id, item?.subjectKey]));
           const shop = {
-            ...buildShopRecord({
-              state: s,
-              items: bought,
-              store: shopStore,
-              total,
-              id: uid('h'),
-              day: s.day,
-            }),
+            ...record,
             saved,
             pantryReconciled: Boolean(reconciled),
             items: bought.map(({ id: itemId, name, price, qty, emoji }) => ({
@@ -358,6 +364,7 @@ export function useStoreApi({
               recordedAt: s.day,
               qty,
               emoji,
+              subjectKey: stampedSubjectById.get(itemId) ?? null,
             })),
           };
           const route = routeFromTicks(bought);
