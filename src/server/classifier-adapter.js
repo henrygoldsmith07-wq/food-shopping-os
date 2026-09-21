@@ -23,7 +23,9 @@
  */
 
 import { createHash } from 'node:crypto';
-import { FALLBACK_LABELS, isLabel, isTaxonomy, taxonomyLabels } from './classify-taxonomies.js';
+import {
+  FALLBACK_LABELS, isLabel, isTaxonomy, taxonomyFingerprint, taxonomyLabels,
+} from './classify-taxonomies.js';
 
 const DEFAULT_BASE = 'https://classifier.dev/v1/classify';
 const DEFAULT_FLOOR = 0.6;
@@ -52,8 +54,15 @@ export const classifierConfigured = () =>
 /* ---------- Cache and telemetry ---------- */
 
 const cache = new Map();
+/**
+ * Cache validation: the key binds the taxonomy id, the taxonomy fingerprint
+ * (its exact label set) and the normalised text. A taxonomy bump — a new
+ * version, or a label added without one — resolves to a different key, so
+ * stale answers from an older label set are never served, however long the
+ * TTL still has to run.
+ */
 const cacheKey = (taxonomy, text) =>
-  createHash('sha256').update(`${taxonomy}\u0000${text.trim().toLowerCase()}`).digest('hex');
+  createHash('sha256').update(`${taxonomy}\u0000${taxonomyFingerprint(taxonomy) || '?'}\u0000${text.trim().toLowerCase()}`).digest('hex');
 
 const cacheGet = (key, now) => {
   const hit = cache.get(key);
@@ -88,10 +97,14 @@ function freshTelemetry() {
     classifierHits: 0,       // accepted remote labels
     lowConfidenceDiscards: 0,
     unknownLabelDiscards: 0,
+    rowCountMismatches: 0,   // batches whose rows did not line up with inputs
     remoteFailures: 0,
     fallbacks: 0,            // items that ended on `other`/unknown
     llmCallsAvoided: 0,      // items/requests resolved without a general LLM
     avoidedBy: { cache: 0, deterministic: 0, classifier: 0, routing: 0 },
+    prepassAccepted: 0,      // recipe prepasses that bypassed the model
+    prepassDeclined: 0,      // recipe prepasses that fell back to the model
+    prepassDeclineReasons: {}, // gate reason code -> count (stable codes only)
   };
 }
 
@@ -115,6 +128,35 @@ export const noteLlmCallsAvoided = (count = 1, via = 'routing') => {
   const n = Math.max(0, Math.min(1000000, Number(count) || 0));
   telemetry.llmCallsAvoided += n;
   if (telemetry.avoidedBy[via] !== undefined) telemetry.avoidedBy[via] += n;
+};
+
+/**
+ * Record a recipe-prepass outcome: accepted (the extraction model was not
+ * called) or declined with the gate's stable reason codes. Only codes from
+ * the prepass gate's own vocabulary are counted, so a stray string can never
+ * blow up the cardinality of the telemetry object.
+ */
+const PREPASS_REASON_CODES = new Set([
+  'no-confident-title',
+  'too-few-ingredients',
+  'weak-ingredient-confidence',
+  'missing-instruction-evidence',
+  'low-classified-rate',
+  'high-other-rate',
+  'high-fallback-rate',
+  'dangling-quantities',
+]);
+
+export const notePrepassOutcome = (accepted, reasons = []) => {
+  if (accepted) {
+    telemetry.prepassAccepted += 1;
+    return;
+  }
+  telemetry.prepassDeclined += 1;
+  for (const reason of Array.isArray(reasons) ? reasons : [reasons]) {
+    if (!PREPASS_REASON_CODES.has(reason)) continue;
+    telemetry.prepassDeclineReasons[reason] = (telemetry.prepassDeclineReasons[reason] || 0) + 1;
+  }
 };
 
 /* ---------- The adapter ---------- */
@@ -243,8 +285,13 @@ async function classifyRemote(taxonomyId, unresolved, { fetchImpl, signal, timeo
     const rows = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : null;
     if (!rows) throw new Error('malformed-classifier-response');
 
+    // A short or ragged row list is malformed in the same way a missing one
+    // is: the positions without a usable row fall back, and the mismatch is
+    // counted once so it shows up in telemetry rather than passing silently.
+    if (rows.length !== batch.length) telemetry.rowCountMismatches += 1;
+
     const remote = batch.map((entry, i) => {
-      const row = rows[i] || {};
+      const row = rows[i] && typeof rows[i] === 'object' ? rows[i] : {};
       const label = row.label ?? row.class ?? row.category;
       const confidence = Number(row.confidence);
       if (!isLabel(taxonomyId, label)) {

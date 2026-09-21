@@ -44,6 +44,34 @@ knowledge.
   recipe, the draft is laid out directly, `read: 'line-classified'`, and the
   extraction model is not called. A failed prepass is a model call, never a
   failed import.
+
+## The recipe-prepass quality gate
+
+`draftFromClassifiedLines` assembles leniently — a title plus two ingredients
+is a draft. `assessPrepassDraft` (in `recipe-extract.js`) decides whether that
+draft may bypass the extraction model, and it is deliberately stricter than
+the assembler: a classified recipe must not skip the model unless enough of
+the source has been confidently understood. Any single failure declines the
+draft and the import falls back to the model; declining is always safe,
+accepting is what needs evidence. Defaults live in `DEFAULT_PREPASS_GATE`:
+
+| Check | Reason code | Default |
+|---|---|---|
+| confident title required | `no-confident-title` | confidence ≥ 0.7 |
+| sufficient confident ingredients | `too-few-ingredients` / `weak-ingredient-confidence` | ≥ 2 at confidence ≥ 0.7 (the second code fires when the count exists but the confidence does not) |
+| instruction evidence when method-like content exists | `missing-instruction-evidence` | required |
+| minimum share of lines carrying recipe content | `low-classified-rate` | ≥ 0.5 of lines labelled title/ingredient/quantity/instruction/metadata |
+| maximum `other` proportion | `high-other-rate` | ≤ 0.4 |
+| maximum fallback proportion | `high-fallback-rate` | ≤ 0.4 |
+| suspicious quantity/ingredient pairings — quantity lines that never merged into an ingredient | `dangling-quantities` | decline when orphans reach half of ingredients-plus-orphans |
+
+The assessment also reports measurements without ever carrying recipe text:
+`ingredientCoverage`, `instructionCoverage`, per-factor rates, and
+`incomplete` (accepted but thin — no steps, or fewer than three confident
+ingredients). `classifyRecipeLines` returns `{ results, draft, assessment,
+latencyMs }`; the route reads only the gated `draft`. Outcomes feed the
+adapter telemetry as `prepassAccepted` / `prepassDeclined` /
+`prepassDeclineReasons` (stable codes only).
 - **`/api/kitchen/inventory`** — after the model lists the lines, the category
   hints are decided by rules + one batched classifier call, never by asking the
   model for categories. Hints are provenance; the browser's own parser remains
@@ -79,6 +107,20 @@ deterministic rules and `other` — a cost, not an outage.
 | `CLASSIFIER_CONFIDENCE_FLOOR` | Below this, a label is discarded and the item falls back. Default `0.6`. |
 | `CLASSIFIER_TIMEOUT_MS` | Per-request deadline. Default `3000`. |
 
+## Taxonomy versioning and cache validation
+
+`TAXONOMY_VERSIONS` in `classify-taxonomies.js` versions each label set
+(`recipe-line.v1`, …). The adapter mixes a fingerprint of the exact label set
+into its cache key alongside the taxonomy id and the normalised text, so a
+label change invalidates cached answers without waiting for the TTL to
+expire. The rule for taxonomy edits: bump the version when a label set
+changes, and never redefine what an existing label means in place.
+
+A short or ragged classifier response (fewer rows than inputs, or non-object
+rows) is treated like any other malformed answer: the affected positions fall
+back to `other`, and the mismatch is counted once as `rowCountMismatches`
+rather than passing silently.
+
 ## Telemetry: general LLM calls avoided
 
 `classifierTelemetry()` (and `GET /api/classify`) reports, among others:
@@ -89,5 +131,7 @@ deterministic rules and `other` — a cost, not an outage.
   `classifier` and `routing` (requests answered outright by rules).
 - `remoteCalls` / `batchedItems` — how few HTTP calls the batching bought.
 - `cacheHits`, `deterministicHits`, `classifierHits` — where answers came from.
-- `lowConfidenceDiscards`, `unknownLabelDiscards`, `remoteFailures`,
-  `fallbacks` — every honest degradation, counted.
+- `lowConfidenceDiscards`, `unknownLabelDiscards`, `rowCountMismatches`,
+  `remoteFailures`, `fallbacks` — every honest degradation, counted.
+- `prepassAccepted` / `prepassDeclined` / `prepassDeclineReasons` — recipe
+  prepass outcomes and the gate codes behind the declines.
