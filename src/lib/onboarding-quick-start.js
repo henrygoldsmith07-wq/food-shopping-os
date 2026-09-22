@@ -1,3 +1,6 @@
+import { mergeQtys } from './pantry.js';
+import { scaleQty } from './portions.js';
+
 export const QUICK_START_DEFAULTS = {
   household: 1,
   weeklyBudget: 0,
@@ -19,10 +22,37 @@ export const firstSessionPlan = ({ day, recipes = [], pickedRecipeIds = [], hous
   const picked = pickedRecipeIds.map((id) => recipes.find((recipe) => recipe.id === id)).filter(Boolean);
   const meals = picked.length ? picked : recipes.filter((recipe) => recipe.meal === 'dinner').slice(0, 3);
   const plan = Object.fromEntries(meals.map((recipe, index) => [nextDay(day, index), { dinner: recipe.id }]));
-  const shoppingList = [...new Map(meals.flatMap((recipe) => (recipe.ingredients || []).map((ingredient) => [
-    String(ingredient.name || ingredient).toLowerCase(),
-    { name: ingredient.name || ingredient, qty: ingredient.qty || '1', fromRecipe: recipe.name, autoListed: true },
-  ])).map(([key, item]) => [key, item])).values()];
+  const people = Math.max(1, Number(household) || 1);
+  const shoppingByIngredient = new Map();
+  for (const recipe of meals) {
+    const servings = Math.max(1, Number(recipe.servings) || 1);
+    const factor = people / servings;
+    for (const ingredient of recipe.ingredients || []) {
+      const name = String(ingredient?.name || ingredient || '').trim();
+      if (!name) continue;
+      const key = name.toLowerCase().replace(/\s+/g, ' ');
+      const qty = scaleQty(ingredient?.qty || '1', factor);
+      const existing = shoppingByIngredient.get(key);
+      if (!existing) {
+        shoppingByIngredient.set(key, {
+          name,
+          qty,
+          fromRecipe: recipe.name,
+          sourceRecipes: [recipe.name],
+          autoListed: true,
+        });
+        continue;
+      }
+      shoppingByIngredient.set(key, {
+        ...existing,
+        qty: mergeQtys(existing.qty, qty, { ingredient: key }),
+        sourceRecipes: existing.sourceRecipes.includes(recipe.name)
+          ? existing.sourceRecipes
+          : [...existing.sourceRecipes, recipe.name],
+      });
+    }
+  }
+  const shoppingList = [...shoppingByIngredient.values()];
   return {
     plan,
     shoppingList,
