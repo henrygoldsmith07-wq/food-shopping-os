@@ -22,7 +22,7 @@ export const DOMAIN_SLICES = {
     keys: [
       'shoppingList', 'favouriteShopping', 'shops', 'shoppingPreferences', 'shoppingMeta',
       'aisleMemory', 'storeRoutes', 'offers', 'coupons', 'priceAlerts', 'priceAlertConfig',
-      'weeklyBudget', 'monthlyBudget',
+      'weeklyBudget', 'monthlyBudget', 'basketPredictions',
     ],
   },
   household: {
@@ -37,6 +37,7 @@ export const DOMAIN_SLICES = {
     keys: [
       'tasteRatings', 'preferenceEvents', 'favourites', 'recipeRatings', 'cooked', 'cookingTimeHistory',
       'aliasMemory', 'predictionCorrections', 'predictionSnapshots', 'autopilotOutcomes',
+      'quantityOverrides',
     ],
   },
   kitchen: {

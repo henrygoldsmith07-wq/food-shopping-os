@@ -16,6 +16,7 @@ import {
   shoppingPrediction,
 } from '../src/lib/shopping-predictions.js';
 import { shoppingQuantityError, spendAccuracy } from '../src/lib/eval-metrics.js';
+import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
 import {
   PREDICTION_CORRECTION_OPTIONS,
   predictionCorrectionEvent,
@@ -447,8 +448,14 @@ describe('the shared evaluation-time policy', () => {
     expect(shoppingQuantityError(state, { today: '2026-09-20' }).samples).toBe(1);
     // …future from the earlier one.
     expect(shoppingQuantityError(state, { today: '2026-09-17' }).excluded[0].reason).toBe('future-shop');
-    // Spend: same record, same gate.
-    const shop = { ...frozenShop(), predicted: 2.4 };
+    // Spend: same record, same gate — scored only against the GENUINE
+    // pre-purchase freeze (frozen when the list was generated), never a
+    // checkout reconstruction.
+    const freeze = basketPredictionEvent({
+      rows: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 2.4 }],
+      day: '2026-09-18',
+    });
+    const shop = { ...frozenShop(), spendPrediction: { ...freeze, predictedTotal: freeze.predicted } };
     const spendState = household({ shops: [shop] });
     expect(spendAccuracy(spendState, { today: '2026-09-20' }).samples).toBe(1);
     expect(spendAccuracy(spendState, { today: '2026-09-17' }).excluded[0].reason).toBe('future-shop');

@@ -1,89 +1,30 @@
 import { uid } from './state.js';
+import {
+  CORRECTION_SCHEMA_VERSION,
+  SUPPORTED_CORRECTION_SCHEMA_VERSIONS,
+  CORRECTION_SCHEMA_REJECTION_REASONS,
+  correctionSchemaStatus,
+  PREDICTION_CORRECTION_OPTIONS,
+  correctionResponseType,
+  normalizeCorrectionSemantics,
+  CORRECTION_PROOF_STATUS,
+  correctionProofOf,
+} from './correction-measurements.js';
 
-/**
- * Frozen correction evidence schema (task: version frozen evidence).
- *
- *   1 — legacy: `predicted` is a bare number with no recorded unit or
- *       dimension, so its measurement meaning cannot be proven. Handled
- *       DELIBERATELY: kept as qualitative learning evidence, never silently
- *       reinterpreted into a modern dimension.
- *   2 — current: shopping-qty corrections carry the frozen measurement block
- *       (`predictionId`, `subjectKey`, `predictedUnit`, `dimension`) copied
- *       from the prediction as shown. Without it a correction stays
- *       qualitative — it is never guessed into comparability.
- */
-export const CORRECTION_SCHEMA_VERSION = 2;
-export const SUPPORTED_CORRECTION_SCHEMA_VERSIONS = [1, CORRECTION_SCHEMA_VERSION];
-
-export const CORRECTION_SCHEMA_REJECTION_REASONS = {
-  MALFORMED: 'malformed-correction-schema',
-  UNKNOWN: 'unsupported-correction-schema',
+// The frozen-evidence schema gates and the authoritative correction proof
+// live in correction-measurements.js (one proof for every correction
+// consumer). These re-exports keep every existing import path stable.
+export {
+  CORRECTION_SCHEMA_VERSION,
+  SUPPORTED_CORRECTION_SCHEMA_VERSIONS,
+  CORRECTION_SCHEMA_REJECTION_REASONS,
+  correctionSchemaStatus,
+  PREDICTION_CORRECTION_OPTIONS,
+  correctionResponseType,
+  normalizeCorrectionSemantics,
+  CORRECTION_PROOF_STATUS,
+  correctionProofOf,
 };
-
-/**
- * The correction schema gate: absent `schemaVersion` is legacy v1 (supported,
- * deliberately); an integer inside the support set is accepted; anything else
- * is rejected with a named reason — never guessed.
- */
-export const correctionSchemaStatus = (event) => {
-  if (!event || typeof event !== 'object') return { ok: false, reason: CORRECTION_SCHEMA_REJECTION_REASONS.MALFORMED };
-  const raw = event.schemaVersion;
-  if (raw == null) return { ok: true, version: 1, legacy: true };
-  const version = Number(raw);
-  if (!Number.isInteger(version)) return { ok: false, reason: CORRECTION_SCHEMA_REJECTION_REASONS.MALFORMED };
-  if (!SUPPORTED_CORRECTION_SCHEMA_VERSIONS.includes(version)) {
-    return { ok: false, reason: CORRECTION_SCHEMA_REJECTION_REASONS.UNKNOWN };
-  }
-  return { ok: true, version, legacy: version < CORRECTION_SCHEMA_VERSION };
-};
-
-/**
- * The household's correction answer, 0 → 3+. "3+" is CENSORED evidence —
- * the household is telling us "at least three", not "exactly three" — so
- * every option now names its response type and only the exact answers carry
- * a usable point value. Ordinary exact numerical error is never computed
- * from a lower bound; the bound still teaches learning (see
- * predictionLearningProfile) without contaminating accuracy metrics.
- */
-export const PREDICTION_CORRECTION_OPTIONS = [
-  { value: 0, label: 'None', responseType: 'exact' },
-  { value: 1, label: '1', responseType: 'exact' },
-  { value: 2, label: '2', responseType: 'exact' },
-  { value: 3, label: '3+', responseType: 'lower-bound' },
-];
-
-const validValue = (value) => Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 3;
-
-/** Is this stored correction an exact count, or a censored "3+" lower bound? */
-export const correctionResponseType = (actual) => (Number(actual) === 3 ? 'lower-bound' : 'exact');
-
-/**
- * Normalize one stored correction to the explicit semantics schema. Fields:
- *   - `actual`      — the numeric answer (the bound itself for "3+")
- *   - `responseType`— 'exact' | 'lower-bound'
- *   - `valueType`   — 'exact-value' | 'lower-bound'
- *   - `censored`    — true when the true value is only known to be ≥ actual
- * Legacy rows (written before this schema) are classified in place: an
- * `actual` of 3 was the "3+" button, so it becomes a lower bound; nothing
- * is dropped, so migrations never lose household history.
- */
-export const normalizeCorrectionSemantics = (event) => {
-  if (!event || typeof event !== 'object' || !validValue(event.actual)) return null;
-  const responseType = event.responseType === 'lower-bound'
-    || event.valueType === 'lower-bound' || event.censored === true
-    ? 'lower-bound'
-    : event.responseType === 'exact' ? 'exact'
-      : correctionResponseType(event.actual);
-  const censored = responseType === 'lower-bound';
-  return {
-    ...event,
-    responseType,
-    valueType: responseType === 'lower-bound' ? 'lower-bound' : 'exact-value',
-    censored,
-  };
-};
-
-const validEvent = (event) => Boolean(normalizeCorrectionSemantics(event));
 
 /** Store actions for recording, resolving and correcting predictions. */
 export const predictionActions = (set) => ({
@@ -113,7 +54,7 @@ export const predictionActions = (set) => ({
 
 export const predictionCorrectionEvent = ({ predictionType, predictionKey, predicted, actual, date, context = {}, id = null, at = null, predictionId = null, subjectKey = null, predictedUnit = null, dimension = null } = {}) => {
   const value = Number(actual);
-  if (!validValue(value)) return null;
+  if (!Number.isInteger(value) || value < 0 || value > 3) return null;
   const responseType = value === 3 ? 'lower-bound' : 'exact';
   return {
     // Identity is preserved when re-normalizing a stored event (persistence
@@ -147,33 +88,26 @@ export const predictionCorrectionEvent = ({ predictionType, predictionKey, predi
 };
 
 /**
- * The learning profile over explicit corrections. Corrections are LEARNING
- * signal, not accuracy samples — so "3+" rows are honoured as evidence that
- * the prediction was too LOW (they can only count against the prediction,
- * never for it) and are never averaged as exact values.
+ * The learning profile over explicit corrections, built on the ONE shared
+ * proof (`correctionProofOf`) — the exact same gate the explicit-correction
+ * accuracy metric applies. A correction is therefore numerically valid in
+ * the learning profile if and only if it is numerically valid everywhere.
  *
- * Measurement honesty (task: give corrections real measurement semantics):
- * only a shopping-qty row that PROVES a count measurement (the v2 block:
- * dimension 'count' — the household's 0–3+ answer scale) enters the exact
- * error math. Rows that cannot prove it — legacy rows with a bare `predicted`
- * number, or grams/ml predictions answered on the 0–3 scale — remain
- * QUALITATIVE evidence: counted as corrections, never averaged, never
- * guessed into a dimension. Unknown/malformed schema versions are excluded
- * outright and counted in `excludedUnknownSchema`.
+ * Per type:
+ *   - `corrections`          — every row (exact, censored, qualitative);
+ *   - `exactSamples`         — the proven-measurement EXACT answers only;
+ *   - `qualitativeOnly`      — rows kept as evidence but excluded from the
+ *     error math, each with its NAMED reason (`qualitativeReasons`);
+ *   - `censoredLowerBounds`  — the "3+" rows, kept as direction evidence;
+ *   - `tooLowLowerBounds`    — bounds that prove the prediction was too low;
+ *   - `minimumRelativeError` — the largest provable floor across "3+" rows
+ *     (learning evidence, never an accuracy number).
  *
- * Per type: `corrections` counts every usable row (exact, censored and
- * qualitative-only); `exactSamples` counts the proven-measurement exact
- * answers only; `qualitativeOnly` counts rows kept as evidence but excluded
- * from the error math; the mean absolute and signed errors are computed over
- * EXACT rows alone, and each row carries `correctionScope` ('exact-only')
- * and `units` so no consumer can mistake mixed household answers for one
- * unit. `censoredLowerBounds` reports the "3+" rows separately, with
- * `tooLowLowerBounds` counting the bounds that prove the prediction was too
- * low — direction evidence for learning, never an accuracy number.
+ * The mean absolute and signed errors are computed over EXACT rows alone —
+ * a missing predicted value NEVER becomes error 0, because it never passes
+ * the shared proof. Every row carries `correctionScope` ('exact-only') and
+ * `units` so no consumer can mistake mixed household answers for one unit.
  */
-const provenCountMeasurement = (event) => String(event?.predictionType || '') !== 'shopping-qty'
-  || String(event?.dimension || '') === 'count';
-
 export const predictionLearningProfile = (events = []) => {
   const excludedUnknownSchema = [];
   const corrections = (Array.isArray(events) ? events : []).flatMap((event) => {
@@ -190,8 +124,6 @@ export const predictionLearningProfile = (events = []) => {
   });
   const byType = {};
   corrections.forEach((event) => {
-    const censored = event.censored === true || event.responseType === 'lower-bound';
-    const measurable = provenCountMeasurement(event);
     const row = byType[event.predictionType] || {
       corrections: 0,
       exactSamples: 0,
@@ -202,32 +134,40 @@ export const predictionLearningProfile = (events = []) => {
       signedError: 0,
       units: null,
       correctionScope: 'exact-only',
+      qualitativeReasons: {},
+      directionalLearning: 0,
+      minimumRelativeError: null,
     };
     row.corrections += 1;
-    if (censored) {
+    const proof = correctionProofOf(event);
+    if (proof.status === 'censored') {
       // A lower bound is direction evidence ("it was at least this"), never a
-      // magnitude — it joins the counts but not the error averages.
+      // magnitude — it joins the counts and the directional learning tally,
+      // but not the error averages.
       row.censoredLowerBounds += 1;
-      const predicted = Number(event.predicted);
-      if (measurable && Number.isFinite(predicted) && predicted > 0 && event.actual > predicted) {
-        // Proven: the bound sits ABOVE the prediction, so the prediction was
-        // too low by at least (bound − predicted) — direction for learning.
+      if (proof.direction === 'prediction-too-low') {
         row.tooLowLowerBounds += 1;
+        row.directionalLearning += 1;
+      }
+      const floor = proof.minimumRelativeError;
+      if (floor != null && (row.minimumRelativeError == null || floor > row.minimumRelativeError)) {
+        row.minimumRelativeError = floor;
       }
       byType[event.predictionType] = row;
       return;
     }
-    if (!measurable) {
+    if (proof.status === 'unproven') {
       // Qualitative evidence only: the row cannot prove which measurable
-      // quantity its answer compares, so it never enters the error math.
+      // quantity its answer compares (or which prediction it answers), so it
+      // never enters the error math — counted with its named reason.
       row.qualitativeOnly += 1;
+      if (proof.reason) row.qualitativeReasons[proof.reason] = (row.qualitativeReasons[proof.reason] || 0) + 1;
       byType[event.predictionType] = row;
       return;
     }
     row.exactSamples += 1;
-    const error = event.predicted == null ? 0 : event.actual - event.predicted;
-    row.absoluteError += Math.abs(error);
-    row.signedError += error;
+    row.absoluteError += Math.abs(proof.absoluteDiff);
+    row.signedError += proof.signedError;
     byType[event.predictionType] = row;
   });
   Object.values(byType).forEach((row) => {

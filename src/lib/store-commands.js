@@ -11,7 +11,7 @@
  */
 
 import { createLedgerEvent, appendLedgerEvent } from './event-ledger.js';
-import { buildShopRecord } from './shopping-predictions.js';
+import { buildShopRecord, listSnapshotSync } from './shopping-predictions.js';
 
 /**
  * One event onto the household's history via the shared append path, so
@@ -80,6 +80,10 @@ export const applyWeekRecoveryTo = (state, result) => {
   const removeIds = new Set((result.shoppingRemove || []).map((r) => r.id));
   if (removeIds.size) {
     next = { ...next, shoppingList: (next.shoppingList || []).filter((i) => !removeIds.has(i.id)) };
+    // Rows the repairs retire leave WITH their live snapshots (list ↔
+    // snapshot consistency) — frozen copies on shop records are untouched.
+    const synced = listSnapshotSync(next.shoppingList, next.shoppingPredictions);
+    next = { ...next, shoppingPredictions: synced.shoppingPredictions };
     changed.push(`removed ${removeIds.size} list row${removeIds.size === 1 ? '' : 's'}`);
   }
   if (result.shoppingAdd?.length) {
@@ -171,6 +175,10 @@ export const buildDomainCommands = (set) => ({
     // Idempotent replay: a shop id already recorded IS the same purchase —
     // appending it again would let evaluation count one till run twice.
     if ((s.shops || []).some((h) => h?.id === shopId)) return {};
+    // No `predictedCost`: the spend prediction is the pre-till freeze
+    // matched from basketPredictions (see shop-record.js) — copied verbatim;
+    // with no row ids and no honest day-match, `predicted` stays null and
+    // spend accuracy excludes the shop instead of reconstructing.
     const shop = buildShopRecord({
       state: s,
       items: normalised,

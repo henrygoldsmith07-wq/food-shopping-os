@@ -24,7 +24,7 @@
  * their unit or dimension, so they stay qualitative
  * (`correction-measurement-unproven`, legacy) — never guessed into
  * comparability. Unknown/malformed versions are rejected with the named
- * reasons from prediction-feedback.
+ * reasons from the schema gate below.
  *
  * CENSORED "3+" (lower bound, never an exact answer): safe DIRECTIONAL
  * evidence only — the bound proves the prediction was too low when it sits
@@ -38,17 +38,101 @@
  * silently.
  */
 
-import {
-  gateRecordDay,
-} from './evaluation-time.js';
-import {
-  normalizeCorrectionSemantics,
-  correctionSchemaStatus,
-} from './prediction-feedback.js';
+import { gateRecordDay } from './evaluation-time.js';
 
 const round = (n) => (n == null ? null : Math.round(n * 100) / 100);
 
 const CORRECTION_DIMS = ['mass', 'volume', 'count'];
+
+/** The three outcomes the authoritative proof can return, named once. */
+export const CORRECTION_PROOF_STATUS = {
+  EXACT: 'exact',
+  CENSORED: 'censored',
+  UNPROVEN: 'unproven',
+};
+
+/**
+ * Frozen correction evidence schema (task: version frozen evidence).
+ *
+ *   1 — legacy: `predicted` is a bare number with no recorded unit or
+ *       dimension, so its measurement meaning cannot be proven. Handled
+ *       DELIBERATELY: kept as qualitative learning evidence, never silently
+ *       reinterpreted into a modern dimension.
+ *   2 — current: shopping-qty corrections carry the frozen measurement block
+ *       (`predictionId`, `subjectKey`, `predictedUnit`, `dimension`) copied
+ *       from the prediction as shown. Without it a correction stays
+ *       qualitative — it is never guessed into comparability.
+ */
+export const CORRECTION_SCHEMA_VERSION = 2;
+export const SUPPORTED_CORRECTION_SCHEMA_VERSIONS = [1, CORRECTION_SCHEMA_VERSION];
+
+export const CORRECTION_SCHEMA_REJECTION_REASONS = {
+  MALFORMED: 'malformed-correction-schema',
+  UNKNOWN: 'unsupported-correction-schema',
+};
+
+/**
+ * The correction schema gate: absent `schemaVersion` is legacy v1 (supported,
+ * deliberately); an integer inside the support set is accepted; anything else
+ * is rejected with a named reason — never guessed.
+ */
+export const correctionSchemaStatus = (event) => {
+  if (!event || typeof event !== 'object') return { ok: false, reason: CORRECTION_SCHEMA_REJECTION_REASONS.MALFORMED };
+  const raw = event.schemaVersion;
+  if (raw == null) return { ok: true, version: 1, legacy: true };
+  const version = Number(raw);
+  if (!Number.isInteger(version)) return { ok: false, reason: CORRECTION_SCHEMA_REJECTION_REASONS.MALFORMED };
+  if (!SUPPORTED_CORRECTION_SCHEMA_VERSIONS.includes(version)) {
+    return { ok: false, reason: CORRECTION_SCHEMA_REJECTION_REASONS.UNKNOWN };
+  }
+  return { ok: true, version, legacy: version < CORRECTION_SCHEMA_VERSION };
+};
+
+/**
+ * The household's correction answer, 0 → 3+. "3+" is CENSORED evidence —
+ * the household is telling us "at least three", not "exactly three" — so
+ * every option now names its response type and only the exact answers carry
+ * a usable point value. Ordinary exact numerical error is never computed
+ * from a lower bound; the bound still teaches learning (see
+ * predictionLearningProfile) without contaminating accuracy metrics.
+ */
+export const PREDICTION_CORRECTION_OPTIONS = [
+  { value: 0, label: 'None', responseType: 'exact' },
+  { value: 1, label: '1', responseType: 'exact' },
+  { value: 2, label: '2', responseType: 'exact' },
+  { value: 3, label: '3+', responseType: 'lower-bound' },
+];
+
+const validValue = (value) => Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 3;
+
+/** Is this stored correction an exact count, or a censored "3+" lower bound? */
+export const correctionResponseType = (actual) => (Number(actual) === 3 ? 'lower-bound' : 'exact');
+
+/**
+ * Normalize one stored correction to the explicit semantics schema. Fields:
+ *   - `actual`      — the numeric answer (the bound itself for "3+")
+ *   - `responseType`— 'exact' | 'lower-bound'
+ *   - `valueType`   — 'exact-value' | 'lower-bound'
+ *   - `censored`    — true when the true value is only known to be ≥ actual
+ * Legacy rows (written before this schema) are classified in place: an
+ * `actual` of 3 was the "3+" button, so it becomes a lower bound; nothing
+ * is dropped, so migrations never lose household history.
+ */
+export const normalizeCorrectionSemantics = (event) => {
+  if (!event || typeof event !== 'object' || !validValue(event.actual)) return null;
+  const responseType = event.responseType === 'lower-bound'
+    || event.valueType === 'lower-bound' || event.censored === true
+    ? 'lower-bound'
+    : event.responseType === 'exact' ? 'exact'
+      : correctionResponseType(event.actual);
+  const censored = responseType === 'lower-bound';
+  return {
+    ...event,
+    responseType,
+    valueType: responseType === 'lower-bound' ? 'lower-bound' : 'exact-value',
+    censored,
+  };
+};
 
 /**
  * Prove the corrected answer measures the SAME quantity as the prediction.
@@ -74,12 +158,117 @@ export const measurementProof = (c) => {
 };
 
 /**
+ * THE authoritative correction proof — the ONE function every correction
+ * consumer shares (explicit correction accuracy, predictionLearningProfile,
+ * household prediction-error metrics, and any future consumer). A correction
+ * enters EXACT numerical learning only when this returns `status: 'exact'`,
+ * which requires ALL of:
+ *
+ *   - supported schema version (current or the one deliberate legacy
+ *     generation — legacy cannot prove its measurement, so it stops here);
+ *   - a valid prediction ID and the FROZEN subject key;
+ *   - a valid predicted value (finite, > 0);
+ *   - a proven dimension compatible with the 0–3+ count answer scale;
+ *   - a valid actual value (finite, ≥ 0);
+ *   - an EXACT rather than censored response.
+ *
+ * Everything else is `status: 'unproven'` with a NAMED reason — most
+ * importantly `correction-measurement-unproven`, the qualitative-only label.
+ * A missing predicted value NEVER becomes error 0: it is unproven evidence.
+ * Censored "3+" rows return `status: 'censored'` carrying the safe
+ * directional block (lowerBound, direction, minimumError,
+ * minimumRelativeError) for learning only.
+ */
+export const correctionProofOf = (raw) => {
+  if (!raw || typeof raw !== 'object') {
+    return { status: 'unproven', reason: CORRECTION_SCHEMA_REJECTION_REASONS.MALFORMED };
+  }
+  const schema = correctionSchemaStatus(raw);
+  if (!schema.ok) return { status: 'unproven', reason: schema.reason };
+  const c = normalizeCorrectionSemantics(raw);
+  if (!c) {
+    return { status: 'unproven', reason: 'unreadable-correction-answer', schema };
+  }
+  const censored = c.responseType === 'lower-bound' || c.censored === true;
+  const base = { schema, censored };
+  if (String(c.predictionType || '') !== 'shopping-qty') {
+    // Other prediction types (e.g. portions) have no proven shared scale
+    // with the 0–3+ shopping answer — qualitative by definition here.
+    return { status: 'unproven', reason: 'correction-not-shopping-qty', ...base };
+  }
+  if (schema.legacy) {
+    return {
+      status: 'unproven',
+      reason: 'correction-measurement-unproven',
+      why: 'legacy-correction-no-measurement-block',
+      ...base,
+    };
+  }
+  const proof = measurementProof(c);
+  if (!proof.ok) {
+    return {
+      status: 'unproven',
+      reason: 'correction-measurement-unproven',
+      why: proof.why,
+      ...base,
+    };
+  }
+  const predicted = Number(c.predicted);
+  if (c.predicted == null || !Number.isFinite(predicted)) {
+    return { status: 'unproven', reason: 'missing-predicted-qty', ...base };
+  }
+  if (!(predicted > 0)) {
+    return { status: 'unproven', reason: 'non-positive-predicted-qty', ...base };
+  }
+  const actual = Number(c.actual);
+  if (c.actual == null || !Number.isFinite(actual) || actual < 0) {
+    return { status: 'unproven', reason: 'unreadable-purchased-qty', ...base };
+  }
+  const identity = {
+    outcomeId: raw?.id == null ? null : String(raw.id),
+    predictionId: proof.predictionId,
+    subjectKey: proof.subjectKey,
+    name: c.predictionKey == null ? null : c.predictionKey,
+    dimension: proof.dimension,
+    predictedUnit: c.predictedUnit == null ? null : String(c.predictedUnit),
+    predicted,
+    shownAt: c.date == null ? null : c.date,
+    schemaVersion: schema.version,
+  };
+  if (censored) {
+    const overBound = actual - predicted;
+    return {
+      status: 'censored',
+      ...identity,
+      actual,
+      lowerBound: actual,
+      direction: overBound > 0 ? 'prediction-too-low' : 'consistent-with-bound',
+      minimumError: Math.max(0, overBound),
+      minimumRelativeError: round(overBound > 0 ? overBound / predicted : 0),
+    };
+  }
+  const delta = actual - predicted;
+  return {
+    status: 'exact',
+    ...identity,
+    actual,
+    relativeError: Math.abs(delta) / predicted,
+    signedError: delta / predicted,
+    absoluteDiff: Math.abs(delta),
+  };
+};
+
+/**
  * Walk the household's explicit corrections and split them into:
  *   - exact, proven-measurement observations (pushed into `correctionObs`
  *     through the caller's shared `pushObservation` guard, so non-finite
  *     values are excluded identically to purchases);
  *   - censored "3+" rows → directionalEvidence (learning only);
  *   - everything else → `excluded` with a named reason.
+ *
+ * The split is delegated to `correctionProofOf` — the ONE proof every
+ * correction consumer shares — so a correction that is numerically valid
+ * here is numerically valid EVERYWHERE, and vice versa.
  *
  * Expects the CALLER's `excluded` array (shared diagnostics) and the same
  * `pushObservation` the purchase pipeline uses — one guard, one reason
@@ -99,17 +288,14 @@ export const collectCorrectionEvidence = ({
   const rows = (Array.isArray(corrections) ? corrections : [])
     .filter((c) => c?.type === 'prediction_correction' && c.predictionType === 'shopping-qty');
   for (const raw of rows) {
-    const outcomeId = raw?.id || null;
     const name = raw?.predictionKey || null;
+    const outcomeId = raw?.id || null;
     const excludeCorrection = (reason, extra = {}) => {
       excluded.push({ source: 'correction', reason, name, outcomeId, shopId: null, ...extra });
     };
-    const c = normalizeCorrectionSemantics(raw);
-    if (!c) {
-      excludeCorrection('unreadable-correction-answer', { qty: raw?.actual });
-      continue;
-    }
-    const gate = gateRecordDay(c?.date, todayStamp);
+    // The clock gate rides the shared evaluation-time policy — one clock,
+    // one window policy, one reason vocabulary across every accuracy metric.
+    const gate = gateRecordDay(raw?.date, todayStamp);
     if (gate !== 'ok') {
       excludeCorrection(
         gate === 'malformed-day' ? 'undated-observation'
@@ -118,77 +304,51 @@ export const collectCorrectionEvidence = ({
       );
       continue;
     }
-    const schema = correctionSchemaStatus(c);
-    if (!schema.ok) {
-      excludeCorrection(schema.reason);
+    const proof = correctionProofOf(raw);
+    if (proof.status === 'unproven') {
+      excludeCorrection(proof.reason, proof.why ? { why: proof.why } : {});
       continue;
     }
-    if (schema.legacy) {
-      excludeCorrection('correction-measurement-unproven', { why: 'legacy-correction-no-measurement-block' });
-      continue;
-    }
-    const proof = measurementProof(c);
-    if (!proof.ok) {
-      excludeCorrection('correction-measurement-unproven', { why: proof.why });
-      continue;
-    }
-    const predicted = Number(c.predicted);
-    const actual = Number(c.actual);
-    if (c.predicted == null || !Number.isFinite(predicted)) {
-      excludeCorrection('missing-predicted-qty');
-      continue;
-    }
-    if (!(predicted > 0)) {
-      excludeCorrection('non-positive-predicted-qty');
-      continue;
-    }
-    if (c.actual == null || !Number.isFinite(actual) || actual < 0) {
-      excludeCorrection('unreadable-purchased-qty', { qty: c?.actual });
-      continue;
-    }
-    if (c.responseType === 'lower-bound' || c.censored === true) {
+    if (proof.status === 'censored') {
       // CENSORED "3+": actual ≥ bound, never = bound. Directional evidence
       // only — never an exact MAE sample.
-      const overBound = actual - predicted;
-      const evidenceRow = {
+      directionalEvidence.push({
         source: 'correction',
-        outcomeId,
+        outcomeId: proof.outcomeId,
         predictionId: proof.predictionId,
         subjectKey: proof.subjectKey,
-        name,
+        name: proof.name,
         dimension: proof.dimension,
-        predictedUnit: c.predictedUnit == null ? null : String(c.predictedUnit),
-        predicted,
-        lowerBound: actual,
-        direction: overBound > 0 ? 'prediction-too-low' : 'consistent-with-bound',
-        minimumError: Math.max(0, overBound),
-        minimumRelativeError: round(overBound > 0 ? overBound / predicted : 0),
-        shownAt: c.date,
-      };
-      directionalEvidence.push(evidenceRow);
+        predictedUnit: proof.predictedUnit,
+        predicted: proof.predicted,
+        lowerBound: proof.lowerBound,
+        direction: proof.direction,
+        minimumError: proof.minimumError,
+        minimumRelativeError: proof.minimumRelativeError,
+        shownAt: proof.shownAt,
+      });
       excludeCorrection('censored-correction-lower-bound', {
-        bound: actual,
-        lowerBound: actual,
-        direction: evidenceRow.direction,
-        minimumError: evidenceRow.minimumError,
-        minimumRelativeError: evidenceRow.minimumRelativeError,
+        bound: proof.lowerBound,
+        lowerBound: proof.lowerBound,
+        direction: proof.direction,
+        minimumError: proof.minimumError,
+        minimumRelativeError: proof.minimumRelativeError,
       });
       continue;
     }
-    const delta = actual - predicted;
     pushObservation({
-      relativeError: Math.abs(delta) / predicted,
-      signedError: delta / predicted,
-      absoluteDiff: Math.abs(delta),
+      relativeError: proof.relativeError,
+      signedError: proof.signedError,
+      absoluteDiff: proof.absoluteDiff,
       dimension: proof.dimension, // PROVEN — never assumed to be a count
       source: 'correction',
       responseType: 'exact',
       predictionId: proof.predictionId, // the frozen prediction this answers
       subjectKey: proof.subjectKey,
       shopId: null,
-      outcomeId,
-      name,
-      shownAt: c.date,
+      outcomeId: proof.outcomeId,
+      name: proof.name,
+      shownAt: proof.shownAt,
     }, correctionObs, 'correction');
   }
   return { directionalEvidence };

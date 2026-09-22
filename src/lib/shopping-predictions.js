@@ -33,6 +33,12 @@
 import { canonicalName } from './aliases.js';
 import { parseQuantity } from './measure.js';
 import { DAY_RE } from './evaluation-time.js';
+import {
+  PREDICTION_PROVENANCE,
+  evaluableForPredictionAccuracy,
+  provenanceStatusFor,
+  PROVENANCE_REJECTION_REASONS,
+} from './prediction-evidence.js';
 
 /**
  * The frozen-evidence schema version (task: version frozen evidence).
@@ -72,8 +78,12 @@ export const shoppingPrediction = ({
   substitutionWhy = '',
   week = null,
   day = null,
+  provenance = PREDICTION_PROVENANCE.FORQ_PLAN,
+  provenanceAt = null,
+  provenanceDecisionId = null,
 } = {}) => {
   const parsed = parseQuantity(qty, { ingredient: name });
+  const at = Date.now();
   return {
     id: String(itemId || `pred-${Math.random().toString(36).slice(2, 10)}`),
     predictionKey: canonicalName(name) || String(name || '').trim().toLowerCase(),
@@ -101,7 +111,15 @@ export const shoppingPrediction = ({
     isSubstitution: Boolean(substitutedFrom),
     week: week == null ? null : String(week),
     day: day == null ? null : String(day).slice(0, 10),
-    at: Date.now(),
+    at,
+    // Provenance: WHO produced this quantity (task: freeze prediction
+    // provenance). Frozen with the snapshot; only Forq-generated provenance
+    // is evaluableForPredictionAccuracy — manual/repeat/override rows are
+    // frozen and labelled but never scored against Forq's model.
+    provenance,
+    provenanceAt: provenanceAt == null ? at : Number(provenanceAt),
+    provenanceDecisionId: provenanceDecisionId == null ? null : String(provenanceDecisionId),
+    evaluableForPredictionAccuracy: evaluableForPredictionAccuracy(provenance),
   };
 };
 
@@ -162,6 +180,8 @@ const upsertInto = (rows, previous, context) => {
     pantry = [],
     learnedAliases = {},
     day = null,
+    provenanceByRow = null,
+    decisionId = null,
   } = context;
   // Held keys arrive in whatever language the rejection was recorded in;
   // both sides meet on the canonical name so a raw key still matches its
@@ -172,9 +192,21 @@ const upsertInto = (rows, previous, context) => {
   );
   const week = weekStamp(day);
   const keep = new Map((Array.isArray(previous) ? previous : []).map((p) => [p.id, p]));
+  // Provenance (task: freeze prediction provenance): WHO produced each
+  // quantity, decided NOW and frozen on the snapshot. Callers may name the
+  // provenance per row (manual add, repeat-shop and top-up paths pass
+  // `provenanceByRow`); the engine default is Forq's own plan advice,
+  // upgraded to forq-adaptation when a suppression hold or waste adjustment
+  // actually shaped the shown number.
+  const knownProvenance = (value) => (Object.values(PREDICTION_PROVENANCE).includes(value) ? value : null);
+  const stampedAt = Date.now();
+  const decisionIdNorm = decisionId == null || String(decisionId).trim() === '' ? null : String(decisionId).trim();
   for (const row of Array.isArray(rows) ? rows : []) {
     if (!row?.name || !row?.id) continue;
     const key = canonicalName(row.name, learnedAliases) || String(row.name).trim().toLowerCase();
+    const shapedByForq = suppressedSet.has(key) || (row.autoReduction != null && row.autoReduction !== false);
+    const provenance = knownProvenance(provenanceByRow?.[row.id])
+      || (shapedByForq ? PREDICTION_PROVENANCE.FORQ_ADAPTATION : PREDICTION_PROVENANCE.FORQ_PLAN);
     keep.set(row.id, shoppingPrediction({
       itemId: row.id,
       name: row.name,
@@ -194,6 +226,9 @@ const upsertInto = (rows, previous, context) => {
         : null,
       wasteAdjustment: row.autoReduction || null,
       suppressed: suppressedSet.has(key),
+      provenance,
+      provenanceAt: stampedAt,
+      provenanceDecisionId: decisionIdNorm,
       substitutedFrom: row.substitutedFrom == null ? null : String(row.substitutedFrom),
       substitutionWhy: String(row.substitutionWhy || row.substitutionReason || ''),
       week,
@@ -230,99 +265,10 @@ export const replacePredictionsForList = (list = [], previous = [], context = {}
 export const attachPredictions = (list, previous, context) =>
   replacePredictionsForList(list, previous, context);
 
-const basketPrediction = (items = []) => Math.round((Array.isArray(items) ? items : [])
-  .reduce((sum, row) => sum + (Number(row?.price) || 0), 0) * 100) / 100;
-
-/**
- * The one purchase-recording shape. Both sanctioned paths — `recordShop`'s
- * checked-rows flow and the `purchaseIngredients` domain command — build the
- * shop record here, so every shop carries the same prediction metadata and
- * evaluation never meets a shop it cannot read.
- *
- * The frozen `predictions` are the VALIDATED NORMALIZED snapshots looked up
- * from the store's prediction book at purchase time — NOT the raw book rows.
- * Freezing the normalized copy is the point: it carries exactly the fields
- * evaluation is allowed to read (identity, measurement meaning, provenance,
- * lineage, schema version), drops anything else the raw row happened to
- * carry, and is `Object.freeze`d so nothing downstream can quietly rewrite
- * what was shown. Each frozen snapshot persists:
- *
- *   `id` / `predictionId` — the row it advised;  `subjectKey` — canonical
- *   subject resolved with the alias memory AS OF PURCHASE TIME (never
- *   re-derived later);  `name`, `qty` — exactly what was displayed;
- *   `normalized` + `dimension` — the engine-signed measurement meaning;
- *   `day` / `at` — when it was on show;  `substitutedFrom` / `isSubstitution`
- *   — substitution lineage;  `schemaVersion` — the frozen-evidence schema.
- *
- * The bought rows are stamped with `subjectKey` too: the OUTCOME side of the
- * comparison is frozen at the same moment, so a later alias lesson cannot
- * re-describe what was actually purchased.
- *
- * Snapshots that fail the canonical gate are NOT frozen silently: the record
- * carries `predictionRejections` naming the row and the gate's reason, so
- * evaluation can report why a row is unscoreable instead of guessing.
- *
- * `items` are the writer's final item rows (the writer keeps shaping them);
- * `predictedCost` is the writer's own pre-till basket snapshot when it has
- * one, otherwise the sum of the row prices the household saw.
- */
-export const buildShopRecord = ({ state = {}, items = [], store = null, total = null, predictedCost = null, id, day }) => {
-  const book = Array.isArray(state.shoppingPredictions) ? state.shoppingPredictions : [];
-  const byId = new Map(book.map((p) => [p.id, p]));
-  // Only snapshots that pass the canonical schema are frozen onto the shop
-  // record — evaluation must never meet a frozen row it cannot read. Alias
-  // memory rides along so the canonical subject is resolved and frozen with
-  // the snapshot, ONCE, at the moment of purchase.
-  const aliasMemory = state.aliasMemory || {};
-  const predictions = [];
-  const predictionRejections = [];
-  for (const row of Array.isArray(items) ? items : []) {
-    const snap = (row?.id != null && byId.get(row.id)) || null;
-    if (!snap) continue;
-    const verdict = validatePredictionSnapshotWithReason(snap, { aliasMemory });
-    if (!verdict.ok) {
-      predictionRejections.push({ id: row.id, name: row?.name || null, reason: verdict.reason });
-      continue;
-    }
-    predictions.push(Object.freeze({
-      ...verdict.snapshot,
-      // The frozen record always conforms to the CURRENT freeze schema: the
-      // freeze is the deliberate migration moment. A legacy book row's
-      // identity is resolved HERE, at purchase time — and stamped as such —
-      // so evaluation never has to re-derive it under later alias rules.
-      schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-      sourceSchemaVersion: verdict.snapshot.schemaVersion,
-      subjectKeyProvenance: verdict.snapshot.legacy ? 'frozen-at-purchase' : verdict.snapshot.subjectKeyProvenance,
-      legacy: false,
-      // Explicit prediction id alongside the row id (same value, named for
-      // what it is — the identity evaluation must read, never re-derive).
-      predictionId: verdict.snapshot.id,
-      // The bought row's own canonical subject, resolved with the SAME alias
-      // memory at the SAME moment — outcome identity frozen at purchase.
-      outcomeSubjectKey: canonicalName(String(row?.name ?? '').trim(), aliasMemory)
-        || String(row?.name ?? '').trim().toLowerCase(),
-    }));
-  }
-  const stampedItems = (Array.isArray(items) ? items : []).map((item) => (item && typeof item === 'object'
-    ? {
-      ...item,
-      subjectKey: canonicalName(String(item?.name ?? '').trim(), aliasMemory)
-        || String(item?.name ?? '').trim().toLowerCase(),
-    }
-    : item));
-  return {
-    id,
-    date: String(day || '').slice(0, 10),
-    store: store || 'Unnamed shop',
-    total: Math.round((Number(total) || 0) * 100) / 100,
-    predicted: predictedCost != null && Number.isFinite(Number(predictedCost))
-      ? Math.round(Number(predictedCost) * 100) / 100
-      : basketPrediction(stampedItems),
-    items: stampedItems,
-    predictions: Object.freeze(predictions),
-    predictionRejections: Object.freeze(predictionRejections),
-  };
-};
+// The one purchase-recording shape (buildShopRecord) lives in shop-record.js —
+// extracted to keep this module inside the 500-line boundary — and is
+// re-exported here so every existing import path stays stable.
+export { buildShopRecord } from './shop-record.js';
 
 /**
  * The CANONICAL snapshot schema, validated centrally. Every consumer of a
@@ -359,6 +305,8 @@ export const SNAPSHOT_REJECTION_REASONS = {
   MALFORMED_SCHEMA: 'malformed-snapshot-schema',
   UNKNOWN_SCHEMA: 'unsupported-snapshot-schema',
   V2_MISSING_SUBJECT: 'snapshot-v2-missing-subject',
+  V2_MISSING_PROVENANCE: 'snapshot-v2-missing-provenance',
+  UNKNOWN_PROVENANCE: PROVENANCE_REJECTION_REASONS.UNKNOWN,
 };
 
 /**
@@ -434,6 +382,17 @@ export const validatePredictionSnapshotWithReason = (snap, { aliasMemory = {}, r
   }
   const subjectKey = storedSubject || snapshotSubjectKey(snap, aliasMemory);
   if (!subjectKey) return reject(SNAPSHOT_REJECTION_REASONS.NO_SUBJECT);
+  // Provenance gate (task: freeze prediction provenance): a v2 snapshot MUST
+  // say who produced the quantity — the engine stamps it, so absence means
+  // the record does not conform to the schema it claims. Legacy v1 rows had
+  // no provenance field: resolved DELIBERATELY (plan-derived → Forq advice,
+  // everything else → the household's own row) and labelled — never silently
+  // reinterpreted. An explicit but unknown value is rejected outright.
+  if (!schema.legacy && snap.provenance == null) {
+    return reject(SNAPSHOT_REJECTION_REASONS.V2_MISSING_PROVENANCE);
+  }
+  const provenance = provenanceStatusFor(snap);
+  if (!provenance.ok) return reject(SNAPSHOT_REJECTION_REASONS.UNKNOWN_PROVENANCE);
   const day = snap.day == null ? null : String(snap.day).slice(0, 10);
   const hasDay = Boolean(day && DAY_RE.test(day));
   if (requireProvenance && !hasDay && at == null) {
@@ -466,6 +425,12 @@ export const validatePredictionSnapshotWithReason = (snap, { aliasMemory = {}, r
       at,
       schemaVersion: schema.version,
       legacy: schema.legacy,
+      // Who produced the quantity — frozen on the validated copy. Legacy v1
+      // rows say WHERE the value was defaulted; engine v2 rows say WHEN it
+      // was decided (prediction time).
+      provenance: provenance.provenance,
+      evaluableForPredictionAccuracy: provenance.evaluable,
+      provenanceResolvedAt: snap.provenance == null ? 'legacy-defaulted-at-read' : 'frozen-at-prediction-time',
     },
   };
 };
@@ -474,14 +439,46 @@ export const validatePredictionSnapshot = (snap, opts = {}) =>
   validatePredictionSnapshotWithReason(snap, opts).snapshot;
 
 /**
- * Snapshots usable for evaluation: a displayed quantity that is not a
- * manual row (no sourceRecipes → the household's own line, not Forq's
- * advice) and carries a readable quantity. The plan-derived test reads the
- * canonical snapshot fields — `sourceRecipes` and `wasteAdjustment` (the
- * waste adaptation frozen at snapshot time). A row whose ONLY claim is a
- * waste adjustment is still Forq's advice: the reduction changed what the
- * list showed. Every row passes the canonical schema gate first.
+ * Snapshots usable for FORQ PREDICTION ACCURACY: provenance decides. Only
+ * genuine Forq-generated advice (`forq-plan`, `forq-adaptation`,
+ * `forq-top-up`) scores — hand-added rows (`user-manual`), repeated shops
+ * (`user-repeat-shop`) and overridden quantities (`user-override`) are
+ * frozen and labelled but never allowed to move Forq's claimed accuracy.
+ * The canonical gate defaults legacy v1 rows deliberately (plan-derived →
+ * Forq advice, everything else → the household's own), so the historical
+ * semantic survives — labelled, not reinterpreted. Every row passes the
+ * canonical schema gate first.
  */
 export const evaluablePredictions = (store = []) => (Array.isArray(store) ? store : [])
   .map(validatePredictionSnapshot)
-  .filter((p) => p && (p.sourceRecipes.length || p.wasteAdjustment));
+  .filter((p) => p && p.evaluableForPredictionAccuracy);
+
+/**
+ * Enforce the list ↔ snapshot invariant (task: enforce list ↔ snapshot
+ * consistency): every live shoppingPredictions[].id must refer to a
+ * currently visible shopping-list row. Given the next state's list and the
+ * book as it stands, this returns the repaired book — orphaned snapshots
+ * (their row is gone) are evicted IN THE SAME WRITE that removed the row;
+ * rows without snapshots are reported as `missing` so the caller can
+ * decide whether to snapshot them. Frozen copies on historical shops are
+ * untouched by construction: they live on shop records, not in this book.
+ *
+ * Pair with `listSnapshotsConsistent` (prediction-evidence.js), the
+ * assertion the invariant tests run after every list write.
+ */
+export const listSnapshotSync = (list = [], book = []) => {
+  const rows = Array.isArray(list) ? list : [];
+  const entries = Array.isArray(book) ? book : [];
+  const onList = new Set(rows.filter((r) => r?.id != null).map((r) => String(r.id)));
+  const orphans = entries.filter((p) => p?.id != null && !onList.has(String(p.id)));
+  if (!orphans.length) return { shoppingPredictions: entries, removed: [], missing: [] };
+  const gone = new Set(orphans.map((p) => String(p.id)));
+  const missing = rows
+    .filter((r) => r?.id != null && !entries.some((p) => p?.id != null && String(p.id) === String(r.id)))
+    .map((r) => String(r.id));
+  return {
+    shoppingPredictions: entries.filter((p) => p?.id == null || !gone.has(String(p.id))),
+    removed: [...gone],
+    missing,
+  };
+};

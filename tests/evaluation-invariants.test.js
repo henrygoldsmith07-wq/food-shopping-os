@@ -92,7 +92,7 @@ describe('snapshot lifecycle invariants', () => {
     );
     expect(replaced.map((p) => p.id)).toEqual(['b']);
     // …and the retained alias behaves identically (fresh timestamps aside).
-    const stripAt = (rows) => rows.map(({ at, ...rest }) => rest);
+    const stripAt = (rows) => rows.map(({ at, provenanceAt, ...rest }) => rest); // volatile creation stamps
     expect(stripAt(attachPredictions([listRow({ id: 'b', name: 'Bread', qty: '1' })], existing, { day: TODAY })))
       .toEqual(stripAt(replaced));
     // An emptied list evicts everything — frozen copies live on shop records.

@@ -178,6 +178,19 @@ export const shoppingQuantityError = (state = {}, { today = dayStamp() } = {}) =
         continue;
       }
       const prediction = gate.snapshot;
+      // PROVENANCE GATE (task: freeze prediction provenance): only genuine
+      // Forq-generated advice moves Forq's claimed accuracy. The household's
+      // own rows, repeated shops and overridden quantities are frozen and
+      // labelled but EXCLUDED from purchase accuracy — a manual quantity must
+      // never improve or worsen Forq's model. The frozen flag rides the
+      // snapshot, so the decision was made at prediction time, not re-derived.
+      // Legacy v1 rows (pre-provenance) keep the historical semantic — they
+      // scored before provenance existed — and are LABELLED as defaulted;
+      // never silently reinterpreted under the modern rule.
+      if (!prediction.evaluableForPredictionAccuracy && !prediction.legacy) {
+        excluded.push({ source: 'purchase', reason: 'not-forq-provenance', provenance: prediction.provenance, name: item.name, shopId, predictionId: prediction.id });
+        continue;
+      }
       // Substitution lineage: a row that was substituted to a DIFFERENT
       // ingredient kept its row id — the frozen snapshot no longer describes
       // what was bought, so scoring it would answer "how close was the Rice

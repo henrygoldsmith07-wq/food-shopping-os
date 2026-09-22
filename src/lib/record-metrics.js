@@ -21,6 +21,7 @@ import {
   evaluationToday,
   gateRecordDay,
 } from './evaluation-time.js';
+import { basketSchemaStatus } from './prediction-evidence.js';
 
 const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = {}) => ({
   value, confidence, evidence, assumption,
@@ -52,17 +53,20 @@ export const snapshotCosts = (rows = []) => {
 };
 
 /**
- * Predicted vs actual spend: the basket prediction snapshotted when the
- * shop was generated against the total actually recorded at the till.
- * Reports absolute error, percentage error, signed bias (positive = Forq
- * under-predicts on average), the sample count and a confidence grade.
+ * Predicted vs actual spend: the basket prediction FROZEN when the list was
+ * generated or materially repriced against the total actually recorded at
+ * the till. Reports absolute error, percentage error, signed bias (positive
+ * = Forq under-predicts on average), the sample count and a confidence
+ * grade.
  *
- * Only a VALID prediction is scored: the stored snapshot must exist and be
- * a number greater than zero. Shops without a snapshot (recorded before
- * snapshots existed), zero or unpriced baskets, and malformed totals or
- * predictions are honestly EXCLUDED — and counted, with the reason, so the
- * sample size can never silently flatter itself. Nothing is reconstructed
- * after the fact.
+ * Only a GENUINE PRE-PURCHASE prediction is scored (task: freeze spend
+ * predictions when shown): the shop's copied `spendPrediction` freeze —
+ * `basketPredictionId`, `predictedAt`, total, per-row prices — must exist,
+ * pass the basket schema gate, and predate the shop day. A shop without a
+ * real pre-purchase freeze (recorded before freezing existed, a zero-priced
+ * basket, or a checkout-time reconstruction) is honestly EXCLUDED — and
+ * counted, with the reason, so the sample size can never silently flatter
+ * itself. Nothing is reconstructed after the fact.
  *
  * Item-total reconciliation is a DIFFERENT question (data quality of the
  * record, not prediction quality) and lives in basketReconciliation below.
@@ -88,7 +92,6 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
       continue;
     }
     const total = Number(shop?.total);
-    const predicted = Number(shop?.predicted);
     if (shop?.total == null || !Number.isFinite(total)) {
       excluded.push({ reason: 'malformed-total', shopId });
       continue;
@@ -97,20 +100,37 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
       excluded.push({ reason: 'zero-total', shopId: shop?.id || null });
       continue;
     }
-    if (shop?.predicted == null || !Number.isFinite(predicted)) {
-      excluded.push({ reason: 'missing-or-invalid-prediction', shopId: shop?.id || null });
+    // THE EVIDENCE BOUNDARY: the frozen pre-purchase basket prediction, or
+    // nothing. `shop.predicted` alone is NOT evidence — it can be a checkout
+    // reconstruction — so the freeze record must exist and validate.
+    const freeze = shop?.spendPrediction || null;
+    const schema = basketSchemaStatus(freeze);
+    if (!schema.ok) {
+      excluded.push({
+        reason: freeze == null ? 'no-pre-purchase-spend-prediction' : schema.reason,
+        shopId,
+      });
       continue;
     }
-    if (predicted <= 0) {
-      excluded.push({ reason: 'zero-prediction', shopId: shop?.id || null });
+    const predicted = Number(freeze.predictedTotal);
+    if (!Number.isFinite(predicted) || predicted <= 0) {
+      excluded.push({ reason: predicted <= 0 ? 'zero-prediction' : 'missing-or-invalid-prediction', shopId });
       continue;
     }
-    scored.push({ predicted, actual: total });
+    // The freeze must PREDATE the purchase: a snapshot taken after the till
+    // is not a prediction. (The shop-record builder enforces this too; the
+    // metric re-checks so historical records cannot sneak past.)
+    const shopDay = String(shop?.date || '').slice(0, 10);
+    if (freeze.predictedAt && shopDay && freeze.predictedAt > shopDay) {
+      excluded.push({ reason: 'spend-prediction-postdates-shop', shopId });
+      continue;
+    }
+    scored.push({ predicted, actual: total, basketPredictionId: freeze.basketPredictionId });
   }
   const samples = scored.length;
   if (!samples) {
     return {
-      ...metric(null, { assumption: 'No shops with a valid stored basket prediction yet — snapshots begin with the first shop recorded after this metric existed.' }),
+      ...metric(null, { assumption: 'No shops with a genuine pre-purchase basket prediction yet — spend predictions are frozen when the list is generated or repriced; shops recorded before freezing existed are excluded, not reconstructed.' }),
       samples: 0,
       samplesByDim: { mass: 0, volume: 0, count: 0 },
       excluded,
@@ -131,7 +151,7 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
     ...metric(value, {
       confidence: samples >= 8 ? 'high' : samples >= 3 ? 'medium' : 'low',
       evidence: samples,
-      assumption: 'Predicted basket cost (snapshotted when the shop was generated) vs the recorded shop total; mean percentage error, signed bias is the trend.',
+      assumption: 'Predicted basket cost (frozen when the list was generated or materially repriced, copied to the shop verbatim at checkout) vs the recorded shop total; mean percentage error, signed bias is the trend. Shops without a genuine pre-purchase freeze are excluded, never reconstructed.',
     }),
     absoluteError: Math.round(absError * 100) / 100,
     percentageError: Math.round(pctError * 100) / 100,

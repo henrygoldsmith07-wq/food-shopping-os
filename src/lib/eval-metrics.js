@@ -18,6 +18,25 @@ import {
 
 export { spendAccuracy, basketReconciliation, shoppingQuantityError, snapshotCosts } from './spend-metrics.js';
 import { dayStamp } from './kitchen-dates.js';
+// Evidence-boundary names, re-exported for stable consumer import paths
+// (task: one correction-proof function everywhere). `directionalLearning`
+// is the aggregate view over censored "3+" evidence: counts and minimum
+// floors only — no exact values are invented.
+import {
+  CORRECTION_PROOF_STATUS,
+  correctionProofOf,
+} from './correction-measurements.js';
+export {
+  CORRECTION_PROOF_STATUS,
+  correctionProofOf,
+  PREDICTION_PROVENANCE,
+  evaluableForPredictionAccuracy,
+  quantityOverrideEvent,
+  basketPredictionEvent,
+  listSnapshotsConsistent,
+  listSnapshotDivergence,
+  listSnapshotSync,
+} from './evidence-contracts.js';
 
 const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = {}) => ({
   value, confidence, evidence, assumption,

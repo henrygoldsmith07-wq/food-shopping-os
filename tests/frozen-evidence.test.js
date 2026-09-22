@@ -19,6 +19,7 @@ import {
   SUPPORTED_SNAPSHOT_SCHEMA_VERSIONS,
 } from '../src/lib/shopping-predictions.js';
 import { shoppingQuantityError, spendAccuracy, basketReconciliation } from '../src/lib/eval-metrics.js';
+import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
 import {
   predictionCorrectionEvent,
   predictionLearningProfile,
@@ -394,14 +395,21 @@ describe('the root quantity metric cannot be confused with the combined learning
 describe('every metric reports exclusions consistently', () => {
   const messyState = () => {
     const book = upsertPredictions([listRow({ id: 'row-1' })], [], { day: TODAY });
+    // The scored shop carries a GENUINE pre-purchase basket freeze (frozen
+    // when the list was generated) — the only evidence spendAccuracy scores.
+    const basketFreeze = basketPredictionEvent({
+      rows: [{ id: 'row-1', name: 'Rice', qty: '300g', price: 1.2 }],
+      day: TODAY,
+    });
     return household({
+      basketPredictions: [basketFreeze],
       shops: [
         buildShopRecord({
-          state: { shoppingPredictions: book },
+          state: { shoppingPredictions: book, basketPredictions: [basketFreeze] },
           items: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 1.2 }],
           store: 'Tesco', total: 1.2, id: 'h-ok', day: TODAY,
         }),
-        { id: 'h-future', date: '2026-09-30', total: 3, items: [{ id: 'x', name: 'Rice', qty: '1' }] },
+        { id: 'h-future', date: '2026-09-30', total: 3, predicted: 3, items: [{ id: 'x', name: 'Rice', qty: '1' }] },
         { id: 'h-empty', date: TODAY, total: 0, predicted: 0, items: [] },
       ],
       predictionCorrections: [provenCorrection({ id: 'pc-1' })],

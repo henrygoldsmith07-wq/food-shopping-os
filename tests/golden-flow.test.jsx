@@ -8,6 +8,7 @@ import { shoppingListForPlan } from '../src/lib/loop-learning.js';
 import { collectAdaptations } from '../src/lib/adaptations.js';
 import { loopInference } from '../src/lib/loop-inference.js';
 import { attachPredictions, buildShopRecord } from '../src/lib/shopping-predictions.js';
+import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
 import { shoppingQuantityError } from '../src/lib/eval-metrics.js';
 import { buildDomainCommands } from '../src/lib/store-commands.js';
 import { weekDates } from '../src/lib/kitchen.js';
@@ -68,16 +69,36 @@ const runGoldenFlow = (start = baseState()) => {
   expect(rice).toBeDefined(); // curry's rice is written for 4; household eats 4
   expect(rice.qty).toBe('300g'); // the recipe's native 4-serving amount
 
-  // 3. SHOP — the buy is recorded (store command, ledger event). The shop
-  //    record freezes the basket prediction and the per-row snapshots it
-  //    was given — what evaluation will score the purchase against.
+  // 3. LIST SHOWN → EVIDENCE FROZEN: rows priced (the app re-freezes the
+  //    basket prediction on a price change), snapshots and the basket-cost
+  //    prediction frozen BEFORE the till — what evaluation will score the
+  //    purchase against. The buy is then recorded through the store command.
+  const priced = list.map((row) => (row.name === 'Rice'
+    ? { ...row, price: 1.2 }
+    : row.name === 'Chickpeas (tins)' ? { ...row, price: 1.5 } : row));
+  state = {
+    ...state,
+    shoppingList: priced,
+    shoppingPredictions: attachPredictions(priced, [], {
+      day: TODAY,
+      portionsDecision: { portions: 4, source: 'configured' },
+      learnedAliases: state.aliasMemory || {},
+    }),
+    basketPredictions: [basketPredictionEvent({
+      rows: priced,
+      day: TODAY,
+      rowPredictionIds: priced.map((row) => row.id),
+    })],
+  };
+  const boughtRows = priced.filter((row) => row.name === 'Rice' || row.name === 'Chickpeas (tins)');
   commands.purchaseIngredients({
-    items: [{ name: 'Rice', price: 1.2, qty: '300g' }, { name: 'Chickpeas (tins)', price: 1.5, qty: '2' }],
+    items: boughtRows.map((row) => ({ id: row.id, name: row.name, price: row.price, qty: row.qty })),
     store: 'Tesco', total: 2.7,
   });
   expect(ledgerEvents(state, { type: 'IngredientPurchased' })).toHaveLength(1);
   const shop = state.shops.at(-1);
-  expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, frozen
+  expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, copied verbatim
+  expect(shop.spendPrediction.matchedBy).toBe('row-subset'); // priced from the freeze's own rows
   expect(shop.items.every((item) => item.qty && Number(item.price) > 0)).toBe(true);
 
   // 4. COOK — tonight's planned dinner is cooked.
@@ -177,9 +198,21 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
 
     // 3. PURCHASE RECORDED: the household buys the advised rice but ONE tin
     //    against the shown two, through the shared buildShopRecord helper —
-    //    the exact predictions (matched by list row id) ride the shop record.
+    //    the exact predictions (matched by list row id) ride the shop record,
+    //    and the basket cost is the freeze taken when the list was shown.
     const riceSnap = state.shoppingPredictions.find((p) => p.predictionKey === 'rice');
     const chickpeaSnap = state.shoppingPredictions.find((p) => p.predictionKey === 'chickpeas');
+    state = {
+      ...state,
+      basketPredictions: [basketPredictionEvent({
+        rows: [
+          { ...riceRow, id: riceSnap.id, price: 1.2 },
+          { ...chickpeaRow, id: chickpeaSnap.id, price: 1.5 },
+        ],
+        day: TODAY,
+        rowPredictionIds: [riceSnap.id, chickpeaSnap.id],
+      })],
+    };
     const shop = buildShopRecord({
       state,
       items: [
@@ -189,7 +222,8 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       store: 'Tesco', total: 2.7, id: 'h-golden', day: TODAY,
     });
     expect(shop.predictions.map((p) => p.id).sort()).toEqual([chickpeaSnap.id, riceSnap.id]);
-    expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, frozen
+    expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, copied verbatim
+    expect(shop.spendPrediction.matchedBy).toBe('row-ids');
     state = { ...state, shops: [shop] };
 
     // 4. SNAPSHOT SURVIVES LIST REMOVAL: the whole list is deleted after the

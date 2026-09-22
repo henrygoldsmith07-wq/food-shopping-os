@@ -4,9 +4,25 @@ import { reconcilePurchase } from './pantry-intelligence.js';
 import { moveBefore } from './utils.js';
 import { applyListConflictResolution } from './household-concurrency.js';
 import { emojiFor, uid } from './state.js';
-import { upsertPredictions } from './shopping-predictions.js';
+import { upsertPredictions, listSnapshotSync } from './shopping-predictions.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
+
+/**
+ * Remove list rows and their LIVE prediction snapshots in the SAME state
+ * write (task: enforce list ↔ snapshot consistency): every live
+ * shoppingPredictions[].id must refer to a currently visible list row, so a
+ * removal that left its snapshot behind would break the invariant. Frozen
+ * copies on historical shop records are untouched — they live on the shops,
+ * not in this book.
+ */
+const removeRowsWithSnapshots = (state, goneIds) => {
+  const gone = goneIds instanceof Set ? goneIds : new Set(goneIds);
+  const shoppingList = state.shoppingList.filter((item) => !gone.has(item.id));
+  if (shoppingList.length === state.shoppingList.length) return null;
+  const { shoppingPredictions } = listSnapshotSync(shoppingList, state.shoppingPredictions);
+  return { shoppingList, shoppingPredictions };
+};
 
 /** Actions for saved shopping products, kept out of the main store API. */
 export const shoppingActions = (set) => ({
@@ -46,9 +62,10 @@ export const shoppingActions = (set) => ({
   // would leave the undo stack N calls deep with no way back but N taps.
   removeListItems: (ids) => set((state) => {
     if (!householdPermission(state, 'shopping')) return {};
-    const gone = new Set(ids);
-    const shoppingList = state.shoppingList.filter((item) => !gone.has(item.id));
-    return shoppingList.length === state.shoppingList.length ? {} : { shoppingList };
+    // The rows and their live snapshots leave in ONE write (see
+    // removeRowsWithSnapshots) — the books cannot diverge mid-operation.
+    const changes = removeRowsWithSnapshots(state, ids);
+    return changes || {};
   }),
 
   /** Send every ticked item to the pantry in one move, merging with stock the
@@ -72,7 +89,13 @@ export const shoppingActions = (set) => ({
     });
     return {
       pantry: reconciled.pantry,
-      shoppingList: state.shoppingList.filter((item) => !bought.some((boughtItem) => boughtItem.id === item.id)),
+      // The moved rows leave the list — their live snapshots leave in the
+      // SAME write (the list ↔ snapshot invariant holds mid-operation).
+      ...(() => {
+        const nextList = state.shoppingList.filter((item) => !bought.some((boughtItem) => boughtItem.id === item.id));
+        const { shoppingPredictions } = listSnapshotSync(nextList, state.shoppingPredictions);
+        return { shoppingList: nextList, shoppingPredictions };
+      })(),
       pantryConflicts: reconciled.conflicts.length
         ? [...(state.pantryConflicts || []), ...reconciled.conflicts].slice(-100)
         : state.pantryConflicts,
@@ -87,7 +110,10 @@ export const shoppingActions = (set) => ({
       const shoppingList = moveBefore(s.shoppingList, id, beforeId);
       return shoppingList === s.shoppingList ? {} : { shoppingList };
     }),
-  removeListItem: (id) => set((s) => ({ shoppingList: s.shoppingList.filter((i) => i.id !== id) })),
+  removeListItem: (id) => set((s) => {
+    const changes = removeRowsWithSnapshots(s, [id]);
+    return changes || {};
+  }),
   toggleChecked: (id) =>
     set((s) => ({
       shoppingList: s.shoppingList.map((i) => (i.id === id
@@ -101,7 +127,10 @@ export const shoppingActions = (set) => ({
         }
         : i)),
     })),
-  clearChecked: () => set((s) => ({ shoppingList: s.shoppingList.filter((i) => !i.checked) })),
+  clearChecked: () => set((s) => {
+    const changes = removeRowsWithSnapshots(s, s.shoppingList.filter((i) => i.checked).map((i) => i.id));
+    return changes || {};
+  }),
   resolveListConflict: (conflictId, side = 'mine') => set((s) => {
     if (!householdPermission(s, 'shopping')) return {};
     const conflict = (s.listConflicts || [])
@@ -110,7 +139,10 @@ export const shoppingActions = (set) => ({
     const { rows, conflicts } = applyListConflictResolution(
       s.shoppingList, s.listConflicts, conflictId, side,
     );
-    return { shoppingList: rows, listConflicts: conflicts };
+    // Resolution can drop rows — the invariant is re-enforced on the same
+    // write, so no orphaned snapshot survives a conflict resolution.
+    const { shoppingPredictions } = listSnapshotSync(rows, s.shoppingPredictions);
+    return { shoppingList: rows, shoppingPredictions, listConflicts: conflicts };
   }),
 
   // Swap one list row for a substitute. The ROW keeps its id, but the

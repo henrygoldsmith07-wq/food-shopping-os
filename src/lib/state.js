@@ -129,6 +129,8 @@ export const EMPTY_STATE = {
   aliasMemory: {}, // scan/pantry corrections: 'tomatos' → 'tomatoes' — makes entity resolution learn
   predictionCorrections: [], // user-corrected predictions: household truth + inference error signals
   predictionSnapshots: [], // prospective predictions resolved against later household outcomes
+  quantityOverrides: [], // explicit quantity-override events: predictionId, original vs overridden qty (see prediction-evidence.js)
+  basketPredictions: [], // basket-cost predictions FROZEN when the list is generated/repriced — copied to shops at checkout (see prediction-evidence.js)
   autopilotOutcomes: [], // whether recommended actions were completed
   adventureCompleted: {}, // claimed weekly kitchen adventure missions
   planSimulations: [], // saved multi-objective planning scenarios
