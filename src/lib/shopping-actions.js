@@ -5,6 +5,7 @@ import { moveBefore } from './utils.js';
 import { applyListConflictResolution } from './household-concurrency.js';
 import { emojiFor, uid } from './state.js';
 import { upsertPredictions, listSnapshotSync } from './shopping-predictions.js';
+import { refreshBasketFreeze } from './prediction-evidence.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
 
@@ -15,13 +16,23 @@ const text = (value, max) => String(value || '').trim().slice(0, max);
  * removal that left its snapshot behind would break the invariant. Frozen
  * copies on historical shop records are untouched — they live on the shops,
  * not in this book.
+ *
+ * The basket freeze rides the same write (task: material list changes): with
+ * a prior freeze and a still-trustworthy forecast the shown basket is
+ * re-frozen over the remaining rows; with no trustworthy forecast left the
+ * prior freeze is explicitly invalidated — never left describing rows that
+ * are no longer shown, and never invented merely because a row left.
  */
 const removeRowsWithSnapshots = (state, goneIds) => {
   const gone = goneIds instanceof Set ? goneIds : new Set(goneIds);
   const shoppingList = state.shoppingList.filter((item) => !gone.has(item.id));
   if (shoppingList.length === state.shoppingList.length) return null;
   const { shoppingPredictions } = listSnapshotSync(shoppingList, state.shoppingPredictions);
-  return { shoppingList, shoppingPredictions };
+  return {
+    shoppingList,
+    shoppingPredictions,
+    basketPredictions: refreshBasketFreeze({ state, nextList: shoppingList, source: 'row-removal', requirePrev: true }),
+  };
 };
 
 /** Actions for saved shopping products, kept out of the main store API. */
@@ -94,7 +105,13 @@ export const shoppingActions = (set) => ({
       ...(() => {
         const nextList = state.shoppingList.filter((item) => !bought.some((boughtItem) => boughtItem.id === item.id));
         const { shoppingPredictions } = listSnapshotSync(nextList, state.shoppingPredictions);
-        return { shoppingList: nextList, shoppingPredictions };
+        return {
+          shoppingList: nextList,
+          shoppingPredictions,
+          // The shown basket changed — refresh or invalidate the freeze in
+          // the same write (see removeRowsWithSnapshots).
+          basketPredictions: refreshBasketFreeze({ state, nextList, source: 'row-removal', requirePrev: true }),
+        };
       })(),
       pantryConflicts: reconciled.conflicts.length
         ? [...(state.pantryConflicts || []), ...reconciled.conflicts].slice(-100)
@@ -140,9 +157,15 @@ export const shoppingActions = (set) => ({
       s.shoppingList, s.listConflicts, conflictId, side,
     );
     // Resolution can drop rows — the invariant is re-enforced on the same
-    // write, so no orphaned snapshot survives a conflict resolution.
+    // write, so no orphaned snapshot survives a conflict resolution (and the
+    // basket freeze is refreshed/invalidated alongside, never left stale).
     const { shoppingPredictions } = listSnapshotSync(rows, s.shoppingPredictions);
-    return { shoppingList: rows, shoppingPredictions, listConflicts: conflicts };
+    return {
+      shoppingList: rows,
+      shoppingPredictions,
+      basketPredictions: refreshBasketFreeze({ state: s, nextList: rows, source: 'row-removal', requirePrev: true }),
+      listConflicts: conflicts,
+    };
   }),
 
   // Swap one list row for a substitute. The ROW keeps its id, but the
@@ -189,10 +212,25 @@ export const shoppingActions = (set) => ({
         book,
         { day: s.day, learnedAliases: s.aliasMemory || {} },
       );
-      return {
+      const changes = {
         shoppingList,
         shoppingPredictions,
       };
+      // MATERIAL SUBSTITUTION REPRICE (task: re-freeze spend predictions
+      // after substitutions): Rice £1 → Quinoa £3 changes the basket cost
+      // actually on show, so a NEW freeze (source `substitution-reprice`) is
+      // created NOW and the old freeze is superseded in the same write — it
+      // remains historical evidence but checkout must evaluate against the
+      // £3-era basket, never the £1 one.
+      const nextRow = shoppingList.find((item) => item.id === id);
+      if ((Number(nextRow?.price) || 0) !== (Number(current.price) || 0)) {
+        changes.basketPredictions = refreshBasketFreeze({
+          state: s,
+          nextList: shoppingList,
+          source: 'substitution-reprice',
+        });
+      }
+      return changes;
     }),
 });
 

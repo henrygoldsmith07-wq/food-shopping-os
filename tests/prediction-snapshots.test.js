@@ -308,7 +308,9 @@ describe('quantity error against snapshots: prediction vs purchase', () => {
 
 describe('spend accuracy hardening: only valid predictions are scored', () => {
   it('excludes missing, zero and malformed predictions with reasons', () => {
-    const priced = freezeFor([{ id: 'g', name: 'A', price: 8 }]);
+    // Row spend-provenance rides the freeze: strict spend accuracy scores
+    // only Forq-priced rows (an unattributable basket is excluded).
+    const priced = freezeFor([{ id: 'g', name: 'A', price: 8, provenance: 'forq' }]);
     // The spendPrediction shape checkout actually copies onto the record.
     const copied = (overrides = {}) => ({
       basketPredictionId: priced.event.id,
@@ -322,7 +324,7 @@ describe('spend accuracy hardening: only valid predictions are scored', () => {
       ...overrides,
     });
     const state = household({ basketPredictions: priced.book, shops: [
-      { id: 'g', date: TODAY, total: 10, spendPrediction: copied() },                         // scores
+      { id: 'g', date: TODAY, total: 10, items: [{ id: 'g', name: 'A', price: 10 }], spendPrediction: copied() }, // scores (row-exact)
       { id: 'm', date: TODAY, total: 5 },                                                     // no snapshot
       { id: 'z', date: TODAY, total: 4, spendPrediction: copied({ predictedTotal: 0 }) },     // zero prediction
       { id: 'n', date: TODAY, total: null, predicted: 9 },   // malformed total

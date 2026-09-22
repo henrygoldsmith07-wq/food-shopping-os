@@ -48,7 +48,7 @@ import {
   SNAPSHOT_SCHEMA_VERSION,
   validatePredictionSnapshotWithReason,
 } from './shopping-predictions.js';
-import { basketSchemaStatus, evaluableForPredictionAccuracy, provenanceStatusFor } from './prediction-evidence.js';
+import { basketSchemaStatus, basketProvenanceRollup, evaluableForPredictionAccuracy, provenanceStatusFor } from './prediction-evidence.js';
 
 /**
  * Find the pre-purchase basket prediction to copy onto the shop record.
@@ -68,7 +68,7 @@ import { basketSchemaStatus, evaluableForPredictionAccuracy, provenanceStatusFor
 const preTillBasket = ({ basketPredictions, rowPredictionIds, day }) => {
   const stamped = String(day || '').slice(0, 10);
   const candidates = (Array.isArray(basketPredictions) ? basketPredictions : [])
-    .filter((bp) => bp && typeof bp === 'object' && basketSchemaStatus(bp).ok)
+    .filter((bp) => bp && typeof bp === 'object' && !bp.invalidated && basketSchemaStatus(bp).ok)
     .filter((bp) => Number(bp.predicted) > 0)
     .filter((bp) => !stamped || bp.day == null || bp.day <= stamped)
     .sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0));
@@ -83,7 +83,31 @@ const preTillBasket = ({ basketPredictions, rowPredictionIds, day }) => {
         want.reduce((sum, rid) => sum + (Number(rowsById.get(rid)?.price) || 0), 0) * 100,
       ) / 100;
       if (subsetTotal > 0) {
-        return { basket: { ...candidate, predicted: subsetTotal }, matchedBy: 'row-subset' };
+        // TRUE SUBSET EVIDENCE (task: fix subset freeze metadata): the
+        // predicted total, the rows, the row-prediction ids and the coverage
+        // metadata ALL describe the exact bought subset — never a subset
+        // total carrying £10 of full-basket metadata. Ids in the subset with
+        // no frozen price row stay listed (they are unpriced evidence, which
+        // evaluation names and excludes rather than scoring as £0).
+        const subsetRows = want.map((rid) => rowsById.get(rid)).filter(Boolean);
+        const subsetPriced = subsetRows.filter((row) => Number(row?.price) > 0).length;
+        return {
+          basket: {
+            ...candidate,
+            predicted: subsetTotal,
+            rows: subsetRows,
+            rowPredictionIds: want,
+            totalRows: subsetRows.length,
+            pricedRows: subsetPriced,
+            unpricedRows: subsetRows.length - subsetPriced,
+            priceCoverage: subsetRows.length
+              ? Math.round((subsetPriced / subsetRows.length) * 100) / 100
+              : 0,
+            provenance: basketProvenanceRollup(subsetRows),
+            subsetOf: candidate.id ?? null,
+          },
+          matchedBy: 'row-subset',
+        };
       }
       return null; // ids matched but the freeze carries no priced rows
     }
@@ -157,21 +181,47 @@ export const buildShopRecord = ({ state = {}, items = [], store = null, total = 
     ? null // an explicit writer-provided cost is a deliberate legacy path, not a freeze
     : preTillBasket({ basketPredictions: state.basketPredictions, rowPredictionIds: boughtPredictionIds, day });
   const frozenBasket = frozenMatch?.basket || null;
+  // Coverage backfill: a legacy v1 freeze has no stored coverage counts —
+  // derive them from ITS OWN frozen rows (still frozen data, not the list).
+  const coverageOf = (basket) => {
+    const rows = Array.isArray(basket?.rows) ? basket.rows : [];
+    const totalRows = Number.isFinite(Number(basket?.totalRows)) ? Number(basket.totalRows) : rows.length;
+    const pricedRows = Number.isFinite(Number(basket?.pricedRows))
+      ? Number(basket.pricedRows)
+      : rows.filter((row) => Number(row?.price) > 0).length;
+    return {
+      totalRows,
+      pricedRows,
+      unpricedRows: Math.max(0, totalRows - pricedRows),
+      priceCoverage: totalRows ? Math.round((pricedRows / totalRows) * 100) / 100 : 0,
+    };
+  };
   const spendPrediction = frozenBasket
     ? {
       basketPredictionId: frozenBasket.id,
       predictedAt: frozenBasket.day == null ? null : frozenBasket.day,
+      // Precise chronology (task: strong spend provenance timestamps): the
+      // freeze's millisecond stamp rides the record so evaluation can prove
+      // predictionAt <= purchaseAt whenever both sides carry precise stamps.
+      predictedAtMs: Number.isFinite(Number(frozenBasket.at)) ? Number(frozenBasket.at) : null,
       predictedTotal: frozenBasket.predicted,
       rows: frozenBasket.rows,
       priceSource: frozenBasket.source || 'list-generation',
       rowPredictionIds: frozenBasket.rowPredictionIds,
       schemaVersion: frozenBasket.schemaVersion,
       matchedBy: frozenMatch.matchedBy,
+      // Spend provenance + price coverage, copied with the evidence.
+      provenance: frozenBasket.provenance ?? basketProvenanceRollup(frozenBasket.rows ?? []),
+      ...coverageOf(frozenBasket),
+      ...(frozenBasket.subsetOf ? { subsetOf: frozenBasket.subsetOf } : {}),
     }
     : null;
   return {
     id,
     date: String(day || '').slice(0, 10),
+    // Purchase timestamp (task: strong spend provenance timestamps) — lets
+    // evaluation prove predictionAt <= purchaseAt to the millisecond.
+    purchasedAt: Date.now(),
     store: store || 'Unnamed shop',
     total: Math.round((Number(total) || 0) * 100) / 100,
     predicted: frozenBasket ? frozenBasket.predicted : null,

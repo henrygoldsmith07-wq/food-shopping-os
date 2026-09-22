@@ -22,7 +22,8 @@ import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
 import { householdPortionsFor } from './portions.js';
 import { upsertPredictions } from './shopping-predictions.js';
-import { PREDICTION_PROVENANCE, basketPredictionEvent, quantityOverrideEvent } from './prediction-evidence.js';
+import { PREDICTION_PROVENANCE, quantityOverrideEvent, refreshBasketFreeze } from './prediction-evidence.js';
+import { applyOverrideLearning, overrideLearningProfile } from './override-learning.js';
 
 /** Row-level shopping-list actions, composed into the store api by store-api.js. */
 export const shoppingListMutations = (set, { latest } = {}) => ({
@@ -67,7 +68,19 @@ addToList: (items, { provenance = null } = {}) =>
       today: s.day,
       learnedAliases: s.aliasMemory || {},
     });
-    const learnedFresh = applyWasteLearning(fresh, learned);
+    // Existing waste evidence still runs FIRST (preserved, never replaced);
+    // then attributable override evidence (task: use override events in
+    // adaptation confidence) — repeated, consistent quantity overrides on
+    // the same subject lower/raise the quantity Forq will SHOW, at strength
+    // scaled by sample count (one-off = no change). Only Forq-advice rows
+    // are targets, so the household's own manual rows are never rewritten.
+    // The adjusted qty is what the snapshot freezes — the later purchase
+    // then scores against the shown number ONCE; the override event itself
+    // stays out of purchase accuracy (no double-counting).
+    const learnedFresh = applyOverrideLearning(
+      applyWasteLearning(fresh, learned),
+      overrideLearningProfile(s),
+    );
     if (!learnedFresh.length) return {};
     const provenanceByRow = Object.fromEntries(learnedFresh.map((row) => [
       row.id,
@@ -90,20 +103,12 @@ addToList: (items, { provenance = null } = {}) =>
       day: s.day,
       provenanceByRow,
     });
-    // The basket-cost prediction is frozen NOW (task: freeze spend
-    // predictions when shown) — when the list is generated/extended,
-    // never at checkout. Zero-priced rows make a zero freeze, which
-    // the matching filter refuses to copy; a later reprice re-freezes.
-    const basketPredictions = [
-      ...(s.basketPredictions || []),
-      basketPredictionEvent({
-        rows: nextList,
-        day: s.day,
-        source: 'list-generation',
-        rowPredictionIds: nextList.map((row) => row.id),
-        idFactory: () => uid('bp'),
-      }),
-    ].slice(-200);
+    // The basket-cost prediction is refreshed NOW (task: every material
+    // list change freezes a new basket) — over the CURRENT rows with their
+    // provenance-stamped snapshots, superseding the previous freeze in the
+    // same write — never at checkout. Zero-priced rows make no trustworthy
+    // forecast, which invalidates rather than fakes one.
+    const basketPredictions = refreshBasketFreeze({ state: s, nextList, source: 'list-generation' });
     return {
       shoppingList: nextList,
       shoppingPredictions,
@@ -128,8 +133,9 @@ repeatLastShop: () =>
     // or adaptation, that write creates a fresh snapshot and lineage
     // (the adaptation paths re-snapshot the rows they touch).
     const provenanceByRow = Object.fromEntries(items.map((row) => [row.id, PREDICTION_PROVENANCE.USER_REPEAT_SHOP]));
+    const nextList = [...s.shoppingList, ...items];
     return {
-      shoppingList: [...s.shoppingList, ...items],
+      shoppingList: nextList,
       shoppingPredictions: upsertPredictions(items, s.shoppingPredictions, {
         portionsDecision: householdPortionsFor(s),
         pantry: s.pantry || [],
@@ -137,6 +143,11 @@ repeatLastShop: () =>
         day: s.day,
         provenanceByRow,
       }),
+      // Added rows change the shown basket — the displayed spend prediction
+      // must describe the basket NOW shown (receipt-priced repeats make a
+      // trustworthy forecast; the previous freeze is superseded, not left
+      // describing rows that have joined the basket).
+      basketPredictions: refreshBasketFreeze({ state: s, nextList, source: 'reprice' }),
     };
   }),
 setItemAisle: (id, aisle) =>
@@ -190,18 +201,10 @@ updateListItem: (id, patch) =>
     }
     if (changesPrice) {
       // Material reprice: the shown basket cost changed, so the frozen
-      // spend prediction is refreshed NOW — with the full visible list,
-      // the current row prediction ids, and its own freeze identity.
-      changes.basketPredictions = [
-        ...(s.basketPredictions || []),
-        basketPredictionEvent({
-          rows: nextList,
-          day: s.day,
-          source: 'reprice',
-          rowPredictionIds: nextList.map((r) => r.id),
-          idFactory: () => uid('bp'),
-        }),
-      ].slice(-200);
+      // spend prediction is refreshed NOW — over the full visible list,
+      // provenance-stamped from the live book, superseding the old freeze
+      // (which must not keep describing the basket as it was shown).
+      changes.basketPredictions = refreshBasketFreeze({ state: s, nextList, source: 'reprice' });
     }
     return changes;
   }),

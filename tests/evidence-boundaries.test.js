@@ -295,7 +295,7 @@ describe('quantity overrides are explicit, attributable, and never rewrite advic
     app.run('updateListItem', 'row-1', { price: 2.5 });
     const freezes = app.state().basketPredictions;
     expect(freezes.length).toBe(before + 1);
-    expect(freezes.at(-1)).toMatchObject({ source: 'reprice', schemaVersion: 1, predicted: 2.5 });
+    expect(freezes.at(-1)).toMatchObject({ source: 'reprice', schemaVersion: 2, predicted: 2.5 });
   });
 });
 
@@ -344,7 +344,15 @@ describe('spend predictions are frozen when shown, copied verbatim at checkout',
     expect(record.spendPrediction.matchedBy).toBe('row-subset');
     expect(record.spendPrediction.basketPredictionId).toBe(freeze.id);
     expect(record.spendPrediction.predictedAt).toBe(TODAY);
-    expect(record.spendPrediction.rowPredictionIds).toEqual(['row-1', 'row-2']);
+    // TRUE SUBSET METADATA (task: subset freeze metadata): every piece of
+    // the copied freeze describes the exact bought subset — never a £4
+    // subtotal carrying £10 of full-basket row metadata.
+    expect(record.spendPrediction.rowPredictionIds).toEqual(['row-1']);
+    expect(record.spendPrediction.rows.map((row) => row.listItemId)).toEqual(['row-1']);
+    expect(record.spendPrediction.totalRows).toBe(1);
+    expect(record.spendPrediction.pricedRows).toBe(1);
+    expect(record.spendPrediction.priceCoverage).toBe(1);
+    expect(record.spendPrediction.subsetOf).toBe(freeze.id);
     // And spendAccuracy scores it against the freeze, not the till price.
     const result = spendAccuracy({ ...state, shops: [{ ...record, date: TODAY, total: 9 }] }, { today: TODAY });
     expect(result.samples).toBe(1);

@@ -20,6 +20,13 @@ export {
   SUPPORTED_BASKET_SCHEMA_VERSIONS,
   BASKET_SCHEMA_REJECTION_REASONS,
   basketSchemaStatus,
+  SPEND_PROVENANCE,
+  spendProvenanceFrom,
+  basketProvenanceRollup,
+  activeBasketFreezes,
+  invalidateBasketFreeze,
+  appendBasketFreeze,
+  refreshBasketFreeze,
   frozenBasketForList,
   listSnapshotDivergence,
   listSnapshotsConsistent,
@@ -31,6 +38,12 @@ export {
 } from './correction-measurements.js';
 
 export { listSnapshotSync } from './shopping-predictions.js';
+
+export {
+  overrideLearningProfile,
+  applyOverrideLearning,
+  overridePressure,
+} from './override-learning.js';
 
 import { correctionProofOf } from './correction-measurements.js';
 

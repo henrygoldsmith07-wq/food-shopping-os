@@ -76,7 +76,9 @@ const frozenShop = (over = {}) => ({
   date: '2026-09-18',
   total: 3,
   items: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 1.2 }],
-  predictions: [{ id: 'row-1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-18' }],
+  // Provenance-stamped: this is Forq advice — row-exact spend accuracy
+  // scores only Forq-priced, Forq-attributed rows.
+  predictions: [{ id: 'row-1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-18', provenance: 'forq-plan' }],
   ...over,
 });
 
@@ -452,7 +454,7 @@ describe('the shared evaluation-time policy', () => {
     // pre-purchase freeze (frozen when the list was generated), never a
     // checkout reconstruction.
     const freeze = basketPredictionEvent({
-      rows: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 2.4 }],
+      rows: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 2.4, provenance: 'forq' }],
       day: '2026-09-18',
     });
     const shop = { ...frozenShop(), spendPrediction: { ...freeze, predictedTotal: freeze.predicted } };

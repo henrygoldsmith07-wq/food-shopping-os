@@ -276,12 +276,14 @@ describe('spend accuracy: prediction snapshot vs recorded total', () => {
       schemaVersion: event.schemaVersion,
       matchedBy: 'day',
     });
-    const f1 = basketPredictionEvent({ rows: [{ id: 'a', name: 'A', price: 10 }], day: '2026-09-09', at: 900 });
-    const f2 = basketPredictionEvent({ rows: [{ id: 'b', name: 'B', price: 10 }], day: '2026-09-12', at: 950 });
+    const f1 = basketPredictionEvent({ rows: [{ id: 'a', name: 'A', price: 10, provenance: 'forq' }], day: '2026-09-09', at: 900 });
+    const f2 = basketPredictionEvent({ rows: [{ id: 'b', name: 'B', price: 10, provenance: 'forq' }], day: '2026-09-12', at: 950 });
     const state = household({
       shops: [
-        { date: '2026-09-10', total: 12, spendPrediction: copied(f1) }, // 20% under-predicted
-        { date: '2026-09-13', total: 9, spendPrediction: copied(f2) },  // 10% over-predicted
+        // Row-exact: receipt rows carry ids, so the actual subtotal is
+        // provable over EXACTLY the predicted rows — never the full total.
+        { date: '2026-09-10', total: 12, items: [{ id: 'a', name: 'A', price: 12 }], spendPrediction: copied(f1) }, // 20% under-predicted
+        { date: '2026-09-13', total: 9, items: [{ id: 'b', name: 'B', price: 9 }], spendPrediction: copied(f2) },  // 10% over-predicted
       ],
     });
     const result = spendAccuracy(state, { today: TODAY });
@@ -300,7 +302,7 @@ describe('spend accuracy: prediction snapshot vs recorded total', () => {
   });
 
   it('keeps item-total reconciliation as a separate data-quality metric', () => {
-    const freeze = basketPredictionEvent({ rows: [{ id: 'c', name: 'A', price: 12 }], day: '2026-09-09', at: 900 });
+    const freeze = basketPredictionEvent({ rows: [{ id: 'c', name: 'A', price: 10, provenance: 'forq' }], day: '2026-09-09', at: 900 });
     const state = household({
       shops: [{ date: '2026-09-10', total: 12, spendPrediction: {
         basketPredictionId: freeze.id,
@@ -311,7 +313,11 @@ describe('spend accuracy: prediction snapshot vs recorded total', () => {
         rowPredictionIds: freeze.rowPredictionIds,
         schemaVersion: freeze.schemaVersion,
         matchedBy: 'day',
-      }, items: [{ name: 'A', price: 10 }] }],
+        // Row-exact: the receipt row for the predicted row is priced 10 —
+        // prediction quality says £10 vs £10 (0% error), while reconciliation
+        // separately flags the £12 total vs £10 of itemised lines.
+        items: [{ id: 'c', name: 'A', price: 10 }],
+      }, items: [{ id: 'c', name: 'A', price: 10 }] }],
     });
     expect(spendAccuracy(state, { today: TODAY }).value).toBe(0);
     expect(basketReconciliation(state, { today: TODAY }).value).toBeCloseTo(0.17, 2);
