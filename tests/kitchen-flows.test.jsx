@@ -243,7 +243,8 @@ describe('meal plan', () => {
 
     fireEvent.click(screen.getByText('List'));
     expect(screen.getByText('From recipes')).toBeDefined();
-    expect(screen.getByText('Chickpeas (tins)')).toBeDefined();
+    // The row shows the group's everyday name, not the recipe's tin spelling.
+    expect(screen.getByText('Chickpeas')).toBeDefined();
   });
 });
 

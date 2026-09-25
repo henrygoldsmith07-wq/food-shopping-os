@@ -474,7 +474,8 @@ describe('meals to shopping', () => {
     fireEvent.click(screen.getByText(/Send this week's ingredients to the list/));
 
     openShop();
-    expect(screen.getAllByText('Chickpeas (tins)')).toHaveLength(1);
+    // One canonical ingredient = one row, under its everyday name.
+    expect(screen.getAllByText('Chickpeas')).toHaveLength(1);
     expect(screen.getAllByText(/^Rice$/)).toHaveLength(1);
   });
 });
