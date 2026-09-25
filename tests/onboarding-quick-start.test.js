@@ -16,6 +16,8 @@ describe('onboarding quick start', () => {
     const result = firstSessionPlan({ day: '2026-08-28', recipes, pickedRecipeIds: ['curry', 'rice-bowl'], household: 2 });
     expect(Object.keys(result.plan)).toEqual(['2026-08-28', '2026-08-29']);
     expect(result.shoppingList.map((item) => item.name)).toEqual(['Rice', 'Onion', 'Eggs']);
+    expect(result.shoppingList.every((item) => typeof item.id === 'string' && item.id.length > 0)).toBe(true);
+    expect(new Set(result.shoppingList.map((item) => item.id)).size).toBe(result.shoppingList.length);
     expect(result.shoppingList.find((item) => item.name === 'Rice')).toMatchObject({
       qty: '500 g',
       sourceRecipes: ['Curry', 'Rice bowl'],

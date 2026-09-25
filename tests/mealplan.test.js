@@ -173,6 +173,18 @@ describe('leftovers', () => {
     expect(covered.map((e) => e.date)).toEqual(['2026-07-06', '2026-07-08']);
   });
 
+  it('only treats leftovers as a full meal when they cover the household', () => {
+    const oneDinner = { '2026-07-06': { dinner: CURRY } };
+    expect(coveredByLeftovers(oneDinner, week, fridge, { people: 2 })).toHaveLength(1);
+    expect(coveredByLeftovers(oneDinner, week, fridge, { people: 3 })).toHaveLength(0);
+  });
+
+  it('does not use leftovers after their safe date', () => {
+    const afterExpiry = { '2026-07-10': { dinner: CURRY } };
+    expect(coveredByLeftovers(afterExpiry, week, fridge)).toHaveLength(0);
+    expect(shoppingForPlan(afterExpiry, week, { pantry: fridge }).some((item) => item.fromRecipe === curry.name)).toBe(true);
+  });
+
   it('keeps a covered dish off the shopping list', () => {
     const withLeftovers = shoppingForPlan(plan, week, { pantry: fridge });
     // Both curry slots are covered by the two portions, so nothing for it is bought.
@@ -189,6 +201,13 @@ describe('leftovers', () => {
     });
     expect(items.some((i) => i.name === 'Sushi rice')).toBe(false);
     expect(items.some((i) => i.name === 'Salmon fillets')).toBe(true);
+  });
+
+  it('does not re-buy an ingredient that the pantry holds under an alias', () => {
+    const items = shoppingForPlan({ '2026-07-06': { dinner: CURRY } }, week, {
+      pantry: [{ name: 'tin tomatoes', qty: '1 tin', confidence: 'definite' }],
+    });
+    expect(items.some((i) => i.name === 'Chopped tomatoes')).toBe(false);
   });
 });
 

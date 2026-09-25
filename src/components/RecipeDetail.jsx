@@ -4,12 +4,10 @@ import {
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { gbp, cx } from '../lib/utils.js';
-import { itemsFromRecipes } from '../data/stores.js';
 import { MEAL_SLOTS } from '../data/plan.js';
-import { addDays, pantryAvailability } from '../lib/kitchen.js';
-import { sameIngredient } from '../lib/aliases.js';
-import { explainPantryShortfall, shortfallQuantity } from '../lib/pantry-intelligence.js';
-import { mergeQtys } from '../lib/pantry.js';
+import { addDays } from '../lib/kitchen.js';
+import { explainPantryShortfall } from '../lib/pantry-intelligence.js';
+import { pantryReadForRecipeIngredient, shoppingItemsForRecipe } from '../lib/recipe-shopping.js';
 import {
   applySwap, dislikeSwapsFor, makeItFit, makeItFitGoal, nutritionConfidence, safeExternalUrl, scaleRecipe,
 } from '../lib/recipe-tools.js';
@@ -61,13 +59,10 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
   // What you have is read from actual pantry evidence, including aliases and
   // quantities. Several rows of the same ingredient are summed before a
   // recipe is called covered.
-  const pantryRead = (ing) => {
-    const matches = app.pantry.filter((item) => sameIngredient(item.name, ing.name, app.aliasMemory || {}));
-    const availableQty = matches.reduce((total, item) => mergeQtys(total, item.qty || '', { ingredient: ing.name }), '');
-    const confidence = matches.some((item) => ['confirmed_sufficient', 'probably_available'].includes(pantryAvailability(item, app.day)));
-    const shortfallQty = shortfallQuantity(availableQty, ing.qty, { ingredient: ing.name });
-    return { matches, availableQty, shortfallQty, sufficient: confidence && !shortfallQty };
-  };
+  const pantryRead = (ing) => pantryReadForRecipeIngredient(ing, app.pantry, {
+    today: app.day,
+    learnedAliases: app.aliasMemory || {},
+  });
   const has = (ing) => pantryRead(ing).sufficient;
   const missing = recipe.ingredients.filter((i) => !has(i));
   const havePantry = recipe.ingredients.length - missing.length;
@@ -112,7 +107,10 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
       goTab?.('shop');
       return;
     }
-    app.addToList(itemsFromRecipes([recipe], app.pantry.map((p) => p.name)));
+    app.addToList(shoppingItemsForRecipe(recipe, app.pantry, {
+      today: app.day,
+      learnedAliases: app.aliasMemory || {},
+    }));
     setAddedMissingKey(missingKey);
   };
 

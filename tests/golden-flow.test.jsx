@@ -67,7 +67,7 @@ const runGoldenFlow = (start = baseState()) => {
   });
   const rice = list.find((row) => row.name === 'Rice');
   expect(rice).toBeDefined(); // curry's rice is written for 4; household eats 4
-  expect(rice.qty).toBe('300g'); // the recipe's native 4-serving amount
+  expect(rice.qty).toBe('600 g'); // two planned curry nights need two 4-serving batches
 
   // 3. LIST SHOWN → EVIDENCE FROZEN: rows priced (the app re-freezes the
   //    basket prediction on a price change), snapshots and the basket-cost
@@ -108,17 +108,8 @@ const runGoldenFlow = (start = baseState()) => {
   // 5. LEFTOVERS — the household batch-cooked extra: two spare portions go
   //    in the fridge for a later slot.
   commands.createLeftover({ name: 'Coconut Chickpea Curry', portions: 2, safeDays: 3 });
-  state = {
-    ...state,
-    pantry: [
-      ...state.pantry,
-      {
-        id: 'p-curry-leftover', name: 'Coconut Chickpea Curry (leftovers)', cat: 'Leftovers',
-        qty: '2 portions', recipeId: 'chickpea-curry', portions: 2,
-        location: 'Fridge', addedAt: TODAY, expiry: d2,
-      },
-    ],
-  };
+  expect(state.pantry.some((row) => row.cat === 'Leftovers' && row.recipeId === 'chickpea-curry' && row.portions === 2)).toBe(true);
+  expect(state.leftovers.some((row) => row.recipeId === 'chickpea-curry' && row.remainingPortions === 2)).toBe(true);
   expect(ledgerEvents(state, { type: 'LeftoverCreated' })).toHaveLength(1);
 
   // 6. WASTE — the household binned tins of chickpeas twice in the last
@@ -137,10 +128,19 @@ const runGoldenFlow = (start = baseState()) => {
 };
 
 describe('the golden flow: plan → shop → cook → learn → next week', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    // This flow is intentionally pinned to TODAY. Without freezing Date, the
+    // app's real day-rollover eventually makes the seeded missed-meal window
+    // expire and refreshes the seeded plan/list, so the test starts failing
+    // because the calendar moved rather than because the product regressed.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(`${TODAY}T12:00:00`));
+    localStorage.clear();
+  });
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    vi.useRealTimers();
   });
 
   it('evaluates the exact prediction the list showed — snapshot vs purchase', () => {
@@ -377,15 +377,16 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       cooked: state.cooked.filter((c) => !(c.date === pastDate && c.recipeId === 'salmon-teriyaki')),
     };
     const inference = loopInference(open, { today: TODAY });
-    expect(inference.proposals.some((p) => p.date === pastDate && p.recipeId === 'salmon-teriyaki')).toBe(true);
+    const proposal = inference.proposals.find((p) => p.date === pastDate && p.recipeId === 'salmon-teriyaki');
+    expect(proposal).toBeDefined();
 
     // In the app, the confirmation is one tap on This Week, and answering it
     // writes the same ledger event a manual log would.
     localStorage.setItem(STORAGE_KEY, JSON.stringify(open));
     render(<App />);
-    const question = screen.getByText(/marked Teriyaki Salmon Bowls as missed .* did it actually happen/i);
+    const question = screen.getByText(proposal.description);
     expect(question).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: /Yes — .*marked Teriyaki Salmon Bowls as missed/i }));
+    fireEvent.click(screen.getByRole('button', { name: `Yes — ${proposal.description}` }));
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
     expect(stored.householdLedger.some((e) =>

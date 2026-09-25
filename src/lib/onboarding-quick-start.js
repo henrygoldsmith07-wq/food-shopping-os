@@ -34,7 +34,9 @@ export const firstSessionPlan = ({ day, recipes = [], pickedRecipeIds = [], hous
       const qty = scaleQty(ingredient?.qty || '1', factor);
       const existing = shoppingByIngredient.get(key);
       if (!existing) {
+        const slug = key.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         shoppingByIngredient.set(key, {
+          id: `starter-${slug || shoppingByIngredient.size + 1}`,
           name,
           qty,
           fromRecipe: recipe.name,

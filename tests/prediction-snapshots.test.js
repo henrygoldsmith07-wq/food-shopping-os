@@ -324,7 +324,7 @@ describe('spend accuracy hardening: only valid predictions are scored', () => {
       ...overrides,
     });
     const state = household({ basketPredictions: priced.book, shops: [
-      { id: 'g', date: TODAY, total: 10, items: [{ id: 'g', name: 'A', price: 10 }], spendPrediction: copied() }, // scores (row-exact)
+      { id: 'g', date: TODAY, total: 10, items: [{ id: 'g', name: 'A', price: 10, actualPrice: 10, actualPriceSource: 'actual-receipt' }], spendPrediction: copied() }, // scores (row-exact)
       { id: 'm', date: TODAY, total: 5 },                                                     // no snapshot
       { id: 'z', date: TODAY, total: 4, spendPrediction: copied({ predictedTotal: 0 }) },     // zero prediction
       { id: 'n', date: TODAY, total: null, predicted: 9 },   // malformed total

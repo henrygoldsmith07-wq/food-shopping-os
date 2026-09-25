@@ -10,6 +10,7 @@ import {
 } from '../lib/mealplan.js';
 import { prepChecklist, prepProgress } from '../lib/prep-checklist.js';
 import { shoppingListForPlan } from '../lib/loop-learning.js';
+import { householdPortionsFor } from '../lib/portions.js';
 import { downloadFile } from '../lib/notify.js';
 import { Section, Card, Chip, Pill, Sheet, FoodArt } from './ui.jsx';
 import { MonthGrid, WeekGrid } from './PlanCalendar.jsx';
@@ -47,9 +48,10 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const month = useMemo(() => monthDates(anchorMonth), [anchorMonth]);
   const cells = useMemo(() => monthGrid(anchorMonth), [anchorMonth]);
   const dates = view === 'week' ? week : month;
-  const stats = planStats(app.plan, dates, { people: app.portions });
-  const covered = coveredByLeftovers(app.plan, dates, app.pantry);
-  const batches = batchGroups(app.plan, dates, { people: app.portions });
+  const effectivePeople = householdPortionsFor(app).portions;
+  const stats = planStats(app.plan, dates, { people: effectivePeople });
+  const covered = coveredByLeftovers(app.plan, dates, app.pantry, { people: effectivePeople });
+  const batches = batchGroups(app.plan, dates, { people: effectivePeople });
   const thisWeekDates = useMemo(() => weekDates(app.day), [app.day]);
   const prepSteps = useMemo(() => prepChecklist(app.plan, dates), [app.plan, dates]);
   const prep = prepProgress(prepSteps, prepDone);
@@ -98,7 +100,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       <div className="hero-gradient px-5 pt-1 pb-3">
         <p className="text-[0.84375rem] font-semibold rise rise-1" style={{ color: 'var(--muted)' }}>
           {stats.meals
-            ? `${stats.meals} meal${stats.meals === 1 ? '' : 's'} planned · about ${gbp(stats.cost, { always: true })} for ${app.portions} ${view === 'week' ? 'this week' : 'this month'}`
+            ? `${stats.meals} meal${stats.meals === 1 ? '' : 's'} planned · about ${gbp(stats.cost, { always: true })} for ${effectivePeople} ${view === 'week' ? 'this week' : 'this month'}`
             : 'Tap any slot to plan a meal, or let the generator fill the week.'}
         </p>
       </div>

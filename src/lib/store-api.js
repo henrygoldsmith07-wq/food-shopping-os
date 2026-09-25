@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { CATALOGUE } from '../data/foods.js';
 import { guessAisle } from '../data/stores.js';
-import { aisleFor, applyOffers, mergeItems, rememberAisle, routeFromTicks, shoppingNameKey } from './shopping.js';
+import { aisleFor, mergeItems, rememberAisle, shoppingNameKey } from './shopping.js';
 import { buildEntry, copyEntries } from './nutrition.js';
 import { recipeFood } from './foodlog.js';
 import { targetActions } from './target-actions.js';
@@ -19,7 +19,6 @@ import { smartActions } from './smart-actions.js';
 import { HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY } from './health-vault.js';
 import { householdPermission } from './household.js';
 import { householdPortionsFor } from './portions.js';
-import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
 import { offerActions } from './offer-actions.js';
@@ -35,7 +34,7 @@ import { COUPON_KINDS, LOYALTY_PROGRAMMES, normaliseCoupon } from './coupons.js'
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
-import { buildShopRecord, upsertPredictions } from './shopping-predictions.js';
+import { upsertPredictions } from './shopping-predictions.js';
 import { predictionActions } from './prediction-feedback.js';
 import { shoppingListMutations } from './shopping-list-mutations.js';
 import {
@@ -242,109 +241,8 @@ export function useStoreApi({
       // substituteListItem lives in shopping-actions.js (with the other row
       // actions) and writes substitution lineage onto the prediction book —
       // a row that changed ingredient must not ride its old snapshot.
-      // A confirmed purchase stocks the pantry by default. The UI still passes
-      // `toPantry: false` when the shopper explicitly declines, but callers that
-      // only record the purchase get the safe, expected inventory hand-off too.
-      recordShop: ({ store, total, toPantry = true, location = 'Cupboard', itemIds = null }) =>
-        set((s) => {
-          if (!householdPermission(s, 'shopping')) return {};
-          const bought = s.shoppingList.filter((i) => i.checked && (!itemIds || itemIds.includes(i.id)));
-          if (!bought.length) return {};
-          const shopStore = store || 'Unnamed shop';
-          const { saved } = applyOffers(bought, s.offers, { store: shopStore, today: s.day });
-          const purchaseDate = s.day;
-          const reconciled = toPantry && householdPermission(s, 'pantry')
-            ? reconcilePurchase(s.pantry, bought.map((item) => ({
-              ...item, store: shopStore, location, price: Number(item.price) || 0,
-            })), {
-              learnedAliases: s.aliasMemory || {},
-              date: purchaseDate,
-              today: s.day,
-              location,
-              idFactory: () => uid('p'),
-            })
-            : null;
-          // One shared purchase-recording shape (see shopping-predictions.js):
-          // the basket prediction frozen pre-till, and the prediction
-          // snapshots for the exact rows bought, captured from the list's
-          // prediction book while it still exists. Quantity evaluation reads
-          // THESE — never a reconstruction from recipes.
-          // No `predictedCost` here: the SPEND prediction is the pre-till
-          // freeze matched by row-prediction ids (see shop-record.js) —
-          // copied verbatim, never recomputed. No freeze → `predicted: null`
-          // and spend accuracy excludes the shop honestly.
-          const record = buildShopRecord({
-            state: s,
-            items: bought,
-            store: shopStore,
-            total,
-            id: uid('h'),
-            day: s.day,
-          });
-          // The freeze stamps each bought row with its canonical subject
-          // resolved at purchase time; the receipt-shaped item rewrite below
-          // must carry that stamp forward, or the checked-rows path would
-          // lose the frozen outcome identity the command path keeps.
-          const stampedSubjectById = new Map(record.items.map((item) => [item?.id, item?.subjectKey]));
-          const shop = {
-            ...record,
-            saved,
-            pantryReconciled: Boolean(reconciled),
-            items: bought.map(({ id: itemId, name, price, qty, emoji }) => ({
-              id: itemId,
-              name,
-              price: Number(price) || 0,
-              priceSource: 'receipt',
-              recordedAt: s.day,
-              qty,
-              emoji,
-              subjectKey: stampedSubjectById.get(itemId) ?? null,
-            })),
-          };
-          const route = routeFromTicks(bought);
-          const pantryEvent = reconciled
-            ? {
-              id: uid('pe'), type: 'purchase_reconciliation', date: s.day,
-              store: shop.store, added: reconciled.added.length,
-              merged: reconciled.matches.filter((match) => match.action === 'merged').length,
-              conflicts: reconciled.conflicts.length,
-            }
-            : null;
-          // One replayable purchase event per recorded shop. A shop with no
-          // planned meal within ±3 days is honestly marked off-plan — that is
-          // the flag week recovery reads to clear the rows it covered.
-          const plannedDatesNear = Object.keys(s.plan || {})
-            .filter((d) => Object.keys(s.plan[d] || {}).length)
-            .some((d) => Math.abs(new Date(`${d}T12:00:00`) - new Date(`${s.day}T12:00:00`)) <= 3 * 86400000);
-          const withPurchase = appendLedgerEvent(s, createLedgerEvent(
-            'IngredientPurchased',
-            {
-              shopId: shop.id,
-              store: shop.store,
-              total: shop.total,
-              items: shop.items.map((i) => i.name),
-              unplanned: !plannedDatesNear || undefined,
-            },
-            { origin: 'user', at: `${s.day}T12:00:00.000Z` },
-          ));
-          return {
-            ...withPurchase,
-            shops: [...s.shops, shop],
-            shoppingList: s.shoppingList.filter((i) => !bought.some((item) => item.id === i.id)),
-            // The bought rows' snapshots now live on the shop record — the
-            // book only describes rows currently on show. The used basket
-            // freeze STAYS: it is historical evidence, referenced by the
-            // shop's copied spendPrediction, not live state.
-            shoppingPredictions: (s.shoppingPredictions || []).filter((p) => !bought.some((item) => item.id === p.id)),
-            storeRoutes: route.length > 1 ? { ...s.storeRoutes, [shop.store]: route } : s.storeRoutes,
-            pantry: reconciled ? reconciled.pantry : s.pantry,
-            pantryConflicts: reconciled
-              ? [...(s.pantryConflicts || []), ...reconciled.conflicts].slice(-100)
-              : s.pantryConflicts,
-            pantryEvents: pantryEvent ? [...(s.pantryEvents || []), pantryEvent].slice(-100) : s.pantryEvents,
-            lastPantryEvent: pantryEvent || s.lastPantryEvent,
-          };
-        }),
+      // recordShop lives in shopping-actions.js (one shared purchase
+      // recorder: checked-rows flow and domain commands keep one shape).
       ...offerActions(set, latest),
       ...predictionActions(set),
       compareBaskets: (items, offersByStore, options) => compareBaskets(items, offersByStore, options),

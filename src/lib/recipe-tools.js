@@ -21,7 +21,6 @@ import { KCAL_PER_G } from '../data/goals.js';
 import { recipeAllowed } from './goals.js';
 import { evaluateFoodSuitability, suitabilityContextFrom } from './food-suitability.js';
 import { formatQuantity, parseQuantity, scaleQuantity } from './measure.js';
-
 const round1 = (n) => Math.round(n * 10) / 10;
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -399,9 +398,10 @@ export const recipeFromImport = (result, { text = '', url = '', provenance = {} 
     healthScore: 60,
     proteinScore: 50,
     envScore: 60,
+    // ingredient grams are for the WHOLE source recipe (only nutrition is per-serving): multiplying by servings doubled a "Serves 2 · 80 g oats" recipe to 160 g.
     ingredients: (result.ingredients || []).map((i) => ({
       name: i.food?.name || i.name || i.line,
-      qty: i.food && i.grams ? `${Math.round(i.grams * servings)} g` : (i.line || ''),
+      qty: i.food && i.grams ? `${Math.round(i.grams)} g` : (i.line || ''),
     })),
     steps: steps.length
       ? steps

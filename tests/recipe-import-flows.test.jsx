@@ -133,4 +133,22 @@ describe('importing a recipe from a link', () => {
     expect(within(sheet).getByText('Overnight oats')).toBeDefined();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it('Shop missing leaves pantry-covered imported ingredients off the list', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...state,
+      pantry: [{ id: 'p-oats', name: 'Porridge oats', qty: '80 g', confidence: 'definite' }],
+    }));
+    const sheet = openImporter();
+    fireEvent.change(within(sheet).getByLabelText('Recipe text'), {
+      target: { value: 'Overnight oats\nServes 2\n80g porridge oats\n250ml semi-skimmed milk' },
+    });
+    fireEvent.click(within(sheet).getByText('Import recipe'));
+    fireEvent.click(within(sheet).getByText('Shop missing'));
+    fireEvent.click(within(sheet).getByLabelText('Close'));
+    fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('List'));
+
+    expect(screen.queryByLabelText(/Tick .*oats/i)).toBeNull();
+    expect(screen.getByLabelText(/Tick .*milk/i)).toBeDefined();
+  });
 });

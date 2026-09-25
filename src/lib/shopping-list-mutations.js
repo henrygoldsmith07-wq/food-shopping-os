@@ -106,9 +106,17 @@ addToList: (items, { provenance = null } = {}) =>
     // The basket-cost prediction is refreshed NOW (task: every material
     // list change freezes a new basket) — over the CURRENT rows with their
     // provenance-stamped snapshots, superseding the previous freeze in the
-    // same write — never at checkout. Zero-priced rows make no trustworthy
+    // same write — never at checkout. FREEZE ORDERING (task: the freeze
+    // must describe the book it will be evaluated against): the fresh
+    // snapshots ride the state passed in, so per-row provenance resolves
+    // from the NEW book — never the pre-write book, which is missing the
+    // rows this very write added. Zero-priced rows make no trustworthy
     // forecast, which invalidates rather than fakes one.
-    const basketPredictions = refreshBasketFreeze({ state: s, nextList, source: 'list-generation' });
+    const basketPredictions = refreshBasketFreeze({
+      state: { ...s, shoppingPredictions },
+      nextList,
+      source: 'list-generation',
+    });
     return {
       shoppingList: nextList,
       shoppingPredictions,
@@ -134,20 +142,28 @@ repeatLastShop: () =>
     // (the adaptation paths re-snapshot the rows they touch).
     const provenanceByRow = Object.fromEntries(items.map((row) => [row.id, PREDICTION_PROVENANCE.USER_REPEAT_SHOP]));
     const nextList = [...s.shoppingList, ...items];
+    const shoppingPredictions = upsertPredictions(items, s.shoppingPredictions, {
+      portionsDecision: householdPortionsFor(s),
+      pantry: s.pantry || [],
+      learnedAliases: s.aliasMemory || {},
+      day: s.day,
+      provenanceByRow,
+    });
+    // Added rows change the shown basket — the displayed spend prediction
+    // must describe the basket NOW shown (receipt-priced repeats make a
+    // trustworthy forecast; the previous freeze is superseded, not left
+    // describing rows that have joined the basket). FREEZE ORDERING (task:
+    // the freeze reads the NEW book): the repeat-shop snapshots are in the
+    // book passed to the freeze, so its rows freeze as user-priced — not
+    // silently as Forq estimates off the pre-write book.
     return {
       shoppingList: nextList,
-      shoppingPredictions: upsertPredictions(items, s.shoppingPredictions, {
-        portionsDecision: householdPortionsFor(s),
-        pantry: s.pantry || [],
-        learnedAliases: s.aliasMemory || {},
-        day: s.day,
-        provenanceByRow,
+      shoppingPredictions,
+      basketPredictions: refreshBasketFreeze({
+        state: { ...s, shoppingPredictions },
+        nextList,
+        source: 'reprice',
       }),
-      // Added rows change the shown basket — the displayed spend prediction
-      // must describe the basket NOW shown (receipt-priced repeats make a
-      // trustworthy forecast; the previous freeze is superseded, not left
-      // describing rows that have joined the basket).
-      basketPredictions: refreshBasketFreeze({ state: s, nextList, source: 'reprice' }),
     };
   }),
 setItemAisle: (id, aisle) =>
@@ -182,6 +198,12 @@ updateListItem: (id, patch) =>
     if (changesQty) {
       const snap = (s.shoppingPredictions || []).find((p) => p.id === id);
       if (snap) {
+        // OVERRIDE IMMUTABILITY (task: freeze what was shown into the
+        // event): the snapshot's provenance, shown-day and normalized
+        // measurement are copied INTO the event at stamp time. Learning
+        // never re-resolves the live book — the event stays learnable
+        // after the row or snapshot is deleted, and a later re-freeze of
+        // this row id cannot rewrite what the household saw.
         changes.quantityOverrides = [
           ...(s.quantityOverrides || []),
           quantityOverrideEvent({
@@ -192,6 +214,10 @@ updateListItem: (id, patch) =>
             overrideQty: patch.qty,
             dimension: snap.normalized?.dim || null,
             unit: snap.normalized?.unit || null,
+            predictionProvenance: snap.provenance ?? null,
+            predictionDay: snap.day ?? null,
+            predictionAt: snap.at ?? null,
+            prediction: { originalQty: snap.qty, normalized: snap.normalized || null },
             day: s.day,
             actor: s.activeMemberId || null,
             reason: patch.note == null ? null : String(patch.note),

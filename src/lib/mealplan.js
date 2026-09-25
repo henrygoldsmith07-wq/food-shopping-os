@@ -13,6 +13,7 @@ import { MEAL_SLOTS } from '../data/plan.js';
 import { itemsFromRecipes } from '../data/stores.js';
 import { addDays, dayStamp, pantryAvailability, pantryTruthForNeed, weekStart } from './kitchen.js';
 import { canonicalName } from './aliases.js';
+import { scaleQty } from './portions.js';
 import { mergeQtys, qtySuffices } from './pantry.js';
 import { explainPantryShortfall, shortfallQuantity } from './pantry-intelligence.js';
 
@@ -245,21 +246,49 @@ export const leftoverEntry = (recipe, portions, day = dayStamp()) => ({
 });
 
 /**
- * Which planned meals the fridge already covers. Portions are spent in
- * calendar order, so the first two Tuesday-and-Thursday chillis are covered and
- * a third would still need shopping for.
+ * Allocate saved portions to planned meals in calendar order.
+ *
+ * Rows stay separate so their safe dates survive the calculation: a portion
+ * that expires on Tuesday can cover Monday's dinner, but must never suppress
+ * shopping for the same dish on Wednesday. Partial coverage is retained too,
+ * letting the shopping calculation buy only the fresh portions still needed.
  */
-export const coveredByLeftovers = (plan = {}, dates = [], pantry = []) => {
-  const left = new Map(leftoverPortions(pantry));
-  const covered = [];
-  for (const entry of planEntries(plan, dates)) {
-    const have = left.get(entry.recipeId) || 0;
-    if (have <= 0) continue;
-    left.set(entry.recipeId, have - 1);
-    covered.push(entry);
+export const leftoverCoverageForPlan = (plan = {}, dates = [], pantry = [], { people = 1 } = {}) => {
+  const eaters = Math.max(1, Number(people) || 1);
+  const stock = new Map();
+  for (const item of leftoverItems(pantry)) {
+    if (!item?.recipeId) continue;
+    const portions = Math.max(0, Number(item.portions) || 0);
+    if (!portions) continue;
+    if (!stock.has(item.recipeId)) stock.set(item.recipeId, []);
+    stock.get(item.recipeId).push({
+      remaining: portions,
+      expiry: item.expiry ? String(item.expiry).slice(0, 10) : null,
+    });
   }
-  return covered;
+  for (const rows of stock.values()) {
+    rows.sort((a, b) => String(a.expiry || '9999-12-31').localeCompare(String(b.expiry || '9999-12-31')));
+  }
+
+  return planEntries(plan, dates).map((entry) => {
+    let freshPortions = eaters;
+    let savedPortions = 0;
+    for (const row of stock.get(entry.recipeId) || []) {
+      if (freshPortions <= 0) break;
+      if (row.remaining <= 0) continue;
+      if (row.expiry && row.expiry < entry.date) continue;
+      const used = Math.min(freshPortions, row.remaining);
+      row.remaining -= used;
+      freshPortions -= used;
+      savedPortions += used;
+    }
+    return { ...entry, leftoverPortions: savedPortions, freshPortions };
+  });
 };
+
+/** Planned meals the fridge covers completely. */
+export const coveredByLeftovers = (plan = {}, dates = [], pantry = [], options = {}) =>
+  leftoverCoverageForPlan(plan, dates, pantry, options).filter((entry) => entry.freshPortions <= 0);
 
 /* ---------- Variety ---------- */
 
@@ -322,29 +351,18 @@ export const batchGroups = (plan = {}, dates = [], { people = 1 } = {}) =>
  * what you truly need.
  */
 export const shoppingForPlan = (plan = {}, dates = [], {
-  pantry = [], today = dayStamp(), learnedAliases = {},
+  pantry = [], today = dayStamp(), learnedAliases = {}, people = null,
 } = {}) => {
-  const coveredIds = coveredByLeftovers(plan, dates, pantry).map((e) => e.recipeId);
-  const spend = [...coveredIds];
-  const recipes = [];
-  const seen = new Set();
-  for (const entry of planEntries(plan, dates)) {
-    const i = spend.indexOf(entry.recipeId);
-    if (i >= 0) { spend.splice(i, 1); continue; }
-    if (seen.has(entry.recipeId)) continue;
-    seen.add(entry.recipeId);
-    recipes.push(entry.recipe);
+  const scaledPeople = people == null ? null : Math.max(1, Number(people) || 1);
+  const recipeNeeds = [];
+  for (const entry of leftoverCoverageForPlan(plan, dates, pantry, { people: scaledPeople || 1 })) {
+    if (entry.freshPortions <= 0) continue;
+    // Keep every uncovered occurrence. `itemsFromRecipes` still creates one
+    // visible row per ingredient, while `needByKey` below adds the quantities
+    // together. Dropping repeated recipe ids here made two planned dinners buy
+    // only one dinner's ingredients.
+    recipeNeeds.push({ recipe: entry.recipe, freshPortions: entry.freshPortions });
   }
-  // pantry truth: only confirmed_sufficient + probably_available count as have
-  // running_low / unknown / confirmed_insufficient still need shopping.
-  // Names are resolved through the alias table so "Chopped tomatoes (tins)"
-  // and "tin tomatoes" are recognised as the same thing.
-  const sufficientNames = pantry
-    .filter((item) => {
-      const avail = pantryAvailability(item, today);
-      return avail === "confirmed_sufficient" || avail === "probably_available";
-    })
-      .map((p) => canonicalName(p.name, learnedAliases));
   // quantity-aware pass: if an ingredient needs e.g. "500 g" but pantry has "100 g", treat as insufficient
   const byName = new Map();
   for (const item of pantry) {
@@ -369,12 +387,28 @@ export const shoppingForPlan = (plan = {}, dates = [], {
       return truth === 'confirmed_sufficient' || truth === 'probably_available';
     });
   };
-  const filteredRecipes = recipes; // itemsFromRecipes handles name-level de-dupe; quantity refinement happens per-ingredient below
-  const raw = itemsFromRecipes(filteredRecipes, sufficientNames);
-  // Second pass: re-add ingredients where qty is known insufficient.
+  // Scale the recipe's written batch to the household BEFORE comparing it with
+  // pantry stock. Scaling afterwards can make 500 g on the shelf look enough
+  // for a 400 g recipe even when an 8-person household really needs 800 g.
+  const filteredRecipes = scaledPeople == null
+    ? recipeNeeds.map(({ recipe }) => recipe)
+    : recipeNeeds.map(({ recipe, freshPortions }) => {
+      const factor = freshPortions / Math.max(1, Number(recipe.servings) || 1);
+      return {
+        ...recipe,
+        ingredients: (recipe.ingredients || []).map((ingredient) => ({
+          ...ingredient,
+          qty: scaleQty(ingredient.qty || '1', factor),
+        })),
+      };
+    });
+  // Build one row for every distinct ingredient first, then decide whether the
+  // pantry covers that canonical ingredient. Passing canonical pantry names to
+  // itemsFromRecipes used to compare them against raw recipe names and could
+  // therefore re-list an alias-equivalent item (for example "tin tomatoes"
+  // versus "Chopped tomatoes").
+  const raw = itemsFromRecipes(filteredRecipes, []);
   // The week's need for an ingredient is every recipe's need added together.
-  // Keeping only the last recipe's amount — which is what this did — meant two
-  // dinners each wanting 400 g of tomatoes were covered by a single 400 g tin.
   const needByKey = new Map();
   const sourceRecipesByKey = new Map();
   for (const r of filteredRecipes) {
@@ -383,17 +417,6 @@ export const shoppingForPlan = (plan = {}, dates = [], {
       needByKey.set(k, mergeQtys(needByKey.get(k) || "", ing.qty || "", { ingredient: k }));
       if (!sourceRecipesByKey.has(k)) sourceRecipesByKey.set(k, []);
       if (!sourceRecipesByKey.get(k).includes(r.name)) sourceRecipesByKey.get(k).push(r.name);
-    }
-  }
-  const insufficientKeys = new Set();
-  for (const [key, needQty] of needByKey.entries()) {
-    const candidates = byName.get(key) || [];
-    if (!candidates.length) continue;
-    // if any candidate is sufficient for this need, keep it covered
-    const anySufficient = pantryCoversNeed(key, needQty);
-    if (!anySufficient && sufficientNames.includes(key)) {
-      // was considered sufficient by name, but qty shows insufficient -> needs shopping
-      insufficientKeys.add(key);
     }
   }
   const annotate = (rows) => rows.map((row) => {
@@ -405,7 +428,10 @@ export const shoppingForPlan = (plan = {}, dates = [], {
     const shortfallQty = sufficient ? '' : shortfallQuantity(availableQty, requiredQty, { ingredient: key });
     return {
       ...row,
-      qty: requiredQty || row.qty,
+      // The list is what still needs buying, not the recipe's full requirement.
+      // Keep requiredQty separately so explanations/evaluation retain the
+      // original need behind the pantry deduction.
+      qty: availableQty && shortfallQty ? shortfallQty : (requiredQty || row.qty),
       requiredQty,
       pantryQty: availableQty,
       shortfallQty,
@@ -422,26 +448,25 @@ export const shoppingForPlan = (plan = {}, dates = [], {
       pantryTruth: sufficient ? row.pantryTruth : 'confirmed_insufficient',
     };
   });
-  if (!insufficientKeys.size) return annotate(raw);
-  const rawKeys = new Set(raw.map((i) => canonicalName(i.name, learnedAliases)));
-  for (const r of filteredRecipes) {
-    for (const ing of r.ingredients) {
-      const k = canonicalName(ing.name, learnedAliases);
-      if (!insufficientKeys.has(k)) continue;
-      if (rawKeys.has(k)) continue;
-      raw.push({
-        id: `x-${k.replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).slice(2, 6)}`,
-        name: ing.name,
-        emoji: r.emoji,
-        aisle: "From recipes",
-        qty: ing.qty,
-        price: 0,
-        checked: false,
-        fromRecipe: r.name,
-        pantryTruth: "confirmed_insufficient",
-      });
-      rawKeys.add(k);
-    }
-  }
-  return annotate(raw);
+  return annotate(raw).filter((row) => {
+    const key = canonicalName(row.name, learnedAliases);
+    return !pantryCoversNeed(key, row.requiredQty || row.qty);
+  });
+};
+
+/**
+ * The plan generator's hand-off into shopping, kept on the same authoritative
+ * Plan → List path as the calendar and week loop. `people` is the number the
+ * household explicitly chose in that generator session, not a silent reset to
+ * the profile value.
+ */
+export const shoppingForGeneratedEntries = (entries = [], {
+  pantry = [], people = 1, today = '', learnedAliases = {},
+} = {}) => {
+  const usable = (Array.isArray(entries) ? entries : []).filter((entry) => entry?.date && entry?.slot && entry?.recipeId);
+  const dates = [...new Set(usable.map((entry) => entry.date))].sort();
+  if (!usable.length || !dates.length) return [];
+  return shoppingForPlan(applyEntries({}, usable), dates, {
+    pantry, people, today, learnedAliases,
+  });
 };

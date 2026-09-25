@@ -15,16 +15,25 @@
  *     the original frozen advice is preserved untouched and an explicit
  *     override event records who changed what, when — a high-quality
  *     learning signal that is never confused with a purchase outcome.
+ *     (The event factory and its schema gate live in override-events.js
+ *     and are re-exported here unchanged.)
  *
  *   - BASKET-COST PREDICTIONS: the predicted spend is frozen when the list
  *     is generated or materially repriced — never computed at checkout. A
  *     shop without a genuine pre-purchase prediction is excluded from spend
  *     accuracy instead of being reconstructed after the fact.
  *
+ *   - PRICE EVIDENCE (see price-evidence.js): every freeze row also carries
+ *     a PREDICTED-price provenance (`priceProvenance`) frozen at freeze
+ *     time, so spend accuracy can prove the predicted side came from Forq
+ *     independently of the actual side.
+ *
  * Every record carries an explicit schema version; unknown or malformed
  * versions are rejected (or retained as qualitative legacy evidence) with
  * named reasons — never silently reinterpreted.
  */
+
+import { priceProvenanceFor } from './price-evidence.js';
 
 /** Who produced the quantity on a snapshot — the exact provenance vocabulary. */
 export const PREDICTION_PROVENANCE = {
@@ -34,6 +43,7 @@ export const PREDICTION_PROVENANCE = {
   USER_MANUAL: 'user-manual',       // the household hand-added the row
   USER_REPEAT_SHOP: 'user-repeat-shop', // repeated from the last recorded shop
   USER_OVERRIDE: 'user-override',   // the household edited Forq's quantity
+  USER_SUBSTITUTION: 'user-substitution', // the household swapped the ingredient — the choice (and its price) is theirs, never Forq advice
 };
 
 /** Only genuine Forq-generated advice may enter Forq's claimed accuracy. */
@@ -78,66 +88,6 @@ export const provenanceStatusFor = (snap = {}) => {
   return { ok: false, legacy: false, provenance: null, evaluable: false, reason: PROVENANCE_REJECTION_REASONS.UNKNOWN };
 };
 
-const overrideVersion = 1;
-
-/**
- * One quantity override: the household changed what Forq advised. The
- * ORIGINAL frozen advice stays on the snapshot untouched; this record is
- * the explicit, attributable statement of what was shown and what the
- * household made of it. Never a purchase outcome.
- */
-export const quantityOverrideEvent = ({
-  predictionId = null,
-  subjectKey = null,
-  originalQty = null,
-  overrideQty = null,
-  dimension = null,
-  unit = null,
-  day = null,
-  at = null,
-  actor = null,
-  reason = null,
-  id = null,
-  listItemId = null,
-} = {}) => ({
-  id: id || `qov-${Math.random().toString(36).slice(2, 10)}`,
-  type: 'quantity_override',
-  schemaVersion: overrideVersion,
-  predictionId: predictionId == null ? null : String(predictionId),
-  subjectKey: subjectKey == null ? null : String(subjectKey),
-  listItemId: listItemId == null ? null : String(listItemId),
-  // Exactly what was displayed before the edit (the frozen advice is NOT
-  // rewritten — this copy is the provenance of the learning signal).
-  originalQty: originalQty == null ? null : String(originalQty),
-  overrideQty: overrideQty == null ? null : String(overrideQty),
-  // Measurement meaning copied from the prediction, never re-derived.
-  dimension: dimension == null ? null : String(dimension),
-  unit: unit == null ? null : String(unit),
-  day: day == null ? null : String(day).slice(0, 10),
-  at: at || Date.now(),
-  actor: actor == null ? null : String(actor),
-  reason: reason == null ? null : String(reason),
-});
-
-export const SUPPORTED_OVERRIDE_SCHEMA_VERSIONS = [overrideVersion];
-export const OVERRIDE_SCHEMA_REJECTION_REASONS = {
-  MALFORMED: 'malformed-override-schema',
-  UNKNOWN: 'unsupported-override-schema',
-};
-
-/** Version gate for stored override records — named reasons, never guesses. */
-export const overrideSchemaStatus = (record) => {
-  if (!record || typeof record !== 'object') return { ok: false, reason: OVERRIDE_SCHEMA_REJECTION_REASONS.MALFORMED };
-  const raw = record.schemaVersion;
-  if (raw == null) return { ok: false, reason: OVERRIDE_SCHEMA_REJECTION_REASONS.MALFORMED };
-  const version = Number(raw);
-  if (!Number.isInteger(version)) return { ok: false, reason: OVERRIDE_SCHEMA_REJECTION_REASONS.MALFORMED };
-  if (!SUPPORTED_OVERRIDE_SCHEMA_VERSIONS.includes(version)) {
-    return { ok: false, reason: OVERRIDE_SCHEMA_REJECTION_REASONS.UNKNOWN };
-  }
-  return { ok: true, version, legacy: false };
-};
-
 /**
  * Spend provenance (task: add spend provenance) — WHO priced each row of a
  * basket freeze. Strict spend accuracy scores only `forq` rows; the
@@ -150,6 +100,7 @@ export const SPEND_PROVENANCE = {
   USER_MANUAL: 'user-manual',
   USER_REPEAT_SHOP: 'user-repeat-shop',
   USER_OVERRIDE: 'user-override',
+  USER_SUBSTITUTION: 'user-substitution',
 };
 
 /** Normalise any provenance value (snapshot vocabulary or spend vocabulary) to the spend vocabulary. */
@@ -226,12 +177,26 @@ export const basketPredictionEvent = ({
           if (status.ok) provenance = spendProvenanceFrom(status.provenance);
         }
       }
+      // PREDICTED-price provenance (task: true price provenance): WHO
+      // produced this price, resolved ONCE at freeze time and frozen —
+      // never re-derived at checkout. The row's RESOLVED prediction
+      // provenance (explicit stamp or the live snapshot book) feeds the
+      // resolution: a household-created or repeated row owns its price,
+      // so it never falls through to the legacy Forq-estimate rule.
+      // `subjectKey` rides the row too, so receipt rows can be linked back
+      // conservatively without the live book. A legacy row with a real
+      // price and no provenance at all stays Forq's estimate (labelled
+      // legacy by priceProvenanceFor).
+      const priceProvenance = priceProvenanceFor({ ...row, provenance });
       return {
         listItemId: row.id == null ? null : String(row.id),
         name: String(row.name),
+        subjectKey: row.subjectKey == null ? String(row.name).trim().toLowerCase() : String(row.subjectKey),
         qty: row.qty == null ? null : String(row.qty),
         price,
         priceSource: row.priceSource == null ? 'unknown' : String(row.priceSource),
+        priceProvenance: priceProvenance.provenance,
+        priceProvenanceLegacy: priceProvenance.legacy,
         // Row-level price availability (task: track price coverage): an
         // unknown price is NOT a valid £0 prediction — `priced` records
         // whether this row carried a real price when the basket was frozen.
@@ -448,3 +413,12 @@ export const listSnapshotsConsistent = (state = {}) => {
   const { orphans } = listSnapshotDivergence(state);
   return orphans.length === 0;
 };
+
+// Override events (task: override immutability) moved to override-events.js —
+// re-exported unchanged so every existing import keeps working.
+export {
+  quantityOverrideEvent,
+  overrideSchemaStatus,
+  SUPPORTED_OVERRIDE_SCHEMA_VERSIONS,
+  OVERRIDE_SCHEMA_REJECTION_REASONS,
+} from './override-events.js';

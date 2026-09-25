@@ -18,6 +18,7 @@ import { inferConsumption } from './pantry-intelligence.js';
 import { leftoverEntry } from './mealplan.js';
 import { createLeftover } from './leftover-planning.js';
 import { householdPermission } from './household.js';
+import { householdPortionsFor } from './portions.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { uid } from './state.js';
 
@@ -94,11 +95,12 @@ export const diaryActions = (set) => {
     completeRecipe: (recipe, { leftovers = 0, actualMins = null, recommendationId = null } = {}) =>
       set((s) => {
         const entry = buildEntry(recipeFood(recipe, [...CATALOGUE, ...s.customFoods]), { source: 'recipe' });
+        const eatenPortions = Math.max(1, Math.round(householdPortionsFor(s).portions));
         // Cooking a 4-serving dish for a household of 2 uses half of it.
         const consumed = householdPermission(s, 'pantry') && s.autoUsePantry
           ? consumePantryIngredients(s.pantry, recipe.ingredients, {
             learnedAliases: s.aliasMemory,
-            servings: Math.max(1, Math.round(s.portions || 0)) + Math.max(0, Number(leftovers) || 0),
+            servings: eatenPortions + Math.max(0, Number(leftovers) || 0),
             recipeServings: recipe.servings,
             today: s.day,
           })
@@ -154,7 +156,7 @@ export const diaryActions = (set) => {
             ? [...consumed.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, leftovers, s.day) }]
             : consumed.pantry,
           leftovers: householdPermission(s, 'pantry') && leftovers > 0
-            ? [...(s.leftovers || []).filter((item) => item.id !== `leftover-${recipe.id}-${s.day}`), createLeftover({ recipe, cookedPortions: leftovers + Math.max(1, Math.round(s.portions || 1)), eatenPortions: Math.max(0, Math.round(s.portions || 1)), date: s.day })].slice(-200)
+            ? [...(s.leftovers || []).filter((item) => item.id !== `leftover-${recipe.id}-${s.day}`), createLeftover({ recipe, cookedPortions: leftovers + eatenPortions, eatenPortions, date: s.day })].slice(-200)
             : s.leftovers || [],
           pantryEvents: [...(s.pantryEvents || []), pantryEvent].slice(-100),
           lastPantryEvent: pantryEvent,

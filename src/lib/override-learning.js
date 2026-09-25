@@ -1,20 +1,36 @@
 /**
  * Override learning — the immutable `quantityOverrides` event history as a
  * REAL learning signal (tasks: make quantityOverrides part of real learning,
- * use override events in adaptation confidence, replace legacy
- * override-pressure inference).
+ * use override events in adaptation confidence, override immutability,
+ * episode-level learning, recency).
  *
  * THE ONE ATTRIBUTION RULE. An override event may influence Forq's learning
  * only when it proves ALL of:
  *
  *   - a supported override schema version (unknown/malformed → named reason);
  *   - a valid prediction id AND frozen subject key;
- *   - a resolvable prediction — found in the LIVE book or on a FROZEN shop
- *     record, never guessed;
+ *   - a resolvable prediction — a v2 event carries its prediction FROZEN
+ *     (provenance, shown day, normalized measurement), so it proves itself;
+ *     legacy events resolve against the live book or frozen shop snapshots,
+ *     never guessed;
  *   - that prediction's provenance is genuine Forq advice (manual rows and
  *     repeat-shop rows are the household overriding itself — excluded);
  *   - both quantities parse to a comparable measurement (the same engine,
  *     the same scale) with a non-zero original.
+ *
+ * EPISODES (task: episode-level learning): the edits of ONE shown prediction
+ * form one episode — one learning story about one piece of advice. The
+ * FINAL (latest `at`) edit of an episode is where that advice settled: it
+ * counts for the episode's direction and magnitude; the earlier edits ride
+ * as `editCount` metadata. Strength comes from DISTINCT predictions
+ * (episodes), not raw edit volume: overriding four separate shown advices
+ * is real evidence; fiddling four times with one number is not.
+ *
+ * RECENCY (task: recency): every dated edit is weighted by a deterministic
+ * half-life decay (28 days) from the SUPPLIED evaluation `today` — never the
+ * system clock of the moment. Weights scale what learning applies, and the
+ * effective weight is exposed with the oldest/newest evidence and the exact
+ * assumption, so the decay is auditable rather than hidden.
  *
  * Anything unprovable becomes EXCLUDED with a named reason — it never
  * becomes a number. Nothing here ever treats an override as a purchase
@@ -23,16 +39,12 @@
  * purchase outcomes live in purchase accuracy — the two evidence sources
  * are deliberately separate, so an override plus its later purchase are
  * never double-counted as two corrections of the same mistake.
- *
- * STRENGTH BY CONSISTENCE: a one-off override is weak evidence and changes
- * nothing; repeated, same-direction, attributable overrides strengthen
- * (medium at 2–3, high at 4+) and scale the quantity adjustment Forq will
- * next show for that subject.
  */
 
 import { parseQuantity, convert } from './measure.js';
 import { canonicalName } from './aliases.js';
 import { dayStamp } from './kitchen-dates.js';
+import { signedAgeDays, evaluationToday } from './evaluation-time.js';
 import {
   overrideSchemaStatus,
   provenanceStatusFor,
@@ -53,10 +65,27 @@ const countReasons = (excluded = []) => (excluded || []).reduce((counts, e) => {
 const keyFor = (name, aliases = {}) =>
   canonicalName(String(name || '').trim(), aliases) || String(name || '').trim().toLowerCase() || null;
 
+/** Half-life (days) of the deterministic recency decay (task: recency). */
+export const OVERRIDE_RECENCY_HALF_LIFE_DAYS = 28;
+
 /**
- * Resolve the prediction an override references — frozen evidence only:
- * the live snapshot book first (the row is still on show), then each shop
- * record's FROZEN snapshots (the row was already bought). Never re-derived.
+ * Deterministic recency weight for one dated edit: 0.5^(age / half-life).
+ * Age comes from the ONE evaluation clock (signedAgeDays); an undated edit
+ * carries weight 1 — it cannot be decayed, so it is not. Future-dated edits
+ * (negative age) also carry weight 1: they are valid evidence, merely oddly
+ * dated, and a decay must never amplify them above certainty.
+ */
+export const overrideRecencyWeight = (day, today) => {
+  const age = signedAgeDays(day, today);
+  if (age == null || age <= 0) return 1;
+  return round(0.5 ** (age / OVERRIDE_RECENCY_HALF_LIFE_DAYS), 4);
+};
+
+/**
+ * Resolve the prediction a LEGACY override references — frozen evidence
+ * only: the live snapshot book first (the row is still on show), then each
+ * shop record's FROZEN snapshots (the row was already bought). Never
+ * re-derived. v2 events with frozen prediction evidence skip this entirely.
  */
 const resolvePrediction = (state, predictionId) => {
   const id = String(predictionId);
@@ -73,15 +102,15 @@ const resolvePrediction = (state, predictionId) => {
 
 /**
  * The override learning profile (task: make quantityOverrides part of real
- * learning): override rate, direction, relative magnitude, repeated
- * overrides per subject, systematic over/underprediction, and confidence by
- * sample count — with every rejected event named and counted.
+ * learning): override rate, direction, relative magnitude, episodes per
+ * subject, systematic over/underprediction, recency-weighted evidence and
+ * confidence — with every rejected event named and counted.
  */
 export const overrideLearningProfile = (state = {}, { today = dayStamp() } = {}) => {
-  void today; // deterministic inputs only; events carry their own day
   const events = Array.isArray(state.quantityOverrides) ? state.quantityOverrides : [];
   const excluded = [];
   const observations = [];
+  const todayStamp = evaluationToday({ today });
 
   for (const event of events) {
     const at = event?.id ?? null;
@@ -98,20 +127,36 @@ export const overrideLearningProfile = (state = {}, { today = dayStamp() } = {})
       excluded.push({ reason: 'missing-subject-key', eventId: at });
       continue;
     }
-    const snap = resolvePrediction(state, event.predictionId);
-    if (!snap) {
-      excluded.push({ reason: 'prediction-not-found', eventId: at, predictionId: event.predictionId });
-      continue;
+    // OVERSIDE PROVENANCE (task: override immutability): a v2 event carries
+    // its prediction frozen — provenance, shown day, normalized measurement
+    // — and proves itself without the live book. A v2 event without the
+    // frozen stamp (or a legacy v1 event) resolves the prediction like v1,
+    // labelled legacy so the weaker evidence chain stays visible.
+    let provenanceStatus = null;
+    let evidenceChain = 'frozen-event';
+    if (event.predictionProvenance != null) {
+      provenanceStatus = provenanceStatusFor({
+        provenance: event.predictionProvenance,
+        sourceRecipes: [],
+        fromRecipe: null,
+      });
+    } else {
+      evidenceChain = 'resolved-book-legacy';
+      const snap = resolvePrediction(state, event.predictionId);
+      if (!snap) {
+        excluded.push({ reason: 'prediction-not-found', eventId: at, predictionId: event.predictionId });
+        continue;
+      }
+      provenanceStatus = provenanceStatusFor(snap);
     }
-    const status = provenanceStatusFor(snap);
-    if (!status.ok) {
+    if (!provenanceStatus.ok) {
       excluded.push({ reason: 'unknown-prediction-provenance', eventId: at, predictionId: event.predictionId });
       continue;
     }
-    if (!status.evaluable) {
+    if (!provenanceStatus.evaluable) {
       // Manual rows and repeat-shop rows: the household changed its OWN
       // number — not evidence about Forq's advice. Excluded, named.
-      excluded.push({ reason: 'not-forq-provenance', eventId: at, provenance: status.provenance, predictionId: event.predictionId });
+      excluded.push({ reason: 'not-forq-provenance', eventId: at, provenance: provenanceStatus.provenance, predictionId: event.predictionId });
       continue;
     }
     const ingredient = String(event.subjectKey);
@@ -148,57 +193,85 @@ export const overrideLearningProfile = (state = {}, { today = dayStamp() } = {})
       relativeDelta: round(delta / original.amount, 4),
       direction: delta > 0 ? 'increase' : 'decrease',
       day: event.day ?? null,
+      at: Number.isFinite(Number(event.at)) ? Number(event.at) : 0,
+      evidenceChain,
+      weight: overrideRecencyWeight(event.day, todayStamp),
     });
   }
 
-  // Per-subject aggregation: repeats, consistency and strength.
+  // ---- EPISODES (task: episode-level learning) ---------------------------
+  // The edits of one shown prediction = one episode, ordered by `at`; the
+  // FINAL edit is where that advice settled and counts for the episode's
+  // direction and magnitude.
   const subjectMap = new Map();
   for (const row of observations) {
     if (!subjectMap.has(row.subjectKey)) {
-      subjectMap.set(row.subjectKey, {
-        subjectKey: row.subjectKey,
-        count: 0,
-        increases: 0,
-        decreases: 0,
-        relativeDeltas: [],
-        predictionIds: new Set(),
-        lastDay: null,
-      });
+      subjectMap.set(row.subjectKey, { subjectKey: row.subjectKey, rows: [] });
     }
-    const entry = subjectMap.get(row.subjectKey);
-    entry.count += 1;
-    if (row.direction === 'increase') entry.increases += 1;
-    else entry.decreases += 1;
-    entry.relativeDeltas.push(row.relativeDelta);
-    entry.predictionIds.add(row.predictionId);
-    if (row.day && (!entry.lastDay || row.day > entry.lastDay)) entry.lastDay = row.day;
+    subjectMap.get(row.subjectKey).rows.push(row);
   }
-  const bySubject = [...subjectMap.values()].map((entry) => {
-    const consistent = entry.increases === 0 || entry.decreases === 0;
-    const direction = entry.increases > 0 && entry.decreases > 0
-      ? 'mixed'
-      : entry.increases > 0 ? 'increase' : 'decrease';
-    const meanRelativeDelta = entry.relativeDeltas.length
-      ? round(entry.relativeDeltas.reduce((s, v) => s + v, 0) / entry.relativeDeltas.length, 4)
+  const bySubject = [...subjectMap.values()].map(({ subjectKey, rows }) => {
+    const byPrediction = new Map();
+    for (const row of rows) {
+      if (!byPrediction.has(row.predictionId)) byPrediction.set(row.predictionId, []);
+      byPrediction.get(row.predictionId).push(row);
+    }
+    const episodes = [...byPrediction.values()].map((edits) => {
+      const ordered = [...edits].sort((a, b) => a.at - b.at || String(a.day ?? '').localeCompare(String(b.day ?? '')));
+      const final = ordered[ordered.length - 1];
+      const days = ordered.map((r) => r.day).filter(Boolean);
+      return {
+        predictionId: final.predictionId,
+        editCount: ordered.length,
+        eventIds: ordered.map((r) => r.eventId),
+        direction: final.direction,
+        meanRelativeDelta: final.relativeDelta,
+        finalQty: final.overrideQty,
+        firstDay: days.length ? days.reduce((a, b) => (a < b ? a : b)) : null,
+        lastDay: days.length ? days.reduce((a, b) => (a > b ? a : b)) : null,
+      };
+    }).sort((a, b) => a.predictionId.localeCompare(b.predictionId));
+    const consistent = episodes.every((ep) => ep.direction === episodes[0].direction);
+    const distinctPredictions = episodes.length;
+    const editCount = rows.length;
+    const direction = !consistent ? 'mixed' : episodes[0].direction;
+    const meanRelativeDelta = episodes.length
+      ? round(episodes.reduce((s, ep) => s + ep.meanRelativeDelta, 0) / episodes.length, 4)
       : null;
-    // One-off → weak; repeated and consistent → stronger (task: repeated
-    // consistent override → stronger evidence). Mixed repeats stay weak —
-    // they cancel rather than prove a direction.
+    // STRENGTH FROM DISTINCT PREDICTIONS (task: episode-level learning):
+    // one episode → weak; 2–3 independent confirmations → medium; 4+ →
+    // high. Mixed episode directions stay weak — they cancel rather than
+    // prove a direction.
     const strength = !consistent ? 'weak-mixed'
-      : entry.count >= 4 ? 'high'
-        : entry.count >= 2 ? 'medium'
+      : distinctPredictions >= 4 ? 'high'
+        : distinctPredictions >= 2 ? 'medium'
           : 'weak';
+    // RECENCY (task: recency): the episode-final edits carry the applied
+    // evidence, so the subject's weight is their mean weight.
+    const episodeFinals = episodes.map((ep) => {
+      const finals = rows.filter((r) => r.predictionId === ep.predictionId);
+      return finals.reduce((a, b) => (b.at >= a.at ? b : a));
+    });
+    const recencyWeight = round(episodeFinals.reduce((s, r) => s + r.weight, 0) / (episodeFinals.length || 1), 4);
+    const days = rows.map((r) => r.day).filter(Boolean);
     return {
-      subjectKey: entry.subjectKey,
-      count: entry.count,
+      subjectKey,
+      count: editCount,
+      editCount,
+      episodeCount: distinctPredictions,
       direction,
       consistent,
       meanRelativeDelta,
-      totalRelativeDelta: round(entry.relativeDeltas.reduce((s, v) => s + v, 0), 4),
+      totalRelativeDelta: round(rows.reduce((s, r) => s + r.relativeDelta, 0), 4),
       strength,
       confidence: strength === 'high' ? 'high' : strength === 'medium' ? 'medium' : 'low',
-      predictionIds: [...entry.predictionIds],
-      lastOverrideDay: entry.lastDay,
+      predictionIds: episodes.map((ep) => ep.predictionId),
+      episodes,
+      recencyWeight,
+      effectiveSampleWeight: round(rows.reduce((s, r) => s + r.weight, 0) / (editCount || 1), 4),
+      oldestEvidenceDay: days.length ? days.reduce((a, b) => (a < b ? a : b)) : null,
+      newestEvidenceDay: days.length ? days.reduce((a, b) => (a > b ? a : b)) : null,
+      lastOverrideDay: days.length ? days.reduce((a, b) => (a > b ? a : b)) : null,
     };
   }).sort((a, b) => b.count - a.count || String(a.subjectKey).localeCompare(String(b.subjectKey)));
 
@@ -219,6 +292,11 @@ export const overrideLearningProfile = (state = {}, { today = dayStamp() } = {})
   const samples = observations.length;
   const increases = observations.filter((row) => row.direction === 'increase').length;
   const decreases = observations.filter((row) => row.direction === 'decrease').length;
+  const dated = observations.filter((row) => row.day);
+  const days = dated.map((row) => row.day);
+  const effectiveSampleWeight = samples
+    ? round(observations.reduce((s, r) => s + r.weight, 0) / samples, 4)
+    : null;
 
   return {
     samples,
@@ -230,21 +308,29 @@ export const overrideLearningProfile = (state = {}, { today = dayStamp() } = {})
     meanRelativeDelta: samples
       ? round(observations.reduce((s, row) => s + row.relativeDelta, 0) / samples, 4)
       : null,
-    // Repeats + systematic bias (task: repeated overrides by subject,
-    // systematic over/underprediction). Overprediction = Forq showed too
-    // much (the household kept reducing); underprediction = too little.
-    repeatedSubjects: bySubject.filter((row) => row.count >= 2).length,
-    consistentSubjects: bySubject.filter((row) => row.consistent && row.count >= 2).length,
+    // RECENCY (task: recency): deterministic decay from the supplied
+    // evaluation clock — exposed, never hidden in the number.
+    effectiveSampleWeight,
+    oldestEvidenceDay: days.length ? days.reduce((a, b) => (a < b ? a : b)) : null,
+    newestEvidenceDay: days.length ? days.reduce((a, b) => (a > b ? a : b)) : null,
+    recencyAssumption: !todayStamp
+      ? `No usable evaluation clock: every edit carries weight 1 (recency decay needs a deterministic today).`
+      : `Each dated edit is weighted 0.5^(ageDays / ${OVERRIDE_RECENCY_HALF_LIFE_DAYS}) from today ${todayStamp}; undated edits carry weight 1 (nothing is invented about their age).`,
+    // Repeats + systematic bias. Overprediction = Forq showed too much (the
+    // household kept reducing); underprediction = too little. Both count
+    // DISTINCT prediction episodes, never raw edit volume.
+    repeatedSubjects: bySubject.filter((row) => row.episodeCount >= 2).length,
+    consistentSubjects: bySubject.filter((row) => row.consistent && row.episodeCount >= 2).length,
     systematic: {
-      overprediction: bySubject.filter((row) => row.consistent && row.count >= 2 && row.direction === 'decrease').length,
-      underprediction: bySubject.filter((row) => row.consistent && row.count >= 2 && row.direction === 'increase').length,
+      overprediction: bySubject.filter((row) => row.consistent && row.episodeCount >= 2 && row.direction === 'decrease').length,
+      underprediction: bySubject.filter((row) => row.consistent && row.episodeCount >= 2 && row.direction === 'increase').length,
     },
     bySubject,
     confidence: samples >= 8 ? 'high' : samples >= 4 ? 'medium' : samples > 0 ? 'low' : 'none',
     evidence: samples,
     excluded,
     excludedReasons: countReasons(excluded),
-    assumption: 'Attributable quantity-override events only: supported schema, resolvable prediction id + frozen subject key, proven parseable quantities, and a referenced prediction whose provenance is genuine Forq advice. Manual/repeat rows, unprovable measurements and unknown schemas are excluded with named reasons. Overrides are NEVER purchase outcomes — they adjust what Forq shows (applyOverrideLearning) and are kept out of purchase/correction accuracy entirely.',
+    assumption: 'Attributable quantity-override events only: supported schema, resolvable (or v2-frozen) prediction id + frozen subject key, proven parseable quantities, and a referenced prediction whose provenance is genuine Forq advice. Edits of one shown prediction form one episode whose FINAL edit carries direction/magnitude; strength scales with DISTINCT overridden predictions. Manual/repeat rows, unprovable measurements and unknown schemas are excluded with named reasons. Overrides are NEVER purchase outcomes.',
   };
 };
 
@@ -275,16 +361,15 @@ const adjustQty = (qty, factor) => {
 };
 
 /**
- * Apply attributable override evidence to the quantities Forq will SHOW
- * (task: use override events in adaptation confidence — repeated reductions
- * lower the future quantity, repeated increases raise it).
+ * Apply attributable override evidence to the quantities Forq will SHOW.
  *
  *   - only FORQ-ADVICE rows are targets (recipe/plan/top-up rows): Forq must
  *     not silently rewrite the household's own manual or repeat rows;
- *   - weak (one-off) and mixed-direction evidence changes NOTHING — it is
- *     recorded, not obeyed;
- *   - medium (2–3 consistent) applies at half strength, high (4+) at full
- *     strength — confidence by sample count, clamped to ±50%;
+ *   - weak (one episode) and mixed-direction evidence changes NOTHING — it
+ *     is recorded, not obeyed;
+ *   - medium (2–3 distinct episodes) applies at half strength, high (4+) at
+ *     full strength, and the whole factor is scaled by the subject's
+ *     deterministic RECENCY weight (task: recency) — clamped to ±50%;
  *   - existing waste learning still runs FIRST: this ADDS an evidence
  *     source beside waste/pantry/portion evidence, never replacing it.
  *
@@ -304,12 +389,13 @@ export const applyOverrideLearning = (items = [], profile = null) => {
       || (Array.isArray(item.sourceRecipes) && item.sourceRecipes.length)
       || item.autoGenerated;
     if (!forqTarget) return item;
-    // One-off or inconsistent overrides are recorded but not obeyed.
+    // One-episode or inconsistent overrides are recorded but not obeyed.
     if (!row.consistent || row.strength === 'weak' || row.strength === 'weak-mixed') return item;
     if (!Number.isFinite(row.meanRelativeDelta)) return item;
-    const weight = row.strength === 'high' ? 1 : 0.5;
+    const strengthWeight = row.strength === 'high' ? 1 : 0.5;
+    const recencyWeight = Number.isFinite(row.recencyWeight) ? row.recencyWeight : 1;
     const clamped = Math.max(-0.5, Math.min(0.5, row.meanRelativeDelta));
-    const factor = clamped * weight;
+    const factor = clamped * strengthWeight * recencyWeight;
     if (Math.abs(factor) < 0.05) return item; // rounding-noise adjustments teach nothing
     const qty = adjustQty(item.qty, factor);
     if (qty == null) return item;
@@ -318,9 +404,11 @@ export const applyOverrideLearning = (items = [], profile = null) => {
       ...item,
       qty,
       overrideAdjustment: {
-        count: row.count,
+        count: row.editCount,
+        episodeCount: row.episodeCount,
         direction: row.direction,
         strength: row.strength,
+        recencyWeight,
         factor: round(factor),
       },
     };
@@ -331,15 +419,15 @@ export const applyOverrideLearning = (items = [], profile = null) => {
 /**
  * Override pressure (task: replace legacy override-pressure inference): how
  * often the household overrode what the app set. The QUANTITY-EDIT component
- * now prefers the immutable `quantityOverrides` event history — schema-gated,
+ * prefers the immutable `quantityOverrides` event history — schema-gated,
  * provenance-gated, counted per distinct still-visible row — instead of
- * inferring edits from the current list's `qty !== lastAutoQty`. Substitutions
- * and the portion override remain SEPARATE, explicitly modelled components.
+ * inferring edits from the current list's `qty !== lastAutoQty`.
+ * Substitutions and the portion override remain SEPARATE components. The
+ * weighted edit count (task: recency) rides the evidence block so the decay
+ * is visible here too.
  *
  * When no event book exists yet (legacy state), the old list inference runs
- * as a labelled fallback (`evidenceSource: 'list-inference-legacy'`) — never
- * silently presented as event-backed evidence. Evidence counts and
- * assumptions are exposed either way.
+ * as a labelled fallback (`evidenceSource: 'list-inference-legacy'`).
  */
 export const overridePressure = (state = {}, { today = dayStamp() } = {}) => {
   const list = Array.isArray(state.shoppingList) ? state.shoppingList : [];
@@ -354,18 +442,18 @@ export const overridePressure = (state = {}, { today = dayStamp() } = {}) => {
   let quantityEdits;
   let evidenceSource;
   let editExcluded = [];
+  let weightedEdits = null;
   if (profile) {
     // Event-backed: attributable edits whose row is STILL on the list (the
     // same population the denominator counts), deduped per row — an edit to
     // a row already bought has left the live list and belongs to the
     // learning profile, not the live pressure reading.
     const listIds = new Set(list.filter((row) => row?.id != null).map((row) => String(row.id)));
-    const currentRows = new Set(
-      profile.observations
-        .filter((row) => row.listItemId != null && listIds.has(String(row.listItemId)))
-        .map((row) => String(row.listItemId)),
-    );
-    quantityEdits = currentRows.size;
+    const currentRows = profile.observations
+      .filter((row) => row.listItemId != null && listIds.has(String(row.listItemId)));
+    const currentIds = new Set(currentRows.map((row) => String(row.listItemId)));
+    quantityEdits = currentIds.size;
+    weightedEdits = round(currentRows.reduce((s, r) => s + r.weight, 0) / (currentIds.size || 1), 4);
     evidenceSource = 'quantity-override-events';
     editExcluded = profile.excluded;
   } else {
@@ -383,11 +471,12 @@ export const overridePressure = (state = {}, { today = dayStamp() } = {}) => {
     confidence: autoRows + substitutions >= 8 ? 'high' : autoRows + substitutions >= 3 ? 'medium' : 'low',
     evidence: autoRows + substitutions,
     assumption: profile
-      ? 'Attributable quantity-override events (schema- and provenance-gated, rows still on the list) + substitutions + portion overrides over automatable decisions. Event history preferred over list inference; excluded events are named, never counted.'
+      ? 'Attributable quantity-override events (schema- and provenance-gated, rows still on the list) + substitutions + portion overrides over automatable decisions. Event history preferred over list inference; excluded events are named, never counted. The recency weight of the still-visible edits rides evidenceCounts.'
       : 'Edited auto-quantities (LEGACY list inference — no quantity-override event book yet), substitutions and portion overrides over automatable decisions.',
     evidenceSource,
     evidenceCounts: {
       quantityEdits,
+      recencyWeightedEdits: weightedEdits,
       substitutions,
       portionOverride,
       autoRows,

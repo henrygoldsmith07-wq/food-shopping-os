@@ -54,13 +54,37 @@ describe('the automatic cook step', () => {
 
     setLeftoverPortions(recipe, 1);
     expect(store.get().pantry.find((p) => p.recipeId === recipe.id).portions).toBe(1);
+    expect(store.get().leftovers.find((p) => p.recipeId === recipe.id)).toMatchObject({
+      remainingPortions: 1, lifecycleState: 'stored',
+    });
 
     setLeftoverPortions(recipe, 0);
     expect(store.get().pantry.find((p) => p.recipeId === recipe.id)).toBeUndefined();
+    expect(store.get().leftovers.find((p) => p.recipeId === recipe.id)).toMatchObject({
+      remainingPortions: 0, lifecycleState: 'eaten',
+    });
 
     // and can add one back after cooking saved none
     setLeftoverPortions(recipe, 2);
     expect(store.get().pantry.find((p) => p.recipeId === recipe.id).portions).toBe(2);
+    expect(store.get().leftovers.find((p) => p.recipeId === recipe.id)).toMatchObject({
+      remainingPortions: 2, lifecycleState: 'stored',
+    });
+  });
+
+  it('eating a pantry leftover decrements its matching lifecycle record too', () => {
+    const store = makeStore();
+    const { completeRecipe } = diaryActions(store.set);
+    const { useLeftover } = planActions(store.set);
+    completeRecipe(recipe, { leftovers: 2 });
+    const pantryLeftover = store.get().pantry.find((p) => p.recipeId === recipe.id);
+
+    useLeftover(pantryLeftover.id);
+    expect(store.get().pantry.find((p) => p.id === pantryLeftover.id).portions).toBe(1);
+    expect(store.get().leftovers.find((p) => p.recipeId === recipe.id)).toMatchObject({
+      remainingPortions: 1,
+      lifecycleState: 'stored',
+    });
   });
 
   it('respects a household that turned pantry automation off', () => {
@@ -68,6 +92,18 @@ describe('the automatic cook step', () => {
     const { completeRecipe } = diaryActions(store.set);
     completeRecipe(recipe, { leftovers: 1 });
     expect(store.get().pantry.find((p) => p.id === 'p1')).toBeTruthy(); // untouched
+  });
+
+  it('uses the learned appetite when recording cooked and leftover portions', () => {
+    const store = makeStore({
+      portions: 2,
+      householdPreferences: { portions: { typical: 3, observations: 4 } },
+    });
+    const { completeRecipe } = diaryActions(store.set);
+    completeRecipe(recipe, { leftovers: 1 });
+
+    const saved = store.get().leftovers.find((item) => item.recipeId === recipe.id);
+    expect(saved).toMatchObject({ cookedPortions: 4, eatenPortions: 3, remainingPortions: 1 });
   });
 });
 
@@ -273,7 +309,7 @@ describe('a non-plan write never prunes a list without a committed plan', () => 
     expect(changes).not.toHaveProperty('shoppingList');
   });
 
-  it('a pantry move keeps rows whose dish is still planned anywhere in the calendar', () => {
+  it('a pantry move removes an untouched current-week row once stock covers it', () => {
     const state = {
       ...EMPTY_STATE,
       day: TODAY,
@@ -282,9 +318,48 @@ describe('a non-plan write never prunes a list without a committed plan', () => 
       shoppingList: [autoRow('Rice', '500 g')],
     };
     const changes = withAutoListSync(state, { pantry: [{ id: 'p-1', name: 'Rice', cat: 'Cupboard', qty: '1 kg' }] });
-    // Rice survives untouched — and the reconcile may add the dish's other
-    // missing ingredients, which is the designed fill-in, never a wipe.
-    expect(changes.shoppingList.map((r) => r.name)).toContain('Rice');
-    expect(changes.shoppingList.find((r) => r.name === 'Rice')).toMatchObject({ qty: '500 g', fromRecipe: recipe.name });
+    expect(changes.shoppingList.map((r) => r.name)).not.toContain('Rice');
+  });
+
+  it('a current-week pantry refresh does not prune a row owned by a future plan range', () => {
+    const future = '2026-08-17';
+    const pantry = [{ id: 'p-1', name: 'Rice', cat: 'Cupboard', qty: '1 kg' }];
+    const state = {
+      ...EMPTY_STATE,
+      day: TODAY,
+      portions: 2,
+      plan: { [future]: { dinner: recipe.id } },
+      shoppingList: [autoRow('Rice', '500 g', { sourceRecipes: [recipe.name] })],
+    };
+    const changes = withAutoListSync(state, { pantry });
+    expect(changes).toEqual({ pantry });
+  });
+
+  it('refreshes pantry-deduction evidence on an existing auto row, not just its displayed quantity', () => {
+    const curry = RECIPES.find((r) => r.id === 'chickpea-curry');
+    const state = {
+      ...EMPTY_STATE,
+      day: TODAY,
+      portions: 4,
+      plan: { [TODAY]: { dinner: curry.id } },
+      pantry: [{ id: 'p-rice', name: 'Rice', qty: '100 g', confidence: 'definite' }],
+      shoppingList: [{
+        id: 's-rice', name: 'Rice', qty: '200 g', lastAutoQty: '200 g', checked: false, price: 0,
+        fromRecipe: curry.name, sourceRecipes: [curry.name], autoListed: true,
+        requiredQty: '300 g', pantryQty: '100 g', shortfallQty: '200 g',
+      }],
+      shoppingPredictions: [],
+    };
+    const pantry = [{ id: 'p-rice', name: 'Rice', qty: '200 g', confidence: 'definite' }];
+    const changes = withAutoListSync(state, { pantry });
+    const rice = changes.shoppingList.find((row) => row.id === 's-rice');
+    expect(rice).toMatchObject({
+      qty: '100 g', lastAutoQty: '100 g', requiredQty: '300g', pantryQty: '200 g', shortfallQty: '100 g',
+      sourceRecipes: [curry.name],
+    });
+    const snapshot = changes.shoppingPredictions.find((row) => row.id === 's-rice');
+    expect(snapshot.pantryDeduction).toMatchObject({
+      requiredQty: '300g', pantryQty: '200 g', shortfallQty: '100 g', deducted: true,
+    });
   });
 });

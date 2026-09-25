@@ -4,10 +4,10 @@ import {
 } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from '../lib/planner.js';
-import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from '../lib/portions.js';
+import { householdPortionsFor } from '../lib/portions.js';
+import { shoppingForGeneratedEntries } from '../lib/mealplan.js';
 import { useApp } from '../lib/store.jsx';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
-import { itemsFromRecipes } from '../data/stores.js';
 import { monthOf, peakNow } from '../data/seasons.js';
 import { expiringSoon } from '../lib/kitchen.js';
 import { wasteAwareList } from '../lib/loop-learning.js';
@@ -160,15 +160,15 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       goTab?.('shop');
       return;
     }
-    // Quantities scale to the chosen portions (what recorded cooks say the
-    // household eats, when they disagree with the profile), then
-    // binned-ingredient memory ships those items lighter, with the reason shown.
-    const chosen = householdPortionsFor(app);
-    const scaled = scaleListToPortions(
-      itemsFromRecipes([...new Set(generated)], pantryNames),
-      chosen.portions,
-      recipePortionFactors((generated || []).map((recipe) => ({ recipe })), chosen.portions),
-    );
+    // Use the same quantity-/alias-/pantry-aware calculation as every other
+    // Plan → List hand-off. Crucially this uses the generator's People stepper:
+    // changing 2 → 5 people must change both the plan AND what Forq asks to buy.
+    const scaled = shoppingForGeneratedEntries(entries, {
+      pantry: app.pantry,
+      people,
+      today: app.day,
+      learnedAliases: app.aliasMemory || {},
+    });
     app.addToList(wasteAwareList(
       scaled,
       { waste: app.waste, cooked: app.cooked, today: app.day, learnedAliases: app.aliasMemory || {} },

@@ -18,6 +18,7 @@ import { explainRecommendation, pantryCoverage, expiringIngredients } from './re
 import { evaluateFoodSuitability } from './food-suitability.js';
 import { tasteScore } from './taste.js';
 import { dayStamp, daysUntil, addDays, weekStart } from './kitchen-dates.js';
+import { householdPortionsFor } from './portions.js';
 
 const DEFAULT_WEIGHTS = {
   coverage: 0.42,
@@ -84,7 +85,7 @@ export const weeklyBudgetReality = (state = {}, { today = dayStamp(), recipes = 
   const recipesById = recipes instanceof Map
     ? recipes
     : new Map((Array.isArray(recipes) ? recipes : []).filter((r) => r?.id).map((r) => [r.id, r]));
-  const portions = Math.max(1, Math.round(Number(state.household) || Number(state.portions) || 1));
+  const portions = householdPortionsFor(state).portions;
   const rows = [];
   for (let i = 3; i >= 0; i -= 1) {
     const start = weekStart(addDays(today, -7 * i));

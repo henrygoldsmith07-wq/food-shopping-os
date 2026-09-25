@@ -12,7 +12,7 @@ import { canonicalName } from './aliases.js';
 import { daysUntil } from './kitchen.js';
 import { shoppingForPlan } from './mealplan.js';
 import { planEntries } from './mealplan.js';
-import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from './portions.js';
+import { householdPortionsFor } from './portions.js';
 import { scrapAdjustedQty, scrapIngredientRates } from './scrap-factors.js';
 import { heldAdaptationKeys } from './adaptation-suppression.js';
 import { allRecipes } from '../data/recipes.js';
@@ -164,9 +164,9 @@ export const shoppingListForPlan = (
   { pantry = [], waste = [], cooked = [], today, learnedAliases = {}, app = null, state = null } = {},
 ) => {
   const household = app ? householdPortionsFor(app) : { portions: 1, source: 'configured' };
-  const raw = shoppingForPlan(plan, dates, { pantry, today, learnedAliases });
-  const entries = planEntries(plan, dates);
-  const scaled = scaleListToPortions(raw, household.portions, recipePortionFactors(entries, household.portions));
+  const scaled = shoppingForPlan(plan, dates, {
+    pantry, today, learnedAliases, people: household.portions,
+  });
   // One authoritative Plan → Shopping calculation: the same household
   // decision, the same waste learning, and the same suppression memory —
   // "not for me" outlives regeneration — everywhere the plan becomes a

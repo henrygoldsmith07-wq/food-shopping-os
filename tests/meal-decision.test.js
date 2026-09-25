@@ -216,6 +216,17 @@ describe('weekly budget reality', () => {
     expect(reality.rows[0].plannedVariance).toBeCloseTo(39, 2);
   });
 
+  it('uses the learned household appetite when estimating planned spend', () => {
+    const state = {
+      day: '2026-09-01', weeklyBudget: 60, portions: 2,
+      householdPreferences: { portions: { typical: 3, observations: 4 } },
+      shops: [{ date: '2026-09-01', total: 42 }],
+      plan: { '2026-09-01': { dinner: 'quick-curry' } },
+    };
+    const reality = weeklyBudgetReality(state, { today: '2026-09-01', recipes });
+    expect(reality.rows[0].planned).toBeCloseTo(4.5, 2);
+  });
+
   it('no budget means no budget claims', () => {
     expect(weeklyBudgetReality({ shops: [{ date: '2026-09-01', total: 99 }] }, { today: '2026-09-01' }).weeks).toBe(0);
   });

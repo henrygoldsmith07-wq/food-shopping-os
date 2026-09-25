@@ -5,6 +5,8 @@ import {
   overrideLearningProfile,
   applyOverrideLearning,
   overridePressure,
+  overrideRecencyWeight,
+  OVERRIDE_RECENCY_HALF_LIFE_DAYS,
 } from '../src/lib/override-learning.js';
 import {
   basketPredictionEvent,
@@ -86,8 +88,11 @@ describe('row-exact spend: predicted set and actual set are the same rows', () =
       at: 1000,
     });
     const items = [
-      { id: 'r1', name: 'Rice', qty: '300g', price: 2 },
-      { id: 'r2', name: 'Bread', qty: '1', price: 2 },
+      // The receipt OBSERVED actuals for the predicted rows (independent
+      // outcome evidence) — the manual extra carries only the echo price,
+      // never an observed outcome.
+      { id: 'r1', name: 'Rice', qty: '300g', price: 2, actualPrice: 2, actualPriceSource: 'actual-receipt' },
+      { id: 'r2', name: 'Bread', qty: '1', price: 2, actualPrice: 2, actualPriceSource: 'actual-receipt' },
       { id: 'm1', name: 'Scented Candle', qty: '1', price: 6 }, // manual extra
     ];
     const shop = { id: 'h1', date: TODAY, total: 10, items, spendPrediction: copiedFreeze(freeze) };
@@ -150,7 +155,7 @@ describe('spend provenance and price coverage decide eligibility', () => {
     const result = spendAccuracy(household({ shops: [shop] }), { today: TODAY });
     expect(result.samples).toBe(0);
     expect(result.value).toBeNull();
-    expect(result.excluded.map((e) => e.reason)).toContain('manual-only-basket');
+    expect(result.excluded.map((e) => e.reason)).toContain('manual-price-basket');
   });
 
   it('a mixed basket scores only the attributable Forq rows', () => {
@@ -164,7 +169,12 @@ describe('spend provenance and price coverage decide eligibility', () => {
     expect(freeze.provenance).toBe('mixed');
     const shop = {
       id: 'h1', date: TODAY, total: 11,
-      items: [{ id: 'f', name: 'Rice', price: 5 }, { id: 'u', name: 'Candle', price: 6 }],
+      // The Forq row has an observed till price; the user-priced candle does
+      // not (its `price` is only the carried echo — never an outcome).
+      items: [
+        { id: 'f', name: 'Rice', price: 5, actualPrice: 5, actualPriceSource: 'actual-receipt' },
+        { id: 'u', name: 'Candle', price: 6 },
+      ],
       spendPrediction: copiedFreeze(freeze),
     };
     const result = spendAccuracy(household({ shops: [shop] }), { today: TODAY });
@@ -263,6 +273,14 @@ describe('freeze lifecycle: subsets are exact, re-freezes are honest, history is
     const latest = activeBasketFreezes(freezes)[0];
     expect(latest.source).toBe('substitution-reprice');
     expect(latest.predicted).toBe(3);
+    // The fresh snapshot is the household's swap decision (task:
+    // substitution provenance) — never forq-plan — and the re-frozen basket
+    // read the NEW book: its row freezes with that provenance, so the
+    // displayed price can never be claimed as Forq's advice.
+    expect(state.shoppingPredictions.find((p) => p.id === 'row-1').provenance).toBe('user-substitution');
+    expect(latest.rows[0].provenance).toBe('user-substitution');
+    expect(latest.rows[0].priceProvenance).toBe('user-substitution');
+    expect(latest.provenance).toBe('user-substitution');
     // The £1-era freeze remains as historical evidence but is superseded —
     // it must not describe the newly displayed basket.
     expect(freezes.find((f) => f.id === freeze1.id).invalidated).toBeTruthy();
@@ -399,19 +417,28 @@ describe('quantity overrides are real, attributable learning evidence', () => {
   });
 
   it('override events affect learning: profile counts them and future quantities move', () => {
-    const events = [eggsEvent({ id: 'q1' }), eggsEvent({ id: 'q2' }), eggsEvent({ id: 'q3' }), eggsEvent({ id: 'q4' })];
-    const profile = overrideLearningProfile(eggState(events));
+    // FOUR EPISODES: four distinct shown predictions, each overridden once —
+    // episode-level evidence at full strength.
+    const events = [
+      eggsEvent({ id: 'q1' }),
+      eggsEvent({ id: 'q2', predictionId: 'row-e2' }),
+      eggsEvent({ id: 'q3', predictionId: 'row-e3' }),
+      eggsEvent({ id: 'q4', predictionId: 'row-e4' }),
+    ];
+    const state = eggState(events, { shoppingPredictions: [eggSnap(), forqSnapshot({ id: 'row-e2' }), forqSnapshot({ id: 'row-e3' }), forqSnapshot({ id: 'row-e4' })] });
+    const profile = overrideLearningProfile(state, { today: TODAY });
     expect(profile.samples).toBe(4);
     expect(profile.directions.decrease).toBe(4);
     expect(profile.meanRelativeDelta).toBe(-0.5);
     expect(profile.bySubject[0].subjectKey).toBe('eggs');
+    expect(profile.bySubject[0].episodeCount).toBe(4); // distinct predictions, not edit volume
     expect(profile.overrideRate).toBeGreaterThan(0); // ÷ Forq-advice rows shown
     // And the learning is APPLIED: repeated reductions lower the quantity
     // Forq will show next (recipe row, Forq-advice target).
     const items = [{ id: 'row-x', name: 'Eggs', qty: '6', fromRecipe: 'Omelette' }];
     const adjusted = applyOverrideLearning(items, profile);
     expect(adjusted[0].qty).toBe('3'); // 6 × (1 − 0.5), full strength (high)
-    expect(adjusted[0].overrideAdjustment).toMatchObject({ count: 4, direction: 'decrease', strength: 'high' });
+    expect(adjusted[0].overrideAdjustment).toMatchObject({ episodeCount: 4, direction: 'decrease', strength: 'high' });
     // overridePressure reads the EVENT BOOK, not list inference.
     const pressure = overridePressure(eggState(events));
     expect(pressure.evidenceSource).toBe('quantity-override-events');
@@ -424,29 +451,95 @@ describe('quantity overrides are real, attributable learning evidence', () => {
     const one = overrideLearningProfile(eggState([eggsEvent({ id: 'q1' })]));
     expect(one.bySubject[0].strength).toBe('weak');
     expect(applyOverrideLearning(items, one)).toBe(items);
-    // Two consistent → medium → half strength (6 × 0.875 = 4.5 → 5 whole eggs).
-    const two = overrideLearningProfile(eggState([eggsEvent({ id: 'q1' }), eggsEvent({ id: 'q2' })]));
+    // Two consistent EPISODES → medium → half strength (6 × 0.875 = 4.5 → 5
+    // whole eggs). Four edits of ONE prediction stay one episode (weak).
+    const two = overrideLearningProfile(eggState([
+      eggsEvent({ id: 'q1' }), eggsEvent({ id: 'q2', predictionId: 'row-e2' }),
+    ], { shoppingPredictions: [eggSnap(), forqSnapshot({ id: 'row-e2' })] }), { today: TODAY });
     expect(two.bySubject[0].strength).toBe('medium');
     expect(applyOverrideLearning(items, two)[0].qty).toBe('5'); // 6 × (1 − 0.25), ceiled to a whole count
-    // Four consistent → high → full strength.
+    // Four consistent EPISODES → high → full strength.
     const four = overrideLearningProfile(eggState([
-      eggsEvent({ id: 'q1' }), eggsEvent({ id: 'q2' }), eggsEvent({ id: 'q3' }), eggsEvent({ id: 'q4' }),
-    ]));
+      eggsEvent({ id: 'q1' }),
+      eggsEvent({ id: 'q2', predictionId: 'row-e2' }),
+      eggsEvent({ id: 'q3', predictionId: 'row-e3' }),
+      eggsEvent({ id: 'q4', predictionId: 'row-e4' }),
+    ], { shoppingPredictions: [eggSnap(), forqSnapshot({ id: 'row-e2' }), forqSnapshot({ id: 'row-e3' }), forqSnapshot({ id: 'row-e4' })] }), { today: TODAY });
     expect(four.bySubject[0].strength).toBe('high');
     // Profile-level confidence rides TOTAL sample count (4 → medium); the
     // per-subject STRENGTH is the high-confidence adaptation signal.
     expect(four.confidence).toBe('medium');
-    // Mixed directions prove nothing → never obeyed.
+    // Mixed EPISODES prove nothing → never obeyed: the final edit of one
+    // shown advice settled UP, another settled DOWN — the signals cancel.
+    // (Wobbles within ONE episode are metadata; its final edit decides.)
     const mixed = overrideLearningProfile(eggState([
-      eggsEvent({ id: 'q1' }),
-      eggsEvent({ id: 'q2', originalQty: '3', overrideQty: '5' }),
-      eggsEvent({ id: 'q3' }),
-    ]));
+      eggsEvent({ id: 'q1', at: 1000 }),
+      eggsEvent({ id: 'q2', originalQty: '3', overrideQty: '5', at: 2000 }), // row-e finally settled UP
+      eggsEvent({ id: 'q3', predictionId: 'row-e2', at: 1500 }),             // row-e2 settled DOWN
+    ], { shoppingPredictions: [eggSnap(), forqSnapshot({ id: 'row-e2' })] }), { today: TODAY });
     expect(mixed.bySubject[0].strength).toBe('weak-mixed');
     expect(applyOverrideLearning(items, mixed)).toBe(items);
     // Systematic-bias views are subject-level, not guesses.
     expect(one.systematic.overprediction).toBe(0);
     expect(four.systematic.overprediction).toBe(1);
+  });
+
+  it('a v2 event carries its prediction frozen — learnable after the row is gone', () => {
+    // The event freezes provenance + shown measurement at stamp time, so
+    // the row and its snapshot can vanish and the evidence stays provable.
+    const frozen = quantityOverrideEvent({
+      predictionId: 'row-e',
+      subjectKey: 'eggs',
+      listItemId: 'row-e',
+      originalQty: '6',
+      overrideQty: '3',
+      dimension: 'count',
+      predictionProvenance: 'forq-plan',
+      predictionDay: TODAY,
+      prediction: { originalQty: '6', normalized: { amount: 6, dim: 'count', unit: 'count' } },
+      day: TODAY,
+      id: 'q1',
+    });
+    const ghostState = household({ shoppingPredictions: [], quantityOverrides: [frozen] });
+    const profile = overrideLearningProfile(ghostState, { today: TODAY });
+    expect(profile.samples).toBe(1);
+    expect(profile.observations[0].evidenceChain).toBe('frozen-event');
+    // A LEGACY v1 event (no frozen stamp) without the book is excluded —
+    // never guessed.
+    const legacy = eggsEvent({ id: 'q2' });
+    const legacyProfile = overrideLearningProfile(
+      household({ shoppingPredictions: [], quantityOverrides: [legacy] }),
+      { today: TODAY },
+    );
+    expect(legacyProfile.samples).toBe(0);
+    expect(legacyProfile.excludedReasons['prediction-not-found']).toBe(1);
+    // And a v2 event with an UNKNOWN frozen provenance is rejected, named.
+    const badV2 = quantityOverrideEvent({
+      ...frozen, id: 'q3', predictionProvenance: 'alien-origin',
+    });
+    const badProfile = overrideLearningProfile(
+      household({ shoppingPredictions: [], quantityOverrides: [badV2] }),
+      { today: TODAY },
+    );
+    expect(badProfile.samples).toBe(0);
+    expect(badProfile.excludedReasons['unknown-prediction-provenance']).toBe(1);
+  });
+
+  it('recency: deterministic decay from the supplied evaluation clock', () => {
+    expect(OVERRIDE_RECENCY_HALF_LIFE_DAYS).toBe(28);
+    // Today's edit carries full weight…
+    expect(overrideRecencyWeight(TODAY, TODAY)).toBe(1);
+    // …one half-life halves it…
+    expect(overrideRecencyWeight('2026-08-19', TODAY)).toBe(0.5);
+    // …an undated edit cannot be decayed, so it is not…
+    expect(overrideRecencyWeight(null, TODAY)).toBe(1);
+    // …and the profile exposes the whole mechanism, never hides it.
+    const old = overrideLearningProfile(eggState([eggsEvent({ id: 'q1', day: '2026-08-19' })]), { today: TODAY });
+    expect(old.effectiveSampleWeight).toBe(0.5);
+    expect(old.bySubject[0].recencyWeight).toBe(0.5);
+    expect(old.oldestEvidenceDay).toBe('2026-08-19');
+    expect(old.newestEvidenceDay).toBe('2026-08-19');
+    expect(old.recencyAssumption).toMatch(/0\.5\^\(ageDays \/ 28\)/);
   });
 
   it('manual and repeat-shop rows never affect override learning', () => {
@@ -532,7 +625,7 @@ describe('evidence schema versions remain safe', () => {
     // to the shop record's FROZEN prediction snapshots (checkout evidence).
     const shop = {
       id: 'h1', date: TODAY, total: 6,
-      items: [{ id: 'a', name: 'A', price: 6 }],
+      items: [{ id: 'a', name: 'A', price: 6, actualPrice: 6, actualPriceSource: 'actual-receipt' }],
       predictions: [{ id: 'a', name: 'A', qty: '1', day: TODAY, provenance: 'forq-plan' }],
       spendPrediction: {
         basketPredictionId: 'bp-old', schemaVersion: 1,
@@ -568,5 +661,69 @@ describe('evidence schema versions remain safe', () => {
       'prediction-not-found': 1,
       'missing-prediction-id': 1,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Freeze ordering: a new freeze must describe the book of the same write
+// ---------------------------------------------------------------------------
+
+describe('freeze ordering: per-row provenance resolves from the NEW prediction book', () => {
+  it('addToList freezes the added row with the provenance written in the same action', () => {
+    const state = household({});
+    const actions = driver(shoppingListMutations, state);
+    actions.run('addToList', { id: 'hand1', name: 'Soap', qty: '1', price: 3 });
+    const next = actions.state();
+    expect(next.shoppingList).toHaveLength(1);
+    const latest = activeBasketFreezes(next.basketPredictions)[0];
+    expect(latest.source).toBe('list-generation');
+    expect(latest.rows[0].listItemId).toBe('hand1');
+    // The freeze read the NEW book: the hand-added row's user-manual
+    // snapshot exists only in the write that created it.
+    expect(latest.rows[0].provenance).toBe('user-manual');
+    expect(latest.rows[0].priceProvenance).toBe('user-manual-price');
+    expect(latest.provenance).toBe('user-manual');
+  });
+
+  it('repeatLastShop freezes repeated rows as user-priced, never Forq estimates', () => {
+    const state = household({
+      shops: [{ id: 'h1', store: 'Tesco', date: TODAY, total: 5, items: [
+        { id: 'b1', name: 'Bread', qty: '1', price: 2, priceSource: 'receipt' },
+        { id: 'm1', name: 'Milk', qty: '1', price: 3, priceSource: 'receipt' },
+      ] }],
+    });
+    const actions = driver(shoppingListMutations, state);
+    actions.run('repeatLastShop');
+    const next = actions.state();
+    expect(next.shoppingList).toHaveLength(2);
+    // Repeat-shop snapshots are user-repeat-shop by construction; the
+    // freeze must not have stamped their rows forq-price-estimate by
+    // reading the pre-write book.
+    expect(next.shoppingPredictions.every((p) => p.provenance === 'user-repeat-shop')).toBe(true);
+    const latest = activeBasketFreezes(next.basketPredictions)[0];
+    expect(latest.source).toBe('reprice');
+    expect(latest.rows.every((row) => row.provenance === 'user-repeat-shop')).toBe(true);
+    expect(latest.rows.every((row) => row.priceProvenance === 'user-manual-price')).toBe(true);
+    expect(latest.provenance).toBe('user-repeat-shop');
+  });
+
+  it('updateListItem price edit re-freezes without losing row provenance', () => {
+    const snap = forqSnapshot({ id: 'row-1', name: 'Rice', qty: '300g', subjectKey: 'rice' });
+    const state = household({
+      shoppingList: [{ id: 'row-1', name: 'Rice', qty: '300g', price: 4, checked: false }],
+      shoppingPredictions: [snap],
+    });
+    const actions = driver(shoppingListMutations, state);
+    actions.run('updateListItem', 'row-1', { price: 5 });
+    const next = actions.state();
+    const latest = activeBasketFreezes(next.basketPredictions)[0];
+    expect(latest.source).toBe('reprice');
+    // The quantity advice is still Forq's (a price edit alone fires no
+    // override event and re-snapshots nothing), but the typed price is the
+    // household's own number — exactly the split the two provenances exist
+    // to record.
+    expect(latest.rows[0].priceProvenance).toBe('user-manual-price');
+    expect(latest.rows[0].provenance).toBe('forq'); // spend vocabulary
+    expect(latest.provenance).toBe('forq');
   });
 });

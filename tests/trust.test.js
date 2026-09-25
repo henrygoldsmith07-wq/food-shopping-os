@@ -191,18 +191,20 @@ describe('list top-up: one authoritative Plan → Shopping calculation', () => {
     });
     const topUp = inferListTopUp(state, { today: TODAY });
     const chickpeas = topUp.find((r) => r.name === 'Chickpeas (tins)');
-    // Household of 4, learned reduction applies (evidence: two binned tins).
+    // Household of 4 × two planned dinners = 4 tins required; the learned
+    // reduction buys one fewer (evidence: two binned tins).
     expect(chickpeas).toBeDefined();
-    expect(chickpeas.qty).toBe('1');
+    expect(chickpeas.qty).toBe('3');
     expect(chickpeas.wasteNote).toMatch(/binned 2× recently/i);
 
-    // The same top-up with the adaptation rejected: no reduced quantity.
+    // The same top-up with the adaptation rejected: no reduced quantity —
+    // both dinners are bought at the full scaled amount.
     const rejected = {
       ...state,
       householdLedger: [rejection('chickpeas')],
     };
     const heldTopUp = inferListTopUp(rejected, { today: TODAY });
-    expect(heldTopUp.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('2');
+    expect(heldTopUp.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('4');
   });
 });
 
@@ -317,7 +319,7 @@ describe('spend accuracy: prediction snapshot vs recorded total', () => {
         // prediction quality says £10 vs £10 (0% error), while reconciliation
         // separately flags the £12 total vs £10 of itemised lines.
         items: [{ id: 'c', name: 'A', price: 10 }],
-      }, items: [{ id: 'c', name: 'A', price: 10 }] }],
+      }, items: [{ id: 'c', name: 'A', price: 10, actualPrice: 10, actualPriceSource: 'actual-receipt' }] }],
     });
     expect(spendAccuracy(state, { today: TODAY }).value).toBe(0);
     expect(basketReconciliation(state, { today: TODAY }).value).toBeCloseTo(0.17, 2);

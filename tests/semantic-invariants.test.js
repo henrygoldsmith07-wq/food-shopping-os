@@ -457,7 +457,13 @@ describe('the shared evaluation-time policy', () => {
       rows: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 2.4, provenance: 'forq' }],
       day: '2026-09-18',
     });
-    const shop = { ...frozenShop(), spendPrediction: { ...freeze, predictedTotal: freeze.predicted } };
+    const shop = {
+      ...frozenShop(),
+      // The till price was independently observed on the receipt — the
+      // outcome side of the comparison (the list price stays a prediction).
+      items: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 1.2, actualPrice: 2.4, actualPriceSource: 'actual-receipt' }],
+      spendPrediction: { ...freeze, predictedTotal: freeze.predicted },
+    };
     const spendState = household({ shops: [shop] });
     expect(spendAccuracy(spendState, { today: '2026-09-20' }).samples).toBe(1);
     expect(spendAccuracy(spendState, { today: '2026-09-17' }).excluded[0].reason).toBe('future-shop');

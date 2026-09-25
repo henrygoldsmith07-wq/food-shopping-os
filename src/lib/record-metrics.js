@@ -7,8 +7,11 @@
  *     frozen when the list was generated or repriced, against the receipt
  *     subtotal for EXACTLY the rows that prediction covered — row-exact
  *     evidence sets on both sides (evaluatedRowIds / predictedSubtotal /
- *     actualSubtotal / coverageMode / matchedBy per observation), spend
- *     provenance per row, price coverage per freeze, and precise
+ *     actualSubtotal / coverageMode / matchedBy per observation). The two
+ *     sides are INDEPENDENT observations (predicted price provenance frozen
+ *     at freeze time; actual prices only from independently observed
+ *     receipt evidence — never the carried list price), with price
+ *     coverage per freeze, Forq price-provenance gating, and precise
  *     predictionAt <= purchaseAt chronology.
  *   - basketReconciliation: is the record clean? Sum of itemised receipt
  *     lines vs the declared total — data quality, not prediction quality.
@@ -27,10 +30,13 @@ import {
 } from './evaluation-time.js';
 import {
   basketSchemaStatus,
-  provenanceStatusFor,
-  spendProvenanceFrom,
-  SPEND_PROVENANCE,
 } from './prediction-evidence.js';
+import {
+  PRICE_PROVENANCE,
+  isForqPriceProvenance,
+  priceProvenanceFor,
+  observedActualPriceOf,
+} from './price-evidence.js';
 
 const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = {}) => ({
   value, confidence, evidence, assumption,
@@ -85,8 +91,9 @@ export const snapshotCosts = (rows = []) => {
  * A receipt containing manual/unpredicted extras scores only the Forq
  * subset (`coverageMode: 'subset'`) — never a predicted subset against the
  * full receipt total. Everything unprovable is EXCLUDED with a named reason:
- * no freeze, manual-only basket, unattributable provenance, unpriced
- * prediction rows, missing receipt prices, postdating timestamps.
+ * no freeze, manual-price-basket / unknown-price-provenance (price
+ * provenance decides eligibility), unpriced prediction rows, missing actual
+ * receipt prices, postdating timestamps.
  *
  * Only a GENUINE PRE-PURCHASE freeze is scored: the shop's copied
  * `spendPrediction` must exist, pass the basket schema gate, and predate the
@@ -182,40 +189,43 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
       continue;
     }
     const receiptById = new Map(receiptRows.map((item) => [String(item.id), item]));
-    // Row spend-provenance: the freeze's own stamp (v2) when present,
-    // otherwise the shop's FROZEN prediction snapshots (checkout-time
-    // evidence). The live book is never consulted for an old shop.
-    const shopSnapById = new Map(
-      (Array.isArray(shop.predictions) ? shop.predictions : [])
-        .filter((p) => p && (p.predictionId ?? p.id) != null)
-        .map((p) => [String(p.predictionId ?? p.id), p]),
-    );
-    const provenanceOfRow = (row) => {
-      const own = spendProvenanceFrom(row?.provenance);
-      if (own) return own;
-      const snap = row?.listItemId != null ? shopSnapById.get(String(row.listItemId)) : null;
-      if (!snap) return null;
-      const status = provenanceStatusFor(snap);
-      return status.ok ? spendProvenanceFrom(status.provenance) : null;
-    };
-    const attributed = freezeRows.map((row) => ({ row, provenance: provenanceOfRow(row) }));
-    const forqRows = attributed.filter((entry) => entry.provenance === SPEND_PROVENANCE.FORQ);
+    // PRICE COVERAGE FIRST (task: unknown prices are never £0 forecast
+    // errors): every freeze row without a real price is named per row and
+    // excludes the shop, regardless of provenance — a freeze whose own
+    // coverage metadata is incomplete cannot back ANY honest comparison,
+    // not even a subset one.
+    const unpriced = freezeRows.filter((row) => !(Number(row.price) > 0));
+    if (unpriced.length) {
+      for (const row of unpriced) {
+        excluded.push({ reason: 'unpriced-prediction-row', shopId, rowId: row.listItemId ?? null });
+      }
+      excluded.push({ reason: 'incomplete-price-coverage', shopId, unpricedRows: unpriced.length });
+      continue;
+    }
+    // PRICE provenance (task: true price provenance — independent of
+    // quantity provenance): the freeze row's own stamp (frozen at freeze
+    // time), with a deliberate legacy derivation for v1 rows. Strict spend
+    // accuracy scores only rows whose PRICE Forq genuinely produced or
+    // selected — a Forq-generated quantity with a user-entered price is NOT
+    // a Forq price prediction.
+    const attributed = freezeRows.map((row) => ({ row, provenance: priceProvenanceFor(row) }));
+    const forqRows = attributed.filter((entry) => isForqPriceProvenance(entry.provenance.provenance));
     if (!forqRows.length) {
-      // A manual-only basket must never enter Forq spend accuracy; a basket
+      // A user-priced basket must never enter Forq spend accuracy; a basket
       // whose pricer cannot be attributed at all is excluded with its own
       // named reason — never defaulted into Forq's numbers.
-      const allKnown = attributed.every((entry) => entry.provenance != null);
+      const allKnown = attributed.every((entry) => entry.provenance.provenance !== PRICE_PROVENANCE.UNKNOWN);
       excluded.push({
-        reason: allKnown ? 'manual-only-basket' : 'unattributable-row-provenance',
+        reason: allKnown ? 'manual-price-basket' : 'unknown-price-provenance',
         shopId,
         freezeProvenance: freeze.provenance ?? null,
       });
       continue;
     }
     const notPurchased = [];
-    const unpriced = [];
     const missingActual = [];
     const evaluatedRowIds = [];
+    const outcomeById = new Map();
     for (const { row } of forqRows) {
       const rid = row.listItemId != null ? String(row.listItemId) : null;
       const receipt = rid != null ? receiptById.get(rid) : null;
@@ -226,32 +236,59 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
         notPurchased.push(rid);
         continue;
       }
-      const predictedPrice = Math.round((Number(row.price) || 0) * 100) / 100;
-      if (!(predictedPrice > 0)) {
-        // An unknown price is NOT a £0 forecast (task: never treat unknown
-        // prices as £0 errors) — the shop is excluded, not scored.
-        unpriced.push(rid);
-        continue;
-      }
-      const actualPrice = Math.round((Number(receipt.price) || 0) * 100) / 100;
-      if (!(actualPrice > 0)) {
-        // The actual side cannot be proven for this row — exclude rather
-        // than estimate the receipt price.
+      // THE INDEPENDENT OUTCOME (task: actual price-observation pipeline):
+      // the actual side comes ONLY from an independently observed receipt
+      // price — never from the carried list price. `receipt.price` here is
+      // the list price echoed through checkout; only `actualPrice` (stamped
+      // by the receipt/import/manual-confirmation pipelines) is an outcome.
+      const outcome = observedActualPriceOf(receipt);
+      if (!outcome) {
         missingActual.push(rid);
         continue;
       }
       evaluatedRowIds.push(rid);
-    }
-    if (unpriced.length) {
-      for (const rid of unpriced) {
-        excluded.push({ reason: 'unpriced-prediction-row', shopId, rowId: rid });
-      }
-      excluded.push({ reason: 'incomplete-price-coverage', shopId, unpricedRows: unpriced.length });
-      continue;
+      outcomeById.set(rid, outcome);
     }
     if (missingActual.length) {
       for (const rid of missingActual) {
         excluded.push({ reason: 'missing-actual-row-price', shopId, rowId: rid });
+      }
+      // WHOLE-BASKET FALLBACK (task: do not fake row-level accuracy when
+      // only total spend is known): with NO observed row actuals anywhere,
+      // one whole-basket comparison is allowed — but only when the predicted
+      // basket provably covers the ENTIRE purchased basket (identical row
+      // sets, no extras, complete price coverage) and the declared total is
+      // provably the sum of that basket's itemised prices. Otherwise the
+      // shop is excluded: a subset-forecast vs full-receipt-total comparison
+      // is never manufactured.
+      const allRowsMatch = forqRows.length === receiptRows.length
+        && forqRows.every(({ row }) => row.listItemId != null && receiptById.has(String(row.listItemId)));
+      const itemsSum = Math.round(allItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0) * 100) / 100;
+      const totalProvable = Math.round(total * 100) / 100 === itemsSum
+        && (allItems.length === receiptRows.length);
+      if (missingActual.length === forqRows.length && allRowsMatch && totalProvable) {
+        const coverage = Number.isFinite(Number(freeze.priceCoverage)) ? Number(freeze.priceCoverage)
+          : (freezeRows.length ? Math.round((freezeRows.filter((r) => Number(r?.price) > 0).length / freezeRows.length) * 100) / 100 : 0);
+        if (coverage < 1) {
+          excluded.push({ reason: 'incomplete-price-coverage', shopId, unpricedRows: 0, priceCoverage: coverage });
+          continue;
+        }
+        scored.push({
+          predicted: predicted,
+          actual: total,
+          basketPredictionId: freeze.basketPredictionId ?? null,
+          evaluatedRowIds: [],
+          predictedSubtotal: predicted,
+          actualSubtotal: total,
+          coverageMode: 'whole-basket',
+          matchedBy: freeze.matchedBy ?? null,
+          priceCoverage: coverage,
+          provenance: freeze.provenance ?? null,
+          chronologyProof: predictedAtMs != null && purchaseAtMs != null ? 'precise' : 'day-level',
+          notPurchasedRows: notPurchased.length,
+          unpredictedReceiptRows: 0,
+        });
+        continue;
       }
       continue;
     }
@@ -264,13 +301,14 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
       continue;
     }
     // THE TWO SUBTOTALS OVER THE SAME ROW SET — by construction identical
-    // `evaluatedRowIds` on both sides.
+    // `evaluatedRowIds` on both sides. The actual side sums the INDEPENDENT
+    // outcome prices, never the carried list prices.
     const evaluatedSet = new Set(evaluatedRowIds);
     const predictedSubtotal = Math.round(forqRows
       .filter(({ row }) => evaluatedSet.has(String(row.listItemId)))
       .reduce((sum, { row }) => sum + (Number(row.price) || 0), 0) * 100) / 100;
     const actualSubtotal = Math.round(evaluatedRowIds
-      .reduce((sum, rid) => sum + (Number(receiptById.get(rid).price) || 0), 0) * 100) / 100;
+      .reduce((sum, rid) => sum + (outcomeById.get(rid)?.price || 0), 0) * 100) / 100;
     if (!(predictedSubtotal > 0) || !(actualSubtotal > 0)) {
       excluded.push({ reason: 'empty-evaluated-subtotal', shopId });
       continue;
@@ -281,19 +319,24 @@ export const spendAccuracy = (state = {}, { today = dayStamp() } = {}) => {
       : (freezeRows.length
         ? Math.round((freezeRows.filter((row) => Number(row?.price) > 0).length / freezeRows.length) * 100) / 100
         : 0);
+    const outcomeSources = [...new Set([...outcomeById.values()].map((o) => o.source))];
     scored.push({
       predicted: predictedSubtotal,
       actual: actualSubtotal,
       basketPredictionId: freeze.basketPredictionId ?? null,
       // The proof (task: success condition) — exact rows, exact subtotals,
-      // how they were matched, how complete the price prediction was, and
-      // how chronology was established.
+      // how they were matched, how complete the price prediction was, how
+      // chronology was established, and where each actual price came from.
       evaluatedRowIds,
       predictedSubtotal,
       actualSubtotal,
       coverageMode,
       matchedBy: freeze.matchedBy ?? null,
       priceCoverage,
+      // Independently proven outcome provenance (task: the two sides never
+      // share a source): the observed actual price source(s) for this
+      // sample — 'actual-receipt' / 'receipt-import', never the list.
+      actualPriceSources: outcomeSources,
       provenance: freeze.provenance ?? null,
       chronologyProof: predictedAtMs != null && purchaseAtMs != null ? 'precise' : 'day-level',
       notPurchasedRows: notPurchased.length,
