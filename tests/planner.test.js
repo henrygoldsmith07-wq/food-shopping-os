@@ -167,6 +167,24 @@ describe('itemsFromRecipes', () => {
     const withPantry = itemsFromRecipes([recipe], ['Sushi rice', 'Soy sauce']);
     expect(withPantry).toHaveLength(recipe.ingredients.length - 2);
   });
+
+  it('collapses alias-equivalent spellings into one row — curated table or taught alias', () => {
+    // "Onion" and "White onion" are the same food to Forq; a week planning
+    // both spellings must not list the ingredient twice. The curated alias
+    // table already knows they match, before any user teaching.
+    const a = { name: 'A', emoji: '🥘', servings: 2, ingredients: [{ name: 'Onion', qty: '2' }] };
+    const b = { name: 'B', emoji: '🍲', servings: 2, ingredients: [{ name: 'White onion', qty: '1' }] };
+    const curated = itemsFromRecipes([a, b], [], { learnedAliases: {} });
+    expect(curated).toHaveLength(1);
+    expect(curated[0].name).toBe('Onion'); // the group's everyday name
+    expect(curated[0].qty).toBe('3');      // both needs added
+    expect(curated[0].forRecipes).toEqual(['A', 'B']);
+    // A taught alias merges a spelling the table does not know.
+    const c = { name: 'C', emoji: '🧅', servings: 2, ingredients: [{ name: 'Vidalia', qty: '1' }] };
+    const taught = itemsFromRecipes([a, c], [], { learnedAliases: { vidalia: 'onion' } });
+    expect(taught).toHaveLength(1);
+    expect(taught[0].name).toBe('Onion');
+  });
 });
 
 describe('plans learn from confirmed skip reasons', () => {

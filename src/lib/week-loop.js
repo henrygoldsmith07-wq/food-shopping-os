@@ -18,25 +18,16 @@ import { householdPermission } from './household.js';
 import { emojiFor, uid } from './state.js';
 import { householdPortionsFor } from './portions.js';
 
+/** Single scaling implementation — see portions.js. Kept as a re-export so
+ * existing imports from this module keep working. */
+export { scaleQty } from './portions.js';
+
 /**
  * The week loop's portions and list scaling live in `portions.js` — one
  * decision shared with every other plan-to-list path, so the loop cannot
  * disagree with the plan generator about how much to buy.
  */
 export { householdPortionsFor } from './portions.js';
-
-/** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */
-export const scaleQty = (qty, factor = 1) => {
-  if (!qty || !(factor > 0) || Math.abs(factor - 1) < 0.05) return qty || '';
-  const text = String(qty).trim();
-  const m = text.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
-  if (!m) return text;
-  const n = Number(String(m[1]).replace(',', '.'));
-  if (!Number.isFinite(n)) return text;
-  const scaled = Math.round(n * factor * 10) / 10;
-  const unit = (m[2] || '').trim();
-  return unit ? `${scaled} ${unit}` : String(scaled);
-};
 
 /**
  * Shopping list for the week plan, scaled to household portions and
@@ -49,8 +40,18 @@ export const scaleQty = (qty, factor = 1) => {
 export const shoppingForWeekLoop = (app, dates = weekDates(app.day)) => {
   const household = householdPortionsFor(app);
   const people = household.portions;
-  const items = shoppingForPlan(app.plan || {}, dates, {
+  // The same waste learning every other Plan → List hand-off applies: an
+  // ingredient the household keeps binning arrives one unit lighter, here
+  // too. The loop's own "generate" used to skip this, so its added list
+  // disagreed with the reconciled list for the same plan.
+  const items = wasteAwareList(shoppingForPlan(app.plan || {}, dates, {
     pantry: app.pantry || [], today: app.day, learnedAliases: app.aliasMemory || {}, people,
+  }), {
+    waste: app.waste || [],
+    cooked: app.cooked || [],
+    today: app.day,
+    learnedAliases: app.aliasMemory || {},
+    held: heldAdaptationKeys(app, { today: app.day }),
   }).map((item) => ({ ...item, people }));
   return { items, portions: household };
 };
@@ -174,7 +175,14 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   // What this week's plan needs, after the pantry, the leftovers and the
   // household's own waste pattern have had their say.
   const dynamic = deriveDynamicShoppingList(state, { dates });
-  const derived = wasteAwareList(dynamic.length ? dynamic : shoppingForWeekLoop(state, dates).items, {
+  // `shoppingForWeekLoop` already applies the waste learning once; the
+  // fallback only needs its raw core rows, so the reduction is never
+  // compounded by running `wasteAwareList` twice over the same row.
+  const fallback = shoppingForPlan(state.plan || {}, dates, {
+    pantry: state.pantry || [], today: state.day, learnedAliases: aliasMemory,
+    people: householdPortionsFor(state).portions,
+  });
+  const derived = wasteAwareList(dynamic.length ? dynamic : fallback, {
     waste: state.waste || [],
     cooked: state.cooked || [],
     today: state.day,

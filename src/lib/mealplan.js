@@ -12,7 +12,7 @@ import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS } from '../data/plan.js';
 import { itemsFromRecipes } from '../data/stores.js';
 import { addDays, dayStamp, pantryAvailability, pantryTruthForNeed, weekStart } from './kitchen.js';
-import { canonicalName } from './aliases.js';
+import { canonicalName, displayNameFor } from './aliases.js';
 import { scaleQty } from './portions.js';
 import { mergeQtys, qtySuffices } from './pantry.js';
 import { explainPantryShortfall, shortfallQuantity } from './pantry-intelligence.js';
@@ -407,7 +407,7 @@ export const shoppingForPlan = (plan = {}, dates = [], {
   // itemsFromRecipes used to compare them against raw recipe names and could
   // therefore re-list an alias-equivalent item (for example "tin tomatoes"
   // versus "Chopped tomatoes").
-  const raw = itemsFromRecipes(filteredRecipes, []);
+  const raw = itemsFromRecipes(filteredRecipes, [], { learnedAliases });
   // The week's need for an ingredient is every recipe's need added together.
   const needByKey = new Map();
   const sourceRecipesByKey = new Map();
@@ -422,12 +422,18 @@ export const shoppingForPlan = (plan = {}, dates = [], {
   const annotate = (rows) => rows.map((row) => {
     const key = canonicalName(row.name, learnedAliases);
     const requiredQty = needByKey.get(key);
-    if (!requiredQty) return row;
+    if (!requiredQty) return { ...row, name: displayNameFor(row.name, learnedAliases) || row.name };
+    // One canonical ingredient must also READ as one ingredient: "White
+    // onion" from one recipe and "Onion" from another are the same row, so
+    // both carry the group's everyday name instead of two spellings that
+    // each look like a separate purchase.
+    const displayName = displayNameFor(row.name, learnedAliases) || row.name;
     const availableQty = availableFor(key);
     const sufficient = pantryCoversNeed(key, requiredQty);
     const shortfallQty = sufficient ? '' : shortfallQuantity(availableQty, requiredQty, { ingredient: key });
     return {
       ...row,
+      name: displayName,
       // The list is what still needs buying, not the recipe's full requirement.
       // Keep requiredQty separately so explanations/evaluation retain the
       // original need behind the pantry deduction.
@@ -445,7 +451,13 @@ export const shoppingForPlan = (plan = {}, dates = [], {
           sourceRecipes: sourceRecipesByKey.get(key) || [],
         })
         : row.explanation,
-      pantryTruth: sufficient ? row.pantryTruth : 'confirmed_insufficient',
+      // Only claim "confirmed_insufficient" when usable pantry evidence
+      // exists and fell short. With no evidence at all the honest answer is
+      // "unknown" — the item is listed either way, but the label must not
+      // invent confidence the pantry never gave us.
+      pantryTruth: sufficient
+        ? row.pantryTruth
+        : (availableQty ? 'confirmed_insufficient' : 'unknown'),
     };
   });
   return annotate(raw).filter((row) => {

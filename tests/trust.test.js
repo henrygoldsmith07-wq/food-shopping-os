@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EMPTY_STATE } from '../src/lib/state.js';
+import { canonicalName } from '../src/lib/aliases.js';
 import { shoppingListForPlan } from '../src/lib/loop-learning.js';
 import { reconcileListWithPlan } from '../src/lib/week-loop.js';
 import { householdPortionsFor } from '../src/lib/portions.js';
@@ -60,6 +61,10 @@ const nextWeekList = (state) => shoppingListForPlan(
   { pantry: [], waste: state.waste, cooked: state.cooked || [], today: TODAY, app: state, state },
 );
 
+// Rows are found by their canonical ingredient, so display-name changes
+// ("Chickpeas (tins)" now showing as "Chickpeas") cannot break the story.
+const chickpeaRow = (rows) => rows.find((r) => canonicalName(r.name) === canonicalName('Chickpeas (tins)'));
+
 const rejection = (key, day = TODAY) => ledgerEvent('RecommendationRejected', day, {
   recipeId: null,
   context: { kind: 'adaptation', key },
@@ -69,12 +74,12 @@ describe('adaptation suppression: "not for me" outlives regeneration', () => {
   it('adapts, then the rejection holds the reduction across regeneration', () => {
     const state = household();
     const adapted = nextWeekList(state);
-    expect(adapted.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('1');
+    expect(chickpeaRow(adapted).qty).toBe('1');
 
     // THE regression: adapt → reject → regenerate → adaptation remains suppressed.
     const rejected = { ...state, householdLedger: [rejection('chickpeas')], adaptationSuppression: { chickpeas: { rejections: [TODAY] } } };
     const regenerated = nextWeekList(rejected);
-    expect(regenerated.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('2');
+    expect(chickpeaRow(regenerated).qty).toBe('2');
   });
 
   it('keeps the row untouched even when the household edited nothing (reconcile path)', () => {
@@ -105,7 +110,7 @@ describe('adaptation suppression: "not for me" outlives regeneration', () => {
   it('recovers only when the hold expires — not because the list regenerated', () => {
     const state = household({ householdLedger: [rejection('chickpeas')] });
     for (let i = 0; i < 5; i += 1) {
-      expect(nextWeekList(state).find((r) => r.name === 'Chickpeas (tins)').qty).toBe('2');
+      expect(chickpeaRow(nextWeekList(state)).qty).toBe('2');
     }
   });
 });
@@ -190,7 +195,7 @@ describe('list top-up: one authoritative Plan → Shopping calculation', () => {
       shoppingList: [{ id: 's0', name: 'Rice', qty: '300g', checked: false, fromRecipe: 'Chickpea Curry' }],
     });
     const topUp = inferListTopUp(state, { today: TODAY });
-    const chickpeas = topUp.find((r) => r.name === 'Chickpeas (tins)');
+    const chickpeas = chickpeaRow(topUp);
     // Household of 4 × two planned dinners = 4 tins required; the learned
     // reduction buys one fewer (evidence: two binned tins).
     expect(chickpeas).toBeDefined();
@@ -204,7 +209,7 @@ describe('list top-up: one authoritative Plan → Shopping calculation', () => {
       householdLedger: [rejection('chickpeas')],
     };
     const heldTopUp = inferListTopUp(rejected, { today: TODAY });
-    expect(heldTopUp.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('4');
+    expect(chickpeaRow(heldTopUp).qty).toBe('4');
   });
 });
 

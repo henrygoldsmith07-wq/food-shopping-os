@@ -260,3 +260,43 @@ describe('the growing calendar', () => {
     for (let m = 1; m <= 12; m += 1) expect(peakNow(m).length, `month ${m}`).toBeGreaterThan(2);
   });
 });
+
+describe('the shopping list for a plan', () => {
+  const WEEK = ['2026-07-06', '2026-07-07'];
+
+  it('lists an alias-equivalent ingredient once with the summed requirement and both meals as provenance', () => {
+    // The curry writes "Onion", the risotto writes "White onion" — the same
+    // food. The list must carry ONE row totalling both scaled needs, not two
+    // rows each claiming the full requirement.
+    const twoOnionMeals = {
+      '2026-07-06': { dinner: CURRY },
+      '2026-07-07': { dinner: 'mushroom-risotto' },
+    };
+    const rows = shoppingForPlan(twoOnionMeals, WEEK, { pantry: [], people: 5, today: '2026-07-06' });
+    const onionRows = rows.filter((r) => /onion/i.test(r.name));
+    expect(onionRows).toHaveLength(1);
+    const row = onionRows[0];
+    // Curry scales 1 × 5/4 → 1.3, risotto 1 × 5/3 → 1.7 (each rounded to 0.1
+    // before summing) — one row carrying the whole requirement.
+    expect(row.qty).toBe('3');
+    expect(row.requiredQty).toBe(row.qty);
+    expect(row.sourceRecipes).toEqual(expect.arrayContaining(['Coconut Chickpea Curry', 'Garlic Mushroom Risotto']));
+  });
+
+  it('deducts pantry stock across spellings and buys only the shortfall', () => {
+    const twoOnionMeals = {
+      '2026-07-06': { dinner: CURRY },
+      '2026-07-07': { dinner: 'mushroom-risotto' },
+    };
+    // One onion already on the shelf — the same canonical food.
+    const rows = shoppingForPlan(twoOnionMeals, WEEK, {
+      pantry: [{ id: 'p1', name: 'Onion', qty: '1' }],
+      people: 5, today: '2026-07-06',
+    });
+    const onionRows = rows.filter((r) => /onion/i.test(r.name));
+    expect(onionRows).toHaveLength(1);
+    expect(onionRows[0].qty).toBe('2');
+    expect(onionRows[0].requiredQty).toBe('3');
+    expect(onionRows[0].explanation).toBeTruthy();
+  });
+});

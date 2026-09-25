@@ -120,7 +120,8 @@ describe('the weekly planner', () => {
     fireEvent.click(screen.getByText('Review shopping list'));
 
     expect(screen.getByText('Your list')).toBeDefined();
-    expect(screen.getByLabelText('Tick Chickpeas (tins)')).toBeDefined();
+    // The generated row carries the group's everyday name, not the recipe's spelling.
+    expect(screen.getByLabelText('Tick Chickpeas')).toBeDefined();
   });
 
   it('starts a fresh shopping hand-off when the plan range changes', () => {

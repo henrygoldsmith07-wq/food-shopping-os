@@ -45,7 +45,7 @@ export const ALIAS_GROUPS = [
   ['Aubergine', ['aubergine', 'aubergines', 'eggplant']],
   ['Peppers', ['peppers', 'bell peppers', 'mixed peppers', 'red pepper', 'green pepper', 'yellow pepper', 'capsicum']],
   ['Red onion', ['red onion', 'red onions']],
-  ['White onion', ['white onion', 'brown onion', 'onions', 'onion']],
+  ['Onion', ['onion', 'onions', 'white onion', 'brown onion']],
   ['Garlic', ['garlic', 'garlic cloves', 'cloves of garlic', 'garlic (bulb)']],
   ['Ginger', ['ginger', 'fresh ginger', 'ginger root']],
   ['Carrots', ['carrots', 'carrot', 'baby carrots']],
@@ -74,7 +74,7 @@ export const ALIAS_GROUPS = [
   ['Tempeh', ['tempeh', 'tempeh block']],
   ['Greek yogurt', ['greek yogurt', 'greek yoghurt', 'greek style yogurt', 'natural yogurt', 'natural yoghurt', 'plain yogurt', 'plain yoghurt', 'yogurt', 'yoghurt']],
   ['Coconut yogurt', ['coconut yogurt', 'coconut yoghurt', 'soy yogurt']],
-  ['Semi-skimmed milk', ['semi-skimmed milk', 'milk', 'semi skimmed milk', 'whole milk', 'skimmed milk', 'oat milk', 'almond milk', 'soya milk']],
+  ['Semi-skimmed milk', ['semi-skimmed milk', 'milk', 'semi skimmed milk', 'whole milk', 'skimmed milk']],
   ['Cheddar', ['cheddar', 'cheddar cheese', 'mature cheddar']],
   ['Parmesan', ['parmesan', 'parmesan cheese', 'parmigiano', 'grated parmesan']],
   ['Feta', ['feta', 'feta cheese']],
@@ -84,11 +84,11 @@ export const ALIAS_GROUPS = [
   ['Oats', ['oats', 'porridge oats', 'rolled oats', 'jumbo oats']],
   ['Rice', ['rice', 'white rice', 'long grain rice', 'basmati rice', 'easy cook rice']],
   ['Brown rice', ['brown rice', 'wholegrain rice']],
-  ['Sushi rice', ['sushi rice', 'short grain rice', 'risotto rice', 'arborio rice']],
+  ['Sushi rice', ['sushi rice', 'short grain rice']],
   ['Pasta', ['pasta', 'penne', 'spaghetti', 'fusilli', 'rigatoni', 'macaroni', 'wholewheat pasta']],
   ['Pappardelle', ['pappardelle', 'tagliatelle', 'fettuccine']],
-  ['Rice noodles', ['rice noodles', 'noodles', 'egg noodles', 'udon noodles', 'glass noodles']],
-  ['Couscous', ['couscous', 'cous cous', 'bulgur wheat']],
+  ['Rice noodles', ['rice noodles', 'noodles']],
+  ['Couscous', ['couscous', 'cous cous']],
   ['Quinoa', ['quinoa', 'white quinoa', 'tri-colour quinoa']],
   ['Flour', ['flour', 'plain flour', 'self raising flour', 'strong white flour', 'wholemeal flour']],
   ['Sugar', ['sugar', 'granulated sugar', 'caster sugar', 'brown sugar']],
@@ -120,11 +120,11 @@ export const ALIAS_GROUPS = [
   ['Black pepper', ['black pepper', 'pepper', 'cracked black pepper', 'ground black pepper']],
   ['Mixed grains pouch', ['mixed grains pouch', 'grain pouch', 'microwave grains', 'ready cooked grains']],
   ['Tortillas', ['tortillas', 'flour tortillas', 'wraps', 'corn tortillas']],
-  ['Crusty bread', ['crusty bread', 'bread', 'sourdough', 'baguette', 'ciabatta']],
-  ['Frozen berries', ['frozen berries', 'mixed berries', 'frozen mixed berries']],
+  ['Crusty bread', ['crusty bread', 'bread']],
+  ['Frozen berries', ['frozen berries', 'frozen mixed berries']],
   ['Fresh berries', ['fresh berries', 'strawberries', 'raspberries', 'blueberries']],
   ['Bananas', ['bananas', 'banana', 'ripe bananas']],
-  ['Soured cream', ['soured cream', 'sour cream', 'creme fraiche']],
+  ['Soured cream', ['soured cream', 'sour cream']],
   ['Crème fraîche', ['crème fraîche', 'creme fraiche', 'half fat creme fraiche']],
   ['Mascarpone', ['mascarpone', 'mascarpone cheese']],
   ['Peanut oil', ['peanut oil', 'groundnut oil']],
@@ -151,7 +151,7 @@ export const ALIAS_GROUPS = [
   ['Ice cream', ['ice cream', 'vanilla ice cream', 'ice cream (tub)']],
   ['Mince pies', ['mince pies', 'mince pie']],
   ['Gravy granules', ['gravy granules', 'gravy', 'instant gravy']],
-].map(([canonical, aliases]) => ({ canonical: clean(canonical), aliases: aliases.map(clean) }));
+].map(([canonical, aliases]) => ({ canonical: clean(canonical), display: String(canonical).trim(), aliases: aliases.map(clean) }));
 
 const byAlias = new Map();
 for (const group of ALIAS_GROUPS) {
@@ -184,6 +184,20 @@ export const sameIngredient = (a, b, learned = {}) => {
   if (ca === cb) return true;
   const [short, long] = ca.length <= cb.length ? [ca, cb] : [cb, ca];
   return long.includes(short) && short.length >= 4;
+};
+
+/**
+ * The human name to show for a canonical ingredient: the curated group's
+ * first entry (its everyday name) when the name belongs to a group — "White
+ * onion" and "Onion" both show as "Onion" — and the name itself when it
+ * stands alone. Grouping and arithmetic still key on `canonicalName`; this
+ * only fixes what the user reads, so one ingredient never appears under two
+ * different names on the same list.
+ */
+export const displayNameFor = (name, learned = {}) => {
+  const key = canonicalName(name, learned);
+  const group = ALIAS_GROUPS.find((g) => g.canonical === key);
+  return group ? group.display : String(name || '').trim();
 };
 
 /** The canonical name for a shopping-list or pantry row, for grouping. */

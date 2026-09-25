@@ -13,7 +13,6 @@ import {
 } from '../lib/youth.js';
 import { byId } from '../data/recipes.js';
 import { MAX_STARTER_PICKS, starterOptions, starterSuitable } from '../lib/starter-recipes.js';
-import { itemsFromRecipes } from '../data/stores.js';
 import { addDays } from '../lib/kitchen.js';
 import { haptic } from '../lib/haptics.js';
 import { recordProductEvent } from '../lib/product-analytics.js';
