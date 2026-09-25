@@ -51,7 +51,13 @@ const openReports = async () => {
   const guidance = dialogFor('Guidance');
   fireEvent.click(within(guidance).getByText('Review'));
   fireEvent.click(within(guidance).getByText('Reports & export'));
-  await within(guidance).findByText('Week', { selector: 'div, span, p, li, td, th, button, a, summary, h1, h2, h3, h4' });
+  // The reports view aggregates the whole diary before it can draw, so on a
+  // loaded machine the default 1s findBy budget expires before the first
+  // row exists. Same generous wait the guidance sheet uses.
+  await within(guidance).findByText('Week', {
+    selector: 'div, span, p, li, td, th, button, a, summary, h1, h2, h3, h4',
+    timeout: 5000,
+  });
   return guidance;
 };
 
