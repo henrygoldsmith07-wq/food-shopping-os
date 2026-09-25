@@ -299,4 +299,20 @@ describe('the shopping list for a plan', () => {
     expect(onionRows[0].requiredQty).toBe('3');
     expect(onionRows[0].explanation).toBeTruthy();
   });
+
+  it('never folds a different food into one purchase just because the name is similar', () => {
+    // A generic "Noodles" is egg-noodle nests in the recipe book, not rice
+    // noodles. Merging them would let one ingredient's pantry stock silence
+    // a purchase the household genuinely needs.
+    const rows = shoppingForPlan({ '2026-07-06': { dinner: 'tofu-stirfry' } }, WEEK, {
+      pantry: [{ id: 'p1', name: 'Rice noodles', qty: '2 nests' }],
+      people: 2, today: '2026-07-06',
+    });
+    const noodles = rows.filter((r) => /noodle/i.test(r.name));
+    expect(noodles).toHaveLength(1);
+    // Still asked for at full need: the pantry's rice noodles are not egg
+    // nests, so nothing was deducted against this row.
+    expect(noodles[0].requiredQty).toBe('2 nests');
+    expect(noodles[0].qty).toBe('2 nests');
+  });
 });

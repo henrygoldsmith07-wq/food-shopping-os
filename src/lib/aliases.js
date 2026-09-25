@@ -87,7 +87,10 @@ export const ALIAS_GROUPS = [
   ['Sushi rice', ['sushi rice', 'short grain rice']],
   ['Pasta', ['pasta', 'penne', 'spaghetti', 'fusilli', 'rigatoni', 'macaroni', 'wholewheat pasta']],
   ['Pappardelle', ['pappardelle', 'tagliatelle', 'fettuccine']],
-  ['Rice noodles', ['rice noodles', 'noodles']],
+  // Plain "Noodles" is deliberately NOT an alias here: recipes using it mean
+  // egg-noodle nests, and folding those into rice noodles would suppress a
+  // purchase the household genuinely needs.
+  ['Rice noodles', ['rice noodles']],
   ['Couscous', ['couscous', 'cous cous']],
   ['Quinoa', ['quinoa', 'white quinoa', 'tri-colour quinoa']],
   ['Flour', ['flour', 'plain flour', 'self raising flour', 'strong white flour', 'wholemeal flour']],
