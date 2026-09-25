@@ -12,6 +12,7 @@ import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
 import { shoppingQuantityError } from '../src/lib/eval-metrics.js';
 import { buildDomainCommands } from '../src/lib/store-commands.js';
 import { weekDates } from '../src/lib/kitchen.js';
+import { canonicalName } from '../src/lib/aliases.js';
 
 // One journey, many screens: keep every step well inside the timeout.
 vi.setConfig({ testTimeout: 20_000 });
@@ -33,6 +34,10 @@ vi.setConfig({ testTimeout: 20_000 });
  */
 
 const TODAY = '2026-09-16'; // a Wednesday; weekDates gives the real week
+
+// Rows are found by their canonical ingredient, so display-name changes
+// ("Chickpeas (tins)" now showing as "Chickpeas") cannot break the story.
+const chickpeaRow = (rows) => rows.find((r) => canonicalName(r.name) === canonicalName('Chickpeas (tins)'));
 
 /** Seed state: onboarded household of 4, mid-week, empty-ish kitchen. */
 const baseState = () => ({
@@ -75,7 +80,7 @@ const runGoldenFlow = (start = baseState()) => {
   //    purchase against. The buy is then recorded through the store command.
   const priced = list.map((row) => (row.name === 'Rice'
     ? { ...row, price: 1.2 }
-    : row.name === 'Chickpeas (tins)' ? { ...row, price: 1.5 } : row));
+    : canonicalName(row.name) === 'chickpeas' ? { ...row, price: 1.5 } : row));
   state = {
     ...state,
     shoppingList: priced,
@@ -90,7 +95,7 @@ const runGoldenFlow = (start = baseState()) => {
       rowPredictionIds: priced.map((row) => row.id),
     })],
   };
-  const boughtRows = priced.filter((row) => row.name === 'Rice' || row.name === 'Chickpeas (tins)');
+  const boughtRows = priced.filter((row) => row.name === 'Rice' || canonicalName(row.name) === 'chickpeas');
   commands.purchaseIngredients({
     items: boughtRows.map((row) => ({ id: row.id, name: row.name, price: row.price, qty: row.qty })),
     store: 'Tesco', total: 2.7,
@@ -184,7 +189,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       { pantry: [], waste: [], cooked: [], today: TODAY, app: state, state },
     );
     const riceRow = list.find((r) => r.name === 'Rice');
-    const chickpeaRow = list.find((r) => r.name === 'Chickpeas (tins)');
+    const chickpeasRow = chickpeaRow(list);
     // 1. PREDICTION SHOWN → 2. SNAPSHOT FROZEN (same write that shows it).
     state = {
       ...state,
@@ -207,7 +212,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       basketPredictions: [basketPredictionEvent({
         rows: [
           { ...riceRow, id: riceSnap.id, price: 1.2 },
-          { ...chickpeaRow, id: chickpeaSnap.id, price: 1.5 },
+          { ...chickpeasRow, id: chickpeaSnap.id, price: 1.5 },
         ],
         day: TODAY,
         rowPredictionIds: [riceSnap.id, chickpeaSnap.id],
@@ -217,7 +222,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       state,
       items: [
         { ...riceRow, id: riceSnap.id, qty: '300g', price: 1.2 },
-        { ...chickpeaRow, id: chickpeaSnap.id, qty: '1', price: 1.5 },
+        { ...chickpeasRow, id: chickpeaSnap.id, qty: '1', price: 1.5 },
       ],
       store: 'Tesco', total: 2.7, id: 'h-golden', day: TODAY,
     });
@@ -284,7 +289,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       },
     );
     // THE CHANGED RECOMMENDATION + THE EXPLANATION, beside the change.
-    const chickpeas = replan.find((row) => row.name === 'Chickpeas (tins)');
+    const chickpeas = chickpeaRow(replan);
     expect(chickpeas).toBeDefined();
     expect(chickpeas.qty).toBe('1');
     expect(chickpeas.wasteNote).toMatch(/binned 2× recently/i);
@@ -299,12 +304,12 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       })),
     };
     const { adaptations } = collectAdaptations(listed, { today: TODAY });
-    const chickpeaRow = adaptations.find((a) => a.kind === 'waste-qty' && a.key.includes('chickpea'));
-    expect(chickpeaRow).toBeDefined();
-    expect(chickpeaRow.title).toMatch(/reduced chickpeas/i);
-    expect(chickpeaRow.evidence).toMatch(/You binned chickpeas \(tins\) 2× in the last month/i);
-    expect(['high', 'medium']).toContain(chickpeaRow.confidence);
-    expect(chickpeaRow.undo).toBeTruthy();
+    const chickpeaAdaptation = adaptations.find((a) => a.kind === 'waste-qty' && a.key.includes('chickpea'));
+    expect(chickpeaAdaptation).toBeDefined();
+    expect(chickpeaAdaptation.title).toMatch(/reduced chickpeas/i);
+    expect(chickpeaAdaptation.evidence).toMatch(/You binned chickpeas 2× in the last month/i);
+    expect(['high', 'medium']).toContain(chickpeaAdaptation.confidence);
+    expect(chickpeaAdaptation.undo).toBeTruthy();
 
     // Empty-state honesty: no waste history → no invented reduction.
     const untouched = shoppingListForPlan(
@@ -315,7 +320,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
         app: { ...state, portions: 4, portionsOverride: 'auto' },
       },
     );
-    const untouchedChickpeas = untouched.find((row) => row.name === 'Chickpeas (tins)');
+    const untouchedChickpeas = chickpeaRow(untouched);
     expect(untouchedChickpeas.qty).toBe('2');
     expect(untouchedChickpeas.wasteNote).toBeUndefined();
   });
@@ -411,7 +416,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
 
     // LEARN + ADAPT: two binned tins → next week asks for one fewer.
     const adapted = listFor(state);
-    const adaptedRow = adapted.find((r) => r.name === 'Chickpeas (tins)');
+    const adaptedRow = chickpeaRow(adapted);
     expect(adaptedRow.qty).toBe('1');
     expect(adaptedRow.wasteNote).toMatch(/binned 2× recently/i);
 
@@ -438,7 +443,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
 
     // REGENERATE: the same plan, the same evidence, a fresh list.
     const regenerated = listFor(corrected);
-    const heldRow = regenerated.find((r) => r.name === 'Chickpeas (tins)');
+    const heldRow = chickpeaRow(regenerated);
     // RESPECTED: the quantity is back to the unlearned amount, with no
     // reduction applied over the household's no.
     expect(heldRow.qty).toBe('2');

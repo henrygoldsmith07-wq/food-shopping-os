@@ -27,6 +27,7 @@ const freezeFor = (rows) => {
   return { event, basketPredictions: [event] };
 };
 import { spendAccuracy, shoppingQuantityError } from '../src/lib/eval-metrics.js';
+import { canonicalName } from '../src/lib/aliases.js';
 
 const TODAY = '2026-09-16';
 const NOON = 'T12:00:00.000Z';
@@ -128,7 +129,7 @@ describe('prediction snapshots: what the list actually showed', () => {
   it('list regeneration writes fresh snapshots matching the displayed quantities', () => {
     const state = household();
     const adapted = nextWeekList(state);
-    const row = adapted.find((r) => r.name === 'Chickpeas (tins)');
+    const row = adapted.find((r) => canonicalName(r.name) === 'chickpeas');
     expect(row).toBeDefined();
     expect(state.shoppingPredictions).toBeUndefined(); // pure builder: no writes
     expect(state.__allRecipes).toBeUndefined(); // built-in catalogue only — no test injection
@@ -391,7 +392,7 @@ describe('suppression recovery: new evidence earns reconsideration', () => {
     // regeneration re-earns it. That is reconsideration, not repetition:
     // it required genuinely new behaviour after the household's "no".
     const adapted = nextWeekList(state);
-    expect(adapted.find((r) => r.name === 'Chickpeas (tins)').wasteNote).toContain('Binned 2× recently');
+    expect(adapted.find((r) => canonicalName(r.name) === 'chickpeas').wasteNote).toContain('Binned 2× recently');
   });
 
   it('evidence before the rejection is not new evidence', () => {
