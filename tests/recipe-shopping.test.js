@@ -27,6 +27,21 @@ describe('single-recipe shopping hand-off', () => {
     expect(rows.some((row) => row.name === 'Chopped tomatoes')).toBe(false);
   });
 
+  it('merges alias-equivalent spellings inside one recipe via a taught alias', () => {
+    const rows = shoppingItemsForRecipe({
+      ...recipe,
+      ingredients: [
+        { name: 'Onion', qty: '2' },
+        { name: 'Vidalia', qty: '1' },
+      ],
+    }, [], { today: '2026-09-22', learnedAliases: { vidalia: 'onion' } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      name: 'Onion', qty: '3', requiredQty: '3', sourceRecipes: ['Rice bowl'],
+    });
+    expect(rows[0].forRecipes).toEqual(['Rice bowl']);
+  });
+
   it('does not subtract a quantity whose pantry confidence is unknown', () => {
     const ingredient = { name: 'Rice', qty: '300 g' };
     const read = pantryReadForRecipeIngredient(ingredient, [

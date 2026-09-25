@@ -62,11 +62,32 @@ export const shoppingItemsForRecipe = (
   }
   if (!needs.length) return [];
 
-  const rows = itemsFromRecipes([{ ...recipe, ingredients: needs.map((row) => row.ingredient) }], []);
-  const evidence = new Map(needs.map((row) => [
-    canonicalName(row.ingredient.name, learnedAliases),
-    row,
-  ]));
+  // Same alias awareness as every other Plan → List path: a taught alias
+  // must merge rows here exactly as it does on the week list, and the
+  // evidence lookup below keys on the learned-aware canonical name.
+  const rows = itemsFromRecipes([{ ...recipe, ingredients: needs.map((row) => row.ingredient) }], [], { learnedAliases });
+  // Two alias-equivalent spellings collapse into one row, so their evidence
+  // must collapse with it: keep one record per canonical ingredient with the
+  // quantities merged and both shortfall paths visible.
+  const evidence = new Map();
+  for (const row of needs) {
+    const key = canonicalName(row.ingredient.name, learnedAliases);
+    const known = evidence.get(key);
+    if (!known) {
+      evidence.set(key, row);
+      continue;
+    }
+    evidence.set(key, {
+      ...known,
+      ingredient: { ...known.ingredient, qty: mergeQtys(known.ingredient.qty, row.ingredient.qty) },
+      requiredQty: mergeQtys(known.requiredQty, row.requiredQty),
+      pantryQty: known.pantryQty || row.pantryQty,
+      shortfallQty: mergeQtys(known.shortfallQty, row.shortfallQty),
+      pantryTruth: known.pantryTruth === 'confirmed_insufficient' || row.pantryTruth === 'confirmed_insufficient'
+        ? 'confirmed_insufficient'
+        : (known.pantryTruth || row.pantryTruth || 'unknown'),
+    });
+  }
   return rows.map((row) => {
     const proof = evidence.get(canonicalName(row.name, learnedAliases));
     return {
