@@ -8,9 +8,11 @@ import { shoppingListForPlan } from '../src/lib/loop-learning.js';
 import { collectAdaptations } from '../src/lib/adaptations.js';
 import { loopInference } from '../src/lib/loop-inference.js';
 import { attachPredictions, buildShopRecord } from '../src/lib/shopping-predictions.js';
+import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
 import { shoppingQuantityError } from '../src/lib/eval-metrics.js';
 import { buildDomainCommands } from '../src/lib/store-commands.js';
 import { weekDates } from '../src/lib/kitchen.js';
+import { canonicalName } from '../src/lib/aliases.js';
 
 // One journey, many screens: keep every step well inside the timeout.
 vi.setConfig({ testTimeout: 20_000 });
@@ -32,6 +34,10 @@ vi.setConfig({ testTimeout: 20_000 });
  */
 
 const TODAY = '2026-09-16'; // a Wednesday; weekDates gives the real week
+
+// Rows are found by their canonical ingredient, so display-name changes
+// ("Chickpeas (tins)" now showing as "Chickpeas") cannot break the story.
+const chickpeaRow = (rows) => rows.find((r) => canonicalName(r.name) === canonicalName('Chickpeas (tins)'));
 
 /** Seed state: onboarded household of 4, mid-week, empty-ish kitchen. */
 const baseState = () => ({
@@ -66,18 +72,38 @@ const runGoldenFlow = (start = baseState()) => {
   });
   const rice = list.find((row) => row.name === 'Rice');
   expect(rice).toBeDefined(); // curry's rice is written for 4; household eats 4
-  expect(rice.qty).toBe('300g'); // the recipe's native 4-serving amount
+  expect(rice.qty).toBe('600 g'); // two planned curry nights need two 4-serving batches
 
-  // 3. SHOP — the buy is recorded (store command, ledger event). The shop
-  //    record freezes the basket prediction and the per-row snapshots it
-  //    was given — what evaluation will score the purchase against.
+  // 3. LIST SHOWN → EVIDENCE FROZEN: rows priced (the app re-freezes the
+  //    basket prediction on a price change), snapshots and the basket-cost
+  //    prediction frozen BEFORE the till — what evaluation will score the
+  //    purchase against. The buy is then recorded through the store command.
+  const priced = list.map((row) => (row.name === 'Rice'
+    ? { ...row, price: 1.2 }
+    : canonicalName(row.name) === 'chickpeas' ? { ...row, price: 1.5 } : row));
+  state = {
+    ...state,
+    shoppingList: priced,
+    shoppingPredictions: attachPredictions(priced, [], {
+      day: TODAY,
+      portionsDecision: { portions: 4, source: 'configured' },
+      learnedAliases: state.aliasMemory || {},
+    }),
+    basketPredictions: [basketPredictionEvent({
+      rows: priced,
+      day: TODAY,
+      rowPredictionIds: priced.map((row) => row.id),
+    })],
+  };
+  const boughtRows = priced.filter((row) => row.name === 'Rice' || canonicalName(row.name) === 'chickpeas');
   commands.purchaseIngredients({
-    items: [{ name: 'Rice', price: 1.2, qty: '300g' }, { name: 'Chickpeas (tins)', price: 1.5, qty: '2' }],
+    items: boughtRows.map((row) => ({ id: row.id, name: row.name, price: row.price, qty: row.qty })),
     store: 'Tesco', total: 2.7,
   });
   expect(ledgerEvents(state, { type: 'IngredientPurchased' })).toHaveLength(1);
   const shop = state.shops.at(-1);
-  expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, frozen
+  expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, copied verbatim
+  expect(shop.spendPrediction.matchedBy).toBe('row-subset'); // priced from the freeze's own rows
   expect(shop.items.every((item) => item.qty && Number(item.price) > 0)).toBe(true);
 
   // 4. COOK — tonight's planned dinner is cooked.
@@ -87,17 +113,8 @@ const runGoldenFlow = (start = baseState()) => {
   // 5. LEFTOVERS — the household batch-cooked extra: two spare portions go
   //    in the fridge for a later slot.
   commands.createLeftover({ name: 'Coconut Chickpea Curry', portions: 2, safeDays: 3 });
-  state = {
-    ...state,
-    pantry: [
-      ...state.pantry,
-      {
-        id: 'p-curry-leftover', name: 'Coconut Chickpea Curry (leftovers)', cat: 'Leftovers',
-        qty: '2 portions', recipeId: 'chickpea-curry', portions: 2,
-        location: 'Fridge', addedAt: TODAY, expiry: d2,
-      },
-    ],
-  };
+  expect(state.pantry.some((row) => row.cat === 'Leftovers' && row.recipeId === 'chickpea-curry' && row.portions === 2)).toBe(true);
+  expect(state.leftovers.some((row) => row.recipeId === 'chickpea-curry' && row.remainingPortions === 2)).toBe(true);
   expect(ledgerEvents(state, { type: 'LeftoverCreated' })).toHaveLength(1);
 
   // 6. WASTE — the household binned tins of chickpeas twice in the last
@@ -116,10 +133,19 @@ const runGoldenFlow = (start = baseState()) => {
 };
 
 describe('the golden flow: plan → shop → cook → learn → next week', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    // This flow is intentionally pinned to TODAY. Without freezing Date, the
+    // app's real day-rollover eventually makes the seeded missed-meal window
+    // expire and refreshes the seeded plan/list, so the test starts failing
+    // because the calendar moved rather than because the product regressed.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(`${TODAY}T12:00:00`));
+    localStorage.clear();
+  });
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    vi.useRealTimers();
   });
 
   it('evaluates the exact prediction the list showed — snapshot vs purchase', () => {
@@ -163,7 +189,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       { pantry: [], waste: [], cooked: [], today: TODAY, app: state, state },
     );
     const riceRow = list.find((r) => r.name === 'Rice');
-    const chickpeaRow = list.find((r) => r.name === 'Chickpeas (tins)');
+    const chickpeasRow = chickpeaRow(list);
     // 1. PREDICTION SHOWN → 2. SNAPSHOT FROZEN (same write that shows it).
     state = {
       ...state,
@@ -177,19 +203,32 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
 
     // 3. PURCHASE RECORDED: the household buys the advised rice but ONE tin
     //    against the shown two, through the shared buildShopRecord helper —
-    //    the exact predictions (matched by list row id) ride the shop record.
+    //    the exact predictions (matched by list row id) ride the shop record,
+    //    and the basket cost is the freeze taken when the list was shown.
     const riceSnap = state.shoppingPredictions.find((p) => p.predictionKey === 'rice');
     const chickpeaSnap = state.shoppingPredictions.find((p) => p.predictionKey === 'chickpeas');
+    state = {
+      ...state,
+      basketPredictions: [basketPredictionEvent({
+        rows: [
+          { ...riceRow, id: riceSnap.id, price: 1.2 },
+          { ...chickpeasRow, id: chickpeaSnap.id, price: 1.5 },
+        ],
+        day: TODAY,
+        rowPredictionIds: [riceSnap.id, chickpeaSnap.id],
+      })],
+    };
     const shop = buildShopRecord({
       state,
       items: [
         { ...riceRow, id: riceSnap.id, qty: '300g', price: 1.2 },
-        { ...chickpeaRow, id: chickpeaSnap.id, qty: '1', price: 1.5 },
+        { ...chickpeasRow, id: chickpeaSnap.id, qty: '1', price: 1.5 },
       ],
       store: 'Tesco', total: 2.7, id: 'h-golden', day: TODAY,
     });
     expect(shop.predictions.map((p) => p.id).sort()).toEqual([chickpeaSnap.id, riceSnap.id]);
-    expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, frozen
+    expect(shop.predicted).toBe(2.7); // the pre-till basket prediction, copied verbatim
+    expect(shop.spendPrediction.matchedBy).toBe('row-ids');
     state = { ...state, shops: [shop] };
 
     // 4. SNAPSHOT SURVIVES LIST REMOVAL: the whole list is deleted after the
@@ -250,7 +289,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       },
     );
     // THE CHANGED RECOMMENDATION + THE EXPLANATION, beside the change.
-    const chickpeas = replan.find((row) => row.name === 'Chickpeas (tins)');
+    const chickpeas = chickpeaRow(replan);
     expect(chickpeas).toBeDefined();
     expect(chickpeas.qty).toBe('1');
     expect(chickpeas.wasteNote).toMatch(/binned 2× recently/i);
@@ -265,12 +304,12 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       })),
     };
     const { adaptations } = collectAdaptations(listed, { today: TODAY });
-    const chickpeaRow = adaptations.find((a) => a.kind === 'waste-qty' && a.key.includes('chickpea'));
-    expect(chickpeaRow).toBeDefined();
-    expect(chickpeaRow.title).toMatch(/reduced chickpeas/i);
-    expect(chickpeaRow.evidence).toMatch(/You binned chickpeas \(tins\) 2× in the last month/i);
-    expect(['high', 'medium']).toContain(chickpeaRow.confidence);
-    expect(chickpeaRow.undo).toBeTruthy();
+    const chickpeaAdaptation = adaptations.find((a) => a.kind === 'waste-qty' && a.key.includes('chickpea'));
+    expect(chickpeaAdaptation).toBeDefined();
+    expect(chickpeaAdaptation.title).toMatch(/reduced chickpeas/i);
+    expect(chickpeaAdaptation.evidence).toMatch(/You binned chickpeas 2× in the last month/i);
+    expect(['high', 'medium']).toContain(chickpeaAdaptation.confidence);
+    expect(chickpeaAdaptation.undo).toBeTruthy();
 
     // Empty-state honesty: no waste history → no invented reduction.
     const untouched = shoppingListForPlan(
@@ -281,7 +320,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
         app: { ...state, portions: 4, portionsOverride: 'auto' },
       },
     );
-    const untouchedChickpeas = untouched.find((row) => row.name === 'Chickpeas (tins)');
+    const untouchedChickpeas = chickpeaRow(untouched);
     expect(untouchedChickpeas.qty).toBe('2');
     expect(untouchedChickpeas.wasteNote).toBeUndefined();
   });
@@ -343,15 +382,16 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
       cooked: state.cooked.filter((c) => !(c.date === pastDate && c.recipeId === 'salmon-teriyaki')),
     };
     const inference = loopInference(open, { today: TODAY });
-    expect(inference.proposals.some((p) => p.date === pastDate && p.recipeId === 'salmon-teriyaki')).toBe(true);
+    const proposal = inference.proposals.find((p) => p.date === pastDate && p.recipeId === 'salmon-teriyaki');
+    expect(proposal).toBeDefined();
 
     // In the app, the confirmation is one tap on This Week, and answering it
     // writes the same ledger event a manual log would.
     localStorage.setItem(STORAGE_KEY, JSON.stringify(open));
     render(<App />);
-    const question = screen.getByText(/marked Teriyaki Salmon Bowls as missed .* did it actually happen/i);
+    const question = screen.getByText(proposal.description);
     expect(question).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: /Yes — .*marked Teriyaki Salmon Bowls as missed/i }));
+    fireEvent.click(screen.getByRole('button', { name: `Yes — ${proposal.description}` }));
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
     expect(stored.householdLedger.some((e) =>
@@ -376,7 +416,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
 
     // LEARN + ADAPT: two binned tins → next week asks for one fewer.
     const adapted = listFor(state);
-    const adaptedRow = adapted.find((r) => r.name === 'Chickpeas (tins)');
+    const adaptedRow = chickpeaRow(adapted);
     expect(adaptedRow.qty).toBe('1');
     expect(adaptedRow.wasteNote).toMatch(/binned 2× recently/i);
 
@@ -403,7 +443,7 @@ describe('the golden flow: plan → shop → cook → learn → next week', () =
 
     // REGENERATE: the same plan, the same evidence, a fresh list.
     const regenerated = listFor(corrected);
-    const heldRow = regenerated.find((r) => r.name === 'Chickpeas (tins)');
+    const heldRow = chickpeaRow(regenerated);
     // RESPECTED: the quantity is back to the unlearned amount, with no
     // reduction applied over the household's no.
     expect(heldRow.qty).toBe('2');

@@ -16,7 +16,11 @@ import { replacePredictionsForList } from './shopping-predictions.js';
 import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
 import { emojiFor, uid } from './state.js';
-import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from './portions.js';
+import { householdPortionsFor } from './portions.js';
+
+/** Single scaling implementation — see portions.js. Kept as a re-export so
+ * existing imports from this module keep working. */
+export { scaleQty } from './portions.js';
 
 /**
  * The week loop's portions and list scaling live in `portions.js` — one
@@ -24,19 +28,6 @@ import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from 
  * disagree with the plan generator about how much to buy.
  */
 export { householdPortionsFor } from './portions.js';
-
-/** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */
-export const scaleQty = (qty, factor = 1) => {
-  if (!qty || !(factor > 0) || Math.abs(factor - 1) < 0.05) return qty || '';
-  const text = String(qty).trim();
-  const m = text.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
-  if (!m) return text;
-  const n = Number(String(m[1]).replace(',', '.'));
-  if (!Number.isFinite(n)) return text;
-  const scaled = Math.round(n * factor * 10) / 10;
-  const unit = (m[2] || '').trim();
-  return unit ? `${scaled} ${unit}` : String(scaled);
-};
 
 /**
  * Shopping list for the week plan, scaled to household portions and
@@ -49,46 +40,58 @@ export const scaleQty = (qty, factor = 1) => {
 export const shoppingForWeekLoop = (app, dates = weekDates(app.day)) => {
   const household = householdPortionsFor(app);
   const people = household.portions;
-  const raw = shoppingForPlan(app.plan || {}, dates, { pantry: app.pantry || [] });
-  // shoppingForPlan uses recipe ingredient lines as written (usually 1 batch).
-  // Scale each line toward household portions using the recipe's stated servings.
-  const entries = planEntries(app.plan || {}, dates);
-  const factors = recipePortionFactors(entries, people);
-  const items = scaleListToPortions(raw, people, factors).map((item) => ({ ...item, people }));
+  // The same waste learning every other Plan → List hand-off applies: an
+  // ingredient the household keeps binning arrives one unit lighter, here
+  // too. The loop's own "generate" used to skip this, so its added list
+  // disagreed with the reconciled list for the same plan.
+  const items = wasteAwareList(shoppingForPlan(app.plan || {}, dates, {
+    pantry: app.pantry || [], today: app.day, learnedAliases: app.aliasMemory || {}, people,
+  }), {
+    waste: app.waste || [],
+    cooked: app.cooked || [],
+    today: app.day,
+    learnedAliases: app.aliasMemory || {},
+    held: heldAdaptationKeys(app, { today: app.day }),
+  }).map((item) => ({ ...item, people }));
   return { items, portions: household };
 };
 
-/** Ingredients the plan needs vs what the pantry already covers (name match). */
+/** Ingredients the plan needs vs what the pantry actually covers. */
 export const pantryCheckForPlan = (app, dates = weekDates(app.day)) => {
-  const need = shoppingForPlan(app.plan || {}, dates, { pantry: [] });
-  // truth-aware: only confirmed_sufficient / probably_available count as have
-  const sufficientNames = new Set(
-    (app.pantry || [])
-      .filter((row) => {
-        const c = String(row.confidence || "definite").toLowerCase();
-        if (c === "unknown") return false;
-        if (row.low) return false;
-        // Probable counts; definite counts even when the amount wasn't recorded.
-        return true;
-      })
-      .map((p) => canonicalName(p.name, app.aliasMemory)),
-  );
-  const covered = need.filter((i) => sufficientNames.has(String(i.name).toLowerCase()));
-  const missing = shoppingForPlan(app.plan || {}, dates, { pantry: app.pantry || [] });
-  const leftoverCovered = coveredByLeftovers(app.plan || {}, dates, app.pantry || []);
+  const household = householdPortionsFor(app);
+  const options = {
+    today: app.day, learnedAliases: app.aliasMemory || {}, people: household.portions,
+  };
+  const need = shoppingForPlan(app.plan || {}, dates, {
+    pantry: [], ...options,
+  });
+  // Measure pantry coverage through the same quantity-/alias-/confidence-aware
+  // calculation that builds the list. A name match alone used to call 2 thighs
+  // "covered" even when the household needed 8, and aliases could disagree
+  // with the shopping result. Exclude leftover rows here so the pantry count
+  // remains distinct from the leftoverMeals metric below.
+  const pantryOnly = (app.pantry || []).filter((row) => row.cat !== 'Leftovers');
+  const afterPantry = shoppingForPlan(app.plan || {}, dates, { pantry: pantryOnly, ...options });
+  const stillNeeded = new Set(afterPantry.map((item) => canonicalName(item.name, app.aliasMemory)));
+  const covered = need.filter((item) => !stillNeeded.has(canonicalName(item.name, app.aliasMemory)));
+  const missing = shoppingForPlan(app.plan || {}, dates, {
+    pantry: app.pantry || [], ...options,
+  });
+  const leftoverCovered = coveredByLeftovers(app.plan || {}, dates, app.pantry || [], { people: household.portions });
   return {
     totalIngredients: need.length,
     coveredByPantry: covered.length,
     missing: missing.length,
     missingItems: missing,
     leftoverMeals: leftoverCovered.length,
-    plannedMeals: planStats(app.plan || {}, dates, { people: app.portions || 1 }).meals,
+    plannedMeals: planStats(app.plan || {}, dates, { people: household.portions }).meals,
   };
 };
 
 export const weekLoopSnapshot = (app) => {
   const dates = weekDates(app.day);
-  const stats = planStats(app.plan || {}, dates, { people: app.portions || 1 });
+  const household = householdPortionsFor(app);
+  const stats = planStats(app.plan || {}, dates, { people: household.portions });
   const list = app.shoppingList || [];
   const checked = list.filter((i) => i.checked);
   const pantryCheck = pantryCheckForPlan(app, dates);
@@ -110,7 +113,7 @@ export const weekLoopSnapshot = (app) => {
 
   const done = {
     plan: stats.meals > 0,
-    portions: (app.portions || app.household || 1) >= 1,
+    portions: household.portions >= 1,
     pantry: stats.meals > 0, // reviewable once planned
     list: list.length > 0 || (stats.meals > 0 && pantryCheck.missing === 0),
     prices: true, // optional
@@ -178,7 +181,14 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   // What this week's plan needs, after the pantry, the leftovers and the
   // household's own waste pattern have had their say.
   const dynamic = deriveDynamicShoppingList(state, { dates });
-  const derived = wasteAwareList(dynamic.length ? dynamic : shoppingForWeekLoop(state, dates).items, {
+  // `shoppingForWeekLoop` already applies the waste learning once; the
+  // fallback only needs its raw core rows, so the reduction is never
+  // compounded by running `wasteAwareList` twice over the same row.
+  const fallback = shoppingForPlan(state.plan || {}, dates, {
+    pantry: state.pantry || [], today: state.day, learnedAliases: aliasMemory,
+    people: householdPortionsFor(state).portions,
+  });
+  const derived = wasteAwareList(dynamic.length ? dynamic : fallback, {
     waste: state.waste || [],
     cooked: state.cooked || [],
     today: state.day,
@@ -195,11 +205,22 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
     if (key && !needed.has(key)) needed.set(key, row);
   }
 
-  // A dish planned anywhere still owns its rows — moving Tuesday's dinner
-  // into next month must not strand its shopping mid-move.
+  // Rows that belong ONLY to a plan outside this synced range must survive a
+  // current-week pantry/portion refresh — moving Tuesday's dinner into next
+  // month must not strand its shopping. But a row for a meal inside `dates`
+  // is allowed to disappear when the pantry now covers it; the old
+  // "recipe planned anywhere" guard kept covered current-week food on the
+  // shopping list indefinitely.
   const planEntriesAll = planEntries(plan, Object.keys(plan).sort());
+  const rangeDates = new Set(dates);
   const plannedRecipeNames = new Set(
     planEntriesAll.map((entry) => entry.recipe?.name).filter(Boolean),
+  );
+  const plannedOutsideRangeNames = new Set(
+    planEntriesAll
+      .filter((entry) => !rangeDates.has(entry.date))
+      .map((entry) => entry.recipe?.name)
+      .filter(Boolean),
   );
 
   // Only prune when this list answers to a plan this state can actually see:
@@ -216,23 +237,58 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   for (const row of list) {
     const key = keyOf(row.name);
     const auto = Boolean(row.fromRecipe) && !row.checked;
-    if (canPrune && auto && !needed.has(key) && !plannedRecipeNames.has(row.fromRecipe)) {
+    const owners = Array.isArray(row.sourceRecipes) && row.sourceRecipes.length
+      ? row.sourceRecipes
+      : [row.fromRecipe].filter(Boolean);
+    // During a plan edit, a row can predate the committed plan (for example a
+    // proposal the household is accepting). Preserve it when the same recipe
+    // is now present; a later pantry/portion refresh can safely remove it if
+    // stock proves it unnecessary. When the plan edit removed its recipe,
+    // there is no owner and it is pruned immediately.
+    const ownedByCommittedPlan = owners.some((name) => plannedRecipeNames.has(name));
+    const ownedOutsideRange = owners.some((name) => plannedOutsideRangeNames.has(name));
+    const preserveUnneeded = planChanged ? ownedByCommittedPlan : ownedOutsideRange;
+    if (canPrune && auto && !needed.has(key) && !preserveUnneeded) {
       changed = true;
       continue; // the plan no longer asks for this
     }
     const neededRow = needed.get(key);
     if (auto && neededRow) {
       const untouched = row.lastAutoQty != null ? row.qty === row.lastAutoQty : row.qty === neededRow.qty;
-      if (untouched && (row.qty !== neededRow.qty || row.wasteNote !== neededRow.wasteNote || (row.autoReduction || null) !== (neededRow.autoReduction || null))) {
+      const refreshed = {
+        qty: neededRow.qty,
+        lastAutoQty: neededRow.qty,
+        wasteNote: neededRow.wasteNote,
+        autoReduction: neededRow.autoReduction || null,
+        binnedCount: neededRow.binnedCount,
+        lastBinnedAt: neededRow.lastBinnedAt,
+        requiredQty: neededRow.requiredQty,
+        pantryQty: neededRow.pantryQty || '',
+        shortfallQty: neededRow.shortfallQty || '',
+        sourceRecipes: neededRow.sourceRecipes || (neededRow.fromRecipe ? [neededRow.fromRecipe] : []),
+        explanation: neededRow.explanation,
+        pantryTruth: neededRow.pantryTruth,
+      };
+      const currentEvidence = {
+        qty: row.qty,
+        lastAutoQty: row.lastAutoQty,
+        wasteNote: row.wasteNote,
+        autoReduction: row.autoReduction || null,
+        binnedCount: row.binnedCount,
+        lastBinnedAt: row.lastBinnedAt,
+        requiredQty: row.requiredQty,
+        pantryQty: row.pantryQty || '',
+        shortfallQty: row.shortfallQty || '',
+        sourceRecipes: row.sourceRecipes || (row.fromRecipe ? [row.fromRecipe] : []),
+        explanation: row.explanation,
+        pantryTruth: row.pantryTruth,
+      };
+      const evidenceChanged = JSON.stringify(currentEvidence) !== JSON.stringify(refreshed);
+      if (untouched && evidenceChanged) {
         changed = true;
         nextList.push({
           ...row,
-          qty: neededRow.qty,
-          lastAutoQty: neededRow.qty,
-          wasteNote: neededRow.wasteNote,
-          autoReduction: neededRow.autoReduction || null,
-          binnedCount: neededRow.binnedCount,
-          lastBinnedAt: neededRow.lastBinnedAt,
+          ...refreshed,
         });
         continue;
       }

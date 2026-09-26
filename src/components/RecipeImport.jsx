@@ -5,7 +5,7 @@ import { importRecipeText, recipeTextFromMarkup } from '../lib/foodlog.js';
 import { isVideoLink, recipeFromImport } from '../lib/recipe-tools.js';
 import { provenanceFrom } from '../lib/recipe-import.js';
 import { buildEntry, mealForTime, timeStamp } from '../lib/nutrition.js';
-import { itemsFromRecipes } from '../data/stores.js';
+import { shoppingItemsForRecipe } from '../lib/recipe-shopping.js';
 import { PRIVACY_COPY } from '../data/privacy.js';
 import { Card, Chip, Pill, Stepper } from './ui.jsx';
 import RecipeImportSource from './RecipeImportSource.jsx';
@@ -270,7 +270,11 @@ export default function RecipeImport({ defaultMeal, onDone }) {
                     url: fetched ? url : link,
                     provenance: result.provenance,
                   });
-                  app.addToList(itemsFromRecipes([imported]));
+                  const rows = shoppingItemsForRecipe(imported, app.pantry, {
+                    today: app.day,
+                    learnedAliases: app.aliasMemory || {},
+                  });
+                  if (rows.length) app.addToList(rows);
                   setListed(true);
                 }}
                 disabled={listed}
@@ -278,7 +282,7 @@ export default function RecipeImport({ defaultMeal, onDone }) {
                 style={{ borderColor: listed ? 'var(--good)' : 'var(--line)', color: listed ? 'var(--good)' : 'var(--ink)' }}
               >
                 <span className="inline-flex items-center gap-1.5">
-                  <ShoppingCart size={14} /> {listed ? 'On your list' : 'Shop missing'}
+                  <ShoppingCart size={14} /> {listed ? 'Shopping checked' : 'Shop missing'}
                 </span>
               </button>
           </div>

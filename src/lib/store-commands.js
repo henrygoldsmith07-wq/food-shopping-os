@@ -11,7 +11,11 @@
  */
 
 import { createLedgerEvent, appendLedgerEvent } from './event-ledger.js';
-import { buildShopRecord } from './shopping-predictions.js';
+import { buildShopRecord, listSnapshotSync } from './shopping-predictions.js';
+import { allRecipes } from '../data/recipes.js';
+import { leftoverEntry } from './mealplan.js';
+import { createLeftover as createLeftoverRecord } from './leftover-planning.js';
+import { addDays } from './kitchen-dates.js';
 
 /**
  * One event onto the household's history via the shared append path, so
@@ -80,6 +84,10 @@ export const applyWeekRecoveryTo = (state, result) => {
   const removeIds = new Set((result.shoppingRemove || []).map((r) => r.id));
   if (removeIds.size) {
     next = { ...next, shoppingList: (next.shoppingList || []).filter((i) => !removeIds.has(i.id)) };
+    // Rows the repairs retire leave WITH their live snapshots (list ↔
+    // snapshot consistency) — frozen copies on shop records are untouched.
+    const synced = listSnapshotSync(next.shoppingList, next.shoppingPredictions);
+    next = { ...next, shoppingPredictions: synced.shoppingPredictions };
     changed.push(`removed ${removeIds.size} list row${removeIds.size === 1 ? '' : 's'}`);
   }
   if (result.shoppingAdd?.length) {
@@ -171,6 +179,10 @@ export const buildDomainCommands = (set) => ({
     // Idempotent replay: a shop id already recorded IS the same purchase —
     // appending it again would let evaluation count one till run twice.
     if ((s.shops || []).some((h) => h?.id === shopId)) return {};
+    // No `predictedCost`: the spend prediction is the pre-till freeze
+    // matched from basketPredictions (see shop-record.js) — copied verbatim;
+    // with no row ids and no honest day-match, `predicted` stays null and
+    // spend accuracy excludes the shop instead of reconstructing.
     const shop = buildShopRecord({
       state: s,
       items: normalised,
@@ -190,12 +202,41 @@ export const buildDomainCommands = (set) => ({
     const waste = [...(s.waste || []), { name, reason, cost, date: new Date().toISOString().slice(0, 10) }];
     return withLedger({ ...s, waste }, createLedgerEvent('IngredientWasted', { name, reason, cost }, { actor, origin }));
   }),
-  createLeftover: ({ name, portions = 1, safeDays = 3, actor = null, origin = 'user' } = {}) => set((s) => {
-    const leftovers = [...(s.leftovers || []), {
-      id: `l${Date.now().toString(36)}`, name, portions, safeDays,
-      createdAt: new Date().toISOString().slice(0, 10),
-    }];
-    return withLedger({ ...s, leftovers }, createLedgerEvent('LeftoverCreated', { name, portions }, { actor, origin }));
+  createLeftover: ({ name, recipeId = null, portions = 1, safeDays = 3, actor = null, origin = 'user' } = {}) => set((s) => {
+    const count = Math.max(0, Math.round(Number(portions) || 0));
+    if (!count || (!name && !recipeId)) return {};
+    const day = String(s.day || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const targetName = String(name || '').trim().toLowerCase();
+    const recipe = allRecipes().find((row) => recipeId && row.id === recipeId)
+      || allRecipes().find((row) => targetName && String(row.name || '').trim().toLowerCase() === targetName)
+      || { id: recipeId || null, name: name || 'Leftovers', emoji: '🍽️' };
+    const lifecycle = createLeftoverRecord({
+      recipe,
+      cookedPortions: count,
+      eatenPortions: 0,
+      date: day,
+      safeDays,
+    });
+    const pantryBase = leftoverEntry(recipe, count, day);
+    const pantryRow = {
+      id: `p-${lifecycle.id}`,
+      low: false,
+      ...pantryBase,
+      expiry: addDays(day, Math.max(1, Math.round(Number(safeDays) || 3))),
+    };
+    const samePantryLeftover = (row) => row?.cat === 'Leftovers' && row?.addedAt === day
+      && (recipe.id ? row.recipeId === recipe.id : String(row.name || '').toLowerCase() === String(pantryRow.name || '').toLowerCase());
+    const pantry = [...(s.pantry || []).filter((row) => !samePantryLeftover(row)), pantryRow];
+    const leftovers = [...(s.leftovers || []).filter((row) => row.id !== lifecycle.id), lifecycle].slice(-200);
+    return withLedger(
+      { ...s, pantry, leftovers },
+      createLedgerEvent('LeftoverCreated', {
+        name: recipe.name,
+        recipeId: recipe.id || null,
+        portions: count,
+        safeUntil: lifecycle.safeUntil,
+      }, { actor, origin }),
+    );
   }),
   correctPantry: ({ corrections = [], actor = null, origin = 'user' } = {}) => set((s) => {
     const pantry = (s.pantry || []).map((p) => {

@@ -108,7 +108,7 @@ export const createExampleWeekState = (day = todayStamp()) => {
   ];
 
   const mode = applyProductMode('meal_planning', {});
-  const listPreview = shoppingForPlan(plan, dates, { pantry });
+  const listPreview = shoppingForPlan(plan, dates, { pantry, people: 2, today: day });
 
   return {
     ...EMPTY_STATE,

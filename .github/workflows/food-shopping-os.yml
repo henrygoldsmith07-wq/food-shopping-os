@@ -19,6 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The secret scan below works out which commits the push introduced
+          # and scans exactly that range (`base^..head`). A depth-1 clone does
+          # not contain the base commit's parent, so any push carrying more
+          # than one commit fails the scan with "unknown revision" instead of
+          # scanning. Fetch enough history for the range to resolve.
+          fetch-depth: 0
 
       - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@v2

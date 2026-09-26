@@ -5,6 +5,7 @@ import {
 import { useApp } from '../lib/store.jsx';
 import { spendByMonth, weekDates } from '../lib/kitchen.js';
 import { planStats } from '../lib/mealplan.js';
+import { householdPortionsFor } from '../lib/portions.js';
 import { gbp } from '../lib/utils.js';
 import { Bars, Card, Chip, Meter, Pill, Section } from './ui.jsx';
 
@@ -17,9 +18,10 @@ export default function BudgetPanel() {
   const [alertName, setAlertName] = useState('');
   const [alertTarget, setAlertTarget] = useState('');
   const spend = useMemo(() => spendByMonth(app.shops, 6, app.day), [app.shops, app.day]);
-  const planned = planStats(app.plan, weekDates(app.day), { people: app.portions });
+  const effectivePeople = householdPortionsFor(app).portions;
+  const planned = planStats(app.plan, weekDates(app.day), { people: effectivePeople });
   const costPerMeal = planned.meals ? planned.cost / planned.meals : 0;
-  const costPerServing = planned.meals ? planned.cost / planned.meals / app.portions : 0;
+  const costPerServing = planned.meals ? planned.cost / planned.meals / effectivePeople : 0;
   const anomalies = app.priceAnomalies;
 
   const saveBudgets = () => app.set({

@@ -1,12 +1,41 @@
 import { householdPermission } from './household.js';
-import { aisleFor, shoppingNameKey } from './shopping.js';
+import { aisleFor, applyOffers, shoppingNameKey, routeFromTicks } from './shopping.js';
 import { reconcilePurchase } from './pantry-intelligence.js';
 import { moveBefore } from './utils.js';
 import { applyListConflictResolution } from './household-concurrency.js';
 import { emojiFor, uid } from './state.js';
-import { upsertPredictions } from './shopping-predictions.js';
+import { upsertPredictions, listSnapshotSync, buildShopRecord } from './shopping-predictions.js';
+import { PREDICTION_PROVENANCE, refreshBasketFreeze } from './prediction-evidence.js';
+import { receiptOutcomeRecords } from './price-evidence.js';
+import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
+
+/**
+ * Remove list rows and their LIVE prediction snapshots in the SAME state
+ * write (task: enforce list ↔ snapshot consistency): every live
+ * shoppingPredictions[].id must refer to a currently visible list row, so a
+ * removal that left its snapshot behind would break the invariant. Frozen
+ * copies on historical shop records are untouched — they live on the shops,
+ * not in this book.
+ *
+ * The basket freeze rides the same write (task: material list changes): with
+ * a prior freeze and a still-trustworthy forecast the shown basket is
+ * re-frozen over the remaining rows; with no trustworthy forecast left the
+ * prior freeze is explicitly invalidated — never left describing rows that
+ * are no longer shown, and never invented merely because a row left.
+ */
+const removeRowsWithSnapshots = (state, goneIds) => {
+  const gone = goneIds instanceof Set ? goneIds : new Set(goneIds);
+  const shoppingList = state.shoppingList.filter((item) => !gone.has(item.id));
+  if (shoppingList.length === state.shoppingList.length) return null;
+  const { shoppingPredictions } = listSnapshotSync(shoppingList, state.shoppingPredictions);
+  return {
+    shoppingList,
+    shoppingPredictions,
+    basketPredictions: refreshBasketFreeze({ state, nextList: shoppingList, source: 'row-removal', requirePrev: true }),
+  };
+};
 
 /** Actions for saved shopping products, kept out of the main store API. */
 export const shoppingActions = (set) => ({
@@ -46,9 +75,10 @@ export const shoppingActions = (set) => ({
   // would leave the undo stack N calls deep with no way back but N taps.
   removeListItems: (ids) => set((state) => {
     if (!householdPermission(state, 'shopping')) return {};
-    const gone = new Set(ids);
-    const shoppingList = state.shoppingList.filter((item) => !gone.has(item.id));
-    return shoppingList.length === state.shoppingList.length ? {} : { shoppingList };
+    // The rows and their live snapshots leave in ONE write (see
+    // removeRowsWithSnapshots) — the books cannot diverge mid-operation.
+    const changes = removeRowsWithSnapshots(state, ids);
+    return changes || {};
   }),
 
   /** Send every ticked item to the pantry in one move, merging with stock the
@@ -72,7 +102,19 @@ export const shoppingActions = (set) => ({
     });
     return {
       pantry: reconciled.pantry,
-      shoppingList: state.shoppingList.filter((item) => !bought.some((boughtItem) => boughtItem.id === item.id)),
+      // The moved rows leave the list — their live snapshots leave in the
+      // SAME write (the list ↔ snapshot invariant holds mid-operation).
+      ...(() => {
+        const nextList = state.shoppingList.filter((item) => !bought.some((boughtItem) => boughtItem.id === item.id));
+        const { shoppingPredictions } = listSnapshotSync(nextList, state.shoppingPredictions);
+        return {
+          shoppingList: nextList,
+          shoppingPredictions,
+          // The shown basket changed — refresh or invalidate the freeze in
+          // the same write (see removeRowsWithSnapshots).
+          basketPredictions: refreshBasketFreeze({ state, nextList, source: 'row-removal', requirePrev: true }),
+        };
+      })(),
       pantryConflicts: reconciled.conflicts.length
         ? [...(state.pantryConflicts || []), ...reconciled.conflicts].slice(-100)
         : state.pantryConflicts,
@@ -87,7 +129,10 @@ export const shoppingActions = (set) => ({
       const shoppingList = moveBefore(s.shoppingList, id, beforeId);
       return shoppingList === s.shoppingList ? {} : { shoppingList };
     }),
-  removeListItem: (id) => set((s) => ({ shoppingList: s.shoppingList.filter((i) => i.id !== id) })),
+  removeListItem: (id) => set((s) => {
+    const changes = removeRowsWithSnapshots(s, [id]);
+    return changes || {};
+  }),
   toggleChecked: (id) =>
     set((s) => ({
       shoppingList: s.shoppingList.map((i) => (i.id === id
@@ -101,7 +146,10 @@ export const shoppingActions = (set) => ({
         }
         : i)),
     })),
-  clearChecked: () => set((s) => ({ shoppingList: s.shoppingList.filter((i) => !i.checked) })),
+  clearChecked: () => set((s) => {
+    const changes = removeRowsWithSnapshots(s, s.shoppingList.filter((i) => i.checked).map((i) => i.id));
+    return changes || {};
+  }),
   resolveListConflict: (conflictId, side = 'mine') => set((s) => {
     if (!householdPermission(s, 'shopping')) return {};
     const conflict = (s.listConflicts || [])
@@ -110,7 +158,16 @@ export const shoppingActions = (set) => ({
     const { rows, conflicts } = applyListConflictResolution(
       s.shoppingList, s.listConflicts, conflictId, side,
     );
-    return { shoppingList: rows, listConflicts: conflicts };
+    // Resolution can drop rows — the invariant is re-enforced on the same
+    // write, so no orphaned snapshot survives a conflict resolution (and the
+    // basket freeze is refreshed/invalidated alongside, never left stale).
+    const { shoppingPredictions } = listSnapshotSync(rows, s.shoppingPredictions);
+    return {
+      shoppingList: rows,
+      shoppingPredictions,
+      basketPredictions: refreshBasketFreeze({ state: s, nextList: rows, source: 'row-removal', requirePrev: true }),
+      listConflicts: conflicts,
+    };
   }),
 
   // Swap one list row for a substitute. The ROW keeps its id, but the
@@ -150,16 +207,172 @@ export const shoppingActions = (set) => ({
       const substitutedRow = shoppingList.find((item) => item.id === id);
       // Recipe provenance belonged to the ORIGINAL ingredient: the fresh
       // snapshot names the substitution lineage instead of borrowing recipes
-      // that never asked for it.
+      // that never asked for it. The swap is a USER decision (task:
+      // substitution provenance) — its snapshot is provenance-stamped
+      // user-substitution, never forq-plan: the displayed price rode the
+      // household's choice, not Forq advice.
       const book = Array.isArray(s.shoppingPredictions) ? s.shoppingPredictions : [];
       const shoppingPredictions = upsertPredictions(
         [{ ...substitutedRow, sourceRecipes: [], fromRecipe: null }],
         book,
-        { day: s.day, learnedAliases: s.aliasMemory || {} },
+        {
+          day: s.day,
+          learnedAliases: s.aliasMemory || {},
+          provenanceByRow: { [id]: PREDICTION_PROVENANCE.USER_SUBSTITUTION },
+        },
       );
-      return {
+      const changes = {
         shoppingList,
         shoppingPredictions,
+      };
+      // MATERIAL SUBSTITUTION REPRICE (task: re-freeze spend predictions
+      // after substitutions): Rice £1 → Quinoa £3 changes the basket cost
+      // actually on show, so a NEW freeze (source `substitution-reprice`) is
+      // created NOW and the old freeze is superseded in the same write — it
+      // remains historical evidence but checkout must evaluate against the
+      // £3-era basket, never the £1 one.
+      const nextRow = shoppingList.find((item) => item.id === id);
+      if ((Number(nextRow?.price) || 0) !== (Number(current.price) || 0)) {
+        changes.basketPredictions = refreshBasketFreeze({
+          // FREEZE ORDERING (task: the freeze must describe the book it
+          // will be evaluated against): pass the NEW prediction book so the
+          // re-frozen basket stamps the substituted row with its fresh
+          // user-substitution provenance — the pre-write book still held
+          // the old ingredient's snapshot.
+          state: { ...s, shoppingPredictions },
+          nextList: shoppingList,
+          source: 'substitution-reprice',
+        });
+      }
+      return changes;
+    }),
+  ...recordShopAction(set),
+});
+
+/**
+ * Record a completed shop from the CHECKED list rows (task: one shared
+ * purchase recorder). The basket prediction copied onto the record is the
+ * genuine pre-till freeze; each item keeps its shown list price as a
+ * PREDICTION echo and carries an actual price only when one was
+ * independently observed — the checked-rows flow observes none, so the
+ * record's receipt outcomes are honestly empty. Pantry reconciliation,
+ * the replayable purchase event, the store route and the list/book clean-up
+ * ride the same single write.
+ */
+const recordShopAction = (set) => ({
+  recordShop: ({ store, total, toPantry = true, location = 'Cupboard', itemIds = null }) =>
+    set((s) => {
+      if (!householdPermission(s, 'shopping')) return {};
+      const bought = s.shoppingList.filter((i) => i.checked && (!itemIds || itemIds.includes(i.id)));
+      if (!bought.length) return {};
+      const shopStore = store || 'Unnamed shop';
+      const { saved } = applyOffers(bought, s.offers, { store: shopStore, today: s.day });
+      const purchaseDate = s.day;
+      const reconciled = toPantry && householdPermission(s, 'pantry')
+        ? reconcilePurchase(s.pantry, bought.map((item) => ({
+          ...item, store: shopStore, location, price: Number(item.price) || 0,
+        })), {
+          learnedAliases: s.aliasMemory || {},
+          date: purchaseDate,
+          today: s.day,
+          location,
+          idFactory: () => uid('p'),
+        })
+        : null;
+      // One shared purchase-recording shape (see shopping-predictions.js):
+      // the basket prediction frozen pre-till, and the prediction
+      // snapshots for the exact rows bought, captured from the list's
+      // prediction book while it still exists. Quantity evaluation reads
+      // THESE — never a reconstruction from recipes.
+      // No `predictedCost` here: the SPEND prediction is the pre-till
+      // freeze matched by row-prediction ids (see shop-record.js) —
+      // copied verbatim, never recomputed. No freeze → `predicted: null`
+      // and spend accuracy excludes the shop honestly.
+      const record = buildShopRecord({
+        state: s,
+        items: bought,
+        store: shopStore,
+        total,
+        id: uid('h'),
+        day: s.day,
+      });
+      // The freeze stamps each bought row with its canonical subject
+      // resolved at purchase time; the item rewrite below must carry
+      // that stamp forward, or the checked-rows path would lose the
+      // frozen outcome identity the command path keeps.
+      const stampedSubjectById = new Map(record.items.map((item) => [item?.id, item?.subjectKey]));
+      // PREDICTION vs OUTCOME (task: separate predicted price from actual
+      // receipt price): each shop item keeps the list price it was shown
+      // (`price`/`priceSource` — a prediction echo, NEVER relabelled as
+      // receipt evidence) and carries an actual ONLY when one was
+      // independently observed on this flow. The checked-rows flow
+      // observes none — so `actualPrice` stays null on every row and
+      // strict row-level spend accuracy honestly excludes this shop.
+      // `recordedAt` is the recording moment, not an outcome label.
+      const shop = {
+        ...record,
+        saved,
+        pantryReconciled: Boolean(reconciled),
+        items: bought.map(({ id: itemId, name, price, qty, emoji, priceSource: rowPriceSource }) => ({
+          id: itemId,
+          name,
+          price: Number(price) || 0,
+          priceSource: rowPriceSource || 'unknown',
+          recordedAt: s.day,
+          qty,
+          emoji,
+          subjectKey: stampedSubjectById.get(itemId) ?? null,
+          actualPrice: null,
+          actualPriceSource: null,
+          observedAt: null,
+        })),
+      };
+      const route = routeFromTicks(bought);
+      const pantryEvent = reconciled
+        ? {
+          id: uid('pe'), type: 'purchase_reconciliation', date: s.day,
+          store: shop.store, added: reconciled.added.length,
+          merged: reconciled.matches.filter((match) => match.action === 'merged').length,
+          conflicts: reconciled.conflicts.length,
+        }
+        : null;
+      // One replayable purchase event per recorded shop. A shop with no
+      // planned meal within ±3 days is honestly marked off-plan — that is
+      // the flag week recovery reads to clear the rows it covered.
+      const plannedDatesNear = Object.keys(s.plan || {})
+        .filter((d) => Object.keys(s.plan[d] || {}).length)
+        .some((d) => Math.abs(new Date(`${d}T12:00:00`) - new Date(`${s.day}T12:00:00`)) <= 3 * 86400000);
+      const withPurchase = appendLedgerEvent(s, createLedgerEvent(
+        'IngredientPurchased',
+        {
+          shopId: shop.id,
+          store: shop.store,
+          total: shop.total,
+          items: shop.items.map((i) => i.name),
+          unplanned: !plannedDatesNear || undefined,
+        },
+        { origin: 'user', at: `${s.day}T12:00:00.000Z` },
+      ));
+      return {
+        ...withPurchase,
+        shops: [...s.shops, shop],
+        // Canonical receipt-outcome records (task: actual price-observation
+        // pipeline): the rows whose prices were INDEPENDENTLY observed on
+        // this flow. The checked-rows flow observes none — honest empty.
+        receiptOutcomes: receiptOutcomeRecords(shop),
+        shoppingList: s.shoppingList.filter((i) => !bought.some((item) => item.id === i.id)),
+        // The bought rows' snapshots now live on the shop record — the
+        // book only describes rows currently on show. The used basket
+        // freeze STAYS: it is historical evidence, referenced by the
+        // shop's copied spendPrediction, not live state.
+        shoppingPredictions: (s.shoppingPredictions || []).filter((p) => !bought.some((item) => item.id === p.id)),
+        storeRoutes: route.length > 1 ? { ...s.storeRoutes, [shop.store]: route } : s.storeRoutes,
+        pantry: reconciled ? reconciled.pantry : s.pantry,
+        pantryConflicts: reconciled
+          ? [...(s.pantryConflicts || []), ...reconciled.conflicts].slice(-100)
+          : s.pantryConflicts,
+        pantryEvents: pantryEvent ? [...(s.pantryEvents || []), pantryEvent].slice(-100) : s.pantryEvents,
+        lastPantryEvent: pantryEvent || s.lastPantryEvent,
       };
     }),
 });

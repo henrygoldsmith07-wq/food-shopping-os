@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EMPTY_STATE } from '../src/lib/state.js';
+import { canonicalName } from '../src/lib/aliases.js';
 import { shoppingListForPlan } from '../src/lib/loop-learning.js';
 import { reconcileListWithPlan } from '../src/lib/week-loop.js';
 import { householdPortionsFor } from '../src/lib/portions.js';
@@ -24,6 +25,7 @@ import {
 import { inferListTopUp } from '../src/lib/loop-inference.js';
 import { learnMealDecisionProfile } from '../src/lib/meal-decision.js';
 import { spendAccuracy, basketReconciliation, shoppingQuantityError, snapshotCosts } from '../src/lib/eval-metrics.js';
+import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
 import { buildDomainCommands } from '../src/lib/store-commands.js';
 import { captureMissedMeals } from '../src/lib/plan-outcome.js';
 
@@ -59,6 +61,10 @@ const nextWeekList = (state) => shoppingListForPlan(
   { pantry: [], waste: state.waste, cooked: state.cooked || [], today: TODAY, app: state, state },
 );
 
+// Rows are found by their canonical ingredient, so display-name changes
+// ("Chickpeas (tins)" now showing as "Chickpeas") cannot break the story.
+const chickpeaRow = (rows) => rows.find((r) => canonicalName(r.name) === canonicalName('Chickpeas (tins)'));
+
 const rejection = (key, day = TODAY) => ledgerEvent('RecommendationRejected', day, {
   recipeId: null,
   context: { kind: 'adaptation', key },
@@ -68,12 +74,12 @@ describe('adaptation suppression: "not for me" outlives regeneration', () => {
   it('adapts, then the rejection holds the reduction across regeneration', () => {
     const state = household();
     const adapted = nextWeekList(state);
-    expect(adapted.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('1');
+    expect(chickpeaRow(adapted).qty).toBe('1');
 
     // THE regression: adapt → reject → regenerate → adaptation remains suppressed.
     const rejected = { ...state, householdLedger: [rejection('chickpeas')], adaptationSuppression: { chickpeas: { rejections: [TODAY] } } };
     const regenerated = nextWeekList(rejected);
-    expect(regenerated.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('2');
+    expect(chickpeaRow(regenerated).qty).toBe('2');
   });
 
   it('keeps the row untouched even when the household edited nothing (reconcile path)', () => {
@@ -104,7 +110,7 @@ describe('adaptation suppression: "not for me" outlives regeneration', () => {
   it('recovers only when the hold expires — not because the list regenerated', () => {
     const state = household({ householdLedger: [rejection('chickpeas')] });
     for (let i = 0; i < 5; i += 1) {
-      expect(nextWeekList(state).find((r) => r.name === 'Chickpeas (tins)').qty).toBe('2');
+      expect(chickpeaRow(nextWeekList(state)).qty).toBe('2');
     }
   });
 });
@@ -189,19 +195,21 @@ describe('list top-up: one authoritative Plan → Shopping calculation', () => {
       shoppingList: [{ id: 's0', name: 'Rice', qty: '300g', checked: false, fromRecipe: 'Chickpea Curry' }],
     });
     const topUp = inferListTopUp(state, { today: TODAY });
-    const chickpeas = topUp.find((r) => r.name === 'Chickpeas (tins)');
-    // Household of 4, learned reduction applies (evidence: two binned tins).
+    const chickpeas = chickpeaRow(topUp);
+    // Household of 4 × two planned dinners = 4 tins required; the learned
+    // reduction buys one fewer (evidence: two binned tins).
     expect(chickpeas).toBeDefined();
-    expect(chickpeas.qty).toBe('1');
+    expect(chickpeas.qty).toBe('3');
     expect(chickpeas.wasteNote).toMatch(/binned 2× recently/i);
 
-    // The same top-up with the adaptation rejected: no reduced quantity.
+    // The same top-up with the adaptation rejected: no reduced quantity —
+    // both dinners are bought at the full scaled amount.
     const rejected = {
       ...state,
       householdLedger: [rejection('chickpeas')],
     };
     const heldTopUp = inferListTopUp(rejected, { today: TODAY });
-    expect(heldTopUp.find((r) => r.name === 'Chickpeas (tins)').qty).toBe('2');
+    expect(chickpeaRow(heldTopUp).qty).toBe('4');
   });
 });
 
@@ -263,10 +271,26 @@ describe('spend accuracy: prediction snapshot vs recorded total', () => {
   });
 
   it('scores predicted vs actual, with absolute error, bias and samples', () => {
+    // The shops carry REAL pre-purchase freezes (frozen when the list was
+    // generated), copied onto the record at checkout — not bare numbers.
+    const copied = (event) => ({
+      basketPredictionId: event.id,
+      predictedAt: event.day,
+      predictedTotal: event.predicted,
+      rows: event.rows,
+      priceSource: event.source,
+      rowPredictionIds: event.rowPredictionIds,
+      schemaVersion: event.schemaVersion,
+      matchedBy: 'day',
+    });
+    const f1 = basketPredictionEvent({ rows: [{ id: 'a', name: 'A', price: 10, provenance: 'forq' }], day: '2026-09-09', at: 900 });
+    const f2 = basketPredictionEvent({ rows: [{ id: 'b', name: 'B', price: 10, provenance: 'forq' }], day: '2026-09-12', at: 950 });
     const state = household({
       shops: [
-        { date: '2026-09-10', total: 12, predicted: 10, items: [{ name: 'A', price: 10 }] },
-        { date: '2026-09-13', total: 9, predicted: 10, items: [{ name: 'B', price: 9 }] },
+        // Row-exact: receipt rows carry ids, so the actual subtotal is
+        // provable over EXACTLY the predicted rows — never the full total.
+        { date: '2026-09-10', total: 12, items: [{ id: 'a', name: 'A', price: 12 }], spendPrediction: copied(f1) }, // 20% under-predicted
+        { date: '2026-09-13', total: 9, items: [{ id: 'b', name: 'B', price: 9 }], spendPrediction: copied(f2) },  // 10% over-predicted
       ],
     });
     const result = spendAccuracy(state, { today: TODAY });
@@ -285,8 +309,22 @@ describe('spend accuracy: prediction snapshot vs recorded total', () => {
   });
 
   it('keeps item-total reconciliation as a separate data-quality metric', () => {
+    const freeze = basketPredictionEvent({ rows: [{ id: 'c', name: 'A', price: 10, provenance: 'forq' }], day: '2026-09-09', at: 900 });
     const state = household({
-      shops: [{ date: '2026-09-10', total: 12, predicted: 12, items: [{ name: 'A', price: 10 }] }],
+      shops: [{ date: '2026-09-10', total: 12, spendPrediction: {
+        basketPredictionId: freeze.id,
+        predictedAt: freeze.day,
+        predictedTotal: freeze.predicted,
+        rows: freeze.rows,
+        priceSource: freeze.source,
+        rowPredictionIds: freeze.rowPredictionIds,
+        schemaVersion: freeze.schemaVersion,
+        matchedBy: 'day',
+        // Row-exact: the receipt row for the predicted row is priced 10 —
+        // prediction quality says £10 vs £10 (0% error), while reconciliation
+        // separately flags the £12 total vs £10 of itemised lines.
+        items: [{ id: 'c', name: 'A', price: 10 }],
+      }, items: [{ id: 'c', name: 'A', price: 10, actualPrice: 10, actualPriceSource: 'actual-receipt' }] }],
     });
     expect(spendAccuracy(state, { today: TODAY }).value).toBe(0);
     expect(basketReconciliation(state, { today: TODAY }).value).toBeCloseTo(0.17, 2);

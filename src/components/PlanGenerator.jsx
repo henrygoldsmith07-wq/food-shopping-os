@@ -5,12 +5,12 @@ import {
 import { gbp } from '../lib/utils.js';
 import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from '../lib/planner.js';
 import { householdPortionsFor } from '../lib/portions.js';
+import { shoppingForGeneratedEntries } from '../lib/mealplan.js';
 import { useApp } from '../lib/store.jsx';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
 import { monthOf, peakNow } from '../data/seasons.js';
 import { expiringSoon } from '../lib/kitchen.js';
-import { planFromEntries } from '../lib/mealplan.js';
-import { shoppingListForPlan } from '../lib/loop-learning.js';
+import { wasteAwareList } from '../lib/loop-learning.js';
 import { explainRecommendation } from '../lib/recommend.js';
 import { Card, Chip, Pill, Stepper, FoodArt } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
@@ -160,19 +160,19 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       goTab?.('shop');
       return;
     }
-    // The one Plan → list calculation (shoppingListForPlan): pantry
-    // quantities subtracted, fridge-covered meals left off, portions scaled
-    // to the household, binned-ingredient memory applied. The not-yet-applied
-    // run is shaped into the plan that calculation reads, so "Shop for it"
-    // puts exactly what the week loop previews on the list.
-    const planForList = planFromEntries(entries);
-    app.addToList(shoppingListForPlan(planForList, Object.keys(planForList), {
+    // Use the same quantity-/alias-/pantry-aware calculation as every other
+    // Plan → List hand-off. Crucially this uses the generator's People stepper:
+    // changing 2 → 5 people must change both the plan AND what Forq asks to buy.
+    const scaled = shoppingForGeneratedEntries(entries, {
       pantry: app.pantry,
-      waste: app.waste,
+      people,
       today: app.day,
       learnedAliases: app.aliasMemory || {},
-      app, // portions follow the same learned-appetite decision as every list path
-    }));
+    });
+    app.addToList(wasteAwareList(
+      scaled,
+      { waste: app.waste, cooked: app.cooked, today: app.day, learnedAliases: app.aliasMemory || {} },
+    ));
     setAddedToList(true);
   };  const cost = generated ? generated.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
   const kcal = generated ? Math.round(generated.reduce((s, r) => s + r.kcal, 0) / generated.length) : 0;

@@ -240,7 +240,19 @@ describe('a recipe page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review shopping list' }));
 
     expect(screen.getByText('Your list')).toBeDefined();
-    expect(screen.getByText('Chickpeas (tins)')).toBeDefined();
+    // The row shows the alias group's everyday name, not the recipe's spelling.
+    expect(screen.getByText('Chickpeas')).toBeDefined();
+  });
+
+  it('adds a displayed shortfall even when the pantry already has a same-name row', () => {
+    onboard();
+    addPantry('Rice'); // name is known, amount is not — the recipe still needs 300 g
+    openFirstMatch('Coconut Chickpea Curry');
+
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ missing to shopping list/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review shopping list' }));
+
+    expect(screen.getByLabelText('Tick Rice')).toBeDefined();
   });
 
   it('hands the recipe over as a code, and takes one back', () => {

@@ -17,7 +17,17 @@ import {
   weekStamp,
   evaluablePredictions,
 } from '../src/lib/shopping-predictions.js';
+import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
+
+// A real pre-purchase basket freeze, as list generation leaves it, that
+// describes exactly the given rows — the honest way to make a shop
+// scoreable under the frozen-spend-prediction contract.
+const freezeFor = (rows) => {
+  const event = basketPredictionEvent({ rows, day: TODAY, at: 1000 });
+  return { event, basketPredictions: [event] };
+};
 import { spendAccuracy, shoppingQuantityError } from '../src/lib/eval-metrics.js';
+import { canonicalName } from '../src/lib/aliases.js';
 
 const TODAY = '2026-09-16';
 const NOON = 'T12:00:00.000Z';
@@ -119,7 +129,7 @@ describe('prediction snapshots: what the list actually showed', () => {
   it('list regeneration writes fresh snapshots matching the displayed quantities', () => {
     const state = household();
     const adapted = nextWeekList(state);
-    const row = adapted.find((r) => r.name === 'Chickpeas (tins)');
+    const row = adapted.find((r) => canonicalName(r.name) === 'chickpeas');
     expect(row).toBeDefined();
     expect(state.shoppingPredictions).toBeUndefined(); // pure builder: no writes
     expect(state.__allRecipes).toBeUndefined(); // built-in catalogue only — no test injection
@@ -198,7 +208,7 @@ describe('prediction snapshots: what the list actually showed', () => {
 
   it('both purchase paths freeze the same prediction metadata via one helper', () => {
     const book = attachPredictions([listRow({ id: 'row-9', name: 'Rice', qty: '300g' })], [], { day: TODAY });
-    const state = { shoppingPredictions: book };
+    const state = { shoppingPredictions: book, ...freezeFor([{ id: 'row-9', name: 'Rice', qty: '300g', price: 1.2 }]) };
     const viaRecordShop = buildShopRecord({
       state, items: [{ id: 'row-9', name: 'Rice', qty: '300g', price: 1.2 }],
       store: 'Tesco', total: 2.7, id: 'h1', day: TODAY,
@@ -210,26 +220,35 @@ describe('prediction snapshots: what the list actually showed', () => {
     for (const shop of [viaRecordShop, viaCommand]) {
       expect(shop.predictions).toHaveLength(1);
       expect(shop.predictions[0].qty).toBe('300g');
+      // The PRE-PURCHASE freeze is copied verbatim — never the checkout rows.
       expect(shop.predicted).toBe(1.2);
+      expect(shop.spendPrediction.basketPredictionId).toBe(state.basketPredictions[0].id);
     }
     expect(viaRecordShop.total).toBe(2.7);
     expect(viaCommand.total).toBe(2.2);
   });
 
-  it('a shop with no snapshot rows still carries a valid basket prediction', () => {
+  it('a shop with no snapshot rows and no freeze honestly carries no spend prediction', () => {
     const shop = buildShopRecord({
       state: {}, items: [{ name: 'Bread', qty: '1 loaf', price: 0 }], total: 0, id: 'h2', day: TODAY,
     });
-    expect(shop.predicted).toBe(0); // zero/unpriced basket — spend accuracy will exclude and say why
+    // Nothing was frozen pre-purchase, so there is nothing to copy — the
+    // record says so, and spend accuracy excludes (never reconstructs).
+    expect(shop.predicted).toBeNull();
+    expect(shop.spendPrediction).toBeNull();
     expect(shop.predictions).toEqual([]);
   });
 
-  it('evaluable predictions are the plan-derived ones with a readable quantity', () => {
+  it('evaluable predictions carry explicit Forq provenance and a readable quantity', () => {
+    // Provenance is now FROZEN ON the snapshot (who produced the quantity),
+    // not inferred from sourceRecipes: only Forq-generated advice is
+    // evaluable for prediction accuracy, whatever its recipe lineage.
     const book = [
-      shoppingPrediction({ itemId: 'x1', name: 'Rice', qty: '300g', sourceRecipes: ['Curry'] }),
-      shoppingPrediction({ itemId: 'x2', name: 'Bread', qty: '1 loaf', sourceRecipes: [] }),
+      shoppingPrediction({ itemId: 'x1', name: 'Rice', qty: '300g', provenance: 'forq-plan' }),
+      shoppingPrediction({ itemId: 'x2', name: 'Bread', qty: '1 loaf', provenance: 'user-manual' }),
+      shoppingPrediction({ itemId: 'x3', name: 'Pasta', qty: '500g', sourceRecipes: ['Curry'] }), // legacy v1: plan-derived
     ];
-    expect(evaluablePredictions(book).map((p) => p.id)).toEqual(['x1']);
+    expect(evaluablePredictions(book).map((p) => p.id)).toEqual(['x1', 'x3']);
   });
 });
 
@@ -290,10 +309,25 @@ describe('quantity error against snapshots: prediction vs purchase', () => {
 
 describe('spend accuracy hardening: only valid predictions are scored', () => {
   it('excludes missing, zero and malformed predictions with reasons', () => {
-    const state = household({ shops: [
-      { id: 'g', date: TODAY, total: 10, predicted: 8 },    // scores
-      { id: 'm', date: TODAY, total: 5 },                    // no snapshot
-      { id: 'z', date: TODAY, total: 4, predicted: 0 },      // zero prediction
+    // Row spend-provenance rides the freeze: strict spend accuracy scores
+    // only Forq-priced rows (an unattributable basket is excluded).
+    const priced = freezeFor([{ id: 'g', name: 'A', price: 8, provenance: 'forq' }]);
+    // The spendPrediction shape checkout actually copies onto the record.
+    const copied = (overrides = {}) => ({
+      basketPredictionId: priced.event.id,
+      predictedAt: priced.event.day,
+      predictedTotal: priced.event.predicted,
+      rows: priced.event.rows,
+      priceSource: priced.event.source,
+      rowPredictionIds: priced.event.rowPredictionIds,
+      schemaVersion: priced.event.schemaVersion,
+      matchedBy: 'row-ids',
+      ...overrides,
+    });
+    const state = household({ basketPredictions: priced.book, shops: [
+      { id: 'g', date: TODAY, total: 10, items: [{ id: 'g', name: 'A', price: 10, actualPrice: 10, actualPriceSource: 'actual-receipt' }], spendPrediction: copied() }, // scores (row-exact)
+      { id: 'm', date: TODAY, total: 5 },                                                     // no snapshot
+      { id: 'z', date: TODAY, total: 4, spendPrediction: copied({ predictedTotal: 0 }) },     // zero prediction
       { id: 'n', date: TODAY, total: null, predicted: 9 },   // malformed total
       { id: 'u', date: TODAY, total: 'free', predicted: 3 }, // malformed total
     ] });
@@ -301,7 +335,7 @@ describe('spend accuracy hardening: only valid predictions are scored', () => {
     expect(result.samples).toBe(1);
     expect(result.value).toBe(0.25); // |10 − 8| / 8
     expect(result.excluded.map((e) => e.reason).sort()).toEqual([
-      'malformed-total', 'malformed-total', 'missing-or-invalid-prediction', 'zero-prediction',
+      'malformed-total', 'malformed-total', 'no-pre-purchase-spend-prediction', 'zero-prediction',
     ]);
   });
 
@@ -358,7 +392,7 @@ describe('suppression recovery: new evidence earns reconsideration', () => {
     // regeneration re-earns it. That is reconsideration, not repetition:
     // it required genuinely new behaviour after the household's "no".
     const adapted = nextWeekList(state);
-    expect(adapted.find((r) => r.name === 'Chickpeas (tins)').wasteNote).toContain('Binned 2× recently');
+    expect(adapted.find((r) => canonicalName(r.name) === 'chickpeas').wasteNote).toContain('Binned 2× recently');
   });
 
   it('evidence before the rejection is not new evidence', () => {

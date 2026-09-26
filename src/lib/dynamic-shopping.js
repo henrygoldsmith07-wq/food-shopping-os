@@ -5,7 +5,7 @@ import { pantryTruthForNeed } from './kitchen.js';
 import { addShoppingExplanations } from './shopping-explanations.js';
 import { runoutPredictionFor } from './consumption-predictions.js';
 import { evidenceConfidence } from './confidence.js';
-import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from './portions.js';
+import { householdPortionsFor } from './portions.js';
 
 const reliable = (item, today) => ['confirmed_sufficient', 'probably_available'].includes(pantryTruthForNeed(item, null, { today }));
 const priorityFor = (row) => row.expiryPressure ? 'urgent' : row.mealDependency ? 'planned' : row.staple ? 'routine' : 'normal';
@@ -17,16 +17,22 @@ export const deriveDynamicShoppingList = (state = {}, { dates = null } = {}) => 
   // recorded cooks disagree with the profile, the same decision every other
   // list path uses.
   const household = householdPortionsFor(state);
-  const planRowsRaw = shoppingForPlan(state.plan || {}, planDates, { pantry: [], recipes: recipePool });
   const entries = planEntries(state.plan || {}, planDates);
-  const planRows = scaleListToPortions(planRowsRaw, household.portions, recipePortionFactors(entries, household.portions));
+  const planRows = shoppingForPlan(state.plan || {}, planDates, {
+    pantry: state.pantry || [],
+    today: state.day,
+    learnedAliases: state.aliasMemory || {},
+    people: household.portions,
+  });
   const recipesById = new Map(recipePool.map((recipe) => [recipe.id, recipe]));
   const recipesByName = new Map(entries.map((entry) => [entry.recipe?.name || recipesById.get(entry.recipeId)?.name, entry.recipe || recipesById.get(entry.recipeId)]).filter(([name]) => name));
   const pantry = state.pantry || [];
   const auto = planRows.map((row) => {
     const recipe = recipesByName.get(row.fromRecipe);
     const pantryRow = pantry.find((item) => canonicalName(item.name, state.aliasMemory) === canonicalName(row.name, state.aliasMemory));
-    const truth = pantryRow ? pantryTruthForNeed(pantryRow, row.qty, { today: state.day, learnedAliases: state.aliasMemory }) : 'unknown';
+    const truth = row.pantryTruth || (pantryRow
+      ? pantryTruthForNeed(pantryRow, row.requiredQty || row.qty, { today: state.day, learnedAliases: state.aliasMemory })
+      : 'unknown');
     return {
       ...row,
       fromRecipe: row.fromRecipe || recipe?.name || null,
@@ -40,7 +46,7 @@ export const deriveDynamicShoppingList = (state = {}, { dates = null } = {}) => 
         inferred: truth !== 'confirmed_sufficient',
       }),
     };
-  }).filter((row) => !row.pantryTruth || !reliable(pantry.find((item) => canonicalName(item.name, state.aliasMemory) === canonicalName(row.name, state.aliasMemory)), state.day));
+  });
 
   const staples = recurringStaples(state.shops || [], pantry, state.shoppingList || [], { today: state.day })
     .filter((item) => item.dueNow)

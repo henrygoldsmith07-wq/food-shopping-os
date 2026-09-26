@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyEntries, batchGroups, clearDates, copyMealTo, coveredByLeftovers, daysInMonth,
   leftoverEntry, leftoverPortions, mealPlanIcs, monthDates, monthGrid, monthLabel, moveMeal,
-  planDishes, planEntries, planFromEntries, planStats, shiftMonth, shiftWeek, shoppingForPlan, weekOffset,
+  planDishes, planEntries, planStats, shiftMonth, shiftWeek, shoppingForPlan, weekOffset,
 } from '../src/lib/mealplan.js';
 import { inMonth, monthOf, peakNow, seasonalHits, seasonScore } from '../src/data/seasons.js';
 import { weekDates } from '../src/lib/kitchen.js';
@@ -173,6 +173,18 @@ describe('leftovers', () => {
     expect(covered.map((e) => e.date)).toEqual(['2026-07-06', '2026-07-08']);
   });
 
+  it('only treats leftovers as a full meal when they cover the household', () => {
+    const oneDinner = { '2026-07-06': { dinner: CURRY } };
+    expect(coveredByLeftovers(oneDinner, week, fridge, { people: 2 })).toHaveLength(1);
+    expect(coveredByLeftovers(oneDinner, week, fridge, { people: 3 })).toHaveLength(0);
+  });
+
+  it('does not use leftovers after their safe date', () => {
+    const afterExpiry = { '2026-07-10': { dinner: CURRY } };
+    expect(coveredByLeftovers(afterExpiry, week, fridge)).toHaveLength(0);
+    expect(shoppingForPlan(afterExpiry, week, { pantry: fridge }).some((item) => item.fromRecipe === curry.name)).toBe(true);
+  });
+
   it('keeps a covered dish off the shopping list', () => {
     const withLeftovers = shoppingForPlan(plan, week, { pantry: fridge });
     // Both curry slots are covered by the two portions, so nothing for it is bought.
@@ -190,21 +202,12 @@ describe('leftovers', () => {
     expect(items.some((i) => i.name === 'Sushi rice')).toBe(false);
     expect(items.some((i) => i.name === 'Salmon fillets')).toBe(true);
   });
-});
 
-describe('shaping a proposal into a plan', () => {
-  it('merges slots per day and drops rows with nothing to cook', () => {
-    const shaped = planFromEntries([
-      { date: '2026-07-06', slot: 'breakfast', recipeId: 'protein-pancakes' },
-      { date: '2026-07-06', slot: 'dinner', recipeId: CURRY },
-      { date: '2026-07-07', slot: 'dinner', recipeId: null },
-      { date: '2026-07-08' },
-    ]);
-    expect(shaped).toEqual({ '2026-07-06': { breakfast: 'protein-pancakes', dinner: CURRY } });
-    // A generated run reads back through the same readers a committed plan
-    // does, so a proposal can be costed and shopped without being applied.
-    expect(planEntries(shaped, ['2026-07-06']).map((e) => e.slot)).toEqual(['breakfast', 'dinner']);
-    expect(planFromEntries([])).toEqual({});
+  it('does not re-buy an ingredient that the pantry holds under an alias', () => {
+    const items = shoppingForPlan({ '2026-07-06': { dinner: CURRY } }, week, {
+      pantry: [{ name: 'tin tomatoes', qty: '1 tin', confidence: 'definite' }],
+    });
+    expect(items.some((i) => i.name === 'Chopped tomatoes')).toBe(false);
   });
 });
 
@@ -255,5 +258,61 @@ describe('the growing calendar', () => {
 
   it('has something to recommend in every month', () => {
     for (let m = 1; m <= 12; m += 1) expect(peakNow(m).length, `month ${m}`).toBeGreaterThan(2);
+  });
+});
+
+describe('the shopping list for a plan', () => {
+  const WEEK = ['2026-07-06', '2026-07-07'];
+
+  it('lists an alias-equivalent ingredient once with the summed requirement and both meals as provenance', () => {
+    // The curry writes "Onion", the risotto writes "White onion" — the same
+    // food. The list must carry ONE row totalling both scaled needs, not two
+    // rows each claiming the full requirement.
+    const twoOnionMeals = {
+      '2026-07-06': { dinner: CURRY },
+      '2026-07-07': { dinner: 'mushroom-risotto' },
+    };
+    const rows = shoppingForPlan(twoOnionMeals, WEEK, { pantry: [], people: 5, today: '2026-07-06' });
+    const onionRows = rows.filter((r) => /onion/i.test(r.name));
+    expect(onionRows).toHaveLength(1);
+    const row = onionRows[0];
+    // Curry scales 1 × 5/4 → 1.3, risotto 1 × 5/3 → 1.7 (each rounded to 0.1
+    // before summing) — one row carrying the whole requirement.
+    expect(row.qty).toBe('3');
+    expect(row.requiredQty).toBe(row.qty);
+    expect(row.sourceRecipes).toEqual(expect.arrayContaining(['Coconut Chickpea Curry', 'Garlic Mushroom Risotto']));
+  });
+
+  it('deducts pantry stock across spellings and buys only the shortfall', () => {
+    const twoOnionMeals = {
+      '2026-07-06': { dinner: CURRY },
+      '2026-07-07': { dinner: 'mushroom-risotto' },
+    };
+    // One onion already on the shelf — the same canonical food.
+    const rows = shoppingForPlan(twoOnionMeals, WEEK, {
+      pantry: [{ id: 'p1', name: 'Onion', qty: '1' }],
+      people: 5, today: '2026-07-06',
+    });
+    const onionRows = rows.filter((r) => /onion/i.test(r.name));
+    expect(onionRows).toHaveLength(1);
+    expect(onionRows[0].qty).toBe('2');
+    expect(onionRows[0].requiredQty).toBe('3');
+    expect(onionRows[0].explanation).toBeTruthy();
+  });
+
+  it('never folds a different food into one purchase just because the name is similar', () => {
+    // A generic "Noodles" is egg-noodle nests in the recipe book, not rice
+    // noodles. Merging them would let one ingredient's pantry stock silence
+    // a purchase the household genuinely needs.
+    const rows = shoppingForPlan({ '2026-07-06': { dinner: 'tofu-stirfry' } }, WEEK, {
+      pantry: [{ id: 'p1', name: 'Rice noodles', qty: '2 nests' }],
+      people: 2, today: '2026-07-06',
+    });
+    const noodles = rows.filter((r) => /noodle/i.test(r.name));
+    expect(noodles).toHaveLength(1);
+    // Still asked for at full need: the pantry's rice noodles are not egg
+    // nests, so nothing was deducted against this row.
+    expect(noodles[0].requiredQty).toBe('2 nests');
+    expect(noodles[0].qty).toBe('2 nests');
   });
 });

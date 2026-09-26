@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { CATALOGUE } from '../data/foods.js';
 import { guessAisle } from '../data/stores.js';
-import { aisleFor, applyOffers, mergeItems, rememberAisle, routeFromTicks, shoppingNameKey } from './shopping.js';
+import { aisleFor, mergeItems, rememberAisle, shoppingNameKey } from './shopping.js';
 import { buildEntry, copyEntries } from './nutrition.js';
 import { recipeFood } from './foodlog.js';
 import { targetActions } from './target-actions.js';
@@ -19,7 +19,6 @@ import { smartActions } from './smart-actions.js';
 import { HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY } from './health-vault.js';
 import { householdPermission } from './household.js';
 import { householdPortionsFor } from './portions.js';
-import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { recipeActions } from './recipe-actions.js';
 import { diaryActions } from './diary-actions.js';
 import { offerActions } from './offer-actions.js';
@@ -35,8 +34,14 @@ import { COUPON_KINDS, LOYALTY_PROGRAMMES, normaliseCoupon } from './coupons.js'
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { compareBaskets } from './basket-optimizer.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
-import { buildShopRecord, upsertPredictions } from './shopping-predictions.js';
+import { upsertPredictions } from './shopping-predictions.js';
 import { predictionActions } from './prediction-feedback.js';
+import { shoppingListMutations } from './shopping-list-mutations.js';
+import {
+  PREDICTION_PROVENANCE,
+  basketPredictionEvent,
+  quantityOverrideEvent,
+} from './prediction-evidence.js';
 import { buildDomainCommands } from './store-commands.js';
 import { ledgerCommands } from './event-ledger.js';
 import { pantryLifecycleActions } from './store-pantry-slice.js';
@@ -227,181 +232,17 @@ export function useStoreApi({
         }),
       togglePantryLow: (id) =>
         set((s) => (householdPermission(s, 'pantry') ? { pantry: s.pantry.map((p) => (p.id === id ? { ...p, low: !p.low } : p)) } : {})),
-      addToList: (items) =>
-        set((s) => {
-          if (!householdPermission(s, 'shopping')) return {};
-          const keyFor = shoppingNameKey;
-          const have = new Set(s.shoppingList.map((i) => keyFor(i.name)));
-          const quantities = new Map();
-          [...s.shops].reverse().forEach((shop) => shop.items.forEach((item) => {
-            const key = keyFor(item.name);
-            if (!quantities.has(key) && item.qty) quantities.set(key, item.qty);
-          }));
-          const fresh = mergeItems(Array.isArray(items) ? items : [items])
-            .filter((i) => i.name && !have.has(keyFor(i.name)))
-            .map((i) => {
-              const check = duplicatePurchaseCheck(i, {
-                list: s.shoppingList,
-                shops: s.shops,
-                today: s.day,
-                learnedAliases: s.aliasMemory || {},
-              });
-              return {
-                id: i.id || uid('s'),
-                checked: false,
-                price: Number(i.price) || 0,
-                priceSource: i.priceSource || (Number(i.price) > 0 ? 'manual' : 'unknown'),
-                qty: i.qty || quantities.get(keyFor(i.name)) || '',
-                note: String(i.note || '').trim(),
-                priority: i.priority === 'high' ? 'high' : 'normal',
-                emoji: i.emoji || emojiFor(i.name),
-                ...i,
-                purchaseWarning: check.recentlyPurchased || null,
-                aisle: aisleFor(i.name, s.aisleMemory) === guessAisle(i.name)
-                  ? (i.aisle || guessAisle(i.name))
-                  : aisleFor(i.name, s.aisleMemory),
-              };
-            });
-          const learned = wasteLearningProfile({
-            purchases: s.shops,
-            waste: s.waste,
-            today: s.day,
-            learnedAliases: s.aliasMemory || {},
-          });
-          const learnedFresh = applyWasteLearning(fresh, learned);
-          if (!learnedFresh.length) return {};
-          return {
-            shoppingList: [...s.shoppingList, ...learnedFresh],
-            // Top-ups and hand-added rows get their own snapshots, so even
-            // the add-manual path is evaluable — the prediction is what the
-            // list shows at that moment. UPSERT, not replace: `learnedFresh`
-            // is only the newly added rows, and the snapshots of every row
-            // already on the list must survive this write untouched.
-            shoppingPredictions: upsertPredictions(learnedFresh, s.shoppingPredictions, {
-              portionsDecision: householdPortionsFor(s),
-              pantry: s.pantry || [],
-              learnedAliases: s.aliasMemory || {},
-              day: s.day,
-            }),
-          };
-        }),
-      repeatLastShop: () =>
-        set((s) => {
-          const last = s.shops.at(-1);
-          if (!last?.items?.length) return {};
-          const have = new Set(s.shoppingList.map((i) => shoppingNameKey(i.name)));
-          const items = last.items.filter((i) => i.name && !have.has(shoppingNameKey(i.name)) && (have.add(shoppingNameKey(i.name)), true))
-            .map((i) => ({ id: uid('s'), name: i.name, qty: i.qty || '', price: Number(i.price) || 0, priceSource: 'receipt',
-              store: last.store || '', emoji: i.emoji || emojiFor(i.name), aisle: aisleFor(i.name, s.aisleMemory), checked: false,
-              note: '', priority: 'normal' }));
-          return items.length ? { shoppingList: [...s.shoppingList, ...items] } : {};
-        }),
-      setItemAisle: (id, aisle) =>
-        set((s) => {
-          const item = s.shoppingList.find((i) => i.id === id);
-          if (!item) return {};
-          return {
-            shoppingList: s.shoppingList.map((i) => (i.id === id ? { ...i, aisle } : i)),
-            aisleMemory: rememberAisle(s.aisleMemory, item.name, aisle),
-          };
-        }),
-      updateListItem: (id, patch) =>
-        set((s) => ({ shoppingList: s.shoppingList.map((i) => (i.id === id
-          ? { ...i, ...patch, ...(Object.prototype.hasOwnProperty.call(patch || {}, 'price') ? { priceSource: Number(patch.price) > 0 ? 'manual' : 'unknown' } : {}) }
-          : i)) })),
+      // Provenance for added rows (task: freeze prediction provenance): a
+      // recipe-derived row is Forq's plan advice, an auto-generated row is a
+      // Forq top-up, everything else is the household's own hand-added row —
+      // unless the caller names the provenance explicitly.
+      ...shoppingListMutations(set, { latest }),
+
       // substituteListItem lives in shopping-actions.js (with the other row
       // actions) and writes substitution lineage onto the prediction book —
       // a row that changed ingredient must not ride its old snapshot.
-      // A confirmed purchase stocks the pantry by default. The UI still passes
-      // `toPantry: false` when the shopper explicitly declines, but callers that
-      // only record the purchase get the safe, expected inventory hand-off too.
-      recordShop: ({ store, total, toPantry = true, location = 'Cupboard', itemIds = null }) =>
-        set((s) => {
-          if (!householdPermission(s, 'shopping')) return {};
-          const bought = s.shoppingList.filter((i) => i.checked && (!itemIds || itemIds.includes(i.id)));
-          if (!bought.length) return {};
-          const shopStore = store || 'Unnamed shop';
-          const { saved } = applyOffers(bought, s.offers, { store: shopStore, today: s.day });
-          const purchaseDate = s.day;
-          const reconciled = toPantry && householdPermission(s, 'pantry')
-            ? reconcilePurchase(s.pantry, bought.map((item) => ({
-              ...item, store: shopStore, location, price: Number(item.price) || 0,
-            })), {
-              learnedAliases: s.aliasMemory || {},
-              date: purchaseDate,
-              today: s.day,
-              location,
-              idFactory: () => uid('p'),
-            })
-            : null;
-          // One shared purchase-recording shape (see shopping-predictions.js):
-          // the basket prediction frozen pre-till, and the prediction
-          // snapshots for the exact rows bought, captured from the list's
-          // prediction book while it still exists. Quantity evaluation reads
-          // THESE — never a reconstruction from recipes.
-          const shop = {
-            ...buildShopRecord({
-              state: s,
-              items: bought,
-              store: shopStore,
-              total,
-              id: uid('h'),
-              day: s.day,
-            }),
-            saved,
-            pantryReconciled: Boolean(reconciled),
-            items: bought.map(({ id: itemId, name, price, qty, emoji }) => ({
-              id: itemId,
-              name,
-              price: Number(price) || 0,
-              priceSource: 'receipt',
-              recordedAt: s.day,
-              qty,
-              emoji,
-            })),
-          };
-          const route = routeFromTicks(bought);
-          const pantryEvent = reconciled
-            ? {
-              id: uid('pe'), type: 'purchase_reconciliation', date: s.day,
-              store: shop.store, added: reconciled.added.length,
-              merged: reconciled.matches.filter((match) => match.action === 'merged').length,
-              conflicts: reconciled.conflicts.length,
-            }
-            : null;
-          // One replayable purchase event per recorded shop. A shop with no
-          // planned meal within ±3 days is honestly marked off-plan — that is
-          // the flag week recovery reads to clear the rows it covered.
-          const plannedDatesNear = Object.keys(s.plan || {})
-            .filter((d) => Object.keys(s.plan[d] || {}).length)
-            .some((d) => Math.abs(new Date(`${d}T12:00:00`) - new Date(`${s.day}T12:00:00`)) <= 3 * 86400000);
-          const withPurchase = appendLedgerEvent(s, createLedgerEvent(
-            'IngredientPurchased',
-            {
-              shopId: shop.id,
-              store: shop.store,
-              total: shop.total,
-              items: shop.items.map((i) => i.name),
-              unplanned: !plannedDatesNear || undefined,
-            },
-            { origin: 'user', at: `${s.day}T12:00:00.000Z` },
-          ));
-          return {
-            ...withPurchase,
-            shops: [...s.shops, shop],
-            shoppingList: s.shoppingList.filter((i) => !bought.some((item) => item.id === i.id)),
-            // The bought rows' snapshots now live on the shop record — the
-            // book only describes rows currently on show.
-            shoppingPredictions: (s.shoppingPredictions || []).filter((p) => !bought.some((item) => item.id === p.id)),
-            storeRoutes: route.length > 1 ? { ...s.storeRoutes, [shop.store]: route } : s.storeRoutes,
-            pantry: reconciled ? reconciled.pantry : s.pantry,
-            pantryConflicts: reconciled
-              ? [...(s.pantryConflicts || []), ...reconciled.conflicts].slice(-100)
-              : s.pantryConflicts,
-            pantryEvents: pantryEvent ? [...(s.pantryEvents || []), pantryEvent].slice(-100) : s.pantryEvents,
-            lastPantryEvent: pantryEvent || s.lastPantryEvent,
-          };
-        }),
+      // recordShop lives in shopping-actions.js (one shared purchase
+      // recorder: checked-rows flow and domain commands keep one shape).
       ...offerActions(set, latest),
       ...predictionActions(set),
       compareBaskets: (items, offersByStore, options) => compareBaskets(items, offersByStore, options),

@@ -16,6 +16,7 @@ import {
   shoppingPrediction,
 } from '../src/lib/shopping-predictions.js';
 import { shoppingQuantityError, spendAccuracy } from '../src/lib/eval-metrics.js';
+import { basketPredictionEvent } from '../src/lib/prediction-evidence.js';
 import {
   PREDICTION_CORRECTION_OPTIONS,
   predictionCorrectionEvent,
@@ -55,10 +56,18 @@ const correction = (over = {}) => ({
   type: 'prediction_correction',
   predictionType: 'shopping-qty',
   predictionKey: 'rice',
-  predicted: 300,
+  // v2 frozen measurement block: which prediction this answers, its frozen
+  // subject, and the unit/dimension the prediction was shown in. A count
+  // prediction ('2 tins') is the one scale the 0–3+ answer can prove.
+  predictionId: 'row-1',
+  subjectKey: 'rice',
+  predicted: 2,
+  predictedUnit: 'tin',
+  dimension: 'count',
   actual: 2,
   date: '2026-09-18',
   at: Date.now(),
+  schemaVersion: 2,
   ...over,
 });
 
@@ -67,7 +76,9 @@ const frozenShop = (over = {}) => ({
   date: '2026-09-18',
   total: 3,
   items: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 1.2 }],
-  predictions: [{ id: 'row-1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-18' }],
+  // Provenance-stamped: this is Forq advice — row-exact spend accuracy
+  // scores only Forq-priced, Forq-attributed rows.
+  predictions: [{ id: 'row-1', predictionKey: 'rice', name: 'Rice', qty: '300g', day: '2026-09-18', provenance: 'forq-plan' }],
   ...over,
 });
 
@@ -275,9 +286,14 @@ describe('correction semantics: 3+ is a lower bound, never exactly 3', () => {
     const result = shoppingQuantityError(state, { today: TODAY });
     // Only the exact answer is scored: |2−2|/2 = 0 — the 3+ row would have
     // contributed 0.5 if it were misread as "exactly 3".
-    expect(result.samples).toBe(1);
+    expect(result.explicitQuantityCorrectionAccuracy.samples).toBe(1);
     expect(result.explicitQuantityCorrectionAccuracy.value).toBe(0);
     expect(result.excluded.some((e) => e.reason === 'censored-correction-lower-bound' && e.outcomeId === 'pc-3plus')).toBe(true);
+    // The censored row still yields safe DIRECTIONAL evidence for learning —
+    // a lower bound, a direction, and the minimum error it proves — never an
+    // exact-accuracy sample.
+    const directional = result.explicitQuantityCorrectionAccuracy.directionalEvidence.find((d) => d.outcomeId === 'pc-3plus');
+    expect(directional).toMatchObject({ lowerBound: 3, direction: 'prediction-too-low', minimumError: 1, minimumRelativeError: 0.5 });
   });
 
   it('censored rows still teach learning without entering error averages', () => {
@@ -301,19 +317,24 @@ describe('purchase accuracy and explicit correction accuracy are separate metric
   it('purchase accuracy answers only the till-run question; corrections never blend into it', () => {
     const state = household({
       shops: [frozenShop()], // |600−300|/300 = 1
-      predictionCorrections: [correction({ predicted: 2, actual: 0, date: '2026-09-18', id: 'pc-1' })], // |0−2|/2 = 1
+      predictionCorrections: [correction({ predicted: 2, actual: 1, date: '2026-09-18', id: 'pc-1' })], // |1−2|/2 = 0.5
     });
     const result = shoppingQuantityError(state, { today: TODAY });
     expect(result.purchaseQuantityAccuracy.value).toBe(1);
     expect(result.purchaseQuantityAccuracy.samples).toBe(1);
-    expect(result.explicitQuantityCorrectionAccuracy.value).toBe(1);
+    expect(result.explicitQuantityCorrectionAccuracy.value).toBe(0.5);
     expect(result.explicitQuantityCorrectionAccuracy.samples).toBe(1);
     // The combined view is explicit about being the LEARNING signal…
-    expect(result.combinedLearningSignal.value).toBe(1);
+    expect(result.combinedLearningSignal.value).toBe(0.75);
     expect(result.combinedLearningSignal.samples).toBe(2);
-    // …and the top-level value is the combined learning view, labelled as such.
+    // …and the top-level value is the PURCHASE ACCURACY ONLY — never the
+    // blended learning number (task: remove ambiguous blended root metrics).
     expect(result.value).toBe(1);
-    expect(result.observations).toHaveLength(2);
+    expect(result.value).toBe(result.purchaseQuantityAccuracy.value);
+    expect(result.value).not.toBe(result.combinedLearningSignal.value);
+    expect(result.observations).toHaveLength(1); // root observations = purchase only
+    expect(result.observations[0].source).toBe('purchase');
+    expect(result.combinedLearningSignal.observations).toHaveLength(2);
   });
 
   it('categorical (portions) corrections never enter quantity accuracy', () => {
@@ -429,8 +450,20 @@ describe('the shared evaluation-time policy', () => {
     expect(shoppingQuantityError(state, { today: '2026-09-20' }).samples).toBe(1);
     // …future from the earlier one.
     expect(shoppingQuantityError(state, { today: '2026-09-17' }).excluded[0].reason).toBe('future-shop');
-    // Spend: same record, same gate.
-    const shop = { ...frozenShop(), predicted: 2.4 };
+    // Spend: same record, same gate — scored only against the GENUINE
+    // pre-purchase freeze (frozen when the list was generated), never a
+    // checkout reconstruction.
+    const freeze = basketPredictionEvent({
+      rows: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 2.4, provenance: 'forq' }],
+      day: '2026-09-18',
+    });
+    const shop = {
+      ...frozenShop(),
+      // The till price was independently observed on the receipt — the
+      // outcome side of the comparison (the list price stays a prediction).
+      items: [{ id: 'row-1', name: 'Rice', qty: '600g', price: 1.2, actualPrice: 2.4, actualPriceSource: 'actual-receipt' }],
+      spendPrediction: { ...freeze, predictedTotal: freeze.predicted },
+    };
     const spendState = household({ shops: [shop] });
     expect(spendAccuracy(spendState, { today: '2026-09-20' }).samples).toBe(1);
     expect(spendAccuracy(spendState, { today: '2026-09-17' }).excluded[0].reason).toBe('future-shop');

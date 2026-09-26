@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Week Recovery Engine â€” repairs the rest of the week whenever reality changes.
  *
  * Triggers: MealSkipped, IngredientWasted, PantryCorrected, LeftoverCreated,
@@ -123,16 +123,33 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
   const plan = state.plan || {};
   const pantry = Array.isArray(state.pantry) ? state.pantry : [];
   const shoppingList = Array.isArray(state.shoppingList) ? state.shoppingList : [];
-  // A saved portion has two homes â€” the first-class leftovers slice and
-  // pantry rows marked Leftovers. Both count, deduped by id.
-  const leftoverRows = new Map();
-  for (const p of pantry) {
-    if (p.cat === 'Leftovers' || p.recipeId) leftoverRows.set(p.id, p);
+  // A saved portion has two homes: pantry stock for planning/shopping and a
+  // lifecycle record for history. Their IDs intentionally differ, so deduping
+  // by ID counted one physical batch twice. Pantry rows are the live stock and
+  // win; lifecycle-only rows are normalised into the same shape when there is
+  // no matching pantry batch.
+  const pantryLeftovers = pantry.filter((p) => p.cat === 'Leftovers' || p.recipeId);
+  const semanticKey = (row) => {
+    const recipeId = row?.recipeId || null;
+    const date = row?.addedAt || row?.cookedDate || null;
+    return recipeId && date ? `${recipeId}|${date}` : null;
+  };
+  const pantryIds = new Set(pantryLeftovers.map((row) => row.id).filter(Boolean));
+  const pantryKeys = new Set(pantryLeftovers.map(semanticKey).filter(Boolean));
+  const leftovers = [...pantryLeftovers];
+  for (const lifecycle of (Array.isArray(state.leftovers) ? state.leftovers : [])) {
+    if (!lifecycle) continue;
+    const remaining = Math.max(0, Number(lifecycle.remainingPortions ?? lifecycle.portions) || 0);
+    if (remaining <= 0 || lifecycle.lifecycleState === 'eaten' || lifecycle.lifecycleState === 'discarded') continue;
+    const key = semanticKey(lifecycle);
+    if ((lifecycle.id && pantryIds.has(lifecycle.id)) || (key && pantryKeys.has(key))) continue;
+    leftovers.push({
+      ...lifecycle,
+      name: lifecycle.name || lifecycle.recipeName || 'Leftovers',
+      portions: remaining,
+      expiry: lifecycle.expiry || lifecycle.safeUntil || null,
+    });
   }
-  for (const l of (Array.isArray(state.leftovers) ? state.leftovers : [])) {
-    if (l && !leftoverRows.has(l.id)) leftoverRows.set(l.id, l);
-  }
-  const leftovers = [...leftoverRows.values()];
   const cooked = Array.isArray(state.cooked) ? state.cooked : [];
   const mealPlanEvents = Array.isArray(state.mealPlanEvents) ? state.mealPlanEvents : [];
   const dates = remainingWeekDates(today);

@@ -60,11 +60,22 @@ describe('example week demonstration data', () => {
     });
     const demo = createExampleWeekState('2026-07-28');
     const dates = weekDates(demo.day);
-    const need = shoppingForPlan(demo.plan, dates, { pantry: demo.pantry });
+    const need = shoppingForPlan(demo.plan, dates, { pantry: demo.pantry, people: demo.household, today: demo.day });
     expect(need.length).toBeGreaterThan(0);
     // Pantry staples reduce the list
-    const withoutPantry = shoppingForPlan(demo.plan, dates, { pantry: [] });
+    const withoutPantry = shoppingForPlan(demo.plan, dates, { pantry: [], people: demo.household, today: demo.day });
     expect(need.length).toBeLessThanOrEqual(withoutPantry.length);
+  });
+
+  it('sizes the demonstration shopping quantities for the two-person example household', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const dates = weekDates(demo.day);
+    const need = shoppingForPlan(demo.plan, dates, {
+      pantry: demo.pantry, people: demo.household, today: demo.day,
+    });
+    // Chicken traybake appears twice. It serves four and uses 8 thighs per
+    // batch, so two dinners for two people still require 8 thighs in total.
+    expect(need.find((item) => item.name === 'Chicken thighs')?.requiredQty).toBe('8');
   });
 
   it('does not mutate EMPTY_STATE when creating a demo', () => {

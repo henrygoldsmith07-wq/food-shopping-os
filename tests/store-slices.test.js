@@ -48,4 +48,23 @@ describe('store domain slices', () => {
     commands.respondToRecommendation({ recommendationId: 'x', accepted: true });
     expect(writes[2].householdLedger[0].type).toBe('RecommendationAccepted');
   });
+
+  it('createLeftover keeps lifecycle and pantry stock in the same pantry domain write', () => {
+    let state = { ...EMPTY_STATE, day: '2026-09-22' };
+    const set = (patch) => {
+      const changes = typeof patch === 'function' ? patch(state) : patch;
+      state = { ...state, ...changes };
+      return state;
+    };
+    const commands = buildDomainCommands(set);
+    commands.createLeftover({ name: 'Coconut Chickpea Curry', portions: 2, safeDays: 3 });
+
+    expect(state.pantry).toEqual(expect.arrayContaining([
+      expect.objectContaining({ cat: 'Leftovers', recipeId: 'chickpea-curry', portions: 2, expiry: '2026-09-25' }),
+    ]));
+    expect(state.leftovers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ recipeId: 'chickpea-curry', remainingPortions: 2, safeUntil: '2026-09-25' }),
+    ]));
+    expect(state.householdLedger.at(-1)).toMatchObject({ type: 'LeftoverCreated', recipeId: 'chickpea-curry', portions: 2 });
+  });
 });

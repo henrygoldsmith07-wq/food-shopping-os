@@ -78,6 +78,50 @@ describe('week recovery engine', () => {
     expect(result.planPatch['2026-09-01'].dinner).toBeNull();
   });
 
+  it('does not count the same leftover batch twice across pantry and lifecycle storage', () => {
+    const state = {
+      ...baseState,
+      plan: {
+        '2026-09-01': { dinner: 'curry' },
+        '2026-09-02': { dinner: 'pasta' },
+      },
+      pantry: [
+        ...baseState.pantry,
+        {
+          id: 'p-left', name: 'Chickpea curry (leftovers)', cat: 'Leftovers', recipeId: 'curry',
+          portions: 1, qty: '1 portion', addedAt: '2026-09-01', expiry: '2026-09-02',
+        },
+      ],
+      leftovers: [{
+        id: 'leftover-curry-2026-09-01', recipeId: 'curry', recipeName: 'Chickpea curry',
+        cookedDate: '2026-09-01', remainingPortions: 1, safeUntil: '2026-09-02', lifecycleState: 'stored',
+      }],
+      mealPlanEvents: [
+        { id: 'm1', date: '2026-09-01', slot: 'dinner', status: 'skipped' },
+        { id: 'm2', date: '2026-09-02', slot: 'dinner', status: 'skipped' },
+      ],
+    };
+    const result = recoverWeek(state, { today: '2026-09-01', catalogue });
+    expect(result.repairs.filter((repair) => repair.kind === 'reuse-leftover')).toHaveLength(1);
+  });
+
+  it('never proposes a lifecycle leftover whose remaining portions are already zero', () => {
+    const state = {
+      ...baseState,
+      pantry: baseState.pantry,
+      leftovers: [{
+        id: 'leftover-curry-2026-08-31', recipeId: 'curry', recipeName: 'Chickpea curry',
+        cookedDate: '2026-08-31', remainingPortions: 0, safeUntil: '2026-09-02', lifecycleState: 'eaten',
+      }],
+    };
+    const result = recoverWeek(state, {
+      today: '2026-09-01',
+      trigger: { kind: 'MealSkipped', date: '2026-09-01', slot: 'dinner', recipeId: 'curry' },
+      catalogue,
+    });
+    expect(result.repairs.some((repair) => repair.kind === 'reuse-leftover')).toBe(false);
+  });
+
   it('finds skipped slots on its own when no trigger is given', () => {
     const state = {
       ...baseState,

@@ -16,7 +16,7 @@ export const MAX_INGREDIENTS = 60;
 export const MAX_STEPS = 40;
 export const MAX_LINE = 200;
 
-import { classifyBatch } from './classifier-adapter.js';
+import { classifyBatch, notePrepassOutcome } from './classifier-adapter.js';
 import { deterministicRecipeLineKind, firstLineIsTitle } from './classify-deterministic.js';
 
 
@@ -197,12 +197,152 @@ export const draftFromClassifiedLines = (classified) => {
 };
 
 /**
- * The whole prepass: text in, `{ results, draft }` out, or null when the text
- * is too thin to bother classifying. `results` is labelled provenance; `draft`
- * is null when the labelled lines did not add up to a recipe, and the caller
- * falls back to the model as before.
+ * The prepass quality gate: conservative acceptance for a classified recipe.
+ *
+ * A classified recipe must not bypass the extraction model unless enough of
+ * the source has been confidently understood. Every check below is a hard
+ * line — any single failure declines the draft and the caller falls back to
+ * the general AI extraction model rather than silently dropping recipe
+ * information. Declining is always safe; accepting is what needs evidence.
+ *
+ * The factors, in order:
+ *   - confident title required (minTitleConfidence)
+ *   - sufficient confident ingredients (minIngredients at minIngredientConfidence)
+ *   - instruction evidence when method-like content exists
+ *   - minimum share of lines carrying recipe content (minClassifiedRate)
+ *   - maximum `other` proportion (maxOtherRate)
+ *   - maximum fallback proportion (maxFallbackRate)
+ *   - suspicious quantity/ingredient pairing detection: quantity lines that
+ *     never merged into an ingredient (maxDanglingQtyRate)
+ */
+export const DEFAULT_PREPASS_GATE = {
+  minTitleConfidence: 0.7,
+  minIngredients: 2,
+  minIngredientConfidence: 0.7,
+  requireInstructionEvidence: true,
+  minClassifiedRate: 0.5,
+  maxOtherRate: 0.4,
+  maxFallbackRate: 0.4,
+  maxDanglingQtyRate: 0.5,
+};
+
+/** Labels that count as understood recipe content for the coverage rate. */
+const CONTENT_LABELS = new Set(['title', 'ingredient', 'quantity', 'instruction', 'metadata']);
+
+/**
+ * Cooking verbs that mark a line as method-like even when no rule claimed it.
+ * Only fallback rows are tested against this: confidently labelled rows have
+ * already said what they are, and an uncertain line that reads like an
+ * instruction is evidence the source is not yet understood, not an ingredient.
+ */
+const METHODISH_RE = /\b(heat|stir|cook|bake|roast|fry|boil|simmer|oven|add|mix|pour|serve|chop|season|whisk|grill|steam|saut|knead|garnish|drizzle|melt|drain)\b/i;
+
+/**
+ * Assess an assembled draft against its classified lines.
+ *
+ * Pure: no network, no telemetry, no side effects — the caller records the
+ * outcome. Returns `{ accept, reasons, measurements }` where `reasons` holds
+ * stable codes (the adapter counts them) and `measurements` carries the
+ * coverage figures behind the decision.
+ */
+export const assessPrepassDraft = (draft, results, gate = DEFAULT_PREPASS_GATE) => {
+  const rows = Array.isArray(results) ? results : [];
+  const total = rows.length;
+  const reasons = [];
+
+  const titleConf = rows.reduce(
+    (best, row) => (row.label === 'title' ? Math.max(best, Number(row.confidence) || 0) : best), 0,
+  );
+  const ingredientRows = rows.filter((row) => row.label === 'ingredient');
+  const confidentIngredients = ingredientRows.filter(
+    (row) => (Number(row.confidence) || 0) >= gate.minIngredientConfidence,
+  );
+  const instructionRows = rows.filter((row) => row.label === 'instruction');
+  const methodishFallback = rows.filter(
+    (row) => row.source === 'fallback' && METHODISH_RE.test(String(row.item || '')),
+  );
+  const steps = Array.isArray(draft?.steps) ? draft.steps : [];
+
+  // Walk the quantity merge the assembler performs, counting the quantity
+  // lines that never found an ingredient: a bare "2" with no food word is a
+  // pairing the source never explained, not a quantity to keep.
+  let danglingQty = 0;
+  let pendingQty = false;
+  for (const row of rows) {
+    if (row.label === 'quantity') {
+      if (pendingQty) danglingQty += 1;
+      pendingQty = true;
+    } else if (row.label === 'ingredient') {
+      pendingQty = false;
+    } else if (pendingQty) {
+      danglingQty += 1;
+      pendingQty = false;
+    }
+  }
+  if (pendingQty) danglingQty += 1;
+
+  const classified = rows.filter((row) => CONTENT_LABELS.has(row.label)).length;
+  const other = rows.filter((row) => row.label === 'other').length;
+  const fallback = rows.filter((row) => row.source === 'fallback').length;
+  const classifiedRate = total ? classified / total : 0;
+  const otherRate = total ? other / total : 0;
+  const fallbackRate = total ? fallback / total : 0;
+  const qtyDenominator = confidentIngredients.length + danglingQty;
+  const danglingQtyRate = qtyDenominator ? danglingQty / qtyDenominator : (danglingQty ? 1 : 0);
+
+  const hasConfidentTitle = titleConf >= gate.minTitleConfidence;
+  if (!hasConfidentTitle) {
+    reasons.push('no-confident-title');
+  } else if (confidentIngredients.length < gate.minIngredients) {
+    // The count exists but the confidence does not, or the lines never
+    // arrived at all — either way the source is not understood well enough
+    // to skip the model. (A null draft with a confident title always lands
+    // here: assembly only declines on missing ingredients past the title.)
+    reasons.push(ingredientRows.length >= gate.minIngredients ? 'weak-ingredient-confidence' : 'too-few-ingredients');
+  }
+  if (gate.requireInstructionEvidence
+    && instructionRows.length + methodishFallback.length > 0 && steps.length === 0) {
+    reasons.push('missing-instruction-evidence');
+  }
+  if (classifiedRate < gate.minClassifiedRate) reasons.push('low-classified-rate');
+  if (otherRate > gate.maxOtherRate) reasons.push('high-other-rate');
+  if (fallbackRate > gate.maxFallbackRate) reasons.push('high-fallback-rate');
+  if (danglingQty > 0 && danglingQtyRate >= gate.maxDanglingQtyRate) reasons.push('dangling-quantities');
+
+  const measurements = {
+    totalLines: total,
+    titleConfidence: Math.round(titleConf * 100) / 100,
+    ingredientLines: ingredientRows.length,
+    confidentIngredientLines: confidentIngredients.length,
+    instructionLines: instructionRows.length,
+    methodishFallbackLines: methodishFallback.length,
+    danglingQuantities: danglingQty,
+    classifiedRate: Math.round(classifiedRate * 1000) / 1000,
+    otherRate: Math.round(otherRate * 1000) / 1000,
+    fallbackRate: Math.round(fallbackRate * 1000) / 1000,
+    danglingQtyRate: Math.round(danglingQtyRate * 1000) / 1000,
+    ingredientCoverage: total ? Math.round((confidentIngredients.length / total) * 1000) / 1000 : 0,
+    instructionCoverage: total ? Math.round((instructionRows.length / total) * 1000) / 1000 : 0,
+    // Accepted but thin: no steps recovered, or fewer than three confident
+    // ingredients. A measurement, not a refusal — the user still checks it.
+    incomplete: Boolean(draft?.title) && (steps.length === 0 || confidentIngredients.length < 3),
+  };
+
+  return { accept: reasons.length === 0, reasons, measurements };
+};
+
+/**
+ * The whole prepass: text in, `{ results, draft, assessment, latencyMs }` out,
+ * or null when the text is too thin to bother classifying. `results` is
+ * labelled provenance; `draft` is null when the labelled lines did not pass
+ * the quality gate, and the caller falls back to the model as before.
+ *
+ * `options.gate` overrides the acceptance thresholds; every other option is
+ * passed through to the classifier batch.
  */
 export const classifyRecipeLines = async (material, options = {}) => {
+  const startedAt = Date.now();
+  const { gate = DEFAULT_PREPASS_GATE, ...batchOptions } = options;
   const lines = String(material || '')
     .split('\n')
     .map((line) => line.trim())
@@ -214,11 +354,19 @@ export const classifyRecipeLines = async (material, options = {}) => {
   const rest = first ? lines.slice(1) : lines;
   const classified = await classifyBatch('recipe-line', rest, {
     deterministic: deterministicRecipeLineKind,
-    ...options,
+    ...batchOptions,
   });
   const results = first
     ? [{ item: lines[0], label: 'title', confidence: first.confidence, source: 'deterministic' }, ...classified]
     : classified;
-  return { results, draft: draftFromClassifiedLines(results) };
+  const draft = draftFromClassifiedLines(results);
+  const assessment = assessPrepassDraft(draft, results, gate);
+  const latencyMs = Date.now() - startedAt;
+  if (!assessment.accept) {
+    notePrepassOutcome(false, assessment.reasons);
+    return { results, draft: null, assessment, latencyMs };
+  }
+  notePrepassOutcome(true);
+  return { results, draft, assessment, latencyMs };
 };
 

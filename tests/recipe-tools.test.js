@@ -217,7 +217,8 @@ describe('keeping an imported recipe', () => {
     expect(kept.steps[0].text).toMatch(/leave it in the fridge/);
     expect(kept.kcal).toBe(420);
     expect(kept.servings).toBe(2);
-    expect(kept.ingredients[0]).toEqual({ name: 'Porridge oats', qty: '160 g' });
+    expect(kept.ingredients[0]).toEqual({ name: 'Porridge oats', qty: '80 g' });
+    expect(kept.ingredients[1]).toEqual({ name: 'Peanut butter', qty: '32 g' });
     expect(kept.imported).toBe(true);
 
     const bare = recipeFromImport(parsed, { text: '80g porridge oats' });

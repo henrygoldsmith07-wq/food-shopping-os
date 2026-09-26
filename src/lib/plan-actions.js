@@ -14,6 +14,10 @@ import { applyEntries, clearDates, LEFTOVER_CAT, leftoverEntry, moveMeal } from 
 import { householdPermission } from './household.js';
 import { uid } from './state.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
+import {
+  consumePlannedLeftover,
+  createLeftover as createLeftoverRecord,
+} from './leftover-planning.js';
 
 /**
  * One event onto the household's history. The ledger always comes from the
@@ -22,6 +26,32 @@ import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
  * events once the ledger outgrows its cap) lives in appendLedgerEvent.
  */
 const withEvent = (s, patch, event) => appendLedgerEvent({ ...s, ...patch }, event);
+
+/** Keep the first-class lifecycle record aligned with today's pantry portions. */
+const syncLeftoverRecord = (records = [], recipe, day, remainingPortions) => {
+  const n = Math.max(0, Math.round(Number(remainingPortions) || 0));
+  const id = `leftover-${recipe?.id || 'meal'}-${day || 'today'}`;
+  const existing = (records || []).find((row) => row?.id === id
+    || (row?.recipeId === recipe?.id && row?.cookedDate === day));
+  if (!existing) {
+    if (n === 0) return records || [];
+    return [...(records || []), createLeftoverRecord({ recipe, cookedPortions: n, eatenPortions: 0, date: day })].slice(-200);
+  }
+  const eaten = Math.max(0, Number(existing.eatenPortions) || 0);
+  return (records || []).map((row) => {
+    if (row !== existing) return row;
+    const plannedReuse = n > 0 && row.plannedReuse
+      ? { ...row.plannedReuse, portions: Math.min(n, Math.max(1, Number(row.plannedReuse.portions) || 1)) }
+      : null;
+    return {
+      ...row,
+      cookedPortions: eaten + n,
+      remainingPortions: n,
+      plannedReuse,
+      lifecycleState: n > 0 ? (plannedReuse ? 'planned' : 'stored') : 'eaten',
+    };
+  });
+};
 
 export const planActions = (set) => ({
   markMealPlanOutcome: ({ date, slot, status = 'skipped', reason = null, actualRecipeId = null } = {}) =>
@@ -118,7 +148,10 @@ export const planActions = (set) => ({
     set((s) => {
       if (!householdPermission(s, 'pantry') || !(portions > 0) || !recipe) return {};
       return withEvent(s,
-        { pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, portions, s.day) }] },
+        {
+          pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, portions, s.day) }],
+          leftovers: syncLeftoverRecord(s.leftovers || [], recipe, s.day, portions),
+        },
         createLedgerEvent('LeftoverCreated', { name: recipe.name, recipeId: recipe.id, portions }, { origin: 'user' }));
     }),
   useLeftover: (id) =>
@@ -131,12 +164,20 @@ export const planActions = (set) => ({
       // But the meal itself IS recorded: a leftover eaten is the outcome the
       // whole leftovers system exists for, and evaluation reads the ledger.
       const portions = (Number(row.portions) || 1) - 1;
-      return withEvent(s, { pantry: s.pantry
-        .map((p) => {
-          if (p.id !== id) return p;
-          return { ...p, portions, qty: `${portions} portion${portions === 1 ? '' : 's'}` };
-        })
-        .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0) },
+      const leftovers = (s.leftovers || []).map((lifecycle) => {
+        const linked = row.id === `p-${lifecycle.id}`
+          || (row.recipeId && lifecycle.recipeId === row.recipeId && row.addedAt && lifecycle.cookedDate === row.addedAt);
+        return linked ? consumePlannedLeftover(lifecycle, 1) : lifecycle;
+      });
+      return withEvent(s, {
+        pantry: s.pantry
+          .map((p) => {
+            if (p.id !== id) return p;
+            return { ...p, portions, qty: `${portions} portion${portions === 1 ? '' : 's'}` };
+          })
+          .filter((p) => p.cat !== LEFTOVER_CAT || (Number(p.portions) || 0) > 0),
+        leftovers,
+      },
         createLedgerEvent('MealCooked', {
           date: s.day,
           slot: null,
@@ -158,11 +199,15 @@ export const planActions = (set) => ({
       const n = Math.max(0, Math.round(Number(portions) || 0));
       const mine = (p) => p.cat === LEFTOVER_CAT && p.recipeId === recipe.id && p.addedAt === s.day;
       const rows = s.pantry.filter(mine);
-      if (!rows.length && n === 0) return {};
+      const leftovers = syncLeftoverRecord(s.leftovers || [], recipe, s.day, n);
+      if (!rows.length && n === 0) return leftovers === s.leftovers ? {} : { leftovers };
       if (!rows.length) {
-        return { pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, n, s.day) }] };
+        return {
+          pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, n, s.day) }],
+          leftovers,
+        };
       }
-      if (n === 0) return { pantry: s.pantry.filter((p) => !mine(p)) };
+      if (n === 0) return { pantry: s.pantry.filter((p) => !mine(p)), leftovers };
       let remaining = n;
       const pantry = s.pantry.flatMap((p) => {
         if (!mine(p)) return [p];
@@ -175,6 +220,6 @@ export const planActions = (set) => ({
       if (remaining > 0) {
         pantry.push({ id: uid('p'), low: false, ...leftoverEntry(recipe, remaining, s.day) });
       }
-      return { pantry };
+      return { pantry, leftovers };
     }),
 });

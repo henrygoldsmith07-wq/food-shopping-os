@@ -4,6 +4,7 @@ import { useApp } from '../lib/store.jsx';
 import { DEMO_BANNER, DEMO_LABEL, DEMO_WALKTHROUGH } from '../data/exampleWeek.js';
 import { weekDates } from '../lib/kitchen.js';
 import { shoppingForPlan } from '../lib/mealplan.js';
+import { householdPortionsFor } from '../lib/portions.js';
 import { Card } from './ui.jsx';
 
 /**
@@ -20,7 +21,12 @@ export default function DemoWalkthrough({ onNavigate }) {
   const runAction = (action) => {
     if (action === 'generateList') {
       const dates = weekDates(app.day);
-      const items = shoppingForPlan(app.plan, dates, { pantry: app.pantry });
+      const items = shoppingForPlan(app.plan, dates, {
+        pantry: app.pantry,
+        people: householdPortionsFor(app).portions,
+        today: app.day,
+        learnedAliases: app.aliasMemory || {},
+      });
       app.addToList(items);
       setNote(`Added ${items.length} items to the demo list (pantry already deducted).`);
       return;

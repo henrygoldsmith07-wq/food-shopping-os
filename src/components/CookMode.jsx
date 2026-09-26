@@ -6,6 +6,7 @@ import { useApp } from '../lib/store.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { safeExternalUrl } from '../lib/recipe-tools.js';
 import { defaultLeftoverPortions } from '../lib/loop-learning.js';
+import { householdPortionsFor } from '../lib/portions.js';
 import { Card, Meter, Stepper } from './ui.jsx';
 
 /**
@@ -54,7 +55,7 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
   const [dwell, setDwell] = useState(DWELL_SECONDS);
   const [spare, setSpare] = useState(() => defaultLeftoverPortions(
     recipe,
-    Math.max(1, Math.round(app.portions || app.household || 1)),
+    Math.max(1, Math.round(householdPortionsFor(app).portions)),
   ));
   const [wakeState, setWakeState] = useState('checking');
   const [startedAt] = useState(() => Date.now());

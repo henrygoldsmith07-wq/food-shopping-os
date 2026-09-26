@@ -18,6 +18,25 @@ import {
 
 export { spendAccuracy, basketReconciliation, shoppingQuantityError, snapshotCosts } from './spend-metrics.js';
 import { dayStamp } from './kitchen-dates.js';
+// Evidence-boundary names, re-exported for stable consumer import paths
+// (task: one correction-proof function everywhere). `directionalLearning`
+// is the aggregate view over censored "3+" evidence: counts and minimum
+// floors only — no exact values are invented.
+import {
+  CORRECTION_PROOF_STATUS,
+  correctionProofOf,
+} from './correction-measurements.js';
+export {
+  CORRECTION_PROOF_STATUS,
+  correctionProofOf,
+  PREDICTION_PROVENANCE,
+  evaluableForPredictionAccuracy,
+  quantityOverrideEvent,
+  basketPredictionEvent,
+  listSnapshotsConsistent,
+  listSnapshotDivergence,
+  listSnapshotSync,
+} from './evidence-contracts.js';
 
 const metric = (value, { confidence = 'none', evidence = 0, assumption = '' } = {}) => ({
   value, confidence, evidence, assumption,
@@ -268,27 +287,14 @@ export const evaluateHouseholdTrend = (state = {}, { today = dayStamp() } = {}) 
 };
 
 /**
- * Override pressure: how often the household overrode what the app set —
- * portion overrides, quantity edits to plan-derived rows, substitutions.
- * Rising override pressure is the honest signal that a recommendation
- * should carry less weight.
+ * Override pressure lives in override-learning.js (task: replace legacy
+ * override-pressure inference) — the event-backed reading over the
+ * immutable quantityOverrides book. Re-exported here so every existing
+ * import path stays stable, alongside the override learning profile it is
+ * derived from.
  */
-export const overridePressure = (state = {}, { today = dayStamp() } = {}) => {
-  void today;
-  const list = Array.isArray(state.shoppingList) ? state.shoppingList : [];
-  const overriddenRows = list.filter((row) => row.fromRecipe && row.lastAutoQty != null && row.qty !== row.lastAutoQty).length;
-  const autoRows = list.filter((row) => row.fromRecipe && row.lastAutoQty != null).length;
-  const portionOverride = state.portionsOverride != null && state.portionsOverride !== 'auto' ? 1 : 0;
-  const substitutions = (Array.isArray(state.householdLedger) ? state.householdLedger : [])
-    .filter((e) => e.type === 'MealCooked' && e.substituted).length;
-  const denominator = autoRows + substitutions + 1; // +1 keeps portion override representable alone
-  const value = Math.round(((overriddenRows + substitutions + portionOverride) / denominator) * 100) / 100;
-  return metric(value, {
-    confidence: autoRows + substitutions >= 8 ? 'high' : autoRows + substitutions >= 3 ? 'medium' : 'low',
-    evidence: autoRows + substitutions,
-    assumption: 'Edited auto-quantities, substitutions and portion overrides over automatable decisions.',
-  });
-};
+export { overridePressure, overrideLearningProfile, applyOverrideLearning } from './override-learning.js';
+import { overridePressure, overrideLearningProfile } from './override-learning.js';
 
 /** Shops with no plan coverage that week count as unplanned. */
 const unplannedShopsFrom = (shops = [], plan = {}) => {
@@ -337,7 +343,7 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
       {
         confidence: exactTotal >= 20 ? 'high' : exactTotal >= 8 ? 'medium' : exactTotal > 0 ? 'low' : 'none',
         evidence: exactTotal,
-        assumption: 'Mean absolute error across user-corrected predictions, exact answers only (censored "3+" lower bounds excluded). Corrections are explicit feedback, not purchase accuracy — see purchaseQuantityAccuracy.',
+        assumption: 'Mean absolute error across user-corrected predictions, exact answers only: censored "3+" lower bounds excluded, and only corrections that PROVE a count measurement (the frozen measurement block) enter the math — unproven ones stay qualitative learning evidence. Corrections are explicit feedback, not purchase accuracy — see purchaseQuantityAccuracy.',
       },
     );
   } catch { assumptions.push('Prediction profile unavailable.'); }
@@ -397,7 +403,12 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
 
   const evidenceTotal = corrections.length + waste.length + shops.length + outcomes.length + cooked.length;
   return {
-    version: 2,
+    // v3: frozen subject identity (purchase accuracy reads the stored
+    // subjectKey, never re-derived through the current alias memory),
+    // measurement-proven corrections only, split quantity metrics with the
+    // ROOT value = purchase accuracy, and standardised diagnostics on every
+    // spend/quantity/reconciliation block.
+    version: 3,
     evaluatedAt: today,
     ready: evidenceTotal >= 4,
     predictionError,
@@ -411,6 +422,10 @@ export const evaluateHousehold = (state = {}, { today = dayStamp() } = {}) => {
     spendAccuracy: spendAccuracy(state, { today }),
     basketReconciliation: basketReconciliation(state, { today }),
     overridePressure: overridePressure(state, { today }),
+    // The override learning signal itself (task: make quantityOverrides
+    // part of real learning): rate, direction, magnitude, repeats,
+    // systematic bias, confidence by sample count, named exclusions.
+    overrideLearning: overrideLearningProfile(state, { today }),
     portionAccuracy,
     autopilotUndoRate,
     trend: evaluateHouseholdTrend(state, { today }),

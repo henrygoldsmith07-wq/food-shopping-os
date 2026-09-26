@@ -4,6 +4,7 @@ import {
 } from '@testing-library/react';
 import App from '../src/App.jsx';
 import { STORAGE_KEY, todayStamp } from '../src/lib/state.js';
+import { shoppingForGeneratedEntries } from '../src/lib/mealplan.js';
 
 // This suite drives the whole app end to end, so individual journeys can
 // exceed vitest's 5s default under batch load without being broken. Give the
@@ -119,7 +120,8 @@ describe('the weekly planner', () => {
     fireEvent.click(screen.getByText('Review shopping list'));
 
     expect(screen.getByText('Your list')).toBeDefined();
-    expect(screen.getByLabelText('Tick Chickpeas (tins)')).toBeDefined();
+    // The generated row carries the group's everyday name, not the recipe's spelling.
+    expect(screen.getByLabelText('Tick Chickpeas')).toBeDefined();
   });
 
   it('starts a fresh shopping hand-off when the plan range changes', () => {
@@ -148,6 +150,23 @@ describe('the weekly planner', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review shopping list' }));
 
     expect(screen.getByText('Your list')).toBeDefined();
+  });
+
+  it('uses the generator people count before pantry subtraction when building its shopping hand-off', () => {
+    const entries = [{ date: '2026-08-03', slot: 'dinner', recipeId: 'chicken-traybake' }];
+    const pantry = [{ id: 'p1', name: 'Chicken thighs', qty: '6', confidence: 'definite' }];
+
+    const forEight = shoppingForGeneratedEntries(entries, {
+      pantry, people: 8, today: '2026-08-03',
+    });
+    expect(forEight.find((item) => item.name === 'Chicken thighs')).toMatchObject({
+      qty: '10', requiredQty: '16', pantryQty: '6', shortfallQty: '10',
+    });
+
+    const forTwo = shoppingForGeneratedEntries(entries, {
+      pantry, people: 2, today: '2026-08-03',
+    });
+    expect(forTwo.some((item) => item.name === 'Chicken thighs')).toBe(false);
   });
 
   it('downloads the planned week for a calendar', () => {

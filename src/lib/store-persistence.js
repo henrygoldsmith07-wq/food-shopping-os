@@ -6,6 +6,7 @@ import { normalisePriceAlertConfig } from './price-alerts.js';
 import { HEALTH_VAULT_KEY, withoutHealth } from './health-vault.js';
 import { permissionsForRole } from './household.js';
 import { predictionCorrectionEvent } from './prediction-feedback.js';
+import { overrideSchemaStatus, basketSchemaStatus } from './prediction-evidence.js';
 import { captureMissedMeals } from './plan-outcome.js';
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -45,6 +46,17 @@ export const hydrate = (stored = {}) => {
   state.predictionSnapshots = (Array.isArray(state.predictionSnapshots) ? state.predictionSnapshots : [])
     .filter((snapshot) => snapshot?.type === 'prediction_snapshot')
     .slice(-500);
+  // Versioned evidence books survive storage like the loops they describe:
+  // unknown or malformed versions are DROPPED here with named reasons
+  // available from the same gates evaluation uses — never carried into
+  // metrics, never silently reinterpreted (task: version provenance/override
+  // records).
+  state.quantityOverrides = (Array.isArray(state.quantityOverrides) ? state.quantityOverrides : [])
+    .filter((record) => overrideSchemaStatus(record).ok)
+    .slice(-200);
+  state.basketPredictions = (Array.isArray(state.basketPredictions) ? state.basketPredictions : [])
+    .filter((record) => basketSchemaStatus(record).ok)
+    .slice(-200);
   // The prediction book survives offline storage like the list it describes;
   // malformed or junk entries are dropped rather than carried into metrics.
   state.shoppingPredictions = (Array.isArray(state.shoppingPredictions) ? state.shoppingPredictions : [])

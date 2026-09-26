@@ -43,7 +43,7 @@ describe('week loop workflow', () => {
       day,
       plan: {
         [day]: { dinner: 'chicken-traybake' },
-        '2026-07-29': { dinner: 'chicken-traybake' }, // same dish twice → one ingredient set
+        '2026-07-29': { dinner: 'chicken-traybake' }, // same dish twice → one row, combined quantity
       },
       pantry: [{ id: 'p1', name: 'Olive oil', cat: 'Cupboard' }],
       household: 2,
@@ -59,6 +59,7 @@ describe('week loop workflow', () => {
     expect(names.some((n) => n.includes('olive'))).toBe(false); // pantry covered if recipe uses olive oil name match
     // Dedup: one row per ingredient name
     expect(new Set(list.map((i) => i.name.toLowerCase())).size).toBe(list.length);
+    expect(list.find((item) => item.name === 'Chicken thighs')?.qty).toBe('8');
   });
 
   it('scales quantities for the learned appetite when recorded cooks disagree with the profile', () => {
@@ -105,6 +106,46 @@ describe('week loop workflow', () => {
     expect(overridden.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('10');
   });
 
+  it('scales the household need before subtracting pantry stock', () => {
+    const plan = { [day]: { dinner: 'chicken-traybake' } };
+    const pantry = [{ id: 'p1', name: 'Chicken thighs', qty: '6', confidence: 'definite' }];
+
+    const largeHousehold = shoppingForWeekLoop({ day, plan, pantry, portions: 8 }, [day]);
+    expect(largeHousehold.items.find((item) => item.name === 'Chicken thighs')).toMatchObject({
+      qty: '10',
+      requiredQty: '16',
+      pantryQty: '6',
+      shortfallQty: '10',
+    });
+
+    const smallHousehold = shoppingForWeekLoop({ day, plan, pantry, portions: 2 }, [day]);
+    expect(smallHousehold.items.some((item) => item.name === 'Chicken thighs')).toBe(false);
+  });
+
+  it('does not let too few leftover portions erase a household meal from the list', () => {
+    const plan = { [day]: { dinner: 'chicken-traybake' } };
+    const leftovers = [{
+      id: 'l1', name: 'Chicken Traybake (leftovers)', cat: 'Leftovers', recipeId: 'chicken-traybake', portions: 2, qty: '2 portions',
+    }];
+
+    const fourPeople = shoppingForWeekLoop({ day, plan, pantry: leftovers, portions: 4 }, [day]);
+    expect(fourPeople.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('4');
+
+    const twoPeople = shoppingForWeekLoop({ day, plan, pantry: leftovers, portions: 2 }, [day]);
+    expect(twoPeople.items.some((item) => item.name === 'Chicken thighs')).toBe(false);
+  });
+
+  it('buys the full household need when the saved portions expire before dinner', () => {
+    const dinner = '2026-07-29';
+    const plan = { [dinner]: { dinner: 'chicken-traybake' } };
+    const leftovers = [{
+      id: 'l1', name: 'Chicken Traybake (leftovers)', cat: 'Leftovers', recipeId: 'chicken-traybake', portions: 2,
+      qty: '2 portions', expiry: day,
+    }];
+    const list = shoppingForWeekLoop({ day, plan, pantry: leftovers, portions: 4 }, [dinner]);
+    expect(list.items.find((item) => item.name === 'Chicken thighs')?.qty).toBe('8');
+  });
+
   it('keeps the configured portions until the appetite evidence is strong', () => {
     // Fewer than 3 observations, or a gap under half a portion: the
     // household's own setting still wins.
@@ -137,6 +178,34 @@ describe('week loop workflow', () => {
     expect(check.plannedMeals).toBe(1);
     expect(check.missing).toBeGreaterThan(0);
     expect(check.missingItems.length).toBe(check.missing);
+  });
+
+  it('counts pantry coverage only when the recorded quantity really covers the household need', () => {
+    const plan = { [day]: { dinner: 'chicken-traybake' } };
+    const partial = pantryCheckForPlan({
+      day, plan, portions: 4,
+      pantry: [{ id: 'p1', name: 'Chicken thighs', qty: '2', confidence: 'definite' }],
+    }, [day]);
+    expect(partial.coveredByPantry).toBe(0);
+    expect(partial.missingItems.find((item) => item.name === 'Chicken thighs')?.qty).toBe('6');
+
+    const enough = pantryCheckForPlan({
+      day, plan, portions: 4,
+      pantry: [{ id: 'p1', name: 'Chicken thighs', qty: '8', confidence: 'definite' }],
+    }, [day]);
+    expect(enough.coveredByPantry).toBe(1);
+    expect(enough.missingItems.some((item) => item.name === 'Chicken thighs')).toBe(false);
+  });
+
+  it('uses learned aliases when reporting pantry coverage', () => {
+    const check = pantryCheckForPlan({
+      day,
+      plan: { [day]: { dinner: 'chickpea-curry' } },
+      portions: 4,
+      pantry: [{ id: 'p1', name: 'tin tomatoes', qty: '1 tin', confidence: 'definite' }],
+    }, [day]);
+    expect(check.coveredByPantry).toBeGreaterThan(0);
+    expect(check.missingItems.some((item) => item.name === 'Chopped tomatoes')).toBe(false);
   });
 
   it('snapshot points at plan when nothing is scheduled', () => {
