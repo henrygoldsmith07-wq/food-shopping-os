@@ -4,13 +4,13 @@ import {
 } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from '../lib/planner.js';
-import { householdPortionsFor, recipePortionFactors, scaleListToPortions } from '../lib/portions.js';
+import { householdPortionsFor } from '../lib/portions.js';
 import { useApp } from '../lib/store.jsx';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
-import { itemsFromRecipes } from '../data/stores.js';
 import { monthOf, peakNow } from '../data/seasons.js';
 import { expiringSoon } from '../lib/kitchen.js';
-import { wasteAwareList } from '../lib/loop-learning.js';
+import { planFromEntries } from '../lib/mealplan.js';
+import { shoppingListForPlan } from '../lib/loop-learning.js';
 import { explainRecommendation } from '../lib/recommend.js';
 import { Card, Chip, Pill, Stepper, FoodArt } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
@@ -160,19 +160,19 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       goTab?.('shop');
       return;
     }
-    // Quantities scale to the chosen portions (what recorded cooks say the
-    // household eats, when they disagree with the profile), then
-    // binned-ingredient memory ships those items lighter, with the reason shown.
-    const chosen = householdPortionsFor(app);
-    const scaled = scaleListToPortions(
-      itemsFromRecipes([...new Set(generated)], pantryNames),
-      chosen.portions,
-      recipePortionFactors((generated || []).map((recipe) => ({ recipe })), chosen.portions),
-    );
-    app.addToList(wasteAwareList(
-      scaled,
-      { waste: app.waste, cooked: app.cooked, today: app.day, learnedAliases: app.aliasMemory || {} },
-    ));
+    // The one Plan → list calculation (shoppingListForPlan): pantry
+    // quantities subtracted, fridge-covered meals left off, portions scaled
+    // to the household, binned-ingredient memory applied. The not-yet-applied
+    // run is shaped into the plan that calculation reads, so "Shop for it"
+    // puts exactly what the week loop previews on the list.
+    const planForList = planFromEntries(entries);
+    app.addToList(shoppingListForPlan(planForList, Object.keys(planForList), {
+      pantry: app.pantry,
+      waste: app.waste,
+      today: app.day,
+      learnedAliases: app.aliasMemory || {},
+      app, // portions follow the same learned-appetite decision as every list path
+    }));
     setAddedToList(true);
   };  const cost = generated ? generated.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
   const kcal = generated ? Math.round(generated.reduce((s, r) => s + r.kcal, 0) / generated.length) : 0;

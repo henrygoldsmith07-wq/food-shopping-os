@@ -160,4 +160,27 @@ describe('week loop workflow', () => {
     expect(snap.done.plan).toBe(true);
     expect(snap.stats.meals).toBeGreaterThan(0);
   });
+
+  it('previews exactly the list its list step generates, pantry already subtracted', () => {
+    const state = {
+      ...EMPTY_STATE,
+      day,
+      onboarded: true,
+      plan: { [day]: { dinner: 'chickpea-curry' } },
+      pantry: [{ id: 'p1', name: 'Rice', qty: '2 kg', cat: 'Baking & dry' }],
+    };
+    const app = { ...state, ...deriveApp(state) };
+    const snap = weekLoopSnapshot(app);
+    const generated = shoppingForWeekLoop(app, snap.dates);
+    // Same rows, same portions: the preview is the calculation, not a second
+    // derivation of it, so the list step can never show one week and add another.
+    // Row ids are minted per call, so they are not part of the comparison.
+    const rows = (list) => list.map(({ id, ...row }) => row);
+    expect(rows(snap.listPreview)).toEqual(rows(generated.items));
+    expect(snap.portions).toEqual(generated.portions);
+    // And it is the need minus the pantry — not the recipe as written.
+    const withoutPantry = shoppingForWeekLoop({ ...app, pantry: [] }, snap.dates);
+    expect(snap.listPreview.some((row) => row.name === 'Rice')).toBe(false);
+    expect(withoutPantry.items.some((row) => row.name === 'Rice')).toBe(true);
+  });
 });

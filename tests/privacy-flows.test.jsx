@@ -23,7 +23,7 @@ describe('privacy and server deletion', () => {
     expect(screen.getByText('Stored on this device')).toBeTruthy();
     expect(screen.getByText('Stored on Forq’s servers after sign-in')).toBeTruthy();
     expect(screen.getByText('Transmitted when you choose a service')).toBeTruthy();
-    expect(screen.getByText(/OpenAI receives your prompt/)).toBeTruthy();
+    expect(screen.getByText(/configured AI providers receive your prompt/)).toBeTruthy();
     expect(screen.getByText(/Upstash Redis stores your sign-in identity/)).toBeTruthy();
     expect(screen.getByText(/Receipt files you explicitly upload/)).toBeTruthy();
     await waitFor(() => expect(request).toHaveBeenCalledWith(

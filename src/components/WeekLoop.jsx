@@ -9,9 +9,7 @@ import { expiringSoon, weekDates } from '../lib/kitchen.js';
 import { planEntries, planVariety } from '../lib/mealplan.js';
 import {
   nextWeekLoopStep,
-  pantryCheckForPlan,
   prevWeekLoopStep,
-  shoppingForWeekLoop,
   weekLoopSnapshot,
 } from '../lib/week-loop.js';
 import { gbp } from '../lib/utils.js';
@@ -81,7 +79,11 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
   };
 
   const generateList = () => {
-    const { items } = shoppingForWeekLoop(app, dates);
+    // Exactly what the list step previewed: snap.listPreview is the one
+    // pantry-subtracted, portion-scaled calculation (the same one PlanTab
+    // and PlanGenerator's "Shop for it" now run), so the rows you read are
+    // the rows that land on the shopping list — never a second derivation.
+    const items = snap.listPreview;
     if (!items.length) {
       setStatus('Nothing to buy — pantry and leftovers already cover this plan.');
       return;
@@ -126,8 +128,13 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
     setStatus(`Scheduled ${item.name.replace(/ \(leftovers\)$/i, '')} for ${dayShort(target)}.`);
   };
 
-  const pantry = pantryCheckForPlan(app, dates);
-  const { items: weekList, portions: portionSource } = shoppingForWeekLoop(app, dates);
+  // One snapshot, one set of numbers: the pantry check, the list preview and
+  // the portions decision all come from weekLoopSnapshot rather than being
+  // re-derived here — the loop can never show a different week to the one it
+  // generates.
+  const pantry = snap.pantryCheck;
+  const weekList = snap.listPreview;
+  const portionSource = snap.portions;
 
   return (
     <div className="pb-10">

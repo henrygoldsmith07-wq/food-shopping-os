@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyEntries, batchGroups, clearDates, copyMealTo, coveredByLeftovers, daysInMonth,
   leftoverEntry, leftoverPortions, mealPlanIcs, monthDates, monthGrid, monthLabel, moveMeal,
-  planDishes, planEntries, planStats, shiftMonth, shiftWeek, shoppingForPlan, weekOffset,
+  planDishes, planEntries, planFromEntries, planStats, shiftMonth, shiftWeek, shoppingForPlan, weekOffset,
 } from '../src/lib/mealplan.js';
 import { inMonth, monthOf, peakNow, seasonalHits, seasonScore } from '../src/data/seasons.js';
 import { weekDates } from '../src/lib/kitchen.js';
@@ -189,6 +189,22 @@ describe('leftovers', () => {
     });
     expect(items.some((i) => i.name === 'Sushi rice')).toBe(false);
     expect(items.some((i) => i.name === 'Salmon fillets')).toBe(true);
+  });
+});
+
+describe('shaping a proposal into a plan', () => {
+  it('merges slots per day and drops rows with nothing to cook', () => {
+    const shaped = planFromEntries([
+      { date: '2026-07-06', slot: 'breakfast', recipeId: 'protein-pancakes' },
+      { date: '2026-07-06', slot: 'dinner', recipeId: CURRY },
+      { date: '2026-07-07', slot: 'dinner', recipeId: null },
+      { date: '2026-07-08' },
+    ]);
+    expect(shaped).toEqual({ '2026-07-06': { breakfast: 'protein-pancakes', dinner: CURRY } });
+    // A generated run reads back through the same readers a committed plan
+    // does, so a proposal can be costed and shopped without being applied.
+    expect(planEntries(shaped, ['2026-07-06']).map((e) => e.slot)).toEqual(['breakfast', 'dinner']);
+    expect(planFromEntries([])).toEqual({});
   });
 });
 

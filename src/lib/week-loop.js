@@ -92,6 +92,10 @@ export const weekLoopSnapshot = (app) => {
   const list = app.shoppingList || [];
   const checked = list.filter((i) => i.checked);
   const pantryCheck = pantryCheckForPlan(app, dates);
+  // The one preview the loop's list step compares against: the plan's need
+  // MINUS pantry quantities. shoppingForPlan already subtracts them, so the
+  // preview and the generated list can never disagree about "still to buy".
+  const listPreview = shoppingForWeekLoop(app, dates);
   const shopsToday = (app.shops || []).filter((s) => s.date === app.day);
   const cookedToday = (app.cooked || []).filter((c) => c.date === app.day);
   const leftovers = (app.leftovers || app.pantry || []).filter((p) => p.cat === 'Leftovers' || p.recipeId);
@@ -128,6 +132,8 @@ export const weekLoopSnapshot = (app) => {
     stats,
     pantryCheck,
     list,
+    listPreview: listPreview.items,
+    portions: listPreview.portions,
     checkedCount: checked.length,
     shopsToday,
     cookedToday,

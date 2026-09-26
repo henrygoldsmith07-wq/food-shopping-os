@@ -36,7 +36,7 @@ import WeekRecoveryPreview from './WeekRecoveryPreview.jsx';
  * tap away without cluttering the default view. Offline-first, no fetching,
  * fully keyboard navigable.
  */
-export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, goLog }) {
+export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, goLog, onOpenWeekLoop }) {
   const app = useApp();
   const widgets = new Set(app.homeWidgets || []);
   const todayPlan = planForDay(app.plan, app.day);
@@ -116,7 +116,13 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     else if (action.kind === 'pantry') openPantry();
     else if (action.kind === 'profile') goTab('profile');
     else if (action.kind === 'log') goLog('add');
-    else goTab(action.target);
+    // "Run the week loop" opens the loop — the guided form of the plan
+    // screen the CTA names — instead of silently degrading to the tab the
+    // household was told it could skip.
+    else if (action.kind === 'weekLoop') {
+      if (onOpenWeekLoop) onOpenWeekLoop(action.target);
+      else goTab(action.target);
+    } else goTab(action.target);
   };
   const outlookLines = [
     plannedCount ? `${plannedCount} day${plannedCount === 1 ? '' : 's'} planned ahead` : 'Nothing planned yet',
@@ -432,7 +438,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </div>
       )}
 
-      {/* 4 — Concise weekly outlook */}
+      {/* 4 — The week command centre: one set of week stats, one CTA into
+          the loop (Home's documented "Start the week" entry) rather than a
+          second route to the Plan tab the nav already provides. */}
       <section className="px-5" aria-label="Weekly outlook">        <Card>
           <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>This week</p>
           <ul className="mt-2 space-y-1.5">
@@ -444,10 +452,11 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
             <Meter value={app.shoppingList.filter((i) => i.checked).length} max={Math.max(1, app.shoppingList.length)} height={5} />
           </div>
           <button
-            type="button" onClick={() => goTab('plan')}
+            type="button"
+            onClick={() => (onOpenWeekLoop ? onOpenWeekLoop(null) : goTab('plan'))}
             className="press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}
           >
-            Review the week →
+            Start the week →
           </button>
         </Card>
       </section>

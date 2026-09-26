@@ -329,6 +329,9 @@ function Shell() {
               openGuidance={(view = 'next') => { setGuidanceView(view); setGuidanceOpen(true); }}
               goTab={goTab}
               goLog={goLog}
+              // Home's week command centre opens the same guided loop Plan
+              // and Guidance open — one entry, one journey, no tab detour.
+              onOpenWeekLoop={(step) => { setWeekLoopStep(step || null); setWeekLoopOpen(true); }}
             />
           )}
           <Suspense fallback={<ScreenFallback />}>

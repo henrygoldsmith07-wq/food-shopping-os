@@ -71,6 +71,21 @@ export const planEntries = (plan = {}, dates = []) =>
       .map((slot) => ({ date, slot, recipeId: plan[date][slot], recipe: byId(plan[date][slot]) }))
       .filter((e) => e.recipe));
 
+/**
+ * Shape a run of entries ({date, slot, recipeId}) into the plan object every
+ * plan-reading function takes — so a proposal that has not been applied yet
+ * (a generated week, a recovery preview) can be costed, previewed and shopped
+ * exactly like a committed plan, through the same one calculation.
+ */
+export const planFromEntries = (entries = []) => {
+  const plan = {};
+  for (const entry of entries) {
+    if (!entry?.date || !entry?.slot || !entry.recipeId) continue;
+    plan[entry.date] = { ...plan[entry.date], [entry.slot]: entry.recipeId };
+  }
+  return plan;
+};
+
 /** Default eat-by times (HHMMSS). Cook blocks start earlier using recipe.time. */
 const CALENDAR_EAT = {
   breakfast: { h: 8, m: 0 },

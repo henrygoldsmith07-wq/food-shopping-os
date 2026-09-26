@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import HomeTab from '../src/components/HomeTab.jsx';
 
 afterEach(() => cleanup());
@@ -72,5 +72,19 @@ describe('home: plan → shop → eat', () => {
   it('keeps the pantry one tap away', () => {
     render(<HomeTab {...props} />);
     expect(screen.getByText('Open pantry →')).toBeTruthy();
+  });
+
+  it('starts the week loop from the one weekly CTA, instead of a jump to the plan tab', () => {
+    // Home owns the entry, App owns the loop: the CTA must hand off to the
+    // loop (which plans, shops, eats and reconciles off one list) and must not
+    // quietly route the user to the plan tab, and there is only ever one
+    // "start the week" button on this screen.
+    const onOpenWeekLoop = vi.fn();
+    const goTab = vi.fn();
+    render(<HomeTab {...props} goTab={goTab} onOpenWeekLoop={onOpenWeekLoop} />);
+    fireEvent.click(screen.getByRole('button', { name: /Start the week/i }));
+    expect(onOpenWeekLoop).toHaveBeenCalledTimes(1);
+    expect(goTab).not.toHaveBeenCalledWith('plan');
+    expect(screen.queryByText('Plan the week →')).toBeNull();
   });
 });
