@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   requireHousehold: vi.fn(),
   isOpenRouterConfigured: vi.fn(),
+  classifyAiFailure: vi.fn(() => 'retry-model'),
   freeChat: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ vi.mock('../src/server/households.js', async (importOriginal) => ({
 vi.mock('../src/server/openrouter.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isOpenRouterConfigured: mocks.isOpenRouterConfigured,
+  classifyAiFailure: mocks.classifyAiFailure,
   freeChat: mocks.freeChat,
 }));
 
@@ -53,7 +55,9 @@ beforeEach(() => {
   mocks.requireUser.mockResolvedValue({ id: 'user-1' });
   mocks.requireHousehold.mockResolvedValue({ household: { _id: 'household-1' }, membership: { role: 'adult' } });
   mocks.isOpenRouterConfigured.mockReturnValue(true);
-  mocks.freeChat.mockResolvedValue({ text: 'from the model', model: 'test-model' });
+  mocks.freeChat.mockResolvedValue({ text: 'from the model', provider: 'nvidia', model: 'test-model' });
+  mocks.classifyAiFailure.mockReturnValue('retry-model');
+  vi.stubEnv('OPENAI_API_KEY', 'paid-key');
 });
 describe('POST /api/classify — batched labelling', () => {
   it('rejects a cross-origin request before checking the account', async () => {
@@ -145,7 +149,8 @@ describe('POST /api/ai — deterministic routing happens before the model', () =
   it('sends an ordinary question to the model exactly as before', async () => {
     const res = await aiPost(request('/api/ai', { task: 'meal-plan', prompt: 'Plan my week' }));
     const body = await res.json();
-    expect(body.provider).toBe('openrouter-free');
+    expect(body.provider).toBe('nvidia');
+    expect(body.model).toBe('test-model');
     expect(body.output).toBe('from the model');
     expect(mocks.freeChat).toHaveBeenCalledTimes(1);
     expect(classifierTelemetry().llmCallsAvoided).toBe(0);
@@ -154,10 +159,26 @@ describe('POST /api/ai — deterministic routing happens before the model', () =
   it('sends a medical question to the model, never to the classifier', async () => {
     const res = await aiPost(request('/api/ai', { task: 'shopping', prompt: 'Is this safe to eat with a nut allergy?' }));
     expect(res.status).toBe(200);
-    expect((await res.json()).provider).toBe('openrouter-free');
+    expect((await res.json()).provider).toBe('nvidia');
     expect(mocks.freeChat).toHaveBeenCalledTimes(1);
     // The model's system prompt carries the constraint-aware framing.
     const [{ system }] = mocks.freeChat.mock.calls[0];
     expect(system).toContain('allergy and health information as constraints');
+  });
+
+  it('never labels an NVIDIA answer as OpenRouter', async () => {
+    mocks.freeChat.mockResolvedValue({ text: 'hi', provider: 'nvidia', model: 'm' });
+    const res = await aiPost(request('/api/ai', { task: 'meal-plan', prompt: 'Plan my week' }));
+    const body = await res.json();
+    expect(body.provider).toBe('nvidia');
+    expect(body.provider).not.toBe('openrouter-free');
+  });
+
+  it('surfaces a provider-wide outage instead of re-spending it on the paid relay', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'paid-key');
+    mocks.freeChat.mockRejectedValue(Object.assign(new Error('provider 503'), { status: 503 }));
+    mocks.classifyAiFailure.mockReturnValue('retry-provider');
+    const res = await aiPost(request('/api/ai', { task: 'meal-plan', prompt: 'Plan my week' }));
+    expect(res.status).toBe(500);
   });
 });

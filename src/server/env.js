@@ -38,9 +38,15 @@ export const envSchema = z.object({
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 
-  /* AI relay */
+  /* AI relay — paid OpenAI plus the free-tier ladder (NVIDIA NIM first, OpenRouter second) */
   OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().min(1).optional(),
+  NVIDIA_API_KEY: z.string().min(1).optional(),
+  NVIDIA_BASE_URL: z.string().url().optional(),
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  OPENROUTER_BASE_URL: z.string().url().optional(),
   AI_MONTHLY_TOKEN_LIMIT: z.coerce.number().int().positive().optional(),
+  AUTH_DEV_LOGIN: z.enum(['true', 'false']).optional(),
 
   /* classifier.dev — cheap labelling between the deterministic rules and the LLM */
   CLASSIFIER_API_URL: z.string().url().optional(),
@@ -53,16 +59,50 @@ export const envSchema = z.object({
   /* Uploads */
   BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
 
-  /* Scrapers */
+  /* Scrapers — the price-comparison fetch ladder (monid → direct → firecrawl → jina) */
   JINA_API_KEY: z.string().min(1).optional(),
   JINA_READER_BASE_URL: z.string().url().optional(),
   JINA_READER_ENABLED: z.enum(['true', 'false', '1', '0']).optional(),
   FIRECRAWL_API_KEY: z.string().min(1).optional(),
   FIRECRAWL_BASE_URL: z.string().url().optional(),
   FIRECRAWL_WAIT_MS: z.coerce.number().int().nonnegative().optional(),
+  PRICE_SCRAPER_ENABLED: z.enum(['true', 'false']).optional(),
+  PRICE_SCRAPER_STRATEGIES: z.string().min(1).optional(),
+  PRICE_SCRAPER_MARKET: z.enum(['auto', 'on', 'off']).optional(),
+  PRICE_SCRAPER_RETAILERS: z.string().min(1).optional(),
+  PRICE_SCRAPER_CONCURRENCY: z.coerce.number().int().positive().optional(),
+  SCRAPER_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  SCRAPER_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  SCRAPER_USER_AGENT: z.string().min(1).optional(),
+  SCRAPER_MODEL_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  SCRAPE_BATCH_BUDGET_MS: z.coerce.number().int().positive().optional(),
 
-  /* Monid paid pricing rung */
+  /* Monid paid pricing rung — CLI install, API key, endpoint selection and local learning */
+  MONID_API_KEY: z.string().min(1).optional(),
+  MONID_API_BASE_URL: z.string().url().optional(),
   MONID_CLI_ROOT: z.string().min(1).optional(),
+  MONID_DISABLED: z.enum(['true', 'false']).optional(),
+  MONID_FORCE_CONFIGURED: z.string().min(1).optional(),
+  MONID_STATE_FILE: z.string().min(1).optional(),
+  MONID_POLL_MS: z.coerce.number().int().nonnegative().optional(),
+  MONID_SCRAPE_PROVIDER: z.string().min(1).optional(),
+  MONID_SCRAPE_ENDPOINT: z.string().min(1).optional(),
+  MONID_SCRAPE_INPUT_JSON: z.string().min(1).optional(),
+  MONID_SCRAPE_QUERY_JSON: z.string().min(1).optional(),
+  MONID_SCRAPE_PATH_JSON: z.string().min(1).optional(),
+  MONID_MIN_BALANCE: z.coerce.number().min(0).optional(),
+  MONID_RUN_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  SCRAPE_DIAGNOSE_BUDGET_MS: z.coerce.number().int().positive().optional(),
+  MONID_MARKET_PROVIDER: z.string().min(1).optional(),
+  MONID_MARKET_ENDPOINT: z.string().min(1).optional(),
+  MONID_MARKET_INPUT_JSON: z.string().min(1).optional(),
+
+  /* Open product data — barcode nutrition and community price observations */
+  OPEN_FOOD_FACTS_ENABLED: z.enum(['true', 'false']).optional(),
+  OPEN_FOOD_FACTS_API_BASE_URL: z.string().url().optional(),
+  OPEN_FOOD_FACTS_USER_AGENT: z.string().min(1).optional(),
+  OPEN_PRICES_ENABLED: z.enum(['true', 'false']).optional(),
+  OPEN_PRICES_API_BASE_URL: z.string().url().optional(),
 });
 
 /**
@@ -79,6 +119,48 @@ export function redisConfigured(source = process.env) {
   const url = source.UPSTASH_REDIS_REST_URL || source.KV_REST_API_URL;
   const token = source.UPSTASH_REDIS_REST_TOKEN || source.KV_REST_API_TOKEN;
   return Boolean(url && token);
+}
+
+/**
+ * AI readiness across every provider the server can use — not just OpenAI.
+ *
+ * A deployment with NVIDIA_API_KEY or OPENROUTER_API_KEY set can answer every
+ * free-tier request without ever touching the paid relay, so reporting it as
+ * "AI not configured" because OPENAI_API_KEY is missing is wrong. The free
+ * ladder is checked first: free-first callers (freeChat/freeVision, price
+ * extraction, recipe/kitchen reads) run on it. The paid relay is reported as
+ * its own fact so the UI can say "free models ready, paid relay off".
+ */
+export function aiReadiness(source = process.env) {
+  const free = Boolean(source.NVIDIA_API_KEY || source.OPENROUTER_API_KEY);
+  const paid = Boolean(source.OPENAI_API_KEY);
+  if (free && paid) {
+    return {
+      label: 'AI (free models + OpenAI relay)',
+      ready: true,
+      free: true,
+      paid: true,
+      detail: 'Connected',
+    };
+  }
+  if (free) {
+    const via = source.NVIDIA_API_KEY ? 'NVIDIA' : 'OpenRouter';
+    return {
+      label: 'AI (free models)',
+      ready: true,
+      free: true,
+      paid: false,
+      provider: source.NVIDIA_API_KEY ? 'nvidia' : 'openrouter',
+      detail: `Connected via ${via} (free tier); paid relay off`,
+    };
+  }
+  return {
+    label: 'AI relay (OpenAI)',
+    ready: paid,
+    free: false,
+    paid,
+    detail: paid ? 'Connected' : 'Add NVIDIA_API_KEY, OPENROUTER_API_KEY or OPENAI_API_KEY',
+  };
 }
 
 /**
@@ -104,17 +186,13 @@ export function envStatus(source = process.env) {
   };
   return {
     auth,
-    ai: {
-      label: 'AI relay (OpenAI)',
-      ready: Boolean(source.OPENAI_API_KEY),
-      detail: source.OPENAI_API_KEY ? 'Connected' : 'Add OPENAI_API_KEY',
-    },
+    ai: aiReadiness(source),
     classifier: {
       // classifier.dev is free and keyless; its absence is a cost, not an outage
       // — every label falls back to the deterministic rules and `other`.
       label: 'Batch classifier (classifier.dev)',
-      ready: process.env.CLASSIFIER_DISABLED !== 'true' && source.CLASSIFIER_API_URL !== '',
-      detail: process.env.CLASSIFIER_DISABLED === 'true' || source.CLASSIFIER_API_URL === ''
+      ready: source.CLASSIFIER_DISABLED !== 'true' && source.CLASSIFIER_API_URL !== '',
+      detail: source.CLASSIFIER_DISABLED === 'true' || source.CLASSIFIER_API_URL === ''
         ? 'Disabled — labels fall back to the deterministic rules'
         : 'Connected (free tier, no key required)',
     },

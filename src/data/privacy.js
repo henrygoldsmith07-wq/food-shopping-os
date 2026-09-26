@@ -1,5 +1,5 @@
 export const DATA_BOUNDARY =
-  'Forq is local-first by default: your data starts in this browser and no account is required. Signing in opts your household into server sync. When you choose a server-backed AI action, Forq relays that prompt and the relevant context to OpenAI.';
+  'Forq is local-first by default: your data starts in this browser and no account is required. Signing in opts your household into server sync. When you choose a server-backed AI action, Forq relays that prompt and the relevant context to the configured free-tier AI provider (NVIDIA NIM or OpenRouter), or to OpenAI when the free ladder cannot answer and a paid key is configured.';
 
 export const PRIVACY_COPY = {
   cgm: 'CSV parsing happens in this browser. Imported readings stay local by default and join household sync if you sign in. They are sent to OpenAI only if you deliberately include them in a server-backed AI request.',
@@ -42,7 +42,7 @@ export const PRIVACY_DISCLOSURE = [
     title: 'Transmitted when you choose a service',
     summary: 'Forq does not sell your data or send the whole household record to these services.',
     items: [
-      'OpenAI receives your prompt and the relevant context only when you run a server-backed AI action.',
+      'The configured AI providers receive your prompt and the relevant context only when you run a server-backed AI action: the free-tier ladder (NVIDIA NIM or OpenRouter) first, and OpenAI only when the free ladder cannot answer and a paid key is configured.',
       'When you ask Forq to tidy a kitchen list, or photograph a shelf this browser cannot read itself, that text or picture goes to the free AI provider Forq is configured with so it can be listed. It is not stored, and the confidence attached to each item is decided in this browser, not by the model.',
       'When you import a recipe from a link, Forq’s backend fetches that page, and asks TikTok, YouTube or Instagram for a public caption where the link is one of theirs. When the page publishes no recipe data of its own, its text — or a recipe photo the browser could not read itself — goes to the free AI provider Forq is configured with so it can be laid out. Neither is stored.',
       'Google, Apple or Microsoft receive sign-in requests. Google or Microsoft receive meal-event details when you add them to a calendar, and return event times when you ask Forq to find busy evenings.',

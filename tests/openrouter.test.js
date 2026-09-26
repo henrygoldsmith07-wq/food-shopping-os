@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  activeProvider, freeChat, freeVision, isOpenRouterConfigured, nvidiaKey,
+  activeProvider, classifyAiFailure, freeChat, freeVision, isOpenRouterConfigured, nvidiaKey,
   rankedFreeModels, rankedVisionModels,
 } from '../src/server/openrouter.js';
 
@@ -76,6 +76,7 @@ describe('freeChat — failover walks down the intelligence ranking', () => {
     const out = await freeChat({ system: 's', user: 'u', fetchImpl });
     expect(out.model).toContain('glm'); // Ultra failed → next in ranking
     expect(out.text).toBe('hello from the fallback');
+    expect(out.provider).toBe('openrouter'); // the actual source, never 'nvidia'
     expect(tried[0]).toContain('ultra');
   });
 
@@ -121,6 +122,43 @@ describe('freeChat — failover walks down the intelligence ranking', () => {
     });
     const out = await freeChat({ system: 's', user: 'u', fetchImpl, timeoutMs: 2000 });
     expect(out.text).toBe('fast reply');
+    expect(out.provider).toBe('openrouter');
+  });
+});
+
+describe('classifyAiFailure — permanent, retry-model, retry-provider', () => {
+  it('never retries bad input or bad credentials', () => {
+    expect(classifyAiFailure({ status: 401 })).toBe('permanent');
+    expect(classifyAiFailure({ status: 400 })).toBe('permanent');
+    expect(classifyAiFailure(new Error('bad-image'))).toBe('permanent');
+  });
+
+  it('retries another model when the rung refused but the ladder may stand', () => {
+    expect(classifyAiFailure({ status: 404 })).toBe('retry-model');
+    expect(classifyAiFailure({ status: 402 })).toBe('retry-model');
+    expect(classifyAiFailure(new Error('no-free-model'))).toBe('retry-model');
+  });
+
+  it('fails over providers on rate limits, outages and timeouts', () => {
+    expect(classifyAiFailure({ status: 429 })).toBe('retry-provider');
+    expect(classifyAiFailure({ status: 503 })).toBe('retry-provider');
+    expect(classifyAiFailure({ status: 504 })).toBe('retry-provider');
+    expect(classifyAiFailure(Object.assign(new Error('AI provider timed out.'), { status: 504 }))).toBe('retry-provider');
+  });
+
+  it('names NVIDIA as the source when NVIDIA answers', async () => {
+    vi.stubEnv('NVIDIA_API_KEY', 'nvapi-test');
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).includes('nvidia')) {
+        if (String(url).endsWith('/models')) return jsonRes({ data: [{ id: 'nvidia/llama-3.1-nemotron-ultra' }] });
+        return jsonRes({ choices: [{ message: { content: 'from nvidia' } }] });
+      }
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+    const out = await freeChat({ system: 's', user: 'u', fetchImpl });
+    expect(out.provider).toBe('nvidia');
+    expect(out.text).toBe('from nvidia');
   });
 });
 

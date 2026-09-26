@@ -89,6 +89,15 @@ export default function ResolvedPrices({ items = [], sources = {} }) {
               )}
             </div>
 
+            {row.mismatch && (
+              <p className="mt-1.5 inline-flex items-start gap-1.5 text-[0.65625rem] font-semibold" style={{ color: 'var(--warn)' }}>
+                <AlertTriangle size={11} className="mt-px shrink-0" aria-hidden="true" />
+                <span>
+                  Live match distrusted: {row.mismatch.reason} Priced from {row.sourceLabel} instead.
+                </span>
+              </p>
+            )}
+
             {row.disagreement && (
               <p className="mt-1.5 inline-flex items-start gap-1.5 text-[0.65625rem] font-semibold" style={{ color: 'var(--warn)' }}>
                 <AlertTriangle size={11} className="mt-px shrink-0" aria-hidden="true" />

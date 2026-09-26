@@ -41,7 +41,7 @@ The demo itself centres on the product loop: the meal decision, the pantry-aware
 
 
 One app for planning, shopping, cooking, nutrition, budgeting and reducing
-waste. Mobile-first PWA-style web app built with Next.js 15 + React 18 + Tailwind
+waste. Mobile-first PWA-style web app built with Next.js 16 + React 18 + Tailwind
 CSS 4, styled in the calm monochrome Le Studio design language (see
 `apps/le-studio-site`): ink-on-neutral surfaces, border-first cards,
 black-on-white CTAs, and monochrome stroke iconography (lucide-react)
@@ -55,7 +55,9 @@ restored, including from first-run setup. Invalid saved data opens a recovery
 screen instead of being silently replaced. Forq is local-first by default:
 data starts in localStorage and no account is required. Signing in is an opt-in
 to Upstash Redis household sync. When a user chooses a server-backed AI action, Forq
-relays that prompt and its relevant context to OpenAI.
+relays that prompt and its relevant context to the configured free-tier model
+(NVIDIA NIM or OpenRouter), or to OpenAI when the free ladder cannot answer and
+a paid key is configured.
 
 The only data that ships with the app is reference material, not user data: a
 recipe book, a food/barcode/restaurant nutrition catalogue, per-100 g nutrient
@@ -66,7 +68,8 @@ tables and UK reference intakes.
 Forq runs on Next.js and keeps its local-first store. The backend is optional:
 without environment variables it stays local-only; with them it offers opt-in
 Auth.js accounts, Upstash Redis household sync, Ably or Redis live updates, private receipt
-uploads, calendar reads and writes, open product observations and an AI relay to OpenAI.
+uploads, calendar reads and writes, open product observations and a free-tier AI
+ladder (NVIDIA NIM first, OpenRouter second) with an optional paid OpenAI relay.
 
 1. Copy `.env.example` to `.env.local`.
 2. Create an Upstash Redis database and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
@@ -92,7 +95,9 @@ conflict and does not overwrite either copy. Open browser tabs update
 immediately, and private Ably channels (or a Redis-backed stream when Ably is not
 configured) push new household versions to subscribed clients. Upstash Redis
 remains the source of truth. Receipt images require
-Vercel Blob. AI calls require an OpenAI key and run only on the server.
+Vercel Blob. AI calls run only on the server and need a free-tier key
+(`NVIDIA_API_KEY` or `OPENROUTER_API_KEY`); the paid OpenAI relay additionally
+needs `OPENAI_API_KEY`.
 Optional product insights are off until enabled under Privacy & data. They
 record only coarse daily counts for the plan, shop and cook journey, and are
 uploaded only for a signed-in household; they never include food names, health
@@ -303,7 +308,12 @@ the shops answered.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `NVIDIA_API_KEY` | *bundled key* | Free NVIDIA NIM catalogue. Powers the AI assistant and the scraper's fallback extraction. A key is **shipped in the source**, so this works with no setup; set this to use your own, or to an empty string to turn NVIDIA off. |
+| `NVIDIA_API_KEY` | unset | Free NVIDIA NIM catalogue (first on the ladder). Powers the AI assistant and the scraper's fallback extraction. No credential ships with the app — set this to enable NVIDIA, or to an empty string to turn it off explicitly. |
+| `OPENROUTER_API_KEY` | unset | Free OpenRouter catalogue (second on the ladder). Used when NVIDIA is not configured. |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Override the OpenRouter endpoint (tests, self-hosted gateways). |
+| `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Override the NVIDIA NIM endpoint (tests, self-hosted gateways). |
+| `OPENAI_API_KEY` | unset | Paid OpenAI relay for requests the free ladder cannot answer. Free-tier models are unmetered; OpenAI calls draw on the household monthly budget (`AI_MONTHLY_TOKEN_LIMIT`). |
+| `OPENAI_MODEL` | `gpt-5-mini` | Model used by the paid OpenAI relay. |
 | `FIRECRAWL_API_KEY` | unset | Enables the Firecrawl render strategy. Without it the ladder skips Firecrawl. |
 | `FIRECRAWL_BASE_URL` | `https://api.firecrawl.dev/v2` | Pin an API version or point at a self-hosted Firecrawl. |
 | `FIRECRAWL_WAIT_MS` | `2500` | How long Firecrawl waits after load before capturing — raise it for slow shops. |
@@ -327,13 +337,15 @@ the shops answered.
 | `SCRAPER_RENDER_TIMEOUT_MS` | `25000` | Per-page timeout for a rendering strategy. |
 | `SCRAPER_USER_AGENT` | `ForqBot/1.0 …` | The identity sent to shops and matched against their robots.txt. Keep it honest and contactable. |
 
-**On the bundled NVIDIA key.** A working key is committed in
-`src/server/openrouter.js` so the app runs with no configuration. It is a free
-key with no billing attached. It is still a shared credential in a public
-repository: anyone can spend its rate limit, and rotating it needs a release.
-Set `NVIDIA_API_KEY` to your own if you are self-hosting or care about
-availability. Every other secret belongs in `.env.local` (gitignored) locally
-and in your hosting provider's environment settings for a deployment.
+**On credentials.** No credential ships with the app — a key in a public
+repository can be spent by anyone, cannot be rotated without a release, and is
+blocked by secret scanning. Deployments bring their own: `NVIDIA_API_KEY`
+and/or `OPENROUTER_API_KEY` for the free AI ladder, `OPENAI_API_KEY` for the
+paid relay. Every other secret belongs in `.env.local` (gitignored) locally
+and in your hosting provider's environment settings for a deployment. Responses
+from the free ladder carry the actual `provider` (`nvidia` or `openrouter`) and
+`model`, and the `/api/ai` route propagates both — NVIDIA answers are never
+labelled as OpenRouter.
 
 Barcode lookups can optionally use the public Open Food Facts API through the
 authenticated `/api/integrations/products` route. It returns product identity,

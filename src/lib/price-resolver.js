@@ -1,3 +1,5 @@
+import { detectPriceMismatch, PRICE_SOURCES } from './price-provenance.js';
+
 /**
  * One price for every item, and the truth about where it came from.
  *
@@ -7,8 +9,12 @@
  * chosen. Those are not parser bugs to fix — they are the shape of the web,
  * and the honest ways round them are all off the table.
  *
- * What the app can do is stop treating the scraper as the only source. Four
- * sources already exist, each right about something slightly different:
+ * What the app can do is stop treating the scraper as the only source. Sources
+ * already exist, each right about something slightly different. Every price the
+ * resolver considers resolves to one entry of the canonical provenance table
+ * (see price-provenance.js PRICE_SOURCES) — the labels below ride that table,
+ * so "read by AI" and "community observed" can never drift into looking like
+ * live quotes:
  *
  *   scraped   — read from a shop's page just now. Most current, least certain
  *               it is the same product you meant.
@@ -44,10 +50,10 @@ export const SOURCE_WEIGHT = {
 };
 
 export const SOURCE_LABEL = {
-  scraped: 'Live from the shop',
+  scraped: PRICE_SOURCES.scraped.label,
   recorded: 'You paid this',
   checked: 'From an earlier check',
-  observed: 'Community observed',
+  observed: PRICE_SOURCES.observed.label,
 };
 
 /** Age in days, or null when there is no usable date. */
@@ -94,9 +100,13 @@ const priceOf = (value) => {
 };
 
 /** The live check's answer for one item, if it found one. */
-const fromScrape = (entry) => {
+const fromScrape = (entry, name = '') => {
   const price = priceOf(entry?.best?.price);
   if (price === null) return null;
+  // A scraped row that does not actually match the item is not evidence for
+  // it — flag the mismatch so the UI can say so rather than show a confident
+  // wrong number.
+  const mismatch = detectPriceMismatch({ name: entry.best.name, query: name }, name);
   return {
     source: 'scraped',
     price,
@@ -105,6 +115,7 @@ const fromScrape = (entry) => {
     detail: entry.best.name || null,
     url: entry.best.url || null,
     method: entry.best.method || null,
+    mismatch: mismatch?.reason || null,
   };
 };
 
@@ -166,12 +177,16 @@ export const candidatesFor = (name, sources = {}, { now = Date.now() } = {}) => 
   const {
     scraped = {}, history = {}, receipts = {}, observed = {},
   } = sources;
-  const found = [
-    fromScrape(scraped[key]),
-    fromHistory(history[key]),
-    fromReceipts(receipts[key]),
-    fromObserved(observed[key]),
-  ].filter(Boolean);
+    const getSourceEntry = (map, k, rawName) => {
+      if (!map) return undefined;
+      return map[k] ?? map[rawName] ?? map[rawName.toLowerCase()];
+    };
+    const found = [
+      fromScrape(getSourceEntry(scraped, key, name), name),
+      fromHistory(getSourceEntry(history, key, name)),
+      fromReceipts(getSourceEntry(receipts, key, name)),
+      fromObserved(getSourceEntry(observed, key, name)),
+    ].filter(Boolean);
   return found
     .map((candidate) => ({
       ...candidate,
@@ -202,31 +217,42 @@ export const resolvePrice = (name, sources = {}, options = {}) => {
     };
   }
   const [best, ...rest] = candidates;
+  // A scraped candidate that does not match the item is demoted below every
+  // receipt, history and observed row: a wrong product at any price is not a
+  // price for this item. The mismatch reason rides the resolution so the UI
+  // can say which row was distrusted and why.
+  const mismatch = best?.mismatch && best.source === 'scraped'
+    ? { reason: best.mismatch, row: best }
+    : null;
+  const ranked = mismatch ? [...rest, best] : candidates;
+  const [winner, ...others] = ranked;
   // A disagreement worth surfacing: two sources far apart usually means the
   // scraper matched a different product, not that the price moved. The flag
   // names the most distant rival and how far apart they are, so the UI can
   // say which sources disagree instead of issuing a generic warning.
-  const rival = best.price > 0 && rest.length
-    ? rest.reduce((furthest, row) => (
-      Math.abs(row.price - best.price) > Math.abs(furthest.price - best.price) ? row : furthest))
+  const rival = winner.price > 0 && others.length
+    ? others.reduce((furthest, row) => (
+      Math.abs(row.price - winner.price) > Math.abs(furthest.price - winner.price) ? row : furthest))
     : null;
-  const disagreement = rival && Math.abs(rival.price - best.price) / best.price >= 0.5
-    ? { rival, gap: Math.round((Math.abs(rival.price - best.price) / best.price) * 100) }
+  const disagreement = rival && Math.abs(rival.price - winner.price) / winner.price >= 0.5
+    ? { rival, gap: Math.round((Math.abs(rival.price - winner.price) / winner.price) * 100) }
     : false;
   return {
     name,
     resolved: true,
-    price: best.price,
-    source: best.source,
-    sourceLabel: best.sourceLabel,
-    confidence: best.confidence,
-    where: best.where,
-    detail: best.detail,
-    url: best.url || null,
-    date: best.date,
-    candidates,
-    alternatives: rest,
+    price: winner.price,
+    source: winner.source,
+    sourceLabel: winner.sourceLabel,
+    confidence: winner.confidence,
+    where: winner.where,
+    detail: winner.detail,
+    url: winner.url || null,
+    method: winner.method || null,
+    date: winner.date,
+    candidates: ranked,
+    alternatives: others,
     disagreement,
+    mismatch,
   };
 };
 

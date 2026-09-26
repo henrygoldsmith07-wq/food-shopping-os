@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../server/api.js';
 import { requireHousehold } from '../../../server/households.js';
 import { aiRequestSchema } from '../../../server/schemas.js';
-import { isOpenRouterConfigured, freeChat } from '../../../server/openrouter.js';
+import { classifyAiFailure, freeChat, isOpenRouterConfigured } from '../../../server/openrouter.js';
 import {
   releaseAiBudget, reserveAiBudget, settleAiBudget, tokenReservation,
 } from '../../../server/ai-budget.js';
@@ -41,21 +41,31 @@ export async function POST(request) {
       }
     }
 
-    // Free-tier OpenRouter models are unmetered for the household: only a
-    // light abuse guard applies, and the monthly AI budget is not touched.
+    // Free-tier models (NVIDIA NIM first, OpenRouter second) are unmetered for
+    // the household: only a light abuse guard applies, and the monthly AI
+    // budget is not touched.
     await rateLimit(`ai:${user.id}`, isOpenRouterConfigured() ? 200 : 30, 3600000);
-    if (!isOpenRouterConfigured() && !process.env.OPENAI_API_KEY) throw new ApiError(503, 'AI is not configured.');
+    if (!isOpenRouterConfigured() && !process.env.OPENAI_API_KEY) {
+      throw new ApiError(503, 'AI is not configured. Add NVIDIA_API_KEY, OPENROUTER_API_KEY or OPENAI_API_KEY.');
+    }
 
     if (isOpenRouterConfigured()) {
       try {
-        const { text } = await freeChat({
+        const { text, provider, model } = await freeChat({
           system,
           user: JSON.stringify({ task: input.task, prompt: input.prompt, context: input.context || {} }),
         });
-        return NextResponse.json({ output: text, provider: 'openrouter-free' });
+        // Provenance is the actual provider + model, e.g. { provider: 'nvidia',
+        // model: '…' } — never a hard-coded label for the other provider.
+        return NextResponse.json({ output: text, provider, model });
       } catch (error) {
-        // No free slot available right now — fall through to the paid relay.
-        if (error?.status !== 402 && error?.message !== 'no-free-model') throw error;
+        // Only retry-model failures fall through to the paid relay: the ladder
+        // had an answer but every rung refused this request. A permanent
+        // failure (bad input/auth) or a provider-wide outage (retry-provider)
+        // must surface, not be re-spent on a paid call for the same outcome.
+        // With no paid relay configured, report the free-tier failure honestly.
+        if (classifyAiFailure(error) !== 'retry-model') throw error;
+        if (!process.env.OPENAI_API_KEY) throw error;
       }
     }
 
@@ -74,7 +84,11 @@ export async function POST(request) {
     });
     await settleAiBudget(reservation, response.usage?.total_tokens);
     reservation = null;
-    return NextResponse.json({ output: response.output_text });
+    return NextResponse.json({
+      output: response.output_text,
+      provider: 'openai',
+      model: process.env.OPENAI_MODEL || 'gpt-5-mini',
+    });
   } catch (error) {
     try {
       await releaseAiBudget(reservation);

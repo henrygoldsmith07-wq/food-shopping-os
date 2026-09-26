@@ -100,6 +100,42 @@ export const activeProvider = () => {
 
 export const isOpenRouterConfigured = () => Boolean(activeProvider());
 
+/** True when any free-tier chat provider (NVIDIA or OpenRouter) can be used. */
+export const isFreeChatConfigured = () => Boolean(activeProvider());
+
+/**
+ * Failure taxonomy for free-tier model calls. Callers use it to decide whether
+ * retrying another model, another provider, or nothing at all makes sense —
+ * rather than treating every failed HTTP status as "try the next rung".
+ *
+ *   permanent     — retrying cannot help (bad input, bad credentials).
+ *   retry-model   — another model on the SAME provider may answer
+ *                   (model withdrawn, unsupported capability, per-model 429/404).
+ *   retry-provider— the whole provider is unusable right now; a caller with a
+ *                   second provider configured should fail over to it
+ *                   (provider 5xx, provider-wide rate limit, timeout, outage).
+ *
+ * Never fabricate output: when no provider is available, or every rung
+ * refuses, the error propagates so the route answers 503/5xx — the UI then
+ * says what to do instead (type it in, try later), never a guessed answer.
+ */
+export const AI_FAILURE_CLASSES = ['permanent', 'retry-model', 'retry-provider'];
+
+export const classifyAiFailure = (error) => {
+  const status = Number(error?.status);
+  const message = String(error?.message || '').toLowerCase();
+  if (status === 400 || status === 401 || status === 403 || status === 422
+    || message === 'bad-image' || /bad (request|image|input)/.test(message)) {
+    return 'permanent';
+  }
+  // Model-level refusals: the rung failed, the ladder may still stand.
+  if (status === 404 || status === 405 || status === 402 || status === 413
+    || /no-(free|vision)-model|unsupported|unknown model|model (not found|unavailable)/.test(message)) {
+    return 'retry-model';
+  }
+  return 'retry-provider';
+};
+
 /** The ranked ladder, for diagnostics and the backend status panel. */
 export const modelLadder = () => CHAT_MODEL_ORDER.map((entry) => entry.name);
 
@@ -147,6 +183,9 @@ export async function rankedFreeModels(fetchImpl = fetch, options = {}) {
  * `timeoutMs` bounds each model attempt and `signal` aborts the whole walk:
  * a stalled transport or a caller whose time budget expired must not keep
  * stepping through the ladder (or hang on one await) — abort means stop now.
+ *
+ * Returns { text, provider, model } — provider is the actual source
+ * ('nvidia' | 'openrouter'), never a label for the other one.
  */
 const TIMEOUT_ERROR = (ms) => Object.assign(new Error('AI provider timed out.'), { status: 504 });
 
@@ -195,7 +234,7 @@ export async function freeChat({
         continue;
       }
       const body = await raceAbort(() => res.json(), signal);
-      return { text: body?.choices?.[0]?.message?.content ?? '', model };
+      return { text: body?.choices?.[0]?.message?.content ?? '', provider: provider.id, model };
     } catch (error) {
       // An abort is the caller giving up, not a model failing — stop the
       // whole walk rather than spending the next slot on a dead request.
@@ -229,6 +268,8 @@ export async function rankedVisionModels(fetchImpl = fetch, options = {}) {
  * `image` is a data URL, so nothing is uploaded anywhere but the provider. If
  * the catalog has no model that can see, this throws `no-vision-model` — the
  * caller then tells the user to type it in, which is the honest answer.
+ *
+ * Returns { text, provider, model } like freeChat.
  */
 export async function freeVision({
   system, user, image, maxTokens = 1200, fetchImpl = fetch, signal, timeoutMs = 30000,
@@ -283,7 +324,7 @@ export async function freeVision({
         continue;
       }
       const body = await raceAbort(() => res.json(), signal);
-      return { text: body?.choices?.[0]?.message?.content ?? '', model };
+      return { text: body?.choices?.[0]?.message?.content ?? '', provider: provider.id, model };
     } catch (error) {
       if (error?.name === 'AbortError') throw abortError('Model request aborted');
       lastError = error;

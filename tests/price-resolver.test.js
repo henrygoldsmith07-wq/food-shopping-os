@@ -10,7 +10,9 @@ const k = shoppingNameKey;
 const at = (days) => new Date(NOW - days * 86400000).toISOString().slice(0, 10);
 
 const scraped = (price, days = 0) => ({
-  best: { price, retailer: 'Tesco', name: 'Tesco thing', url: 'https://t.test/p' },
+  // The row names the product actually scraped, so mismatch detection stays
+  // out of the way of the ranking these tests are about.
+  best: { price, retailer: 'Tesco', name: 'Milk 2 pints', url: 'https://t.test/p' },
   checkedAt: new Date(NOW - days * 86400000).toISOString(),
 });
 const receipt = (price, days) => ({ points: [{ date: at(days), price, store: 'Aldi' }] });
