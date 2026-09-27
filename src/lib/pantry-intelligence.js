@@ -212,7 +212,7 @@ const countReading = (parsed) => {
   return null;
 };
 
-const quantityCanMerge = (a, b, ingredient) => {
+export const quantityCanMerge = (a, b, ingredient) => {
   const left = parseQuantity(a, { ingredient });
   const right = parseQuantity(b, { ingredient });
   if (!clean(a) && !clean(b)) return true;

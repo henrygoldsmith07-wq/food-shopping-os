@@ -65,12 +65,18 @@ export const sufficientFor = (have, need, options = {}) => {
   return pair[0].amount >= pair[1].amount;
 };
 
-/** Add two quantities, or null when they do not belong on the same scale. */
+/**
+ * Add two quantities, or null when they do not belong on the same scale.
+ * An empty side counts as zero; a side that SAYS something we cannot read is
+ * not zero — summing past it would silently drop what it said and present
+ * the rest as the total.
+ */
 export const addQuantities = (a, b, options = {}) => {
   const pa = a && typeof a === 'object' ? a : parseQuantity(a, options);
   const pb = b && typeof b === 'object' ? b : parseQuantity(b, options);
-  if (!pa) return pb || null;
-  if (!pb) return pa;
+  const says = (v) => Boolean(String(v ?? '').trim());
+  if (!pa) return says(a) ? null : (pb || null);
+  if (!pb) return says(b) ? null : pa;
   const pair = align(pa, pb, options);
   if (!pair) return null;
   const confidence = pair[0].confidence === 'exact' && pair[1].confidence === 'exact'

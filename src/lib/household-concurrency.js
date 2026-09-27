@@ -1,43 +1,31 @@
-// @ts-check
 /**
  * Household concurrency — deterministic conflict behaviour for simultaneous edits.
  *
  * Guarantees:
- *  - two users editing list simultaneously → last writer wins per-item by checkedAt, list order by lastChangedAt
+ *  - two users editing list simultaneously → one-sided changes merge, rows
+ *    changed differently on both devices become an explicit conflict
  *  - pantry quantity conflicts → merge when measurable, otherwise keep both as conflict
+ *  - meal-plan slots edited on two devices → independent slots coexist, the
+ *    same slot changed differently becomes an explicit conflict
  *  - duplicate purchases → duplicatePurchaseCheck warns before second write
  *  - membership changes → permissions checked before every write (household.js)
  *  - offline edits → queued and replayed on reconnect (cloud.js)
  *  - sync after reconnect → versioned compare, never silently overwriting newer remote
+ *
+ * This module owns the shared-list rules and the row-level helpers the rest
+ * of the merge policy uses. The mechanism is one three-way merge (see
+ * state-merge.js) over the copy both devices last agreed on; household-merge.js
+ * applies it to the whole household state. Independent changes always
+ * coexist; a change made differently on both sides is never resolved by a
+ * silent winner.
  */
 
 import { shoppingNameKey } from './shopping.js';
 import { canonicalName } from './aliases.js';
-import { mergePantryQuantities } from './pantry-intelligence.js';
-import { parseQuantity } from './measure.js';
+import { mergePantryQuantities, quantityCanMerge } from './pantry-intelligence.js';
+import { threeWayRows } from './state-merge.js';
 
-/**
- * @param {Array<any>} [list]
- * @returns {Map<any, any>}
- */
 const byId = (list = []) => new Map(list.map((i) => [i.id, i]));
-
-/**
- * Deterministic conflict id derived from both fingerprints — no Math.random,
- * so the same divergence always produces the same conflict id and repeated
- * retries never duplicate it.
- * @param {string} id
- * @param {string} mineFp
- * @param {string} theirsFp
- */
-export const conflictIdFor = (id, mineFp, theirsFp) => {
-  let hash = 0;
-  const text = `${id}|${mineFp}|${theirsFp}`;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = ((hash * 31 + text.charCodeAt(i)) | 0);
-  }
-  return `lc_${id}_${(hash >>> 0).toString(36)}`;
-};
 
 export const mergeShoppingLists = (local = [], remote = [], { lastChangedAtLocal = 0, lastChangedAtRemote = 0 } = {}) => {
   const localById = byId(local);
@@ -76,13 +64,10 @@ export const mergePantry = (local = [], remote = [], { today = '', learnedAliase
       return;
     }
     const existing = byKey.get(key);
-    const canMerge = (() => {
-      const a = parseQuantity(existing.qty, { ingredient: key });
-      const b = parseQuantity(item.qty, { ingredient: key });
-      if (!existing.qty && !item.qty) return true;
-      if (!a || !b) return false;
-      try { return Boolean(mergePantryQuantities(existing.qty, item.qty, { ingredient: key })); } catch { return false; }
-    })();
+    // "Merge when measurable" — two amounts only combine into one number
+    // when both can be read onto the same scale. "A bag" and "two mugs"
+    // never become an invented total.
+    const canMerge = quantityCanMerge(existing.qty, item.qty, key);
     if (canMerge) {
       const mergedQty = existing.qty && item.qty ? (mergePantryQuantities(existing.qty, item.qty, { ingredient: key }) || existing.qty) : (existing.qty || item.qty);
       byKey.set(key, { ...existing, qty: mergedQty, merged: true, sources: [...(existing.sources || []), source] });
@@ -106,14 +91,15 @@ export const detectDuplicatePurchase = (itemName, list = [], shops = [], { learn
   return { duplicate: false };
 };
 
-/* ---------- Shopping-list divergence, made visible ----------
-   Whole-state sync is versioned and last-writer-wins, which is right for
-   most keys and silent data loss for a shared list: Ada edits "Milk" while
-   Sam's device was offline, Sam's push 409s, and Sam is told to reload —
-   which throws his edit away. Instead we fingerprint the rows each side
-   synced from (the base) and only ask a human about rows BOTH sides
-   changed differently. Everything one-sided merges automatically, with the
-   side that changed winning; identical rows pass through untouched.
+/* ---------- Shared-row divergence, made visible ----------
+   Whole-state sync is versioned, which is right for most keys and silent
+   data loss for the things a household edits together: Ada edits "Milk"
+   while Sam's device was offline, Sam's push 409s, and a reload would throw
+   his edit away. Instead we fingerprint the rows each side synced from (the
+   base) and only ask a human about rows BOTH sides changed differently.
+   Everything one-sided merges automatically, with the side that changed
+   winning; identical rows pass through untouched. Fields changed on only one
+   side of a row merge too — a tick and a rename are not a fight.
 */
 
 /** The fields a row comparison cares about. Timestamps of unrelated noise
@@ -132,76 +118,78 @@ export const baseListFingerprint = (list = []) => {
 };
 
 /**
+ * Deterministic conflict id derived from both versions — never Math.random, so
+ * the same divergence reconciled twice (on two devices, or after a retry)
+ * produces one conflict instead of two.
+ * @param {string} id
+ * @param {string} mineFp
+ * @param {string} theirsFp
+ */
+export const conflictIdFor = (id, mineFp, theirsFp) => {
+  let hash = 0;
+  const text = `${id}|${mineFp}|${theirsFp}`;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash * 31 + text.charCodeAt(i)) | 0);
+  }
+  return `lc_${id}_${(hash >>> 0).toString(36)}`;
+};
+
+/**
  * Merge two divergent copies of the shopping list against the fingerprint of
  * the copy both sides last synced from.
  *
- *   - rows only one side has      → keep (additions never conflict)
+ *   - rows only one side has      → keep (additions never conflict), unless
+ *     the base shows the other side deleted an untouched row
  *   - rows both have, unchanged   → keep as-is
  *   - changed on exactly one side → that side wins (a normal sync)
  *   - changed differently on BOTH sides → no silent winner: each becomes a
  *     conflict holding the two versions, for the household to settle.
  */
 export const reconcileShoppingDivergence = (local = [], remote = [], base = {}) => {
-  const localById = byId(local);
-  const remoteById = byId(remote);
-  const rows = [];
-  const conflicts = [];
-  const seen = new Set();
-  const push = (row) => { rows.push(row); seen.add(row.id); };
-  for (const id of new Set([...localById.keys(), ...remoteById.keys()])) {
-    const mine = localById.get(id);
-    const theirs = remoteById.get(id);
-    if (!mine) { push(theirs); continue; }
-    if (!theirs) { push(mine); continue; }
-    const fpMine = rowFingerprint(mine);
-    const fpTheirs = rowFingerprint(theirs);
-    if (fpMine === fpTheirs) { push(mine); continue; }
-    const baseFp = Object.prototype.hasOwnProperty.call(base, id) ? base[id] : undefined;
-    const mineChanged = baseFp === undefined || baseFp !== fpMine;
-    const theirsChanged = baseFp === undefined || baseFp !== fpTheirs;
-    if (mineChanged && theirsChanged) {
-      // Both sides edited the same row since they shared a base — a decision
-      // only the household can make. Neither version is silently discarded.
-      // The conflict id is derived from both fingerprints (never random), so
-      // the same divergence retried twice yields the same conflict.
-      conflicts.push({
-        id: conflictIdFor(id, fpMine, fpTheirs),
-        itemId: id,
-        name: mine.name || theirs.name || 'Item',
-        field: (LIST_FP_FIELDS.find((f) => (mine[f] ?? null) !== (theirs[f] ?? null)) || 'name'),
-        mine,
-        theirs,
-        createdAt: Date.now(),
-        status: 'open',
-        localIndex: local.findIndex((row) => row.id === id),
-      });
-    } else if (mineChanged) {
-      push(mine);
-    } else {
-      push(theirs);
-    }
-  }
-  // Keep the shared order stable where possible: untouched rows stay put, and
-  // adopted rows land where their side had them.
-  const order = new Map();
-  local.forEach((row, i) => { if (seen.has(row.id) && !order.has(row.id)) order.set(row.id, i * 2); });
-  remote.forEach((row, i) => { if (seen.has(row.id) && !order.has(row.id)) order.set(row.id, i * 2 + 1); });
-  rows.sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9));
+  const { rows, fights } = threeWayRows(local, remote, base, {
+    fields: LIST_FP_FIELDS,
+    keyOf: (row) => row.id,
+    keepOnFight: 'none',
+  });
+  const conflicts = fights.map((fight) => listConflictFor(fight, local));
   return { rows, conflicts };
 };
 
-/** What a resolution would leave behind: the chosen copy back on the list,
- *  the conflict marked resolved. Pure — the caller commits it. */
+export const listConflictFor = (fight, local) => {
+  const { mine, theirs, key: id } = fight;
+  return {
+    // Derived from the two versions, not a fresh random string: reconciling the
+    // same divergence twice must not leave the household two open conflicts.
+    id: conflictIdFor(id, rowFingerprint(mine), rowFingerprint(theirs)),
+    itemId: id,
+    name: mine.name || theirs.name || 'Item',
+    field: (LIST_FP_FIELDS.find((f) => (mine[f] ?? null) !== (theirs[f] ?? null)) || 'name'),
+    mine,
+    theirs,
+    createdAt: Date.now(),
+    status: 'open',
+    localIndex: local.findIndex((row) => row.id === id),
+  };
+};
+
 /** Fold a newer household copy's rows into a local state without losing
  *  either side. Returns the next state, or null when nothing would change
  *  (nothing to adopt and nothing to settle). Pure — the caller commits. */
 export const adoptRemoteListRows = (localState, remoteRows, base = {}) => {
-  const { rows, conflicts } = reconcileShoppingDivergence(
-    localState?.shoppingList || [],
-    remoteRows || [],
-    base,
-  );
   const open = (localState?.listConflicts || []).filter((entry) => entry.status !== 'resolved');
+  // Rows parked inside an open conflict are excluded so the same divergence
+  // never adopts a copy behind the household's back — and so running the
+  // merge twice is a no-op rather than a second conflict.
+  const parked = new Set(open.map((entry) => entry.itemId));
+  const { rows, fights } = threeWayRows(localState?.shoppingList || [], remoteRows || [], base, {
+    fields: LIST_FP_FIELDS,
+    keyOf: (row) => row.id,
+    keepOnFight: 'none',
+    parked,
+  });
+  const conflicts = fights
+    .filter((fight) => !open.some((entry) => entry.itemId === fight.key))
+    .map((fight) => listConflictFor(fight, localState?.shoppingList || []));
   const nextConflicts = [...open, ...conflicts].slice(-50);
   const sameRows = JSON.stringify(rows) === JSON.stringify(localState?.shoppingList || []);
   const sameConflicts = JSON.stringify(nextConflicts) === JSON.stringify(open);
@@ -209,6 +197,8 @@ export const adoptRemoteListRows = (localState, remoteRows, base = {}) => {
   return { shoppingList: rows, listConflicts: nextConflicts, conflicts: conflicts.length };
 };
 
+/** What a resolution would leave behind: the chosen copy back on the list,
+ *  the conflict marked resolved. Pure — the caller commits it. */
 export const applyListConflictResolution = (list = [], conflicts = [], conflictId, side = 'mine') => {
   const conflict = (conflicts || []).find((entry) => entry.id === conflictId && entry.status !== 'resolved');
   if (!conflict) return { rows: list, conflicts: conflicts || [] };
@@ -240,14 +230,11 @@ export const offlineQueue = {
    * @param {Array<any>} queue
    * @param {{ type: string, [key: string]: any }} op
    * @param {{ now?: () => number, random?: () => number }} [options]
-   *   `now` and `random` are injected rather than reached for globally so a
-   *   retry of the same op keeps one identity instead of two that later replay
-   *   as duplicates.
+   *   The clock and the random source are injected rather than reached for
+   *   globally, so a retry of the same op keeps one identity instead of two
+   *   that later replay as duplicates.
    */
   enqueue: (queue = [], op, { now = Date.now, random = Math.random } = {}) => {
-    // Deterministic when the caller supplies now/random (tests, retries):
-    // the same op enqueued twice keeps a stable identity instead of two
-    // random ids that later replay as duplicates.
     const stamp = now();
     const suffix = String(random()).slice(2, 8);
     return [...queue, { ...op, queuedAt: stamp, id: `${op.type}-${stamp}-${suffix}` }];

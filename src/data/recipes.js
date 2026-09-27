@@ -9,16 +9,19 @@
  *
  * Hero art is an emoji key rendered as a monochrome icon, so the app stays
  * fully offline and self-contained.
+ *
+ * The book is two tiers. This module ships eagerly: the signature dishes and
+ * everything the generator composes, which is the pool planning draws from —
+ * so generating a plan, shopping it and cooking it never wait on anything. The
+ * hand-written expansion shelves live in `recipes-full.js` and are appended to
+ * this same live `RECIPES` array the first time something browses the whole
+ * book (see `lib/catalogue-loader.js`), so callers see one seamless library
+ * with no changes at the call sites.
  */
 import { generateRecipes } from './recipe-gen.js';
 import { RECIPES_300_PLUS } from './recipes-300-plus.js';
 import { RECIPES_600_PLUS } from './recipes-600-plus.js';
 import { RECIPES_900_PLUS } from './recipes-900-plus.js';
-import { RECIPES_DOUBLE } from './recipes-double.js';
-import { MASTER_RECIPE_EXPANSION } from './master-recipe-expansion.js';
-import { MORE_RECIPES } from './more-recipes.js';
-import { MORE_RECIPES_TWO } from './more-recipes-two.js';
-import { MORE_RECIPES_THREE } from './more-recipes-three.js';
 
 const SIGNATURE = [
   {
@@ -312,18 +315,35 @@ const GENERATED_RECIPES = generateRecipes();
 // Discovery shells intentionally remain separate from generated recipes so
 // recipe maths and existing planning constraints never treat missing costs or
 // nutrition as real zeroes.
-export const RECIPES = [
+
+/** Add dishes to the book, first registration wins, order preserved. */
+const appendRecipes = (rows) => {
+  const added = [];
+  for (const recipe of rows) {
+    if (seenRecipeIds.has(recipe.id)) continue;
+    seenRecipeIds.add(recipe.id);
+    RECIPES.push(recipe);
+    added.push(recipe);
+  }
+  return added;
+};
+
+/**
+ * Add a dish, or a whole shelf of dishes, to the live book. This is how
+ * `recipes-full.js` appends the lazily loaded shelves.
+ */
+export const registerRecipes = (rows) => appendRecipes(Array.isArray(rows) ? rows : [rows]);
+
+/** The book. Live: the lazily loaded shelves are appended to this array. */
+const seenRecipeIds = new Set();
+export const RECIPES = [];
+appendRecipes([
   ...SIGNATURE.map((r) => ({ ...r, meal: mealOf(r), signature: true })),
   ...GENERATED_RECIPES,
   ...RECIPES_300_PLUS,
   ...RECIPES_600_PLUS,
   ...RECIPES_900_PLUS,
-  ...RECIPES_DOUBLE,
-  ...MASTER_RECIPE_EXPANSION,
-  ...MORE_RECIPES,
-  ...MORE_RECIPES_TWO,
-  ...MORE_RECIPES_THREE,
-];
+]);
 
 /**
  * Recipes you added — generated, imported or shared with you — live in app
@@ -334,8 +354,12 @@ let mine = [];
 export const setMyRecipes = (list = []) => { mine = list; };
 export const myRecipes = () => mine;
 
-/** Every dish available right now: the book plus whatever you added. */
-export const allRecipes = () => (mine.length ? [...RECIPES, ...mine] : RECIPES);
+/**
+ * Every dish available right now: the book plus whatever you added. Always a
+ * fresh array — a lazily loaded shelf may land in `RECIPES` at any moment, so
+ * a caller must never hold on to the array it was handed.
+ */
+export const allRecipes = () => (mine.length ? [...RECIPES, ...mine] : [...RECIPES]);
 
 export const byId = (id) => RECIPES.find((r) => r.id === id) || mine.find((r) => r.id === id);
 

@@ -222,4 +222,26 @@ export const planActions = (set) => ({
       }
       return { pantry, leftovers };
     }),
+
+  /**
+   * Settle a plan slot two devices changed differently (see
+   * household-concurrency.js). The household's copy stays visible until
+   * someone picks; nothing is dropped silently.
+   */
+  resolvePlanConflict: (conflictId, side = 'mine') =>
+    set((s) => {
+      const conflict = (s.planConflicts || []).find((entry) => entry.id === conflictId && entry.status !== 'resolved');
+      if (!conflict) return {};
+      const planConflicts = (s.planConflicts || []).map((entry) => (entry.id === conflictId
+        ? { ...entry, status: 'resolved', resolution: side, resolvedAt: Date.now() }
+        : entry));
+      if (side !== 'theirs') return { planConflicts };
+      const day = { ...(s.plan[conflict.date] || {}) };
+      if (conflict.theirs?.recipeId) day[conflict.slot] = conflict.theirs.recipeId;
+      else delete day[conflict.slot];
+      const plan = { ...s.plan };
+      if (Object.keys(day).length) plan[conflict.date] = day;
+      else delete plan[conflict.date];
+      return { plan, planConflicts };
+    }),
 });

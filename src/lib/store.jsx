@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { CATALOGUE } from '../data/foods.js';
 import { DEFAULT_TARGETS } from '../data/nutrients.js';
 import { guessAisle } from '../data/stores.js';
 import { setMyRecipes } from '../data/recipes.js';
+import { ensureFullCatalogue } from './catalogue-loader.js';
 import {
   aisleFor, applyOffers, mergeItems, rememberAisle, routeFromTicks,
 } from './shopping.js';
@@ -21,16 +21,14 @@ import { DEFAULT_PERMISSIONS, householdPermission } from './household.js';
 import { dueBetween, dueNow, reminderContext } from './reminders.js';
 import { moveBefore } from './utils.js';
 import {
-  initialiseCloud, listConflictStatus, makeCloudListAdopter, pullCloud, pushCloud, retryQueuedCloud, subscribeCloud,
+  initialiseCloud, listConflictStatus, makeCloudStateAdopter, pullCloud, pushCloud, retryQueuedCloud, subscribeCloud,
 } from './cloud.js';
 import { startCloudRetryLoop } from './cloud-retry.js';
-import {
-  createHealthVault, decryptHealth, encryptHealth, HEALTH_CREDENTIAL_KEY, HEALTH_FIELDS, HEALTH_VAULT_KEY,
-  healthSnapshot, platformUnlockAvailable, registerPlatformUnlock, verifyPlatformUnlock, withoutHealth,
-} from './health-vault.js';
+import { platformUnlockAvailable } from './health-vault.js';
 import {
   hydrate, loadStoredState, parseBackup, serialiseBackup,
 } from './store-persistence.js';
+import { usePersistence } from './store-persistence-hook.js';
 import { useStoreApi } from './store-api.js';
 import { isUnderEighteen } from './youth.js';
 import { readAnalyticsConsent, setAnalyticsConsent } from './product-analytics.js';
@@ -39,15 +37,13 @@ import { createExampleWeekState } from '../data/exampleWeek.js';
 export { PHOTO_LIMIT } from './health-actions.js';
 
 import {
-  ACCENT_IDS, emojiFor, EMPTY_STATE, rolloverDay, STATE_VERSION, STORAGE_KEY, todayStamp, uid,
+  ACCENT_IDS, emojiFor, EMPTY_STATE, rolloverDay, STATE_VERSION, todayStamp, uid,
 } from './state.js';
 
 export {
   EMPTY_STATE, foodFromEntry, levelFromXp, recentFoodsFrom, rolloverDay, STATE_VERSION,
   STORAGE_KEY, todayStamp, XP_PER_LEVEL, xpIntoLevel,
 } from './state.js';
-
-const KEY = STORAGE_KEY;
 
 export { hydrate, parseBackup, serialiseBackup };
 
@@ -81,7 +77,6 @@ export function AppProvider({ children }) {
   // While an import is in flight its writes share one undo step — reverting a
   // 12-trip CSV import should not take 12 presses of Ctrl+Z.
   const undoBatch = useRef(null);
-  const applyingRemote = useRef(false);
   const vaultKey = useRef(null);
   const vaultSalt = useRef(null);
   const vaultWrites = useRef(Promise.resolve());
@@ -110,76 +105,26 @@ export function AppProvider({ children }) {
     });
   }, []);
 
-  /* Every write stamps the moment the app was last in front of you, which is
-     what the next visit measures "while you were away" from. It's written on
-     the way out rather than held in state, so the heartbeat can't re-render
-     every screen once a minute. */
-  const persist = (next) => {
-    try {
-      const stored = next.healthVaultEnabled ? withoutHealth(next, EMPTY_STATE) : next;
-      localStorage.setItem(KEY, JSON.stringify({
-        ...stored,
-        schemaVersion: STATE_VERSION,
-        lastSeenAt: Date.now(),
-      }));
-      if (next.healthVaultEnabled && vaultKey.current && vaultSalt.current) {
-        const snapshot = healthSnapshot(next);
-        vaultWrites.current = vaultWrites.current
-          .then(() => encryptHealth(snapshot, vaultKey.current, vaultSalt.current))
-          .then((record) => localStorage.setItem(HEALTH_VAULT_KEY, JSON.stringify(record)))
-          .catch((error) => setStorageIssue({
-            kind: 'write',
-            message: 'Your latest health changes could not be encrypted. Keep this tab open and export a backup.',
-            detail: error instanceof Error ? error.message : String(error),
-            raw: null,
-          }));
-      }
-      setStorageIssue((current) => (current?.kind === 'write' ? null : current));
-      return true;
-    } catch (error) {
-      setStorageIssue({
-        kind: 'write',
-        message: 'Your latest changes could not be saved. Export a backup before closing Forq.',
-        detail: error instanceof Error ? error.message : String(error),
-        raw: null,
-      });
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    if (applyingRemote.current) {
-      applyingRemote.current = false;
-      return;
-    }
-    if (!blockPersistence.current) persist(state);
-  }, [state]);
-
-  useEffect(() => {
-    const sync = (event) => {
-      if (event.key !== KEY || !event.newValue) return;
-      try {
-        applyingRemote.current = true;
-        undoHistory.current = [];
-        undoBatch.current = null;
-        setState(parseBackup(event.newValue));
-      } catch {
-        // Ignore incomplete writes from another tab.
-      }
-    };
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-
-  // Leaving is the most accurate moment to stamp, and there may be no render
-  // left after it — so this one writes directly.
+  // The state as it stands right now, for code that runs after a render —
+  // leaving the page, a sync reply, a debounced push.
   const latest = useRef(state);
   latest.current = demo ?? state;
 
-  // A losing push gets the household copy back on the 409; the adopter folds
-  // it in — rows both sides changed wait for a person, not a last writer.
-  const adoptReconciledList = makeCloudListAdopter({
-    latest, cloudMeta, skipCloudPush, setState: routedSetState,
+  /* Saving to this device: every write, another tab's write, the moment you
+     leave, and the theme. It is one concern with four moments, so it lives
+     beside the store rather than inside it. */
+  usePersistence({
+    state, theme: state.theme, accent: state.accent, latest, demoRef,
+    blockPersistence, setState, setStorageIssue,
+    vaultKey, vaultSalt, vaultWrites, undoHistory, undoBatch,
+  });
+
+  // A losing push — or a pull carrying a newer household copy — gets folded
+  // in by the whole-state adopter: rows both sides changed wait for a person,
+  // not a last writer, and independent edits coexist.
+  const adoptHouseholdCopy = makeCloudStateAdopter({
+    latest, cloudMeta, skipCloudPush,
+    setState: (next) => routedSetState(hydrate(next)),
   });
 
   useEffect(() => {
@@ -203,8 +148,9 @@ export function AppProvider({ children }) {
         if (currentVersion > requestedVersion && remoteVersion <= currentVersion) return;
         if (update.state) {
           cloudMeta.current = update.meta;
-          skipCloudPush.current = true;
-          setState(hydrate(update.state));
+          // Fold the household copy in rather than replacing this device's
+          // state wholesale — unsynced local edits used to vanish here.
+          adoptHouseholdCopy(hydrate(update.state), remoteVersion);
           if (liveConnection.current && update.status.kind === 'ready') {
             setCloudStatus({
               kind: 'live',
@@ -256,7 +202,7 @@ export function AppProvider({ children }) {
               if (localPush.status.kind === 'conflict' && localPush.status.remoteState) {
                 // Fold the household copy in (the 409 carries it) instead of
                 // asking for a reload that would drop the local edits.
-                const applied = adoptReconciledList(localPush.status.remoteState, localPush.status.remoteVersion);
+                const applied = adoptHouseholdCopy(hydrate(localPush.status.remoteState), localPush.status.remoteVersion);
                 if (applied) {
                   meta = cloudMeta.current;
                   status = listConflictStatus(applied, 'Your offline changes merged with the household.');
@@ -347,7 +293,7 @@ export function AppProvider({ children }) {
       }
       let status = result.status;
       if (status.kind === 'conflict' && status.remoteState) {
-        const applied = adoptReconciledList(status.remoteState, status.remoteVersion);
+        const applied = adoptHouseholdCopy(hydrate(status.remoteState), status.remoteVersion);
         if (applied) status = listConflictStatus(applied, 'Household changes merged with yours.');
       }
       if (status.kind !== 'ready') cloudReady.current = false;
@@ -359,25 +305,6 @@ export function AppProvider({ children }) {
     }, 750);
     return () => clearTimeout(cloudTimer.current);
   }, [state]);
-
-  useEffect(() => {
-    const mark = () => {
-      // A demo session must never reach storage, even on the way out.
-      if (!blockPersistence.current && !demoRef.current) persist(latest.current);
-    };
-    const onHide = () => { if (document.visibilityState === 'hidden') mark(); };
-    document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', mark);
-    return () => {
-      document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', mark);
-    };
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = state.theme;
-    document.documentElement.dataset.accent = state.accent;
-  }, [state.theme, state.accent]);
 
   /* Under 18 the product-insights answer is "no" and stays "no". Hiding the
      toggle isn't enough — a consent granted before a birthday, or restored
@@ -420,7 +347,28 @@ export function AppProvider({ children }) {
 
   /* Everything below is derived — the app never stores a number twice. */
   const effectiveState = demo ?? state;
-  const derived = useMemo(() => deriveApp(effectiveState), [effectiveState]);
+  // The eager tier of the book ships in the first paint and is what planning,
+  // the shopping list, cooking and logging run on offline from the first
+  // second. The long tail is a local module fetch; when it lands it appends to
+  // the same live arrays, so the derived view is recomputed once to pick the
+  // extra rows up. A failed load leaves the eager book in place — a partial
+  // book must never look like a broken app.
+  const [catalogueComplete, setCatalogueComplete] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    ensureFullCatalogue().then(
+      () => { if (!cancelled) setCatalogueComplete(true); },
+      () => { if (!cancelled) setCatalogueComplete(false); },
+    );
+    return () => { cancelled = true; };
+  }, []);
+  const derived = useMemo(
+    () => deriveApp(effectiveState),
+    // deriveApp is a pure function of the state; catalogueComplete is the one
+    // extra input, and it only ever changes once, when the long tail lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [effectiveState, catalogueComplete],
+  );
 
   /* Reminders answer to the clock as well as to your data, so they're derived
      against the tick rather than only against state changes. */

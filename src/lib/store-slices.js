@@ -15,7 +15,7 @@ export const DOMAIN_SLICES = {
   },
   plan: {
     title: 'Meal planning',
-    keys: ['plan', 'mealPlanEvents', 'calendarBusy', 'planSimulations'],
+    keys: ['plan', 'planConflicts', 'mealPlanEvents', 'calendarBusy', 'planSimulations'],
   },
   shopping: {
     title: 'Shopping & budget',

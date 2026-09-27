@@ -24,6 +24,7 @@ import PlanningSignals from './PlanningSignals.jsx';
 import PlanSimulator from './PlanSimulator.jsx';
 import TonightSlotGuard from './TonightSlotGuard.jsx';
 import JustPlannedOffer from './JustPlannedOffer.jsx';
+import PlanConflictCard from './PlanConflictCard.jsx';
 
 const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -97,6 +98,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
 
   return (
     <div className="pb-6 space-y-6">
+      <PlanConflictCard app={app} />
       <div className="hero-gradient px-5 pt-1 pb-3">
         <p className="text-[0.84375rem] font-semibold rise rise-1" style={{ color: 'var(--muted)' }}>
           {stats.meals

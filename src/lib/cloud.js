@@ -1,8 +1,9 @@
-import { adoptRemoteListRows } from './household-concurrency.js';
+import { adoptRemoteSharedState, baseStateSnapshot } from './household-merge.js';
+import { valueFingerprint } from './state-merge.js';
 
 const META_KEY = 'forq-cloud-meta-v1';
 const QUEUE_KEY = 'forq-cloud-queue-v1';
-const BASE_FP_KEY = 'forq-cloud-base-list-v1';
+const BASE_FP_KEY = 'forq-cloud-base-v2';
 
 const readMeta = () => {
   try {
@@ -47,10 +48,10 @@ export function lastSyncedAt() {
   return meta.syncedAt || null;
 }
 
-/* ---- Divergence base for the shared list --------------------------------
-   Row fingerprints of the shopping list as it was when this device last
-   confirmed a sync. A later 409 compares local rows against this base to
-   tell "I changed this" from "the household changed this" — without a base,
+/* ---- Divergence base for the shared state --------------------------------
+   Fingerprints of the state as it was when this device last confirmed a
+   sync. A later 409 or pull compares local rows against this base to tell
+   "I changed this" from "the household changed this" — without a base,
    every difference looks like a fight. Saved only on confirmed syncs, never
    on a failed push, so the base never drifts towards an unsynced edit. */
 
@@ -62,22 +63,17 @@ const readBase = () => {
   }
 };
 
-export function saveBaseListFingerprint(state, version) {
+export function saveBaseState(state, version) {
   try {
-    localStorage.setItem(BASE_FP_KEY, JSON.stringify({
-      version: Number(version || 0) || 0,
-      rows: baseListFingerprint(state?.shoppingList || []),
-      savedAt: Date.now(),
-    }));
+    localStorage.setItem(BASE_FP_KEY, JSON.stringify(baseStateSnapshot(state, version)));
   } catch {
     // Sync already tells the user when storage fails; the base is best effort.
   }
 }
 
-/** The row fingerprints recorded at the last confirmed sync. */
-export function readBaseListFingerprint() {
-  const base = readBase();
-  return (base && base.rows) || {};
+/** What this device last agreed with the household, or null. */
+export function readBaseState() {
+  return readBase();
 }
 
 /** When offline changes were queued, or null. */
@@ -138,7 +134,7 @@ export async function initialiseCloud(localState) {
       : null;
     if (remote.state) {
       saveMeta({ ...meta, syncedAt: Date.now() });
-      saveBaseListFingerprint(remote.state, meta.version);
+      saveBaseState(remote.state, meta.version);
       return {
         state: remote.state,
         meta: { ...meta, syncedAt: Date.now() },
@@ -152,7 +148,7 @@ export async function initialiseCloud(localState) {
         body: JSON.stringify({ version: 0, deviceId: meta.deviceId, state: syncState(localState) }),
       });
       meta = saveMeta({ ...meta, version: result.version, syncedAt: Date.now() });
-      saveBaseListFingerprint(localState, result.version);
+      saveBaseState(localState, result.version);
     } else {
       saveMeta({ ...meta, syncedAt: Date.now() });
     }
@@ -175,26 +171,35 @@ export async function initialiseCloud(localState) {
 export const listConflictStatus = (applied, mergedMessage) => (applied.conflicts
   ? {
     kind: 'conflict',
-    message: `${applied.conflicts} list item${applied.conflicts === 1 ? '' : 's'} changed on two devices — pick which copy on the List screen.`,
+    message: `${applied.conflicts} item${applied.conflicts === 1 ? ' was' : 's were'} changed on two devices — pick which copy to keep.`,
   }
   : { kind: 'ready', message: mergedMessage });
 
 /** Wire the pure fold into a live store: latest/meta/push guards are refs. */
-export const makeCloudListAdopter = ({ latest, cloudMeta, skipCloudPush, setState }) => (remoteState, remoteVersion) => {
-  const applied = adoptRemoteListRows(
-    latest.current,
-    remoteState?.shoppingList || [],
-    readBaseListFingerprint(),
-  );
-  if (!applied) return null; // nothing to adopt or settle
-  // The merged copy must reach the household, against the winning version.
+export const makeCloudStateAdopter = ({ latest, cloudMeta, skipCloudPush, setState }) => (remoteState, remoteVersion) => {
+  const applied = adoptRemoteSharedState(latest.current, remoteState, readBase());
+  // Whichever copy wins the fold, the household's version is now the base
+  // this device stands on — and the merged copy must reach the household
+  // against that winning version.
   skipCloudPush.current = false;
   cloudMeta.current = {
     ...(cloudMeta.current || {}),
     version: Number(remoteVersion) || Number(cloudMeta.current?.version || 0),
     syncedAt: Date.now(),
   };
-  setState({ ...latest.current, ...applied });
+  if (!applied) {
+    // Nothing to fold in. If the two copies already agree there is nothing
+    // to push back either; otherwise this device's copy still needs its turn
+    // at the household, so nudge the debounced push with the current state.
+    const echoes = valueFingerprint(latest.current) === valueFingerprint(remoteState || {});
+    skipCloudPush.current = echoes;
+    if (!echoes) setState({ ...latest.current });
+    return null;
+  }
+  // A fold that ends up exactly on the household copy has nothing of its own
+  // to add — adopting it must not bounce it back as a new version.
+  skipCloudPush.current = valueFingerprint(applied.state) === valueFingerprint(remoteState || {});
+  setState(applied.state);
   return { conflicts: applied.conflicts };
 };
 
@@ -206,7 +211,7 @@ export async function pushCloud(state, meta, { queueOnFailure = true } = {}) {
       body: JSON.stringify({ version: meta.version, deviceId: meta.deviceId, state: syncState(state) }),
     });
     // This device is now the canonical copy — the base for any future split.
-    saveBaseListFingerprint(state, result.version);
+    saveBaseState(state, result.version);
     return {
       meta: saveMetaIfNewer({ ...meta, version: result.version, syncedAt: Date.now() }),
       status: { kind: 'ready', message: 'All changes synced.' },
@@ -254,7 +259,7 @@ export async function pullCloud(meta) {
     });
     if (remote.version > meta.version && remote.state) {
       // The household copy is now canonical — the base for any future split.
-      saveBaseListFingerprint(remote.state, remote.version);
+      saveBaseState(remote.state, remote.version);
     }
     return {
       state: remote.version > meta.version ? remote.state : null,
