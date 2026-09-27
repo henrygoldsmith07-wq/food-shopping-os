@@ -73,7 +73,26 @@ export const pantryActions = (set) => ({
     const conflict = (state.pantryConflicts || []).find((entry) => entry.id === id);
     if (!conflict) return {};
     let pantry = state.pantry;
-    if (resolution === 'merge' && conflict.itemIds?.length > 1) {
+    if (conflict.mine && conflict.theirs) {
+      // Two devices changed one row differently (household-concurrency.js):
+      // this device's copy is on the shelf, the household's copy waits here.
+      // "Keep separate" shelves both, "Combine" merges what is measurable,
+      // "Dismiss" keeps this device's copy — the record keeps both either way.
+      const theirsRow = state.pantry.some((item) => item.id === conflict.theirs.id)
+        ? { ...conflict.theirs, id: `${conflict.theirs.id}__alt`, conflict: true }
+        : { ...conflict.theirs, conflict: true };
+      if (resolution === 'keep_separate') {
+        pantry = [...state.pantry, theirsRow];
+      } else if (resolution === 'merge') {
+        const withTheirs = [...state.pantry, theirsRow];
+        const ids = new Set([conflict.mine.id, theirsRow.id].filter(Boolean));
+        const selected = withTheirs.filter((item) => ids.has(item.id));
+        const rest = withTheirs.filter((item) => !ids.has(item.id));
+        pantry = [...rest, ...consolidate(selected, {
+          learnedAliases: state.aliasMemory || {}, today: state.day, force: true,
+        }).pantry];
+      }
+    } else if (resolution === 'merge' && conflict.itemIds?.length > 1) {
       const selected = state.pantry.filter((item) => conflict.itemIds.includes(item.id));
       const rest = state.pantry.filter((item) => !conflict.itemIds.includes(item.id));
       pantry = [...rest, ...consolidate(selected, {

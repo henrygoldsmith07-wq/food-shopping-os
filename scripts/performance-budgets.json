@@ -1,1 +1,40 @@
-{"budgets":[{"name":"Forq browser assets","path":".next/static","maxBytes":16000000}]}
+{
+  "budgets": [
+    {
+      "name": "App + catalogue chunk, gzipped",
+      "measure": "appChunkGzip",
+      "maxBytes": 300000,
+      "why": "What a first-time visitor actually downloads over the wire before the week screen is usable. The food catalogue and the recipe generator live in here on purpose — matching a spoken sentence, scanning a barcode and generating a plan all need the whole book, offline, immediately — so this is the number that stops the catalogue growing in silence."
+    },
+    {
+      "name": "App + catalogue chunk, uncompressed",
+      "measure": "appChunk",
+      "maxBytes": 920000,
+      "why": "The parse cost a phone pays before the app runs. Gzip hides it, so it is budgeted separately."
+    },
+    {
+      "name": "Largest single JS chunk",
+      "measure": "largestChunk",
+      "maxBytes": 800000,
+      "why": "One oversized chunk is a single unbreakable download. If this passes while the app chunk fails, a screen that can never load first has appeared."
+    },
+    {
+      "name": "All browser assets",
+      "path": ".next/static",
+      "maxBytes": 3500000,
+      "why": "Everything that ships to the browser, lazily loaded chunks included. A coarse ceiling on purpose, so a runaway dependency is caught even when it hides behind a dynamic import."
+    },
+    {
+      "name": "Catalogue data shipped eagerly",
+      "measure": "catalogueSource",
+      "maxBytes": 800000,
+      "why": "src/data is what the browser parses before anything can run — the single biggest thing in the bundle. It has to be measured, not assumed."
+    },
+    {
+      "name": "Client JS chunk count",
+      "measure": "chunkCount",
+      "maxCount": 60,
+      "why": "A rising chunk count means fragments nobody loads and nobody caches well. Past this, split less, not more."
+    }
+  ]
+}

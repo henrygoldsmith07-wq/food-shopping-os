@@ -5,6 +5,15 @@
  *
  * `n` takes [kcal, protein, carbs, fat, fibre]; `s` takes [label, grams] pairs
  * with the first entry acting as the default serving.
+ *
+ * The book is built in waves, and every wave ships in the first paint on
+ * purpose: matching a spoken sentence, reading a photographed plate, scanning
+ * a barcode and searching the catalogue all have to answer from the whole
+ * book the moment they are used, offline, on a first load. `FOODS` is
+ * therefore a live array that every wave registers into (first registration
+ * wins, so ids stay unique and the everyday rows keep their place at the front
+ * of a search) — see `registerFood` below, which is also how a food the user
+ * creates at runtime joins the catalogue.
  */
 
 import { microsFor, microsFromBlend, fibreFromBlend } from './micronutrients.js';
@@ -291,7 +300,29 @@ const CORE_FOODS = [
 // occurrence: generics and earlier branded definitions win, ids stay unique,
 // and later waves only ever contribute genuinely new products.
 const seenFoodIds = new Set();
-export const FOODS = [
+
+/** Add rows to the book, first registration wins, order preserved. */
+const appendFoods = (rows) => {
+  const added = [];
+  for (const food of rows) {
+    if (seenFoodIds.has(food.id)) continue;
+    seenFoodIds.add(food.id);
+    FOODS.push(food);
+    added.push(food);
+  }
+  return added;
+};
+
+/**
+ * Add a row, or a whole wave of rows, to the live book. This is how a food
+ * the user creates at runtime joins the catalogue, with the same "first
+ * registration wins" rule every shipped wave follows.
+ */
+export const registerFood = (row) => appendFoods(Array.isArray(row) ? row : [row]);
+
+/** The book. Live, so a food added at runtime is visible to every reader. */
+export const FOODS = [];
+appendFoods([
   ...CORE_FOODS,
   ...EXPANDED_FOODS,
   ...STORE_CUPBOARD_FOODS,
@@ -312,6 +343,8 @@ export const FOODS = [
   ...MASTER_FOOD_EXPANSION,
   ...CATALOGUE_SEVENTH_WAVE,
   ...CATALOGUE_EIGHTH_WAVE,
+  // First registration wins, so ids stay unique and the earlier rows keep
+  // precedence in search order.
   ...CATALOGUE_NINTH_WAVE,
   ...CATALOGUE_TENTH_WAVE,
   ...CATALOGUE_ELEVENTH_WAVE,
@@ -328,11 +361,7 @@ export const FOODS = [
   ...CATALOGUE_TWENTY_SECOND_WAVE,
   ...CATALOGUE_TWENTY_THIRD_WAVE,
   ...CATALOGUE_TWENTY_FOURTH_WAVE,
-].filter((food) => {
-  if (seenFoodIds.has(food.id)) return false;
-  seenFoodIds.add(food.id);
-  return true;
-});
+]);
 
 /* ---------- Restaurant menus ----------
    Menu items are stored the way a menu quotes them — calories, macros, portion
@@ -415,6 +444,8 @@ export const RESTAURANT_FOODS = RESTAURANT_MENUS.flatMap(([chain, emoji, items])
   }),
 );
 
+appendFoods(RESTAURANT_FOODS);
+
 /** Presets for quick-add — an estimate now beats a perfect entry never. */
 export const QUICK_ADD_PRESETS = [
   { label: 'Small snack', kcal: 150, protein: 4, carbs: 18, fat: 6 },
@@ -423,5 +454,5 @@ export const QUICK_ADD_PRESETS = [
   { label: 'Takeaway', kcal: 950, protein: 40, carbs: 100, fat: 40 },
 ];
 
-/** Everything loggable that ships with the app. */
-export const CATALOGUE = [...FOODS, ...RESTAURANT_FOODS];
+/** Everything loggable that ships with the app, plus the lazily loaded waves. */
+export const CATALOGUE = FOODS;
