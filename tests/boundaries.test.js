@@ -109,4 +109,44 @@ describe('dependency boundaries', () => {
     expect(clientCount).toBeGreaterThan(100);
     expect(serverCount).toBeGreaterThan(20);
   });
+
+  it('keeps the core loop free of optional-feature imports (optional → core, never core → optional)', () => {
+    // Core is the product promise: plan → pantry → shop → cook → learn.
+    // Optional features (nutrition, health, receipts, AI, …) may call into
+    // core, but core must never reach back: otherwise every optional idea
+    // becomes load-bearing for the weekly shop.
+    const CORE_FILES = [
+      'lib/mealplan.js',
+      'lib/portions.js',
+      'lib/week-loop.js',
+      'lib/shopping.js',
+      'lib/pantry.js',
+      'lib/measure.js',
+      'lib/measure-parse.js',
+      'lib/measure-ops.js',
+      'server/household-scope.js',
+      'server/households.js',
+      'server/schemas.js',
+      'server/api.js',
+    ].map((rel) => join(sourceRoot, rel));
+    // Basename substrings that mark an optional/supporting capability.
+    const OPTIONAL_HINTS = [
+      'nutrition', 'health', 'exercise', 'coach', 'ai-assistant', 'footprint',
+      'sustainab', 'receipt', 'live-price', 'livePrice', 'report', 'integration',
+      'monid', 'scrape', 'retailer', 'openrouter', 'calendar', 'workout',
+      'micronutrition', 'cycle', 'sleep', 'stress', 'fasting', 'coupon',
+    ];
+    const violations = [];
+    for (const file of CORE_FILES) {
+      for (const specifier of importsOf(file)) {
+        const target = resolve(file, specifier);
+        if (!target) continue;
+        const name = slash(target).split('/').pop().toLowerCase();
+        if (OPTIONAL_HINTS.some((hint) => name.includes(hint.toLowerCase()))) {
+          violations.push(`${slash(file)} → ${slash(target)}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
 });

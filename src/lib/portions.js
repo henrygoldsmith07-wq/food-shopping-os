@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * How many portions the household eats, and what that means for quantities.
  *
@@ -8,6 +9,24 @@
  * eaten rather than what the profile says. Every list path reads this one
  * decision, so the plan generator, the plan tab, the reconcile pass and the
  * week loop cannot disagree about how much to buy.
+ *
+ * @typedef {Object} PortionEvidence
+ * @property {number} observations
+ * @property {number|null} typical
+ *
+ * @typedef {Object} PortionDecision
+ * @property {number} portions
+ * @property {'learned'|'configured'} source
+ * @property {number} configured
+ * @property {number|'auto'} override
+ * @property {PortionEvidence} evidence
+ * @property {number} autoPortions
+ * @property {boolean} autoLearned
+ */
+
+/**
+ * @param {any} [source]
+ * @returns {PortionDecision}
  */
 
 import { isAdaptationHeld } from './adaptation-suppression.js';

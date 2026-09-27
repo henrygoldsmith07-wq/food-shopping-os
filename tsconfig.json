@@ -18,6 +18,7 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
+    "types": ["node"],
     "plugins": [
       {
         "name": "next"
@@ -28,6 +29,7 @@
     "src/**/*.js",
     "src/**/*.jsx",
     "src/domain/**/*.ts",
+    "src/typed/**/*.ts",
     "tests/**/*.js",
     "tests/**/*.jsx",
     "tests/**/*.ts",

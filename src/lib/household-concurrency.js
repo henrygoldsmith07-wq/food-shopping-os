@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Household concurrency — deterministic conflict behaviour for simultaneous edits.
  *
@@ -15,7 +16,28 @@ import { canonicalName } from './aliases.js';
 import { mergePantryQuantities } from './pantry-intelligence.js';
 import { parseQuantity } from './measure.js';
 
+/**
+ * @param {Array<any>} [list]
+ * @returns {Map<any, any>}
+ */
 const byId = (list = []) => new Map(list.map((i) => [i.id, i]));
+
+/**
+ * Deterministic conflict id derived from both fingerprints — no Math.random,
+ * so the same divergence always produces the same conflict id and repeated
+ * retries never duplicate it.
+ * @param {string} id
+ * @param {string} mineFp
+ * @param {string} theirsFp
+ */
+export const conflictIdFor = (id, mineFp, theirsFp) => {
+  let hash = 0;
+  const text = `${id}|${mineFp}|${theirsFp}`;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash * 31 + text.charCodeAt(i)) | 0);
+  }
+  return `lc_${id}_${(hash >>> 0).toString(36)}`;
+};
 
 export const mergeShoppingLists = (local = [], remote = [], { lastChangedAtLocal = 0, lastChangedAtRemote = 0 } = {}) => {
   const localById = byId(local);
@@ -140,8 +162,10 @@ export const reconcileShoppingDivergence = (local = [], remote = [], base = {}) 
     if (mineChanged && theirsChanged) {
       // Both sides edited the same row since they shared a base — a decision
       // only the household can make. Neither version is silently discarded.
+      // The conflict id is derived from both fingerprints (never random), so
+      // the same divergence retried twice yields the same conflict.
       conflicts.push({
-        id: `lc_${id}_${Math.random().toString(36).slice(2, 8)}`,
+        id: conflictIdFor(id, fpMine, fpTheirs),
         itemId: id,
         name: mine.name || theirs.name || 'Item',
         field: (LIST_FP_FIELDS.find((f) => (mine[f] ?? null) !== (theirs[f] ?? null)) || 'name'),
@@ -212,7 +236,14 @@ export const resolveVersionConflict = (localVersion, remoteVersion, localState, 
 };
 
 export const offlineQueue = {
-  enqueue: (queue = [], op) => [...queue, { ...op, queuedAt: Date.now(), id: `${op.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }],
+  enqueue: (queue = [], op, { now = Date.now(), random = Math.random } = {}) => {
+    // Deterministic when the caller supplies now/random (tests, retries):
+    // the same op enqueued twice keeps a stable identity instead of two
+    // random ids that later replay as duplicates.
+    const stamp = now();
+    const suffix = String(random()).slice(2, 8);
+    return [...queue, { ...op, queuedAt: stamp, id: `${op.type}-${stamp}-${suffix}` }];
+  },
   replay: async (queue = [], apply) => {
     const results = [];
     for (const op of queue) {

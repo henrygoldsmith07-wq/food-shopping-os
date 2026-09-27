@@ -12,9 +12,10 @@
     "test:e2e": "playwright test",
     "db:migrate": "node scripts/migrate.mjs",
     "db:check": "node scripts/check-database.mjs",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run build",
+    "verify": "npm run lint && npm run typecheck && npm run typecheck:strict && npm test && npm run build",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
+    "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
     "check:scraper": "node scripts/check-scraper.mjs",
     "check:monid": "node scripts/check-monid.mjs"
   },

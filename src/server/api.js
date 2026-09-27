@@ -1,15 +1,29 @@
+// @ts-check
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { getSession } from './auth.js';
 import { databaseConfigured, getDatabase } from './database.js';
 
 export class ApiError extends Error {
+  /** @type {number} */
+  status;
+  /**
+   * @param {number} status
+   * @param {string} message
+   */
   constructor(status, message) {
     super(message);
     this.status = status;
   }
 }
 
+/**
+ * Shared CSRF guard for every mutating API route. Safe methods and
+ * same-origin browser navigations (no Origin header) pass; a cross-site
+ * Origin is rejected. Read-only GET probes (health/readiness/status) and the
+ * cron job (bearer secret) are the only sanctioned exceptions.
+ * @param {{ headers: { get(name: string): string | null }, url: string }} request
+ */
 export function assertSameOrigin(request) {
   const origin = request.headers.get('origin');
   if (!origin) return;
@@ -49,6 +63,27 @@ export function objectId(value, label = 'identifier') {
     throw new ApiError(400, `Invalid ${label}.`);
   }
   return value;
+}
+
+/**
+ * Read a JSON body with a shared size cap, so no route accepts an unbounded
+ * payload. Returns the parsed value; throws 413 over the cap, 400 on
+ * malformed JSON. Routes that accept multipart uploads (receipts) or have
+ * their own documented cap keep their bespoke check and are listed in the
+ * API-contract test's exceptions.
+ * @param {{ text(): Promise<string> }} request
+ * @param {number} [maxBytes]
+ */
+export async function readJsonBody(request, maxBytes = 256 * 1024) {
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > maxBytes) {
+    throw new ApiError(413, 'Request body is too large.');
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new ApiError(400, 'Invalid JSON.');
+  }
 }
 
 export function handleApiError(error) {

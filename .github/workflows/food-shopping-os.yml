@@ -47,6 +47,9 @@ jobs:
       - name: Static type checking
         run: npm run typecheck
 
+      - name: Strict domain type checking
+        run: npm run typecheck:strict
+
       - name: Unit & integration tests
         run: npm test
 

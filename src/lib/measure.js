@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * One way to read a quantity, for the whole app.
  *
@@ -12,3 +13,4 @@
 
 export * from './measure-parse.js';
 export * from './measure-ops.js';
+

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../server/api.js';
+import { assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser } from '../../../server/api.js';
 import { classifyRequestSchema } from '../../../server/schemas.js';
 import { classifierTelemetry, classifyBatch } from '../../../server/classifier-adapter.js';
 import {
@@ -45,7 +45,7 @@ export async function POST(request) {
     // One batched classifier call at most — cheaper per request than the AI
     // route, so the guard is correspondingly lighter.
     await rateLimit(`classify:${user.id}`, 300, 3600000);
-    const input = classifyRequestSchema.parse(await request.json());
+    const input = classifyRequestSchema.parse(await readJsonBody(request));
 
     const results = await classifyBatch(input.taxonomy, input.items, {
       deterministic: DETERMINISTIC[input.taxonomy],
