@@ -4,6 +4,7 @@ import { shoppingForWeekLoop, weekLoopSnapshot } from '../src/lib/week-loop.js';
 import { deriveDynamicShoppingList } from '../src/lib/dynamic-shopping.js';
 import { householdPortionsFor } from '../src/lib/portions.js';
 import { weekDates } from '../src/lib/kitchen.js';
+import { byId } from '../src/data/recipes.js';
 
 /**
  * One authoritative derivation per concept: the week loop, the plan tab and
@@ -12,14 +13,17 @@ import { weekDates } from '../src/lib/kitchen.js';
  * screens can never quote different quantities for the same plan.
  */
 describe('single source of truth — plan → list', () => {
+  // A real book recipe: a plan entry only exists once the recipe resolves, so
+  // a made-up id would quietly test the empty case instead of the real one.
+  const CURRY = 'chickpea-curry';
   const state = {
     day: '2026-09-28',
     portions: 2,
-    plan: { '2026-09-29': { dinner: 'r1' }, '2026-09-30': { dinner: 'r1' } },
+    plan: { '2026-09-29': { dinner: CURRY }, '2026-09-30': { dinner: CURRY } },
     pantry: [],
     waste: [],
     cooked: [],
-    recipes: [{ id: 'r1', name: 'Chilli', servings: 2, ingredients: [{ name: 'Beans', qty: '400 g' }] }],
+    recipes: [byId(CURRY)],
   };
   it('week loop and plan paths agree on portions and list contents', () => {
     const dates = weekDates(state.day);
@@ -35,6 +39,7 @@ describe('single source of truth — plan → list', () => {
     const snapshot = weekLoopSnapshot({ ...state, shoppingList: [], shops: [], leftovers: [] });
     expect(snapshot.listPreview.map((i) => i.name).sort()).toEqual(loopNames);
     expect(direct.map((i) => i.name).sort()).toEqual(loopNames);
+    expect(loopNames.length).toBeGreaterThan(0);
   });
 
   it('plan entries, stats and leftover coverage read the same plan', () => {
@@ -43,6 +48,9 @@ describe('single source of truth — plan → list', () => {
     expect(planStats(state.plan, dates).meals).toBe(2);
     expect(leftoverCoverageForPlan(state.plan, dates, [], { people: 2 })).toHaveLength(2);
     const dynamic = deriveDynamicShoppingList({ ...state, shoppingList: [], shops: [] }, { dates });
-    expect(dynamic.some((r) => r.name === 'Beans')).toBe(true);
+    expect(dynamic.length).toBeGreaterThan(0);
+    expect(dynamic.map((row) => row.name).sort())
+      .toEqual(shoppingForPlan(state.plan, dates, { pantry: [], today: state.day, people: 2 })
+        .map((row) => row.name).sort());
   });
 });

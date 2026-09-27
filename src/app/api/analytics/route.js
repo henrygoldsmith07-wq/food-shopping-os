@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import {
-  ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser,
+  ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser,
 } from '../../../server/api.js';
 import { requireHousehold } from '../../../server/households.js';
 import { getDatabase } from '../../../server/database.js';
@@ -44,7 +44,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`analytics:${user.id}`, 120);
-    const payload = analyticsBatchSchema.parse(await request.json());
+    const payload = analyticsBatchSchema.parse(await readJsonBody(request));
     const { household } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
     const db = await getDatabase();
     const now = new Date();

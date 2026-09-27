@@ -1,7 +1,7 @@
 import { del } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import {
-  ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser,
+  ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser,
 } from '../../../server/api.js';import { deleteHouseholdData, ensurePersonalHousehold, publicHousehold, requireHousehold,
 } from '../../../server/households.js';
 import { writeAuditEvent } from '../../../server/audit.js';
@@ -39,7 +39,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`households:create:${user.id}`, 10, 3600000);
-    const input = householdSchema.parse(await request.json());
+    const input = householdSchema.parse(await readJsonBody(request));
     const db = await getDatabase();
     const now = new Date();
     const inserted = await db.collection('households').insertOne({

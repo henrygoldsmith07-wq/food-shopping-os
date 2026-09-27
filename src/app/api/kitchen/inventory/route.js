@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
-  ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser,
+  ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser,
 } from '../../../../server/api.js';
 import { kitchenInventorySchema } from '../../../../server/schemas.js';
 import { freeChat, freeVision, isOpenRouterConfigured } from '../../../../server/openrouter.js';
@@ -31,7 +31,7 @@ export async function POST(request) {
     if (!isOpenRouterConfigured()) {
       throw new ApiError(503, 'Reading a kitchen photo needs an AI provider configured. Type or paste the list instead.');
     }
-    const input = kitchenInventorySchema.parse(await request.json());
+    const input = kitchenInventorySchema.parse(await readJsonBody(request));
 
     let result;
     try {

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import {
-  ApiError, assertSameOrigin, handleApiError, objectId, rateLimit, requireUser,
+  ApiError, assertSameOrigin, handleApiError, objectId, rateLimit, readJsonBody, requireUser,
 } from '../../../server/api.js';
 import { writeAuditEvent } from '../../../server/audit.js';
 import { coachTokenHash } from '../../../server/coach-shares.js';
@@ -48,7 +48,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`coach-shares:create:${user.id}`, 10, 3600000);
-    const input = coachShareSchema.parse(await request.json());
+    const input = coachShareSchema.parse(await readJsonBody(request));
     const { household, membership } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
     requireAdmin(membership);
     if (input.scopes.includes('health') && !membership.permissions?.includes('health')) {

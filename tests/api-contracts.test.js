@@ -115,4 +115,14 @@ describe('api contract consistency', () => {
     });
     expect(missing).toEqual([]);
   });
+
+  it('no route reads a raw JSON body without the shared size cap', () => {
+    // `request.json()` has no size limit, so one stray call is one unbounded
+    // payload. readJsonBody is the only sanctioned way in: it caps at 256 KB
+    // and returns the same 400/413 envelope for malformed or oversized JSON.
+    // Routes that take multipart uploads (receipts) never parse JSON at all.
+    const raw = routeFiles(API_ROOT)
+      .filter((f) => readFileSync(f, 'utf8').match(/request\s*\.\s*json\s*\(/));
+    expect(raw).toEqual([]);
+  });
 });

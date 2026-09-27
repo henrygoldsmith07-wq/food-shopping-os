@@ -84,6 +84,16 @@ export const reduceCountQty = (qty) => {
  * rejection holds the change for the holding period, two inside the window
  * remove its influence entirely. The rejection is the household speaking;
  * regenerating the list must not out-shout them.
+ *
+ * @param {Array<any>} items
+ * @param {{
+ *   waste?: Array<any>,
+ *   cooked?: Array<any>|null,
+ *   recipes?: Array<any>,
+ *   today?: string,
+ *   learnedAliases?: Record<string, string>,
+ *   held?: Set<string>|Array<string>|null,
+ * }} [options]
  */
 export const wasteAwareList = (items = [], { waste = [], cooked = null, recipes, today, learnedAliases = {}, held = null } = {}) => {
   const profile = recentWasteProfile(waste, { today, learnedAliases });

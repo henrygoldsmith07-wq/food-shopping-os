@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../../server/api.js';
+import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser } from '../../../../server/api.js';
 import { requireHousehold } from '../../../../server/households.js';
 import { getDatabase } from '../../../../server/database.js';
 import { invitationSchema } from '../../../../server/schemas.js';
@@ -13,7 +13,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`invites:create:${user.id}`, 20, 3600000);
-    const input = invitationSchema.parse(await request.json());
+    const input = invitationSchema.parse(await readJsonBody(request));
     const { household, membership } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
     if (!['owner', 'admin'].includes(membership.role)) throw new ApiError(403, 'Household admin access required.');
     const token = randomBytes(32).toString('base64url');
@@ -44,7 +44,7 @@ export async function PATCH(request) {
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`invites:accept:${user.id}`, 20, 3600000);
-    const { token } = await request.json();
+    const { token } = await readJsonBody(request);
     if (typeof token !== 'string' || token.length < 32 || token.length > 100) throw new ApiError(400, 'Invalid invitation.');
     const db = await getDatabase();
     const invite = await db.collection('invitations').findOne({

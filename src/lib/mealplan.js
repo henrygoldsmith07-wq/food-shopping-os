@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * The meal plan, read every way the app needs it.
  *
@@ -6,6 +7,10 @@
  * what to batch cook, what leftovers already cover and what is left to buy are
  * all derived here, so nothing is stored twice and a move is a pure function of
  * the plan you had.
+ *
+ * @typedef {import('../typed/core.js').MealSlot} MealSlot
+ * @typedef {import('../typed/core.js').PlanMap} PlanMap
+ * @typedef {import('../typed/core.js').ShoppingRow} ShoppingRow
  */
 
 import { byId } from '../data/recipes.js';
@@ -53,7 +58,10 @@ export const monthGrid = (stamp = dayStamp()) => {
 
 export const shiftWeek = (stamp = dayStamp(), n = 0) => addDays(weekStart(stamp), n * 7);
 
-export const weekOffset = (from = dayStamp(), to = dayStamp()) => Math.round((new Date(`${weekStart(to)}T12:00:00`) - new Date(`${weekStart(from)}T12:00:00`)) / 604800000);
+/** How many whole weeks lie between the week containing `from` and `to`. */
+export const weekOffset = (from = dayStamp(), to = dayStamp()) => Math.round(
+  (new Date(`${weekStart(to)}T12:00:00`).getTime() - new Date(`${weekStart(from)}T12:00:00`).getTime()) / 604800000,
+);
 
 export const shiftMonth = (stamp = dayStamp(), n = 0) => {
   const d = new Date(`${monthStart(stamp)}T12:00:00`);

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
-  ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser,
+  ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser,
 } from '../../../../../server/api.js';
 import { calendarAccount } from '../../../../../server/calendar.js';
 import { calendarEventSchema, calendarRangeSchema } from '../../../../../server/schemas.js';
@@ -10,7 +10,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`calendar:${user.id}`, 60, 3600000);
-    const input = calendarEventSchema.parse(await request.json());
+    const input = calendarEventSchema.parse(await readJsonBody(request));
     const accessToken = await calendarAccount(user, input.provider);
     const isGoogle = input.provider === 'google';
     const endpoint = isGoogle

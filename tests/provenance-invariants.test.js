@@ -17,11 +17,17 @@ describe('external-data provenance travels with the value', () => {
   });
 
   it('estimates and community observations are never live quotes', () => {
-    expect(normaliseProvenance({ name: 'Milk', price: 1.1, source: 'estimated' }).isLive).toBe(false);
-    expect(normaliseProvenance({ name: 'Milk', price: 1.1, source: 'estimated' }).warning).toBeTruthy();
+    const estimate = normaliseProvenance({ name: 'Milk', price: 1.1, source: 'estimated' });
+    expect(estimate.isLive).toBe(false);
+    expect(estimate.warning).toBeTruthy();
+    // A community price from years ago is not a current shelf price: the row
+    // has to carry its own age and say so in the freshness the UI shows.
     const community = normaliseProvenance({ name: 'Milk', price: 1.0, source: 'observed', observedAt: '2020-01-01' });
     expect(community.isLive).toBe(false);
-    expect(community.stale || community.freshnessLabel).toBeTruthy();
+    expect(community.ageDays).toBeGreaterThan(365);
+    expect(community.freshness).toMatch(/may be out of date/);
+    expect(community.freshnessTone).toBe('danger');
+    expect(community.warning).toBeTruthy();
   });
 
   it('missing data resolves to "unavailable", never an invented price', () => {

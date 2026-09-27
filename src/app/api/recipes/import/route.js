@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
-  ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser,
+  ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser,
 } from '../../../../server/api.js';
 import { recipeImportSchema } from '../../../../server/schemas.js';
 import { freeChat, freeVision, isOpenRouterConfigured } from '../../../../server/openrouter.js';
@@ -214,7 +214,7 @@ export async function POST(request) {
     // Each import is one page fetch and at most one model call, so the guard is
     // tighter than the general AI limit.
     await rateLimit(`recipe-import:${user.id}`, 60, 3600000);
-    const input = recipeImportSchema.parse(await request.json());
+    const input = recipeImportSchema.parse(await readJsonBody(request));
 
     if (input.url) return await fromUrl(input.url, request.signal);
     if (input.text) return await fromText(input.text, 'photo', request.signal);

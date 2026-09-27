@@ -236,7 +236,15 @@ export const resolveVersionConflict = (localVersion, remoteVersion, localState, 
 };
 
 export const offlineQueue = {
-  enqueue: (queue = [], op, { now = Date.now(), random = Math.random } = {}) => {
+  /**
+   * @param {Array<any>} queue
+   * @param {{ type: string, [key: string]: any }} op
+   * @param {{ now?: () => number, random?: () => number }} [options]
+   *   `now` and `random` are injected rather than reached for globally so a
+   *   retry of the same op keeps one identity instead of two that later replay
+   *   as duplicates.
+   */
+  enqueue: (queue = [], op, { now = Date.now, random = Math.random } = {}) => {
     // Deterministic when the caller supplies now/random (tests, retries):
     // the same op enqueued twice keeps a stable identity instead of two
     // random ids that later replay as duplicates.

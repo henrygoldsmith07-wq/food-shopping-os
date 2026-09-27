@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../server/api.js';
+import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser } from '../../../server/api.js';
 import { requireHousehold } from '../../../server/households.js';
 import { aiRequestSchema } from '../../../server/schemas.js';
 import { classifyAiFailure, freeChat, isOpenRouterConfigured } from '../../../server/openrouter.js';
@@ -21,7 +21,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     const user = await requireUser();
     const { household } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
-    const input = aiRequestSchema.parse(await request.json());
+    const input = aiRequestSchema.parse(await readJsonBody(request));
 
     // Route before spending anything. A question the taxonomy layer can answer
     // outright — which aisle, which meal slot — is answered from the rules, no

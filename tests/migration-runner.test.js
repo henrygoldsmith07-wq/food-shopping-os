@@ -3,7 +3,6 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { applyMigrations, validateMigrations } from '../scripts/migrate.mjs';
-import { applyMigrations, validateMigrations } from '../scripts/migrate.mjs';
 
 function fakeDatabase(existing = []) {
   const applied = [...existing];

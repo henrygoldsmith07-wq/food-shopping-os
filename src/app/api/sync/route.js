@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../server/api.js';
+import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser } from '../../../server/api.js';
 import { requireHousehold } from '../../../server/households.js';
 import { getDatabase } from '../../../server/database.js';
 import { publishHousehold } from '../../../server/realtime.js';
@@ -40,15 +40,7 @@ export async function PUT(request) {
     if (Number(request.headers.get('content-length') || 0) > MAX_BYTES) throw new ApiError(413, 'Sync payload is too large.');
     const user = await requireUser();
     await rateLimit(`sync:put:${user.id}`, 90);
-    const raw = await request.text();
-    if (new TextEncoder().encode(raw).byteLength > MAX_BYTES) throw new ApiError(413, 'Sync payload is too large.');
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new ApiError(400, 'Invalid JSON.');
-    }
-    const payload = syncSchema.parse(parsed);
+    const payload = syncSchema.parse(await readJsonBody(request, MAX_BYTES));
     const { household, membership } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
     const db = await getDatabase();
     const now = new Date();

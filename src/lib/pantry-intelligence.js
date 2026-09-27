@@ -415,7 +415,16 @@ export const shortfallQuantity = (available, needed, { ingredient = '' } = {}) =
   return formatQuantity({ ...need, amount: difference.shortfall });
 };
 
-/** Explain a shortfall in language that makes the evidence and next action clear. */
+/**
+ * Explain a shortfall in language that makes the evidence and next action clear.
+ * @param {{
+ *   name?: string,
+ *   needQty?: string,
+ *   availableQty?: string,
+ *   shortfallQty?: string,
+ *   sourceRecipes?: Array<string>,
+ * }} [input]
+ */
 export const explainPantryShortfall = ({
   name, needQty, availableQty = '', shortfallQty = '', sourceRecipes = [],
 } = {}) => {

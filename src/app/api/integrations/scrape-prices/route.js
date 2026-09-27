@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ApiError, assertSameOrigin, handleApiError, rateLimit, requireUser } from '../../../../server/api.js';
+import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser } from '../../../../server/api.js';
 import { scrapeListRequestSchema, scrapeRequestSchema } from '../../../../server/schemas.js';
 import { scrapePrices, scrapeableRetailers, scraperEnabled } from '../../../../server/price-scraper.js';
 import { monidBatchPrices, monidOnPath } from '../../../../server/monid-prices.js';
@@ -31,7 +31,7 @@ export async function POST(request) {
     const user = await requireUser();
     if (!scraperEnabled()) throw new ApiError(503, 'Live price checking is switched off.');
     await rateLimit(`scrape-prices:${user.id}`, 60, 3600000);
-    const body = await request.json().catch(() => { throw new ApiError(400, 'Expected a JSON body.'); });
+    const body = await readJsonBody(request);
     if (Array.isArray(body?.items)) {
       const input = scrapeListRequestSchema.parse(body);
       const deadline = Date.now() + BATCH_BUDGET_MS;
