@@ -17,7 +17,8 @@
 import { aisleFor, mergeItems, rememberAisle, shoppingNameKey } from './shopping.js';
 import { guessAisle } from '../data/stores.js';
 import { householdPermission } from './household.js';
-import { uid, emojiFor } from './state.js';
+import { uid } from './state.js';
+import { emojiFor } from './food-lookup.js';
 import { duplicatePurchaseCheck } from './shopping-intelligence.js';
 import { applyWasteLearning, wasteLearningProfile } from './waste-learning.js';
 import { householdPortionsFor } from './portions.js';

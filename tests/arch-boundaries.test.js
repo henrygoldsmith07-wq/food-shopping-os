@@ -102,7 +102,14 @@ describe('forq food-loop boundaries', () => {
   it('no source file imports anything that no longer exists', () => {
     const resolveTarget = (file, spec) => {
       const base = join(dirname(file), spec);
-      const candidates = [base, `${base}.js`, `${base}.jsx`, `${base}.ts`, `${base}.tsx`, join(base, 'index.js')];
+      // TypeScript lets you import `core.js` and have it resolve to `core.ts`,
+      // so a `.js` specifier has to be tried against its `.ts`/`.tsx` sources
+      // too. Without this, every JSDoc `import('../typed/core.js')` reads as a
+      // dangling import when the file is right there.
+      const swapped = spec.endsWith('.js') || spec.endsWith('.jsx')
+        ? [base.replace(/\.jsx?$/, '.ts'), base.replace(/\.jsx?$/, '.tsx')]
+        : [];
+      const candidates = [base, `${base}.js`, `${base}.jsx`, `${base}.ts`, `${base}.tsx`, ...swapped, join(base, 'index.js')];
       for (const c of candidates) {
         try { if (statSync(c).isFile()) return c; } catch { /* try next */ }
       }

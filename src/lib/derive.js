@@ -8,6 +8,7 @@
  */
 
 import { CATALOGUE } from '../data/foods.js';
+import { combinedCatalogue, combinedRecipes } from './reference-data.js';
 import { GLASS_ML } from '../data/nutrients.js';
 import { dayTotals, hydration, nutrientCoverage } from './nutrition.js';
 import {
@@ -26,7 +27,7 @@ import {
 import { couponVaultStats, couponsForList } from './coupons.js';
 import { derivePriceAnomalies, priceAnomalyForList } from './price-alerts.js';
 import { shoppingInsightFor } from './shopping-intelligence.js';
-import { recentFoodsFrom } from './state.js';
+import { recentFoodsFrom } from './food-lookup.js';
 import {
   evaluateFoodSuitability,
   filterBySuitability,
@@ -134,8 +135,11 @@ export const deriveApp = (state) => {
     dislikes: memberDislikes,
   };
 
-  const catalogue = [...CATALOGUE, ...state.customFoods];
-  const recipeBook = [...RECIPES, ...state.myRecipes];
+  // The two reference lists every derived number below is read from. Cached by
+  // identity: they are six thousand rows, and copying them on every unrelated
+  // state change was the single largest cost in deriving. See reference-data.js.
+  const catalogue = combinedCatalogue(CATALOGUE, state.customFoods);
+  const recipeBook = combinedRecipes(RECIPES, state.myRecipes);
   const tasteProfile = buildTasteProfile(recipeBook, state.tasteRatings, state.favourites, state.cooked);
   const planningDates = weekDates(state.day);
   const useSoon = soonIngredients(state.pantry, { today: state.day });
@@ -404,7 +408,9 @@ export const deriveApp = (state) => {
       // The same headroom the plan generator ranks against caps the basket.
       weeklyBudget: state.weeklyBudget, budgetSpent: spentInWeek(state.shops, state.day),
     }),
-    stats: kitchenStats({ ...state, xp: progress.xp }, state.day),
+    stats: kitchenStats({ ...state, xp: progress.xp }, state.day, {
+      recipesById: (id) => recipeBook.find((r) => r.id === id) || null,
+    }),
     personaTier,
 
     /* ---------- Central food suitability (every surface reads these) ---------- */

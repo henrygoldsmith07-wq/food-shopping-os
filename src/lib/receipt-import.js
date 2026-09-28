@@ -9,7 +9,8 @@
  * exactly like recorded ones.
  */
 
-import { emojiFor, todayStamp, uid } from './state.js';
+import { todayStamp, uid } from './state.js';
+import { emojiFor } from './food-lookup.js';
 import { guessAisle } from '../data/stores.js';
 
 export const RECEIPT_CSV_TEMPLATE = 'date,store,item,qty,price\n2026-08-03,Tesco,Wholemeal bread,1,1.35\n2026-08-03,Tesco,Semi-skimmed milk 2L,1,1.65';

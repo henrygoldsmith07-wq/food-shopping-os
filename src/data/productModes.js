@@ -10,8 +10,13 @@
 
 import { NOTIFICATION_PRESETS } from './reminders.js';
 import { ALL_ENABLED_TOOLS, DEFAULT_ENABLED_TOOLS } from './optionalTools.js';
+import { BAR_TABS, SCREENS, barIdsFor, screenById } from '../lib/screens.js';
 
-const ALL_TABS = ['home', 'plan', 'log', 'shop', 'recipes'];
+// A mode may promote a contextual screen (nutrition puts the diary up front).
+// It may only name screens the registry knows, so a typo can't invent a
+// destination that doesn't exist.
+const ALL_TABS = BAR_TABS.map((screen) => screen.id);
+const CONTEXTUAL_TABS = SCREENS.filter((screen) => !screen.bar).map((screen) => screen.id);
 const ALL_ADVANCED = ['planet', 'micros', 'fasting', 'results', 'register'];
 const ALL_PROFILE = [
   'goals', 'household', 'guidance', 'health', 'exercise', 'reminders', 'nutrition', 'spending', 'progress',
@@ -47,7 +52,7 @@ export const PRODUCT_MODES = [
     blurb: 'Decide what to cook — the list comes from the plan.',
     entryGoal: 'plan',
     widgets: ['rings', 'setup'],
-    primaryTabs: ['home', 'plan', 'recipes', 'shop', 'log'],
+    primaryTabs: ['home', 'plan', 'cook', 'recipes', 'shop'],
     setupOrder: ['plan', 'cook', 'pantry', 'shop', 'log', 'targets'],
     recommendationBoost: {
       plan: 18,
@@ -74,7 +79,7 @@ export const PRODUCT_MODES = [
     blurb: 'One list from the plan, spend tracking, fewer impulse buys.',
     entryGoal: 'shop',
     widgets: ['rings', 'setup', 'numbers'],
-    primaryTabs: ['home', 'shop', 'plan', 'recipes', 'log'],
+    primaryTabs: ['home', 'shop', 'plan', 'cook', 'recipes'],
     setupOrder: ['shop', 'pantry', 'plan', 'cook', 'log', 'targets'],
     recommendationBoost: {
       budget: 22,
@@ -101,7 +106,11 @@ export const PRODUCT_MODES = [
     blurb: 'Diary, targets and macros first — planning supports the numbers.',
     entryGoal: 'plan',
     widgets: ['rings', 'setup', 'log', 'numbers', 'report'],
-    primaryTabs: ['home', 'log', 'plan', 'recipes', 'shop'],
+    // Nutrition promotes the diary into the second slot — in this mode the
+    // diary is the work — and drops Recipes from the bar rather than making
+    // the bar six wide. Recipes stays one tap away from any planned meal,
+    // which is how this mode actually reaches a dish.
+    primaryTabs: ['home', 'log', 'plan', 'cook', 'shop'],
     setupOrder: ['targets', 'log', 'plan', 'cook', 'pantry', 'shop'],
     recommendationBoost: {
       'log-today': 20,
@@ -127,7 +136,7 @@ export const PRODUCT_MODES = [
     blurb: 'Pantry, people, shared lists and less food going off.',
     entryGoal: 'pantry',
     widgets: ['rings', 'setup', 'loop'],
-    primaryTabs: ['home', 'shop', 'plan', 'recipes', 'log'],
+    primaryTabs: ['home', 'shop', 'plan', 'cook', 'recipes'],
     setupOrder: ['pantry', 'shop', 'plan', 'cook', 'log', 'targets'],
     recommendationBoost: {
       expiry: 24,
@@ -199,12 +208,21 @@ export const applyProductMode = (modeId, base = {}) => {
   };
 };
 
-/** Bottom-nav order for a mode (unknown tabs appended, never dropped). */
-export const tabsForMode = (modeId, allTabs = ALL_TABS) => {
+/**
+ * Bar order for a mode.
+ *
+ * The five-tab hierarchy is the answer for any mode that expresses no
+ * preference, so a mode that only wants to *reorder* the bar says so by naming
+ * the screens it cares about; a mode with nothing to say inherits the default
+ * rather than a list that has to be kept in step by hand.
+ *
+ * A contextual screen named here (nutrition's diary) is promoted into the bar
+ * and displaces the last of the five — a mode can change what Forq leads with
+ * without adding a permanent destination.
+ */
+export const tabsForMode = (modeId) => {
   const m = resolveProductMode(modeId);
-  const preferred = m.primaryTabs.filter((id) => allTabs.includes(id));
-  const rest = allTabs.filter((id) => !preferred.includes(id));
-  return [...preferred, ...rest];
+  return barIdsFor(m.primaryTabs);
 };
 
 /** Sort setup steps by the mode’s preferred unlock order. */
@@ -246,4 +264,6 @@ export const profileSectionVisible = (modeId, section) => {
   return sections.includes(section);
 };
 
-export { ALL_TABS, ALL_ADVANCED, ALL_PROFILE };
+export { ALL_TABS, CONTEXTUAL_TABS, ALL_ADVANCED, ALL_PROFILE };
+export { BAR_TABS, SCREENS, screenById };
+export { labelFor, titleFor } from '../lib/screens.js';

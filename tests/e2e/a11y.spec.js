@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { BAR_TABS } from '../../src/lib/screens.js';
 
 /**
  * Accessibility sweep across the primary screens.
@@ -9,11 +10,16 @@ import AxeBuilder from '@axe-core/playwright';
  */
 
 /**
- * The app's actual bottom bar. Pantry is deliberately absent: it is a sheet
- * reachable from Home and the header, not a tab, so it is scanned separately
- * below rather than clicked for as a tab that has never existed.
+ * The app's actual bottom bar — the five-tab hierarchy, in order. Read from
+ * the same registry the app renders from rather than restated, so this file
+ * cannot drift from the navigation it is testing.
+ *
+ * Pantry is deliberately absent: it is a sheet reachable from the week screen
+ * and the header, not a tab, so it is scanned separately below rather than
+ * clicked for as a tab that has never existed. Log and Learn are contextual
+ * for the same reason, and are covered by the same sweep of their own.
  */
-const TABS = ['Week', 'List', 'Plan', 'Cook', 'Learn', 'Recipes'];
+const TABS = BAR_TABS.map((screen) => screen.label);
 
 /**
  * Onboarding, unconditionally and by role.

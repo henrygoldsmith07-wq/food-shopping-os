@@ -4,19 +4,25 @@
  * Kept apart from the provider in `store.jsx` so that what a Forq install *is*
  * — an empty kitchen with nothing pretended — can be read, and tested, without
  * mounting React.
+ *
+ * This module deliberately imports no reference data. It is on the boot path:
+ * storage reads it, hydration writes it, and every screen's state object is
+ * built from it. Pulling the food catalogue or the recipe book in through here
+ * would put both of them in the first paint, so the two helpers that did need
+ * the catalogue now live in `food-lookup.js`, which is loaded with the rest of
+ * the reference data instead.
  */
 
-import { CATALOGUE } from '../data/foods.js';
 import { DEFAULT_TARGETS } from '../data/nutrients.js';
-import { dayStamp, levelFrom } from './kitchen.js';
-import { searchFoods } from './foodlog.js';
+import { dayStamp } from './kitchen-dates.js';
+import { STORAGE_KEY, STATE_VERSION } from './state-versions.js';
 
-export const STORAGE_KEY = 'forq-state-v2';
-export const STATE_VERSION = 4;
+export { STORAGE_KEY, STATE_VERSION };
 
 /* ---------- Pure helpers (exported for tests) ---------- */
+/** XP per level — one line of arithmetic, kept beside the state it levels. */
 export const XP_PER_LEVEL = 160;
-export const levelFromXp = (xp) => levelFrom(xp, XP_PER_LEVEL);
+export const levelFromXp = (xp) => Math.floor(Math.max(0, xp) / XP_PER_LEVEL) + 1;
 export const xpIntoLevel = (xp) => Math.max(0, xp) % XP_PER_LEVEL;
 
 export const todayStamp = dayStamp;
@@ -42,27 +48,9 @@ export const foodFromEntry = (e) => ({
   servings: [{ label: e.servingLabel || `${e.grams} ${e.unit || 'g'}`, grams: e.grams }],
 });
 
-/** Most recently logged foods, newest first, one row per food. */
-export const recentFoodsFrom = (log = {}, catalogue = CATALOGUE, limit = 24) => {
-  const days = Object.keys(log).sort().reverse();
-  const seen = new Map();
-  for (const day of days) {
-    for (const e of [...(log[day] || [])].reverse()) {
-      if (!e.foodId || seen.has(e.foodId)) continue;
-      const food = catalogue.find((f) => f.id === e.foodId) || (e.per100 ? foodFromEntry(e) : null);
-      if (food) seen.set(e.foodId, food);
-      if (seen.size >= limit) return [...seen.values()];
-    }
-  }
-  return [...seen.values()];
-};
-
 export const ACCENT_IDS = ['mono', 'forest', 'ocean', 'wine', 'honey', 'sage', 'clay', 'ink'];
 
 export const uid = (prefix) => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-
-/** An emoji for a typed-in item, borrowed from the food catalogue when it matches. */
-export const emojiFor = (name) => searchFoods(name, CATALOGUE, 1)[0]?.emoji || '🍽️';
 
 /**
  * A brand new kitchen: nothing pre-filled, nothing pretended. Every number in

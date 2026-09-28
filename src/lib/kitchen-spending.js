@@ -1,16 +1,17 @@
 /**
- * What you spent, and what the app has watched you do.
+ * What you spent, and the arithmetic behind the badges.
  *
- * Shops, spending windows, price history and the achievement counters all read
- * the same recorded trips — nothing here is estimated, and a period with no
- * recorded shop reports nothing rather than zero.
+ * Shops, spending windows and price history all read the same recorded
+ * trips — nothing here is estimated, and a period with no recorded shop
+ * reports nothing rather than zero.
  *
  * Split out of kitchen.js to keep both readable; the whole surface is still
  * re-exported from there, so callers import from `kitchen.js` as before.
+ *
+ * @typedef {import('../typed/core.js').RecipeSummary} RecipeSummary
  */
 
 import { BADGES } from '../data/plan.js';
-import { RECIPES } from '../data/recipes.js';
 import { addDays, dayStamp, weekStart } from './kitchen-dates.js';
 
 /* ---------- Shops and spending ---------- */
@@ -123,12 +124,15 @@ export const savingsSummary = (shops = []) => ({
 
 export const planForDay = (plan = {}, stamp = dayStamp()) => plan[stamp] || {};
 
-export const planCost = (slots = {}) =>
+export const planCost = (slots = {}, { costPerServing = () => null } = {}) =>
   Math.round(
     Object.values(slots)
-      .map((id) => RECIPES.find((r) => r.id === id))
-      .filter(Boolean)
-      .reduce((sum, r) => sum + r.costPerServing, 0) * 100,
+      // A plan slot names a recipe id; what it cost comes from the caller,
+      // which holds the book — this module stays free of the reference data
+      // so hydration (via price alerts) never pulls the recipe book in.
+      .map((id) => costPerServing(id))
+      .filter((cost) => Number.isFinite(cost))
+      .reduce((sum, cost) => sum + cost, 0) * 100,
   ) / 100;
 
 export const plannedMeals = (plan = {}) =>
@@ -156,12 +160,13 @@ export const streakFrom = (days = [], today = dayStamp()) => {
 
 const PLANT_TAGS = ['vegan', 'vegetarian'];
 
-/** Real counters behind the badges. */
+/** Real counters behind the badges. Recipe lookups come from the caller. */
 export const kitchenStats = (
   { cooked = [], log = {}, shops = [], weeklyBudget = 0, xp = 0, plan = {}, myRecipes = [] },
   today = dayStamp(),
+  { recipesById = () => null } = {},
 ) => {
-  const recipes = cooked.map((c) => RECIPES.find((r) => r.id === c.recipeId)).filter(Boolean);
+  const recipes = cooked.map((c) => recipesById(c.recipeId)).filter(Boolean);
   return {
     recipesCooked: cooked.length,
     cuisines: new Set(recipes.map((r) => r.cuisine)).size,
@@ -184,10 +189,10 @@ export const badgeProgress = (stats) =>
   });
 
 /** Which cuisines you actually cook, as a share of everything cooked. */
-export const cuisineSplit = (cooked = []) => {
+export const cuisineSplit = (cooked = [], { recipesById = () => null } = {}) => {
   const counts = new Map();
   for (const entry of cooked) {
-    const recipe = RECIPES.find((r) => r.id === entry.recipeId);
+    const recipe = recipesById(entry.recipeId);
     if (!recipe) continue;
     counts.set(recipe.cuisine, (counts.get(recipe.cuisine) || 0) + 1);
   }

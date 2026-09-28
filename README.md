@@ -52,8 +52,25 @@ spending history and no pre-earned achievements. A first run asks for your
 name, budget and targets, and from then on every number you see is computed
 from what you actually log, buy, cook and plan. Backups can be exported and
 restored, including from first-run setup. Invalid saved data opens a recovery
-screen instead of being silently replaced. Forq is local-first by default:
-data starts in localStorage and no account is required. Signing in is an opt-in
+screen instead of being silently replaced. Forq is local-first by default and
+no account is required.
+
+**Where your data lives.** IndexedDB is the canonical store: one record, one
+writer, written asynchronously and transactionally, with no ceiling to hit.
+localStorage holds only what genuinely belongs there — a small pointer
+describing the canonical record, the encrypted health vault, and the cloud-sync
+metadata. A pre-existing localStorage install is migrated into IndexedDB on
+first load and the local copy is dropped *after* the new record is committed, so
+a failed upgrade loses nothing and the app keeps running from the old copy.
+A browser that cannot open IndexedDB falls back to the localStorage copy and
+says so rather than pretending. Two tabs agree through a `BroadcastChannel`
+that carries only a "something changed" signal — never the state itself — and
+each tab reads the canonical record, so localStorage is a signpost rather than
+the thing two tabs fight over. Every write carries a monotonic sequence, so a
+slow write can never land on top of a newer one. A record saved by a newer
+version of Forq is reported and left exactly as found, never rewritten.
+
+Signing in is an opt-in
 to Upstash Redis household sync. When a user chooses a server-backed AI action, Forq
 relays that prompt and its relevant context to the configured free-tier model
 (NVIDIA NIM or OpenRouter), or to OpenAI when the free ladder cannot answer and
@@ -747,6 +764,14 @@ flag; Forq's own data is never deleted or moved.
 - **The shape of it** — five tabs, not six: your profile moved out of the bar
   and behind an avatar that is now on *every* screen rather than only Home,
   which gave the five screens you actually work in a fifth more width each.
+  The bar is **Week · List · Plan · Cook · Recipes**, and it is written down in
+  exactly one place (`src/lib/screens.js`) — the bar, the command palette, the
+  keyboard shortcuts and the product-mode config all read that one registry, so
+  they cannot disagree about where a screen lives. `Log` and `Learn` are
+  *contextual*: real screens reachable from a flow, the palette or the keyboard,
+  but not permanent bar destinations. A product mode may promote one into the
+  bar (Nutrition promotes the diary) — it takes a slot rather than adding one,
+  so the hierarchy never grows past five.
   Every screen names its single most likely next move and puts it in the bottom
   third of the phone, where a thumb already is — and the label follows the
   state, because an empty week wants filling and a full one wants shopping for

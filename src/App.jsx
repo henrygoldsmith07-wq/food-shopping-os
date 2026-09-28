@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, CalendarDays, ChefHat, ClipboardList, Download, Home, ShoppingCart, Upload, UtensilsCrossed,
+  AlertTriangle, Download, Upload,
 } from 'lucide-react';
 import { AppProvider, useApp } from './lib/store.jsx';
 import Onboarding from './components/Onboarding.jsx';
@@ -10,12 +10,15 @@ import DemoWalkthrough, { DemoBanner } from './components/DemoWalkthrough.jsx';
 import { Sheet } from './components/ui.jsx';
 import AppHeader from './components/AppHeader.jsx';
 import GeofenceWatcher from './components/GeofenceWatcher.jsx';
-import JourneyNav from './components/JourneyNav.jsx';
+import TabBar from './components/TabBar.jsx';
+import { BAR_TABS, SCREENS, barIdsFor, titleFor } from './lib/screens.js';
 import { cx } from './lib/utils.js';
 import { downloadFile } from './lib/notify.js';
 import { haptic } from './lib/haptics.js';
 import { flushProductEvents, recordProductEvent } from './lib/product-analytics.js';
 import { pulseForq } from './lib/pulse.js';
+
+export { SCREENS, titleFor };
 
 const testScreens = globalThis.__FORQ_TEST_SCREENS__ || {};
 const deferred = (testComponent, loader) => testComponent || lazy(loader);
@@ -48,32 +51,11 @@ const ScreenFallback = () => (
  *
  * Week-first navigation: This Week is the home screen — the one surface that
  * answers what to do next, what's for dinner, what to buy, what to use soon
- * and what Forq changed — with List and Plan beside it. Log stays a
- * destination (flows, palette, keyboard) off the bar; pantry is a sheet
+ * and what Forq changed — with List and Plan beside it. Log and Learn are
+ * contextual (see `lib/screens.js`): reachable from flows, the palette and the
+ * keyboard, but not permanent residents of the bar. Pantry is a sheet
  * everywhere. Feature reduction is progressive disclosure, never deletion.
  */
-const TABS = [
-  { id: 'home', label: 'Week', Icon: Home }, // the week IS home: plan + list + use soon + changes
-  { id: 'shop', label: 'List', Icon: ShoppingCart },
-  { id: 'plan', label: 'Plan', Icon: CalendarDays },
-  { id: 'cook', label: 'Cook', Icon: UtensilsCrossed },
-  { id: 'learn', label: 'Learn', Icon: ClipboardList },
-  { id: 'recipes', label: 'Recipes', Icon: ChefHat },
-  { id: 'log', label: 'Log', Icon: ClipboardList }, // diary — reachable via flows, not the bar
-];
-
-/** What each screen is called, and the one thing it is mainly for. Primary loop is This week/List/Plan/Cook. */
-export const SCREENS = {
-  home: { title: 'This week' }, // the week = next step + plan + list + use soon + what changed
-  plan: { title: 'Meal planner' },
-  cook: { title: 'Cook' },
-  learn: { title: 'Learn' },
-  log: { title: 'Food diary' },
-  shop: { title: 'Shopping list' },
-  recipes: { title: 'Recipes' },
-  profile: { title: 'You' },
-  // pantry is a sheet, not a tab, but conceptually primary — see HomeTab pantry card + AppHeader button
-};
 
 function StorageRecovery() {
   const app = useApp();
@@ -136,11 +118,25 @@ function Shell() {
   const app = useApp();
   // This Week is the home screen: the week's food, one surface.
   const [tab, setTab] = useState('home');
-  // Modes take screens off the bar; Home is never one, so there is always
-  // somewhere to be. Log stays reachable through flows, palette, keyboard.
-  const tabs = TABS.filter((item) => item.id !== 'log' && app.visibleTabs(TABS.map((t) => t.id)).includes(item.id));
-  // A mode turned off while standing on the screen it hides lands on Home.
-  const activeTab = app.visibleTabs(TABS.map((t) => t.id)).includes(tab) ? tab : 'home';
+  // The bar is the five-tab hierarchy, minus whatever a product mode has
+  // turned off. Week is never one, so there is always somewhere to be. A mode
+  // that wants the diary front and centre promotes it into the bar rather than
+  // adding a sixth permanent destination (see `barIdsFor`).
+  const barIds = useMemo(() => {
+    const preferred = app.navTabs || [];
+    const candidates = barIdsFor(preferred);
+    return app.visibleTabs(candidates).filter((id) => SCREENS.some((screen) => screen.id === id));
+    // `navTabs` and `visibleTabs` both come from the derived state; they change
+    // only when the mode or the module set does, so this recomputes when the
+    // bar would actually look different.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.navTabs]);
+  const tabs = useMemo(
+    () => barIds.map((id) => SCREENS.find((screen) => screen.id === id)).filter(Boolean),
+    [barIds],
+  );
+  // A mode turned off while standing on the screen it hides lands on Week.
+  const activeTab = barIds.includes(tab) || tab === 'log' || tab === 'learn' ? tab : 'home';
   const [recipe, setRecipe] = useState(null);
   const [recipeStartCooking, setRecipeStartCooking] = useState(false);
   // The recommendation this cook session answers, when it came from the
@@ -190,8 +186,9 @@ function Shell() {
     return undone;
   };
   const runCommand = (target) => {
-    const tabIds = new Set(TABS.map((item) => item.id));
-    if (tabIds.has(target)) setTab(target);
+    if (barIds.includes(target)) setTab(target);
+    else if (target === 'log') setTab('log');
+    else if (target === 'learn') setTab('learn');
     else if (target === 'pantry') setPantryOpen(true);
     else if (target === 'add-food') goLog('add');
     else if (target === 'barcode') goLog('barcode');
@@ -248,8 +245,12 @@ function Shell() {
         undo();
       } else if (!typing && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'q') {
         setLauncher('quick');
-      } else if (!typing && !launcher && /^[1-6]$/.test(event.key)) {
-        setTab((tabs[Number(event.key) - 1] || tabs[0]).id);
+      } else if (!typing && !launcher && /^[1-9]$/.test(event.key)) {
+        // Number keys mirror the bar, and the bar is the registry's answer —
+        // so a mode that promotes the diary doesn't leave a shortcut pointing
+        // at the wrong screen.
+        const target = tabs[Number(event.key) - 1];
+        if (target) setTab(target.id);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -310,7 +311,6 @@ function Shell() {
           onProfile={() => setProfileOpen(true)}
           onGuidance={() => { setGuidanceView('next'); setGuidanceOpen(true); }}
         />
-        <JourneyNav active={['plan', 'shop', 'cook', 'learn'].includes(activeTab) ? activeTab : null} onNavigate={goTab} />
 
         {/* Room at the foot for the tab bar and the screen's primary action. */}
         <main id="main" tabIndex={-1} className="app-main pb-44" onFocus={(event) => {
@@ -357,40 +357,10 @@ function Shell() {
         <LauncherButtons onSearch={() => setLauncher('search')} onQuickAdd={() => setLauncher('quick')} />
       </Suspense>
 
-      {/* Bottom navigation on phones, sidebar on larger screens. */}
-      <nav
-        className="app-nav glass"
-        style={{ borderColor: 'var(--line)', paddingBottom: 'env(safe-area-inset-bottom)' }}
-        aria-label="Main navigation"
-      >
-        <div className="app-brand">
-          <img src="/logo.svg" alt="" width={36} height={36} className="h-9 w-9 rounded-xl" aria-hidden="true" />
-          <div>
-            <p className="text-[1.0625rem] font-black tracking-tight">Forq</p>
-            <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>Food, sorted.</p>
-          </div>
-        </div>
-        <div className="app-nav-items">
-          {tabs.map(({ id, label, Icon }) => {
-            const active = activeTab === id;
-            return (
-              <button
-                key={id}
-                onClick={() => goTab(id)}
-                className={cx('app-nav-item press', active && 'is-active')}
-                aria-current={active ? 'page' : undefined}
-                // The colour says which tab you're on; the weight says it again,
-                // for anyone who can't see the difference.
-                style={{ color: active ? 'var(--accent)' : 'var(--muted)' }}
-              >
-                <Icon size={21} strokeWidth={active ? 2.4 : 1.8} />
-                <span className={cx('app-nav-label', active ? 'font-extrabold' : 'font-semibold')}>{label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="app-nav-hint"><kbd>⌘ K</kbd> Search anything</p>
-      </nav>
+      {/* Bottom navigation on phones, sidebar on larger screens. The bar is
+          built from the screen registry, so a screen can only appear here if it
+          was declared there. */}
+      <TabBar tabs={tabs} active={activeTab} onNavigate={goTab} />
 
       {/* Overlays */}
       <Sheet open={!!recipe} onClose={() => { setRecipe(null); setRecipeStartCooking(false); }} full>

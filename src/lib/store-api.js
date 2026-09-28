@@ -25,8 +25,10 @@ import { offerActions } from './offer-actions.js';
 import { planActions } from './plan-actions.js';
 import { pantryFlowActions } from './pantry-flow-actions.js';
 import { withAutoListSync } from './week-loop.js';
-import { emojiFor, EMPTY_STATE, todayStamp, uid } from './state.js';
+import { EMPTY_STATE, todayStamp, uid } from './state.js';
+import { emojiFor } from './food-lookup.js';
 import { parseBackup, serialiseBackup } from './store-persistence.js';
+import { wipeEverything } from './persistence-boot.js';
 import { vaultActions } from './vault-actions.js';
 import { receiptActions, shoppingActions } from './shopping-actions.js';
 import { normalisePriceAlertConfig } from './price-alerts.js';
@@ -98,12 +100,18 @@ export function useStoreApi({
           blockPersistence.current = false;
           undoHistory.current = []; undoBatch.current = null;
           setStorageIssue(null);
+          // The canonical record is replaced, not merged. A restore is the
+          // owner saying what this install is now; the write it triggers lands
+          // in whichever store this device booted with.
           setState(restored);
           return { ok: true };
         } catch (error) {
           return {
             ok: false,
-            error: error instanceof Error ? error.message : 'That backup could not be read.',
+            // A backup from a newer Forq explains itself rather than reporting
+            // a generic parse failure.
+            error: error?.issue?.message
+              || (error instanceof Error ? error.message : 'That backup could not be read.'),
           };
         }
       },
@@ -119,10 +127,19 @@ export function useStoreApi({
         vaultKey.current = null;
         vaultSalt.current = null;
         setVaultUnlocked(false);
-        blockPersistence.current = false;
+        // Writes are held off for the whole wipe. A reset is asynchronous, and
+        // anything that saved in between would be written *after* the clear —
+        // putting the old data straight back. The empty state that follows is
+        // the only thing that should reach a store, and it is a legitimate one.
+        blockPersistence.current = true;
         undoHistory.current = []; undoBatch.current = null;
         setStorageIssue(null);
-        setState({ ...EMPTY_STATE, day: todayStamp() });
+        // Every persistence layer, in every store: the legacy key, the canonical
+        // record and the pointer that describes it.
+        wipeEverything().then(() => {
+          blockPersistence.current = false;
+          setState({ ...EMPTY_STATE, day: todayStamp() });
+        });
       },
       finishOnboarding: (profile) =>
         set((s) => {

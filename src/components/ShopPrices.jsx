@@ -1,5 +1,4 @@
 import { Card, Pill, Section } from './ui.jsx';
-import { clearObservedPriceCache } from '../lib/observed-prices.js';
 
 /**
  * What this list is likely to cost, and how sure that is.
@@ -8,11 +7,14 @@ import { clearObservedPriceCache } from '../lib/observed-prices.js';
  * a bargain is measured against what you actually paid before. Community
  * observations are dated context fetched only when asked for, never a live
  * quote, and the copy says so every time they are shown.
+ *
+ * The observations themselves are owned by `useObservedPrices` — when to fetch,
+ * what to do when it fails. This component only renders what came back, which
+ * is why it takes one `observed` object rather than six props and three
+ * setters.
  */
-export default function ShopPrices({
-  app, visibleList, checkObservedPrices, observedBusy, observedByKey, observedError, observedMeta,
-  setObservedByKey, setObservedMeta, setObservedError, offlineMode, isOnline,
-}) {
+export default function ShopPrices({ app, visibleList, observed, offlineMode, isOnline }) {
+  const { byKey, busy, error, meta, check, refresh } = observed;
   // Nothing on the list, nothing to price.
   if (!visibleList.length) return null;
 
@@ -57,18 +59,18 @@ export default function ShopPrices({
               Your receipts are primary. Community observations are dated context — never a live quote.
             </p>
           </div>
-          <button type="button" onClick={checkObservedPrices} disabled={observedBusy || offlineMode || !isOnline} className="press w-full shrink-0 rounded-2xl px-3.5 py-2.5 text-[0.78125rem] font-extrabold disabled:opacity-50 sm:w-auto sm:py-2" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
-            {offlineMode ? 'Offline mode' : observedBusy ? 'Checking…' : observedByKey ? 'Check again' : 'Check community prices'}
+          <button type="button" onClick={check} disabled={busy || offlineMode || !isOnline} className="press w-full shrink-0 rounded-2xl px-3.5 py-2.5 text-[0.78125rem] font-extrabold disabled:opacity-50 sm:w-auto sm:py-2" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+            {offlineMode ? 'Offline mode' : busy ? 'Checking…' : byKey ? 'Check again' : 'Check community prices'}
           </button>
         </div>
-        {observedError && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{observedError}</p>}
-        {observedMeta && !observedError && (
+        {error && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
+        {meta && !error && (
           <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            {Object.keys(observedByKey || {}).length} item{Object.keys(observedByKey || {}).length === 1 ? '' : 's'} with an observation{observedMeta.fromCache ? ` · ${observedMeta.fromCache} from 24h cache` : ''} · community observed, not live.
+            {Object.keys(byKey || {}).length} item{Object.keys(byKey || {}).length === 1 ? '' : 's'} with an observation{meta.fromCache ? ` · ${meta.fromCache} from 24h cache` : ''} · community observed, not live.
           </p>
         )}
-        {observedByKey && (
-          <button type="button" onClick={() => { clearObservedPriceCache(); setObservedByKey(null); setObservedMeta(null); setObservedError(''); }} className="press mt-2 rounded-full border px-3 py-1 text-[0.6875rem] font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>Clear cached observations</button>
+        {byKey && (
+          <button type="button" onClick={refresh} className="press mt-2 rounded-full border px-3 py-1 text-[0.6875rem] font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>Clear cached observations</button>
         )}
       </Card>
     </Section>

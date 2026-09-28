@@ -12,6 +12,7 @@ import {
   advancedToolsForMode,
   profileSectionVisible,
 } from '../src/data/productModes.js';
+import { screenById } from '../src/lib/screens.js';
 import { setupProgress } from '../src/lib/setup.js';
 import { notificationPresets } from '../src/lib/reminder-suggest.js';
 import { guidanceFor } from '../src/lib/guidance.js';
@@ -70,12 +71,32 @@ describe('product modes', () => {
     expect(household.widgets).not.toContain('numbers');
   });
 
-  it('reorders nav tabs without dropping any', () => {
+  it('promotes the diary in nutrition mode without widening the bar', () => {
     const nutrition = tabsForMode('nutrition');
     expect(nutrition[0]).toBe('home');
+    // The diary becomes a leading destination in the one mode where logging
+    // *is* the work — but it takes a slot, it doesn't add a sixth tab.
     expect(nutrition[1]).toBe('log');
+    expect(nutrition).toHaveLength(5);
     expect(new Set(nutrition).size).toBe(5);
-    expect(nutrition).toEqual(expect.arrayContaining(['plan', 'shop', 'recipes']));
+    expect(nutrition).toEqual(expect.arrayContaining(['plan', 'shop', 'cook']));
+    // Every screen the mode names must be a screen Forq actually has.
+    expect(nutrition.every((id) => screenById[id])).toBe(true);
+  });
+
+  it('keeps every mode at five destinations, all of them real screens', () => {
+    for (const mode of PRODUCT_MODES) {
+      const tabs = tabsForMode(mode.id);
+      expect(new Set(tabs).size, `${mode.id} repeats a screen`).toBe(tabs.length);
+      // A mode may reorder or substitute, never grow the hierarchy.
+      expect(tabs.length, `${mode.id} has too many bar slots`).toBeLessThanOrEqual(5);
+      expect(tabs.every((id) => screenById[id]), `${mode.id} names a screen that doesn't exist`).toBe(true);
+      expect(tabs[0], `${mode.id} must always lead with the week`).toBe('home');
+    }
+  });
+
+  it('defaults to the five-tab hierarchy when a mode names no order', () => {
+    expect(tabsForMode('everything')).toEqual(['home', 'shop', 'plan', 'cook', 'recipes']);
   });
 
   it('orders setup steps by mode', () => {

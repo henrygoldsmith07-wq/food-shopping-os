@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlarmClock, CheckCircle2, ChevronRight, ClipboardList, CookingPot, CalendarDays } from 'lucide-react';
+import { AlarmClock, CheckCircle2, ChevronRight } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { gbp, expiryStatus } from '../lib/utils.js';
 import { byId } from '../data/recipes.js';
@@ -11,11 +11,13 @@ import { rankLeftovers } from '../lib/food-suitability.js';
 import { totalOf } from '../data/stores.js';
 import { bestForSlot } from '../lib/recommend.js';
 import { weeklyFoodLoop } from '../lib/food-loop.js';
+import { nextAction } from '../lib/next-action.js';
 import { Section, Card, Pill, Meter, FoodArt } from './ui.jsx';
 import { Glyph } from './icons.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
 import LoopConfirmCard from './LoopConfirmCard.jsx';
+import NextActionCard from './NextActionCard.jsx';
 import AdaptationsCard from './AdaptationsCard.jsx';
 import GuidancePreview from './GuidancePreview.jsx';
 import HomeNumbers from './HomeNumbers.jsx';
@@ -27,14 +29,20 @@ import WeekRecoveryPreview from './WeekRecoveryPreview.jsx';
 /**
  * This Week — the one surface that answers the product promise.
  *
- * In order: the best next action (Autopilot), one lightweight loop check
- * (confirmations instead of manual logging), tonight's meal (single Meal
- * Decision Engine), what to buy / use soon, what Forq changed based on what
- * actually happened (adaptations — learning shown only where it changes
- * something), and a concise weekly outlook. Everything else lives under
- * “Explore more” so progress, loop health and the full dashboard stay one
- * tap away without cluttering the default view. Offline-first, no fetching,
- * fully keyboard navigable.
+ * In the order a person actually asks for it:
+ *
+ *   1. What should I do next?        one card, one action (lib/next-action.js)
+ *   2. What am I eating tonight?     the meal decision engine's pick
+ *   3. What needs buying or using?   use-soon, next shop, leftovers
+ *   4. What changed because Forq     adaptations, shown only where it
+ *      learned something?            changes something
+ *   5. What else needs attention?    everything else, behind "Explore more"
+ *
+ * The screen used to open with three cards that all claimed to be the next
+ * thing to do. Now one does, and the other two — plus setup guidance and the
+ * weekly report — sit behind a single disclosure. No capability was removed:
+ * the next-action card links straight into whichever of them is the answer
+ * today. Offline-first, no fetching, fully keyboard navigable.
  */
 export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, goLog, onOpenWeekLoop }) {
   const app = useApp();
@@ -134,43 +142,22 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   const useSoon = expiring.slice(0, 4);
   const buySoon = app.shoppingList.filter((r) => !r.checked).slice(0, 4);
 
+  // The one thing the screen leads with. Memoised on exactly the derived
+  // signals the ranking reads, so it doesn't recompute on unrelated changes.
+  const leading = useMemo(() => nextAction(app, {
+    onOpenPantry: openPantry,
+    goTab,
+    openGuidance,
+    onOpenWeekLoop,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [app.wastePrediction, app.plan, app.shoppingList, app.weekRecovery, app.day, app.loopChecks, app.guidance]);
+
   return (
     <div className="pb-6 space-y-6">
-      {/* 1 — Best next action */}
-      <AutopilotCard onOpenPantry={openPantry} goTab={goTab} />
-
-      {/* 1.5 — The loop's one confirmation step: “did this happen?” instead
-          of manual logging, and the plan's missing rows in one tap. */}
-      <LoopConfirmCard goTab={goTab} />
-
-      {/* Setup gates: what unlocks the rest, ticking off as you do it */}
-      <Section className="rise rise-1">
-        <GuidancePreview onOpen={() => openGuidance('next')} onAction={runGuidanceAction} />
-      </Section>
-
-      {/* Plan → Shop → Eat quick nav */}
-      <nav className="px-5" aria-label="Plan, shop, eat">
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { id: 'plan', label: 'Plan', Icon: CalendarDays, hint: 'This week' },
-            { id: 'shop', label: 'Shop', Icon: ClipboardList, hint: app.shoppingList.length ? `${app.shoppingList.length} items` : 'Empty' },
-            { id: 'cook', label: 'Eat', Icon: CookingPot, hint: 'Tonight' },
-          ].map(({ id, label, Icon, hint }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => goTab(id)}
-              className="press flex flex-col items-center gap-1 rounded-2xl border px-3 py-3"
-              style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
-              aria-label={`${label} — ${hint}`}
-            >
-              <Icon size={17} style={{ color: 'var(--accent)' }} />
-              <span className="text-[0.8125rem] font-extrabold">{label}</span>
-              <span className="text-[0.625rem] font-bold" style={{ color: 'var(--faint)' }}>{hint}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      {/* 1 — One next action. The ranking lives in lib/next-action.js so a
+          screen can add urgency without adding a card; the cards it can name
+          are all still further down this page. */}
+      <NextActionCard action={leading} onRun={() => leading?.run?.()} />
 
       {/* 2 — Tonight's meal (one decision engine) */}
       <section className="px-5" aria-label="Tonight's meal">
@@ -469,15 +456,29 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       )}
       {widgets.has('numbers') && <HomeNumbers app={app} goTab={goTab} goLog={goLog} />}
 
+      {/*
+        Everything below is real capability that used to sit at the same visual
+        weight as tonight's dinner. Nothing here is gone: the loop
+        confirmations, the autopilot hand-off, setup guidance and the weekly
+        report are all one tap away, and the next-action card at the top links
+        straight into whichever of them is currently the answer.
+      */}
       <details className="home-more group">
         <summary
           className="mx-5 flex cursor-pointer list-none items-center justify-between rounded-2xl border px-4 py-3 text-[0.8125rem] font-extrabold"
           style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
         >
           Explore more
-          <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>progress · loop · report</span>
+          <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+            confirm · autopilot · setup · report
+          </span>
         </summary>
-        <div className="mt-6 space-y-6 px-5">
+        <div className="mt-6 space-y-6">
+          <AutopilotCard onOpenPantry={openPantry} goTab={goTab} />
+          <LoopConfirmCard goTab={goTab} />
+          <Section>
+            <GuidancePreview onOpen={() => openGuidance('next')} onAction={runGuidanceAction} />
+          </Section>
           {widgets.has('report') && <OutcomeDashboard />}
         </div>
       </details>

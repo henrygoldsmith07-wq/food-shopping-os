@@ -2,7 +2,7 @@ import { ChefHat, GripVertical, Snowflake } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS, WEEK_DAYS } from '../data/plan.js';
-import { planCost } from '../lib/kitchen.js';
+import { planCost } from '../lib/kitchen-spending.js';
 import { Card, FoodArt, Pill } from './ui.jsx';
 
 /**
@@ -58,7 +58,17 @@ export function WeekGrid({
                   </span>
                 )}
               </p>
-              {planCost(slots) > 0 && <Pill tone="muted">{gbp(planCost(slots), { always: true })}/person</Pill>}
+              {(() => {
+                // A plan slot names a recipe id; what it cost is looked up
+                // here, where the book already is — planCost stays free of the
+                // reference data so hydration never pulls it in.
+                const cost = planCost(slots, {
+                  costPerServing: (id) => byId(id)?.costPerServing,
+                });
+                return cost > 0 ? (
+                  <Pill tone="muted">{gbp(cost, { always: true })}/person</Pill>
+                ) : null;
+              })()}
             </div>
             <div className="grid grid-cols-3 gap-2">
               {MEAL_SLOTS.map(({ key, label }) => {

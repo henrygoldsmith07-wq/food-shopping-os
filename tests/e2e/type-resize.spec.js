@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { BAR_TABS } from '../../src/lib/screens.js';
+
+const TAB_LABELS = BAR_TABS.map((screen) => screen.label);
 
 const onboard = async (page) => {
   await page.goto('/');
@@ -33,7 +36,7 @@ test('main screens reflow at 200% text without page-level horizontal overflow', 
   await onboard(page);
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
 
-  for (const tab of ['Week', 'List', 'Plan', 'Cook', 'Learn', 'Recipes']) {
+  for (const tab of TAB_LABELS) {
     await page.getByRole('button', { name: tab, exact: true }).click();
     // Lazily-loaded panels land a beat after the tab does, and one of them
     // overflowing is exactly what this test is for — so settle twice, with the

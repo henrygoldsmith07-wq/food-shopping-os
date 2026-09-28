@@ -7,12 +7,109 @@ import { HEALTH_VAULT_KEY, withoutHealth } from './health-vault.js';
 import { permissionsForRole } from './household.js';
 import { predictionCorrectionEvent } from './prediction-feedback.js';
 import { overrideSchemaStatus, basketSchemaStatus } from './prediction-evidence.js';
-import { captureMissedMeals } from './plan-outcome.js';
+import { captureMissedMeals } from './missed-meals.js';
+
+/**
+ * Repairs for one saved install, keyed by state key.
+ *
+ * Hydration is the boundary between bytes somebody left behind and the object
+ * the product reasons about, so it is where a malformed *nested* value has to
+ * be stopped. The rule is deliberately conservative and per key, not one giant
+ * schema: a bad list row is dropped, a bad price becomes unknown, a bad plan
+ * entry is skipped. Anything that cannot be repaired is removed rather than
+ * guessed at, because a plausible-looking invention is worse than a hole.
+ *
+ * Two constraints keep this honest:
+ *
+ *  - **Nothing is invented.** A repair only ever *removes* a value that cannot
+ *    be true, or replaces it with the explicitly-unknown one. No field is added
+ *    to a row that didn't have it, so a save/load round trip returns the same
+ *    rows it started with — an install that has been opened twice is
+ *    byte-identical to one opened once.
+ *  - **A row is identified by its id.** Every row the app writes has one, and
+ *    a row without one cannot be edited, ticked or removed by a screen. Such a
+ *    row is dropped rather than given a made-up id.
+ *
+ * The array/object shape is already handled by the EMPTY_STATE pass below; this
+ * covers the cases a shape check can't see — rows that are the wrong type, or
+ * fields inside a row that hold the wrong type.
+ */
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+/** Rows a screen can actually act on: an object with an id and a name. */
+const rowsWithId = (value) => (Array.isArray(value) ? value : [])
+  .filter((row) => isObject(row) && row.id && typeof row.name === 'string' && row.name);
+
+/** Drop a field when its value could not be true; leave it alone otherwise. */
+const dropIfNot = (row, key, isValid) => {
+  if (row[key] === undefined) return row;
+  return isValid(row[key]) ? row : { ...row, [key]: null };
+};
+
+/** A finite non-negative number, or a string, or absent. A price of "£2" is not a price. */
+const isAmount = (value) => typeof value === 'number' || value === null;
+
+/** A `YYYY-MM-DD` stamp, or absent. Anything else is not a date. */
+const isDate = (value) => value === undefined || value === null || /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** A map key that names a real day, or null. */
+const dateOr = (value) => (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null);
+
+const PRICES = new Set(['receipt', 'recorded', 'estimated', 'unknown']);
+
+const REPAIRS = {
+  // A pantry row. "Use first" sorts on `expiry`, so a malformed one would read
+  // as fresh food that never needs using.
+  pantry: (rows) => rowsWithId(rows).map((row) => dropIfNot(
+    dropIfNot(row, 'expiry', isDate),
+    'qty',
+    (v) => v === undefined || v === null || typeof v === 'string' || typeof v === 'number',
+  )),
+  shoppingList: (rows) => rowsWithId(rows).map((row) => {
+    const priced = dropIfNot(row, 'price', isAmount);
+    // A price must say where it came from. An unsourced number is a guess, and
+    // a guess is exactly what this app must never print as a fact.
+    return dropIfNot(priced, 'priceSource', (v) => v === undefined || PRICES.has(v));
+  }),
+  shops: (rows) => rowsWithId(rows).map((row) => ({
+    ...dropIfNot(row, 'date', isDate),
+    items: Array.isArray(row.items) ? row.items.filter(isObject) : [],
+  })),
+  cooked: (rows) => rowsWithId(rows).map((row) => dropIfNot(row, 'date', isDate)),
+  waste: (rows) => rowsWithId(rows).map((row) => dropIfNot(row, 'date', isDate)),
+  // A plan is `{ day: { slot: recipeId } }`. A non-object day, a non-object
+  // meal, or a slot without a recipe id is dropped rather than rendered.
+  plan: (plan) => {
+    if (!isObject(plan)) return {};
+    const out = {};
+    for (const [day, meals] of Object.entries(plan)) {
+      if (!isObject(meals) || !dateOr(day)) continue;
+      const slots = Object.entries(meals)
+        .filter(([, recipeId]) => typeof recipeId === 'string' && recipeId.length > 0);
+      if (slots.length) out[day] = Object.fromEntries(slots);
+    }
+    return out;
+  },
+  // The diary is `{ day: entry[] }`. A malformed day is dropped whole; a
+  // malformed entry inside a good day is dropped individually.
+  log: (log) => {
+    if (!isObject(log)) return {};
+    const out = {};
+    for (const [day, entries] of Object.entries(log)) {
+      if (!Array.isArray(entries) || !dateOr(day)) continue;
+      const kept = entries.filter((entry) => isObject(entry) && entry.foodId);
+      if (kept.length) out[day] = kept;
+    }
+    return out;
+  },
+};
+
+
 export const hydrate = (stored = {}) => {
   const candidate = isObject(stored) ? stored : {};
+  // A fresh object, never the caller's: hydration must not hand back a live
+  // reference into a backup object somebody may still hold.
   const state = {
     ...EMPTY_STATE,
     ...candidate,
@@ -29,10 +126,14 @@ export const hydrate = (stored = {}) => {
     body: { ...EMPTY_STATE.body, ...(isObject(candidate.body) ? candidate.body : {}) },
     targets: { ...DEFAULT_TARGETS, ...(isObject(candidate.targets) ? candidate.targets : {}) },
   };
+  for (const [key, repair] of Object.entries(REPAIRS)) {
+    if (key in candidate) state[key] = repair(candidate[key]);
+  }
   Object.entries(EMPTY_STATE).forEach(([key, fallback]) => {
     if (Array.isArray(fallback) && !Array.isArray(state[key])) state[key] = [];
     else if (isObject(fallback) && !isObject(state[key])) state[key] = { ...fallback };
   });
+
   if (!ACCENT_IDS.includes(state.accent)) state.accent = EMPTY_STATE.accent;
   // v4: receipt-only rise/bargain + coupon vault
   if (!Array.isArray(state.coupons)) state.coupons = [];
@@ -77,6 +178,14 @@ export const parseBackup = (text) => {
   if (!isObject(candidate) || typeof candidate.onboarded !== 'boolean') {
     throw new Error('This is not a complete Forq backup.');
   }
+  // A record from a newer Forq is never reinterpreted through this build's
+  // hydration rules, and never rewritten. It is refused, loudly, with the
+  // version that produced it — that data is still its owner's.
+  if (isFutureVersion(candidate)) {
+    const error = new Error('This data was saved by a newer version of Forq.');
+    error.issue = futureVersionIssue(candidate.schemaVersion);
+    throw error;
+  }
   return hydrate(candidate);
 };
 
@@ -112,3 +221,23 @@ export const loadStoredState = () => {
     };
   }
 };
+
+/**
+ * What a record from a future Forq means to this build. A newer schema is
+ * never rewritten — that is somebody's data, produced by a version that knew
+ * things this one doesn't. It is reported so the recovery screen can hand the
+ * raw text back to its owner.
+ */
+export const futureVersionIssue = (storedVersion) => ({
+  kind: 'future',
+  message: `This data was saved by a newer version of Forq (v${storedVersion}). It has been left exactly as it is, and this version of Forq will not write over it.`,
+  raw: null,
+  detail: `Stored schemaVersion ${storedVersion}; this build understands ${STATE_VERSION}.`,
+});
+
+/** True when a record claims a schema this build does not know. */
+export const isFutureVersion = (stored) => {
+  const version = Number(stored?.schemaVersion);
+  return Number.isFinite(version) && version > STATE_VERSION;
+};
+

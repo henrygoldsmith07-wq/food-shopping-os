@@ -11,7 +11,8 @@ import {
   affordableCap, basketProjection, dealQuality, groupForStore, parseVoiceShopping, recurringStaples, rowsOverHeadroom, shoppingNameKey,
 } from '../lib/shopping.js';
 import { AISLE_ORDER as ALL_AISLES } from '../data/stores.js';
-import { clearObservedPriceCache, fetchObservedForList } from '../lib/observed-prices.js';
+import { clearObservedPriceCache } from '../lib/observed-prices.js';
+import { useObservedPrices } from '../lib/use-observed-prices.js';
 import { haptic } from '../lib/haptics.js';
 import { gbp as gbpFmt } from '../lib/utils.js';
 import ReceiptScan from './ReceiptScan.jsx';
@@ -53,10 +54,6 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   const [routeEditor, setRouteEditor] = useState(false);
   const [routeOrder, setRouteOrder] = useState([]);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
-  const [observedByKey, setObservedByKey] = useState(null); // { [shoppingNameKey]: observedPrice } | null
-  const [observedBusy, setObservedBusy] = useState(false);
-  const [observedError, setObservedError] = useState('');
-  const [observedMeta, setObservedMeta] = useState(null); // { checkedAt, fromCache, fetched }
   const [reRanked, setReRanked] = useState(false); // basket rows cheapest-first while over budget
   const shoppingMode = shoppingSession.active;
   const largeTouch = Boolean(app.shoppingPreferences?.largeTouch);
@@ -107,6 +104,10 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   const ticked = visibleList.filter((i) => i.checked).length;
   const checkedTotal = checkedTotalOf(visibleList);
   const known = store && app.storeRoutes[store];
+  // Community price observations: when to ask, what came back, and what to say
+  // when it didn't. That policy belongs to the hook, not to this screen — and
+  // it reads the *visible* list, so a check never prices items you can't see.
+  const observed = useObservedPrices({ items: visibleList, offlineMode, isOnline });
   const staples = useMemo(
     () => recurringStaples(app.shops, app.pantry, list, { today: app.day }),
     [app.shops, app.pantry, list, app.day],
@@ -168,21 +169,6 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
     app.repeatLastShop();
     shoppingSession.start(lastShop?.store || '');
     setRepeatedShopId(lastShop?.id || '');
-  };
-
-  const checkObservedPrices = async () => {
-    if (!visibleList.length || observedBusy || offlineMode || !isOnline) return;
-    setObservedBusy(true);
-    setObservedError('');
-    try {
-      const result = await fetchObservedForList(visibleList);
-      setObservedByKey(result.byKey);
-      setObservedMeta({ checkedAt: result.checkedAt, fromCache: result.fromCache, fetched: result.fetched });
-    } catch (error) {
-      setObservedError(error.status === 401 ? 'Sign in to check community observations.' : error.status === 429 ? 'Too many checks — try again in a few minutes.' : (error.message || 'Community observations unavailable.'));
-    } finally {
-      setObservedBusy(false);
-    }
   };
 
   if (!app.householdAccess.shopping) {
@@ -388,14 +374,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
           <ShopPrices
             app={app}
             visibleList={visibleList}
-            checkObservedPrices={checkObservedPrices}
-            observedBusy={observedBusy}
-            observedByKey={observedByKey}
-            observedError={observedError}
-            observedMeta={observedMeta}
-            setObservedByKey={setObservedByKey}
-            setObservedMeta={setObservedMeta}
-            setObservedError={setObservedError}
+            observed={observed}
             offlineMode={offlineMode}
             isOnline={isOnline}
           />
@@ -432,7 +411,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                             storeOptions={storeChoices}
                             dragging={dragging}
                             setDragging={setDragging}
-                            observedPrice={observedByKey?.[shoppingNameKey(item.name)] || null}
+                            observedPrice={observed.byKey?.[shoppingNameKey(item.name)] || null}
                             largeTouch={largeTouch}
                             pastCap={Boolean(outsideKeys?.has(item.id ? String(item.id) : item.name))} guardOver={Boolean(guardOverKeys?.has(item.id ? String(item.id) : item.name))} />
                         ))}

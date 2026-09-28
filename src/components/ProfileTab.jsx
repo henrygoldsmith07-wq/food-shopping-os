@@ -9,6 +9,7 @@ import { formatAmount } from '../data/nutrients.js';
 import { nutrientRows, snackSummary, timingInsight } from '../lib/nutrition.js';
 import { YOUTH_COPY } from '../lib/youth.js';
 import { badgeProgress, cuisineSplit, spendByMonth, weekDates } from '../lib/kitchen.js';
+import { byId } from '../data/recipes.js';
 import { gbp } from '../lib/utils.js';
 import NutritionPanel from './NutritionPanel.jsx';
 import GoalsPanel from './GoalsPanel.jsx';
@@ -45,7 +46,9 @@ export default function ProfileTab({ openGuidance }) {
   const loggedThisWeek = week.some((d) => d.value > 0);
   const spend = spendByMonth(app.shops, 6, app.day);
   const hasSpend = spend.some((m) => m.spend > 0);
-  const cuisines = cuisineSplit(app.cooked);
+  // The book is already here (badges render from it); the lookup stays at the
+  // call site so cuisineSplit never imports the reference data itself.
+  const cuisines = cuisineSplit(app.cooked, { recipesById: (id) => byId(id) || null });
   const badges = badgeProgress(app.stats);
   const macros = [
     { key: 'protein', label: 'Protein', now: app.proteinToday, goal: app.proteinGoal, color: 'var(--series-1)' },

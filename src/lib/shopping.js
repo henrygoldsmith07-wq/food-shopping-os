@@ -8,7 +8,8 @@
  */
 
 import { AISLE_ORDER, guessAisle } from '../data/stores.js';
-import { dayStamp, priceHistory } from './kitchen.js';
+import { dayStamp } from './kitchen-dates.js';
+import { priceHistory } from './kitchen-spending.js';
 import { mergeQtys } from './pantry.js';
 import { entityKey } from './aliases.js';
 import { compareUnitPrices, unitPriceOf } from './measure.js';
@@ -82,16 +83,15 @@ export const unitPrice = (item = {}) =>
 export const compareSizes = (rows = []) =>
   compareUnitPrices(rows.map((row) => ({ ...row, ingredient: entityKey(row.name) })));
 
-export const shoppingNameKey = (name) => {
-  const raw = String(name || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  const words = raw.replace(/&/g, ' and ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/).filter(Boolean);
-  const key = words.map((word) => {
-    if (word.endsWith('ies') && word.length > 4) return `${word.slice(0, -3)}y`;
-    if (word.endsWith('s') && !word.endsWith('ss') && !word.endsWith('us') && word.length > 3) return word.slice(0, -1);
-    return word;
-  }).join(' ');
-  return key || raw;
-};
+/**
+ * Re-exported where it has always lived, so the thirty-odd call sites that
+ * import it from here keep working. The implementation lives in
+ * `shopping-names.js` — a module that imports nothing, because
+ * `price-alerts.js` needs it at hydration time and hydration must not pull
+ * the whole shopping surface (and through it the recipe book) in just to
+ * compare two names.
+ */
+export { shoppingNameKey } from './shopping-names.js';
 
 /** Suggest the quantity this household most often recorded for a product. */
 export const quantitySuggestion = (name, shops = []) => {

@@ -28,6 +28,8 @@ import { platformUnlockAvailable } from './health-vault.js';
 import {
   hydrate, loadStoredState, parseBackup, serialiseBackup,
 } from './store-persistence.js';
+import { loadCanonicalState } from './persistence-boot.js';
+import { idbSupported } from './persistent-state.js';
 import { usePersistence } from './store-persistence-hook.js';
 import { useStoreApi } from './store-api.js';
 import { isUnderEighteen } from './youth.js';
@@ -41,19 +43,36 @@ import {
 } from './state.js';
 
 export {
-  EMPTY_STATE, foodFromEntry, levelFromXp, recentFoodsFrom, rolloverDay, STATE_VERSION,
+  EMPTY_STATE, foodFromEntry, levelFromXp, rolloverDay, STATE_VERSION,
   STORAGE_KEY, todayStamp, XP_PER_LEVEL, xpIntoLevel,
 } from './state.js';
+
+// Catalogue-dependent lookups are re-exported here so the public surface of
+// the store is unchanged by the move that took them off the boot path.
+export { emojiFor, foodById, recentFoodsFrom } from './food-lookup.js';
 
 export { hydrate, parseBackup, serialiseBackup };
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
+  // Boot in two beats, and the reason is the canonical store. IndexedDB is
+  // asynchronous, so the first paint uses whatever can be read synchronously
+  // (the legacy localStorage copy, or an empty kitchen) and the canonical
+  // snapshot is adopted the moment it lands. That ordering means a slow disk
+  // costs a moment rather than a blank screen, and a legacy install still opens
+  // instantly while its data moves across.
   const initial = useRef(null);
-  if (!initial.current) initial.current = loadStoredState();
+  if (!initial.current) {
+    const first = loadStoredState();
+    // The synchronous issue is kept as well as the async one: unreadable data
+    // must stop *writing* immediately, not once the canonical store has been
+    // consulted, or the first keystroke would overwrite it.
+    initial.current = { ...first, storage: 'localStorage' };
+  }
   const [state, setState] = useState(initial.current.state);
   const [storageIssue, setStorageIssue] = useState(initial.current.issue);
+  const [storage, setStorage] = useState(initial.current.storage);
 
   /* ---- Sandbox / demonstration kitchen --------------------------------
      While a demo session is open, every read comes from the demo copy and
@@ -63,6 +82,10 @@ export function AppProvider({ children }) {
   const [demo, setDemoState] = useState(null);
   const demoRef = useRef(null);
   const realUndoStack = useRef(null);
+  // Set by the first real write. The canonical snapshot arrives asynchronously,
+  // and adopting one that predates an edit the user has already made would be
+  // a silent rollback.
+  const editedSinceBoot = useRef(false);
   const [cloudStatus, setCloudStatus] = useState({ kind: 'checking', message: 'Checking cloud sync…' });
   const blockPersistence = useRef(initial.current.issue?.kind === 'corrupt');
   const cloudMeta = useRef(null);
@@ -89,6 +112,7 @@ export function AppProvider({ children }) {
 
   // Stable across the provider's life: the api memoises on this identity.
   const routedSetState = useCallback((update) => {
+    editedSinceBoot.current = true;
     if (demoRef.current) setDemoState(update);
     else setState(update);
   }, []);
@@ -115,9 +139,31 @@ export function AppProvider({ children }) {
      beside the store rather than inside it. */
   usePersistence({
     state, theme: state.theme, accent: state.accent, latest, demoRef,
-    blockPersistence, setState, setStorageIssue,
+    blockPersistence, setState, setStorageIssue, storage,
     vaultKey, vaultSalt, vaultWrites, undoHistory, undoBatch,
   });
+
+  /* The canonical store is IndexedDB, and it is asynchronous. The first paint
+     above used the synchronous copy so the app is never blank; this adopts the
+     real one and, for a legacy install, is also the migration. Guarded so an
+     edit made in the first few milliseconds is not thrown away by a snapshot
+     that predates it.
+
+     Skipped entirely when there is no IndexedDB: the synchronous read above
+     already *is* the answer then, so the async pass would only re-read the same
+     localStorage copy and write the same state back. */
+  useEffect(() => {
+    if (!idbSupported()) return undefined;
+    let cancelled = false;
+    loadCanonicalState().then((result) => {
+      if (cancelled) return;
+      setStorage(result.storage);
+      if (result.issue) setStorageIssue(result.issue);
+      if (editedSinceBoot.current) return; // the user got there first
+      setState(result.state);
+    }, () => { /* a boot that cannot read keeps the first paint it already has */ });
+    return () => { cancelled = true; };
+  }, [setState, setStorage, setStorageIssue]);
 
   // A losing push — or a pull carrying a newer household copy — gets folded
   // in by the whole-state adopter: rows both sides changed wait for a person,

@@ -70,13 +70,17 @@ export default function PriceCompare() {
   // Everything the app knows about prices, from the four places it knows it.
   // Read fresh on each epoch: the live cache and the dated history both live
   // on the device and are written by the checker below, so a completed check
-  // has to be able to pull them again.
+  // has to be able to pull them again. `priceEpoch` is the only thing that
+  // changes when only those two do — `observed` and `history` are objects the
+  // caller rebuilt, and depending on them directly would read as "always
+  // stale" to the hook rules while actually recomputing on every render.
   const priceSources = useMemo(() => ({
     scraped: loadLivePriceCache(),
     history: loadLivePriceHistory(),
     receipts: receiptsByKey(history),
     observed: observed?.byKey || {},
-  }), [history, observed, priceEpoch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [history, priceEpoch]);
   const fetchObserved = async () => {
     if (!app.shoppingList.length || observedBusy || app.shoppingPreferences?.offlineMode) return;
     setObservedBusy(true);

@@ -15,7 +15,8 @@ import { heldAdaptationKeys } from './adaptation-suppression.js';
 import { replacePredictionsForList } from './shopping-predictions.js';
 import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
-import { emojiFor, uid } from './state.js';
+import { uid } from './state.js';
+import { emojiFor } from './food-lookup.js';
 import { householdPortionsFor } from './portions.js';
 
 /** Single scaling implementation — see portions.js. Kept as a re-export so

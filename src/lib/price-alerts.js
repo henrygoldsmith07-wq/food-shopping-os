@@ -9,8 +9,8 @@
  * recommended controls require.
  */
 
-import { priceHistory } from './kitchen.js';
-import { shoppingNameKey } from './shopping.js';
+import { priceHistory } from './kitchen-spending.js';
+import { shoppingNameKey } from './shopping-names.js';
 
 export const DEFAULT_RISE_PCT = 15;
 export const DEFAULT_BARGAIN_PCT = 15;

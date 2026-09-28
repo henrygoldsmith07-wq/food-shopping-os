@@ -3,7 +3,8 @@ import { aisleFor, applyOffers, shoppingNameKey, routeFromTicks } from './shoppi
 import { reconcilePurchase } from './pantry-intelligence.js';
 import { moveBefore } from './utils.js';
 import { applyListConflictResolution } from './household-concurrency.js';
-import { emojiFor, uid } from './state.js';
+import { uid } from './state.js';
+import { emojiFor } from './food-lookup.js';
 import { upsertPredictions, listSnapshotSync, buildShopRecord } from './shopping-predictions.js';
 import { PREDICTION_PROVENANCE, refreshBasketFreeze } from './prediction-evidence.js';
 import { receiptOutcomeRecords } from './price-evidence.js';

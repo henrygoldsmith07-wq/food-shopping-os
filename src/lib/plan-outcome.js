@@ -1,5 +1,5 @@
 /**
- * Plan vs reality tracking — honest, household-editable, learning-friendly.
+ * Plan vs reality tracking â€” honest, household-editable, learning-friendly.
  *
  * Tracks:
  *  - meals planned
@@ -10,12 +10,19 @@
  *  - takeaway / unplanned meal if recorded
  *
  * Reasons include:
- *  no time · missing ingredients · changed preference · leftovers available · plan too complex
+ *  no time Â· missing ingredients Â· changed preference Â· leftovers available Â· plan too complex
  *  plus the existing youth-safe set.
  */
 
 import { planEntries } from './mealplan.js';
-import { uid } from './state.js';
+
+/**
+ * Re-exported where it has always lived, so existing call sites keep working.
+ * The implementations live in `missed-meals.js` — a module that imports
+ * nothing, because hydration calls them and the boot path must not pull the
+ * 2,200-row recipe book in through `mealplan.js`.
+ */
+export { captureMissedMeals, missedMealSlots } from './missed-meals.js';
 
 export const PLAN_REASONS = [
   { id: 'no-time', label: 'No time' },
@@ -36,63 +43,6 @@ const REASON_BY_ID = new Map(PLAN_REASONS.map((r) => [r.id, r.label]));
 export const reasonLabel = (id) => REASON_BY_ID.get(id) || id || 'Something else';
 
 const eventKey = (date, slot) => `${date}|${slot}`;
-
-/**
- * Planned slots whose date passed with no recorded outcome at all.
- *
- * The household can cook, skip or swap a planned meal — all three write an
- * event. A slot that simply passed without any of those is the silent miss:
- * nobody told the waste log, so the "never cooked" bucket could never see it.
- * Pure: plan + events in, unresolved past slots out.
- */
-export const missedMealSlots = (plan = {}, { before, events = [] } = {}) => {
-  if (!before) return [];
-  const resolved = new Set(events
-    .filter((event) => event?.date && event?.slot)
-    .map((event) => eventKey(event.date, event.slot)));
-  const missed = [];
-  for (const [date, day] of Object.entries(plan)) {
-    if (!day || typeof day !== 'object' || date >= before) continue;
-    for (const [slot, recipeId] of Object.entries(day)) {
-      if (!recipeId || resolved.has(eventKey(date, slot))) continue;
-      missed.push({ date, slot, recipeId });
-    }
-  }
-  return missed;
-};
-
-/**
- * Mark silent misses so the waste log can see them.
- *
- * Runs when the app rolls over to a new day: any planned slot dated before
- * today that still has no outcome event is now definitionally never cooked.
- * Idempotent — resolved slots and already-marked slots are left alone, and
- * the same state returned unchanged when there is nothing to record.
- */
-export const captureMissedMeals = (state = {}) => {
-  const events = Array.isArray(state.mealPlanEvents) ? state.mealPlanEvents : [];
-  const missed = missedMealSlots(state.plan || {}, {
-    before: state.day,
-    events,
-  });
-  if (!missed.length) return state;
-  const stamps = missed.map(({ date, slot, recipeId }) => ({
-    id: uid('mpe'),
-    date,
-    slot,
-    plannedRecipeId: recipeId,
-    actualRecipeId: null,
-    status: 'skipped',
-    reason: 'missed',
-    missed: true,
-    // Provenance: this stamp is Forq's inference, not the household's word —
-    // the loop's confirmation card exists precisely so the household can
-    // correct it (see loop-inference.js). Labelled, never presented as fact.
-    source: 'inferred',
-    at: Date.now(),
-  }));
-  return { ...state, mealPlanEvents: [...events, ...stamps].slice(-500) };
-};
 
 /**
  * Build plan vs reality for a date range.
@@ -165,11 +115,11 @@ export const planOutcome = (plan = {}, dates = [], events = [], cooked = [], pan
     takeawayCount: unplannedRows.length,
     suggestion: (() => {
       if (!rows.length) return 'No planned meals to learn from yet.';
-      if (reasons['leftovers-available'] >= 1) return 'Leftovers covered meals — schedule them explicitly so the list buys less.';
-      if (reasons['no-time'] >= 2) return 'Several “no time” skips — plan quicker meals or batch-cook next week.';
-      if (reasons['missing-ingredients'] >= 2) return 'Missing ingredients caused skips — check pantry before planning.';
-      if (reasons['plan-too-complex'] >= 2) return '“Plan too complex” — fewer distinct dishes or simpler recipes next week.';
-      if (substituted >= 2) return 'Several substitutions — align planned meals with household preferences.';
+      if (reasons['leftovers-available'] >= 1) return 'Leftovers covered meals â€” schedule them explicitly so the list buys less.';
+      if (reasons['no-time'] >= 2) return 'Several â€œno timeâ€ skips â€” plan quicker meals or batch-cook next week.';
+      if (reasons['missing-ingredients'] >= 2) return 'Missing ingredients caused skips â€” check pantry before planning.';
+      if (reasons['plan-too-complex'] >= 2) return 'â€œPlan too complexâ€ â€” fewer distinct dishes or simpler recipes next week.';
+      if (substituted >= 2) return 'Several substitutions â€” align planned meals with household preferences.';
       return 'Adherence is tracked; next plan can prefer quicker, pantry-ready dishes.';
     })(),
   };
