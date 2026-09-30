@@ -13,6 +13,7 @@
 
 import { BADGES } from '../data/plan.js';
 import { addDays, dayStamp, weekStart } from './kitchen-dates.js';
+import { shoppingNameKey } from './shopping-names.js';
 
 /* ---------- Shops and spending ---------- */
 
@@ -67,13 +68,16 @@ export const budgetWeeks = (shops = [], weeklyBudget = 0, today = dayStamp()) =>
  * than once show a trend — everything else is a single data point, and says so.
  */
 export const priceHistory = (shops = []) => {
+  // One canonical product key (see shopping-names.js) so "Milk", "milk " and
+  // "Milks" share one history. The display name stays the first spelling seen.
   const byName = new Map();
-  for (const shop of [...shops].sort((a, b) => a.date.localeCompare(b.date))) {
+  for (const shop of [...shops].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))) {
     for (const item of shop.items || []) {
       const price = Number(item.price) || 0;
       if (!price) continue;
-      const key = item.name.trim().toLowerCase();
-      if (!byName.has(key)) byName.set(key, { name: item.name.trim(), emoji: item.emoji, points: [] });
+      const key = shoppingNameKey(item.name);
+      if (!key) continue;
+      if (!byName.has(key)) byName.set(key, { name: String(item.name || '').trim(), emoji: item.emoji, points: [] });
       byName.get(key).points.push({ date: shop.date, price, store: shop.store });
     }
   }

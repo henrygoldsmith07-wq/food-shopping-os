@@ -6,7 +6,7 @@
  * trust it without ever presenting a community observation as a live shelf price.
  */
 
-import { dayStamp, daysUntil } from './kitchen.js';
+import { dayStamp, daysUntil } from './kitchen-dates.js';
 
 export const PRICE_SOURCES = {
   receipt: { label: 'Receipt (recorded shop)', freshness: 'definitive', confidence: 'high', live: false, authority: 5 },

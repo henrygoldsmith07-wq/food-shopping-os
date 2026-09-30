@@ -39,22 +39,13 @@ export { householdPortionsFor } from './portions.js';
  * it — and the result says which one it used.
  */
 export const shoppingForWeekLoop = (app, dates = weekDates(app.day)) => {
-  const household = householdPortionsFor(app);
-  const people = household.portions;
   // The same waste learning every other Plan → List hand-off applies: an
   // ingredient the household keeps binning arrives one unit lighter, here
   // too. The loop's own "generate" used to skip this, so its added list
-  // disagreed with the reconciled list for the same plan.
-  const items = wasteAwareList(shoppingForPlan(app.plan || {}, dates, {
-    pantry: app.pantry || [], today: app.day, learnedAliases: app.aliasMemory || {}, people,
-  }), {
-    waste: app.waste || [],
-    cooked: app.cooked || [],
-    today: app.day,
-    learnedAliases: app.aliasMemory || {},
-    held: heldAdaptationKeys(app, { today: app.day }),
-  }).map((item) => ({ ...item, people }));
-  return { items, portions: household };
+  // disagreed with the reconciled list for the same plan. Composed from
+  // weekPlanNeed so preview, reconcile and dynamic list share one need.
+  const { rows, portions } = weekPlanNeed(app, dates);
+  return { items: rows.map((item) => ({ ...item, people: portions.portions })), portions };
 };
 
 /** Ingredients the plan needs vs what the pantry actually covers. */
@@ -153,43 +144,57 @@ export const weekLoopSnapshot = (app) => {
 };
 
 /**
- * The plan's changes land in the shopping list by themselves.
+ * The week's plan-derived need, before staples/manual rows join it.
  *
- * This is the transition the loop used to lose: a dish moved, dropped or
- * added left the list describing a week nobody was cooking any more, and
- * every stock change (a binned pepper, a reconciled shop, an eaten leftover)
- * silently changed what was genuinely missing. Given the next state, this
- * returns the list the plan actually needs now — and nothing else:
- *
- *  - rows the plan stopped asking for go (only unchecked, plan-derived rows;
- *    a row whose dish is still planned elsewhere in the calendar stays),
- *  - what a planned dish is missing arrives, but only for a household that
- *    already runs the plan→list flow, so a stray plan edit never conjures a
- *    list out of nothing,
- *  - untouched quantities refresh; a quantity the household edited stays.
- *
- * Returns {} when there is nothing to change, so callers can spread it.
+ * One composed source of truth for every weekly-list entry point: the
+ * preview (`weekLoopSnapshot.listPreview`), the reconciler below and the
+ * dynamic list builder all start from these rows. `deriveDynamicShoppingList`
+ * then adds staples, manual and requested rows only — it never recomputes
+ * plan need, pantry deduction or waste learning.
  */
+export const weekPlanNeed = (state, dates = weekDates(state?.day)) => {
+  const aliasMemory = state.aliasMemory || {};
+  const household = householdPortionsFor(state);
+  return {
+    rows: wasteAwareList(shoppingForPlan(state.plan || {}, dates, {
+      pantry: state.pantry || [], today: state.day, learnedAliases: aliasMemory,
+      people: household.portions,
+    }), {
+      waste: state.waste || [],
+      cooked: state.cooked || [],
+      today: state.day,
+      learnedAliases: aliasMemory,
+      held: heldAdaptationKeys(state, { today: state.day }),
+    }),
+    portions: household,
+    aliasMemory,
+  };
+};
+
 export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { planChanged = false } = {}) => {
   if (!state || !householdPermission(state, 'shopping')) return {};
   const list = Array.isArray(state.shoppingList) ? state.shoppingList : [];
   const plan = state.plan || {};
-  const aliasMemory = state.aliasMemory || {};
+  // One need source of truth (see weekPlanNeed): the dynamic builder only
+  // adds staples/manual/requested rows on top of these same plan rows, and
+  // the fallback below is those rows unadorned — so preview, generated list
+  // and reconcile share identical plan need, pantry deduction and waste
+  // learning, differing only by intentionally added rows and preserved
+  // household edits (checked, hand quantities, hand rows).
+  const { rows: needRows, aliasMemory } = weekPlanNeed(state, dates);
   // The household's "not for me" set — read once, used both to hold the
   // rows and to label the prediction snapshots below.
   const held = heldAdaptationKeys(state, { today: state.day });
 
   // What this week's plan needs, after the pantry, the leftovers and the
-  // household's own waste pattern have had their say.
-  const dynamic = deriveDynamicShoppingList(state, { dates });
-  // `shoppingForWeekLoop` already applies the waste learning once; the
-  // fallback only needs its raw core rows, so the reduction is never
-  // compounded by running `wasteAwareList` twice over the same row.
-  const fallback = shoppingForPlan(state.plan || {}, dates, {
-    pantry: state.pantry || [], today: state.day, learnedAliases: aliasMemory,
-    people: householdPortionsFor(state).portions,
-  });
-  const derived = wasteAwareList(dynamic.length ? dynamic : fallback, {
+  // household's own waste pattern have had their say — fed with the exact
+  // rows above so neither path can drift. One waste pass over the composed
+  // result: plan rows were already adjusted in weekPlanNeed (the guard in
+  // wasteAwareList skips them), while staples and manual rows get their
+  // first — never a second — adjustment here.
+  const dynamic = deriveDynamicShoppingList(state, { dates, planNeed: needRows });
+  const composed = dynamic.length ? dynamic : needRows;
+  const derived = wasteAwareList(composed, {
     waste: state.waste || [],
     cooked: state.cooked || [],
     today: state.day,

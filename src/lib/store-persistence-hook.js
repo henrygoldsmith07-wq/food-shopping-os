@@ -52,6 +52,10 @@ export const usePersistence = ({
   // A state that came from another tab must not immediately be written back
   // out, or two tabs would ping-pong the same write forever.
   const applyingRemote = useRef(false);
+  // The exact document this tab last put into the shared localStorage key. On
+  // the fallback that key is one document per origin, so this is how the
+  // cross-tab listener tells its own write from another tab's.
+  const lastSharedWrite = useRef(null);
   // Which store writes go to. Fixed for the tab's life: it is decided once at
   // boot, so a mid-session change can never split the app across two.
   const store = useRef(storage);
@@ -94,7 +98,11 @@ export const usePersistence = ({
 
     // The fallback store. Still real, still honest about being the smaller one.
     try {
-      localStorage.setItem(KEY, JSON.stringify(payload));
+      const serialized = JSON.stringify(payload);
+      // Remembering exactly what we put there is how the cross-tab listener
+      // tells our own write from another tab's.
+      lastSharedWrite.current = serialized;
+      localStorage.setItem(KEY, serialized);
       return true;
     } catch (error) {
       writeError(
@@ -125,7 +133,23 @@ export const usePersistence = ({
   // not the transport here, it is only the fallback and a signpost.
   useEffect(() => {
     let cancelled = false;
-    const adopt = async () => {
+    /* The localStorage fallback keeps one shared document per origin: there is
+       no per-tab key to watch, and the storage event fires only in the *other*
+       tabs. Adopting that document is this store's equivalent of reading a
+       newer IndexedDB snapshot — skip it and a second tab goes on rendering the
+       copy it booted with, never learning the household has changed. */
+    const sharedDocument = (carried) => {
+      // The event carries the document the other tab wrote, so use it when it is
+      // there; reading the key is the fallback for a signal that only names it.
+      const raw = typeof carried === 'string' ? carried : localStorage.getItem(KEY);
+      if (!raw || raw === lastSharedWrite.current) return null;
+      try {
+        return parseBackup(raw);
+      } catch {
+        return null; // not a document this build can read
+      }
+    };
+    const adopt = async (carried) => {
       try {
         const record = await readSnapshot();
         if (cancelled || !record?.state) return;
@@ -134,7 +158,17 @@ export const usePersistence = ({
         undoBatch.current = null;
         setState(parseBackup(record.state));
       } catch {
-        // A half-finished write in another tab is not ours to interpret.
+        if (cancelled) return;
+        // With a database, a half-finished write in another tab is not ours to
+        // interpret. Without one — the fallback — that shared document *is*
+        // the canonical store, so it is the thing to adopt.
+        if (store.current !== 'localStorage') return;
+        const shared = sharedDocument(carried);
+        if (!shared) return;
+        applyingRemote.current = true;
+        undoHistory.current = [];
+        undoBatch.current = null;
+        setState(shared);
       }
     };
     const stopChannel = openStateChannel(() => { adopt(); });
@@ -142,7 +176,9 @@ export const usePersistence = ({
     // is the same signal, just carried by the storage event.
     const onStorage = (event) => {
       if (event.key && event.key !== POINTER_KEY && event.key !== KEY) return;
-      adopt();
+      // A `clear()` arrives with neither key nor payload; then the shared key
+      // itself is the only place left to look.
+      adopt(event.key === KEY ? event.newValue : undefined);
     };
     window.addEventListener('storage', onStorage);
     return () => {

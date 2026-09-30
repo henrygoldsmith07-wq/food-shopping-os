@@ -86,6 +86,81 @@ describe('durable backups', () => {
   });
 });
 
+describe('hydrate: pure transformation, no lifecycle', () => {
+  it('does not roll the day or capture misses — that is applyBootLifecycle', async () => {
+    const { hydrate: pure, applyBootLifecycle: boot } = await import('../src/lib/store-persistence.js');
+    const stored = {
+      onboarded: true,
+      day: '2026-05-19',
+      plan: { '2026-05-19': { dinner: 'chickpea-curry' } },
+      mealPlanEvents: [],
+    };
+    const hydrated = pure(JSON.parse(JSON.stringify(stored)));
+    expect(hydrated.day).toBe('2026-05-19');
+    expect(hydrated.mealPlanEvents).toEqual([]);
+    const booted = boot(JSON.parse(JSON.stringify(stored)), { today: '2026-05-20' });
+    expect(booted.day).toBe('2026-05-20');
+    expect(booted.mealPlanEvents).toHaveLength(1);
+  });
+
+  it('serialising a backup does not mutate logical state', async () => {
+    const { hydrate: pure, parseBackup: parse, serialiseBackup: serialise } = await import('../src/lib/store-persistence.js');
+    const state = pure({ onboarded: true, day: '2026-05-20', plan: { '2026-05-19': { dinner: 'r1' } }, mealPlanEvents: [] });
+    const before = JSON.stringify(state);
+    const restored = parse(serialise(JSON.parse(JSON.stringify(state))));
+    expect(JSON.stringify(restored)).toBe(before);
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
+  it('save → load → save is stable for valid historical rows', async () => {
+    const { hydrate: pure, parseBackup: parse, serialiseBackup: serialise } = await import('../src/lib/store-persistence.js');
+    const historical = {
+      onboarded: true,
+      day: '2026-05-20',
+      shops: [{ id: 'sh1', date: '2026-02-08', store: 'Sainsbury', total: 23.4, items: [{ name: 'Milk', price: 1.35 }] }],
+      cooked: [{ recipeId: 'chickpea-curry', date: '2026-05-18' }],
+      waste: [{ name: 'Spinach', qty: '200 g', date: '2026-05-14' }],
+    };
+    const once = pure(JSON.parse(JSON.stringify(historical)));
+    const twice = parse(serialise(JSON.parse(JSON.stringify(once))));
+    expect(twice.shops).toHaveLength(1);
+    expect(twice.cooked).toHaveLength(1);
+    expect(twice.waste).toHaveLength(1);
+    expect(JSON.stringify(pure(JSON.parse(JSON.stringify(twice))))).toBe(JSON.stringify(twice));
+  });
+
+  it('keeps every provenance the app actually writes, and drops only bogus sources', async () => {
+    const { hydrate: pure } = await import('../src/lib/store-persistence.js');
+    const state = pure({
+      onboarded: true,
+      day: '2026-05-20',
+      shoppingList: [
+        { id: 's1', name: 'Milk', price: 1.5, priceSource: 'manual' },
+        { id: 's2', name: 'Bread', price: 2, priceSource: 'retailer' },
+        { id: 's3', name: 'Eggs', price: 3, priceSource: 'from a dream' },
+      ],
+    });
+    // 'manual' and 'retailer' are stamped by the app's own writers — an
+    // older, narrower repair vocab nulled them on every load and erased
+    // where the price came from.
+    expect(state.shoppingList[0].priceSource).toBe('manual');
+    expect(state.shoppingList[1].priceSource).toBe('retailer');
+    // A source outside the canonical table is removed, never believed.
+    expect(state.shoppingList[2].priceSource).toBeNull();
+  });
+
+  it('keeps an unknown price unknown rather than inventing £0 or a source', async () => {
+    const { hydrate: pure } = await import('../src/lib/store-persistence.js');
+    const state = pure({
+      onboarded: true,
+      day: '2026-05-20',
+      shoppingList: [{ id: 's2', name: 'Bread', price: 0.9 }],
+    });
+    expect(state.shoppingList[0].price).toBe(0.9);
+    expect(state.shoppingList[0].priceSource).toBeUndefined();
+  });
+});
+
 describe('rolloverDay', () => {
   const base = {
     day: '2026-07-21',

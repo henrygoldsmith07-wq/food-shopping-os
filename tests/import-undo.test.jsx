@@ -20,12 +20,17 @@ describe('import undo batching', () => {
   };
 
   const importReceipts = async (rows) => {
-    // The merged app navigates by journey stage, not a Home/Shop tab pair.
-    fireEvent.click(within(document.querySelector('nav')).getByLabelText('Shop: Buy what you need'));
+    // The merged app navigates by journey stage, not a Home/Shop tab pair: the
+    // shopping list is the "List" tab, and a nav button is named by the label it
+    // shows — the same word its segment chip uses, so the nav and the screen have
+    // to be told apart below.
+    fireEvent.click(within(document.querySelector('nav')).getByRole('button', { name: 'List' }));
     // The import button lives on the list segment; a previous step may have
     // left the tab on its history segment. The segment chips render label
-    // text inside a span, so match the chip button by its full text.
-    const listChip = screen.getAllByText('List').find((el) => el.closest('button'));
+    // text inside a span, so match the chip button by its full text — and take
+    // the one inside the screen, not the nav button of the same name.
+    const listChip = screen.getAllByText('List')
+      .find((el) => el.closest('button') && !el.closest('nav'));
     fireEvent.click(listChip.closest('button'));
     fireEvent.click(screen.getByText('Import receipts'));
     const dialog = document.querySelector('[role="dialog"]');

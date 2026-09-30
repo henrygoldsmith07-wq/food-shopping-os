@@ -19,6 +19,9 @@ const savedState = {
   log: {
     '2026-07-28': [{
       id: 'e1',
+      // Hydration keeps only diary entries that point at a catalogue food — a
+      // record without `foodId` is dropped before any dashboard sees it.
+      foodId: 'greek-yogurt',
       name: 'Yoghurt',
       brand: 'Fage',
       grams: 100,

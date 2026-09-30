@@ -13,6 +13,11 @@ import {
   formatQuantity, parseQuantity, scaleQuantity, subtractQuantities, sufficientFor,
 } from './measure.js';
 import { pantryConfidenceLevel as pantryEvidenceConfidence, quantityRangeLabel } from './pantry-intelligence.js';
+/* Aliased: the wrappers further down hand these three the recipe book by
+   default, so the un-suffixed names in this module are those wrappers. */
+import {
+  cuisineSplit as cuisineSplitOf, kitchenStats as kitchenStatsOf, planCost as planCostOf,
+} from './kitchen-spending.js';
 
 export { quantityRangeLabel };
 
@@ -23,6 +28,33 @@ import { addDays, DAY_MS, dayStamp, daysUntil, weekDates, weekStart } from './ki
 export * from './kitchen-dates.js';
 export * from './kitchen-spending.js';
 export * from './pantry-share-code.js';
+
+/* ---------- the book this surface owns ---------- */
+
+/**
+ * The recipe book, looked up the once.
+ *
+ * `kitchen-spending.js` deliberately knows nothing about recipes: it takes the
+ * book as an argument so hydration can reuse its maths without pulling the
+ * recipe library in behind it. This surface *does* own the book — the `RECIPES`
+ * import above is the same library planning draws from — so when a caller does
+ * not pass a book of its own, these defaults fill the gap. Without them a plan's
+ * cost and a cuisine split come back as zero and nothing, not because the
+ * household cooked nothing, but because nobody injected a lookup. A caller that
+ * does pass one — the merged household's library, an imported shelf — still
+ * wins: its own options are spread last.
+ */
+const bookRecipe = (id) => RECIPES.find((recipe) => recipe.id === id) || null;
+const bookServingCost = (id) => Number(bookRecipe(id)?.costPerServing);
+
+export const planCost = (slots = {}, options = {}) =>
+  planCostOf(slots, { costPerServing: bookServingCost, ...options });
+
+export const kitchenStats = (state, today, options = {}) =>
+  kitchenStatsOf(state, today, { recipesById: bookRecipe, ...options });
+
+export const cuisineSplit = (cooked = [], options = {}) =>
+  cuisineSplitOf(cooked, { recipesById: bookRecipe, ...options });
 
 /* ---------- Pantry ---------- */
 

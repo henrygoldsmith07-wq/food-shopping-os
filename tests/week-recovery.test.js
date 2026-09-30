@@ -227,14 +227,23 @@ describe('week recovery engine', () => {
   });
 
   it('flags a budget overrun honestly, and counts removal savings', () => {
+    // Spend in the budget note comes from recorded trips — the same
+    // spentInWeek the BudgetPanel reads — not from a state field no writer
+    // maintains. An overrun must be reachable from real shops alone.
     const over = recoverWeek(
-      { ...baseState, weeklyBudget: 5, spentThisWeek: 4.9 },
+      {
+        ...baseState,
+        weeklyBudget: 5,
+        spentThisWeek: undefined,
+        shops: [{ id: 'sh1', date: '2026-09-01', store: 'Tesco', total: 4.9, items: [] }],
+      },
       { today: '2026-09-01', trigger: { kind: 'IngredientWasted', ingredient: 'Pasta' }, catalogue: [{ ...catalogue[1] }] },
     );
     expect(over.budgetNote.over).toBe(true);
+    expect(over.budgetNote.spent).toBe(4.9);
 
     const saving = recoverWeek(
-      { ...baseState, weeklyBudget: 60, spentThisWeek: 10 },
+      { ...baseState, weeklyBudget: 60 },
       { today: '2026-09-01', trigger: { kind: 'UnplannedShop', items: ['Tomatoes'] }, catalogue },
     );
     expect(saving.budgetNote.removalSavings).toBeCloseTo(1.2, 2);

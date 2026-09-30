@@ -36,24 +36,12 @@ const AISLE_HINTS = [
 export const guessAisle = (name = '') =>
   (AISLE_HINTS.find(([pattern]) => pattern.test(name)) || [null, 'Other'])[1];
 
-export const key = (name) => String(name || '').trim().toLowerCase();
-
 /** Add up the checked items' prices — the running total while you shop. */
 export const checkedTotalOf = (items = []) =>
   items.filter((i) => i.checked).reduce((s, i) => s + (Number(i.price) || 0), 0);
 
 export const totalOf = (items = []) =>
   items.reduce((s, i) => s + (Number(i.price) || 0), 0);
-
-/** Group a list into aisle order, dropping empty aisles. */
-export const groupByAisle = (items = []) => {
-  const map = new Map(AISLE_ORDER.map((a) => [a, []]));
-  for (const item of items) {
-    const aisle = map.has(item.aisle) ? item.aisle : 'Other';
-    map.get(aisle).push(item);
-  }
-  return [...map.entries()].filter(([, list]) => list.length);
-};
 
 /**
  * Turn recipes' missing ingredients into shopping items. Prices are left

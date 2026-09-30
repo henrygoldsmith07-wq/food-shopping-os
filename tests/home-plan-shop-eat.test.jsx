@@ -48,20 +48,25 @@ vi.mock('../src/components/OutcomeDashboard.jsx', () => ({ default: () => <div /
 describe('home: plan → shop → eat', () => {
   const props = { openRecipe: () => {}, openPantry: () => {}, openGuidance: () => {}, goTab: () => {}, goLog: () => {} };
 
-  it('leads with the best next action, tonight, buy/use soon and outlook', () => {
+  it('leads with the one next action, tonight, buy/use soon and outlook', () => {
+    // One primary next action (lib/next-action.js), not three competing
+    // "Plan, shop, eat" cards: HomeTab's header comment documents the move
+    // from three cards to one, and the ranking is covered behaviourally in
+    // next-action.test.js.
     render(<HomeTab {...props} />);
     expect(screen.getByLabelText('best next action')).toBeTruthy();
-    expect(screen.getByLabelText('Plan, shop, eat')).toBeTruthy();
     expect(screen.getByLabelText("Tonight's meal")).toBeTruthy();
     expect(screen.getByLabelText('Items to buy or use soon')).toBeTruthy();
     expect(screen.getByLabelText('Weekly outlook')).toBeTruthy();
   });
 
-  it('keeps plan/shop/eat one tap away', () => {
+  it('keeps plan, pantry, shop and cook reachable without competing CTAs', () => {
+    // The old three-card shortcut row is gone by design; what must hold is
+    // that each core destination stays one tap away through labelled links.
     render(<HomeTab {...props} />);
-    expect(screen.getByLabelText(/Plan —/)).toBeTruthy();
-    expect(screen.getByLabelText(/Shop —/)).toBeTruthy();
-    expect(screen.getByLabelText(/Eat —/)).toBeTruthy();
+    expect(screen.getByText('Open pantry →')).toBeTruthy();
+    expect(screen.getByText('Open shopping list →')).toBeTruthy();
+    expect(screen.getByText('Full plan →')).toBeTruthy();
   });
 
   it('shows no flashcards and no debate content', () => {

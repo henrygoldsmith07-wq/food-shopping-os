@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { shoppingForPlan, planEntries, planStats, leftoverCoverageForPlan } from '../src/lib/mealplan.js';
-import { shoppingForWeekLoop, weekLoopSnapshot } from '../src/lib/week-loop.js';
+import { reconcileListWithPlan, shoppingForWeekLoop, weekLoopSnapshot, weekPlanNeed } from '../src/lib/week-loop.js';
 import { deriveDynamicShoppingList } from '../src/lib/dynamic-shopping.js';
 import { householdPortionsFor } from '../src/lib/portions.js';
 import { weekDates } from '../src/lib/kitchen.js';
@@ -52,5 +52,46 @@ describe('single source of truth — plan → list', () => {
     expect(dynamic.map((row) => row.name).sort())
       .toEqual(shoppingForPlan(state.plan, dates, { pantry: [], today: state.day, people: 2 })
         .map((row) => row.name).sort());
+  });
+
+  it('reconcile settles after generation: preview and reconciliation are one derivation', () => {
+    // WeekLoop.generateList writes `snap.listPreview` verbatim. Reconciling
+    // that list against the same state must reach a fixpoint: the first pass
+    // may stamp evidence the write path does not carry (lastAutoQty), but a
+    // second pass has nothing left to change. If either diverged, the screen
+    // the household reads and the list the store keeps would disagree.
+    const dates = weekDates(state.day);
+    const base = {
+      ...state, shoppingList: [], shops: [], leftovers: [], onboarded: true, aliasMemory: {},
+    };
+    const snap = weekLoopSnapshot(base);
+    expect(snap.listPreview.length).toBeGreaterThan(0);
+    const written = {
+      ...base,
+      shoppingList: snap.listPreview.map((row) => ({ ...row, checked: false })),
+    };
+    const first = reconcileListWithPlan(written, dates, { planChanged: true });
+    const settled = first.shoppingList
+      ? { ...written, shoppingList: first.shoppingList }
+      : written;
+    expect(reconcileListWithPlan(settled, dates, { planChanged: true })).toEqual({});
+  });
+
+  it('weekPlanNeed is the single need row set every entry point composes from', () => {
+    const dates = weekDates(state.day);
+    const app = { ...state, shoppingList: [], shops: [], leftovers: [] };
+    const need = weekPlanNeed(app, dates);
+    const preview = shoppingForWeekLoop(app, dates);
+    expect(preview.items.map((row) => row.name).sort())
+      .toEqual(need.rows.map((row) => row.name).sort());
+    // The dynamic builder may add staples/manual rows, but it never rewrites
+    // the plan-derived need it was handed: every plan row survives untouched.
+    const dynamic = deriveDynamicShoppingList(app, { dates, planNeed: need.rows });
+    const needByName = new Map(need.rows.map((row) => [row.name, row]));
+    for (const row of dynamic) {
+      if (!needByName.has(row.name)) continue;
+      expect(row.qty).toBe(needByName.get(row.name).qty);
+      expect(row.requiredQty).toBe(needByName.get(row.name).requiredQty);
+    }
   });
 });

@@ -75,8 +75,23 @@ export const V4_INSTALL = {
   day: '2026-05-20',
   healthVaultEnabled: true,
   measurements: [{ id: 'ms1', key: 'weightKg', value: 68.4, date: '2026-05-19' }],
-  cooked: [{ id: 'c1', recipeId: 'chickpea-curry', date: '2026-05-18', portions: 2 }],
-  waste: [{ id: 'w1', item: 'Spinach', qty: '200 g', date: '2026-05-14', cause: 'expired' }],
+  // Real trip/cook/waste shapes as the app writes them: shops are trip
+  // records (no `name`, id always present), cooks are {recipeId,date}
+  // outcomes with no id at all, and waste rows are {name,…,date} with no id.
+  // All of them must survive hydration — spend, streaks and price history
+  // are built from them.
+  shops: [
+    ...V1_INSTALL.shops,
+    { id: 'sh2', date: '2026-05-17', store: 'Tesco', total: 12.1, items: [{ name: 'Eggs', price: 2.1 }] },
+  ],
+  cooked: [
+    { recipeId: 'chickpea-curry', date: '2026-05-18', portions: 2 },
+    { id: 'c2', recipeId: 'chicken-traybake', date: '2026-05-17', portions: 4 },
+  ],
+  waste: [
+    { name: 'Spinach', qty: '200 g', date: '2026-05-14', cause: 'expired' },
+    { id: 'w2', name: 'Milk', qty: '1 l', date: '2026-05-13', cause: 'expired' },
+  ],
   leftovers: [],
   trackingCycle: false,
 };

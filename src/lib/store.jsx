@@ -26,7 +26,7 @@ import {
 import { startCloudRetryLoop } from './cloud-retry.js';
 import { platformUnlockAvailable } from './health-vault.js';
 import {
-  hydrate, loadStoredState, parseBackup, serialiseBackup,
+  applyBootLifecycle, hydrate, loadStoredState, parseBackup, serialiseBackup,
 } from './store-persistence.js';
 import { loadCanonicalState } from './persistence-boot.js';
 import { idbSupported } from './persistent-state.js';
@@ -51,7 +51,7 @@ export {
 // the store is unchanged by the move that took them off the boot path.
 export { emojiFor, foodById, recentFoodsFrom } from './food-lookup.js';
 
-export { hydrate, parseBackup, serialiseBackup };
+export { applyBootLifecycle, hydrate, parseBackup, serialiseBackup };
 
 const AppContext = createContext(null);
 

@@ -18,6 +18,15 @@ const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 const round1 = (value) => Math.round(Number(value || 0) * 10) / 10;
 const clean = (value) => String(value || '').trim();
 
+/**
+ * Confidence table for list-price claims. Kept local rather than importing
+ * PRICE_SOURCES from price-provenance.js: the two answer different
+ * questions. Provenance ranks *evidence* (receipt > live > reference >
+ * community > estimate) for raw price rows; this scores *what a list row
+ * claims*, including the honest "no price" state every unpriced row is in.
+ * Both label observed prices as low-confidence, never live — see
+ * price-provenance.js for the canonical wording rules.
+ */
 const PRICE_SOURCES = {
   receipt: { score: 0.95, label: 'Receipt-backed', detail: 'Recorded from a completed shop.' },
   recorded: { score: 0.9, label: 'Recorded price', detail: 'Entered from your own shopping evidence.' },

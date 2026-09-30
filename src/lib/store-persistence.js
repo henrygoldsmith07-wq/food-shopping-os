@@ -8,6 +8,7 @@ import { permissionsForRole } from './household.js';
 import { predictionCorrectionEvent } from './prediction-feedback.js';
 import { overrideSchemaStatus, basketSchemaStatus } from './prediction-evidence.js';
 import { captureMissedMeals } from './missed-meals.js';
+import { PRICE_SOURCES } from './price-provenance.js';
 
 /**
  * Repairs for one saved install, keyed by state key.
@@ -38,8 +39,17 @@ import { captureMissedMeals } from './missed-meals.js';
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /** Rows a screen can actually act on: an object with an id and a name. */
-const rowsWithId = (value) => (Array.isArray(value) ? value : [])
+const rowsWithIdAndName = (value) => (Array.isArray(value) ? value : [])
   .filter((row) => isObject(row) && row.id && typeof row.name === 'string' && row.name);
+
+/** Recorded rows that predate the id rule: keep anything object-shaped. */
+const rowsWithLegacyId = (value, { nameKey = null } = {}) => (Array.isArray(value) ? value : [])
+  .filter((row) => {
+    if (!isObject(row)) return false;
+    if (nameKey && typeof row[nameKey] === 'string' && row[nameKey].trim()) return true;
+    if (row.id) return true;
+    return false;
+  });
 
 /** Drop a field when its value could not be true; leave it alone otherwise. */
 const dropIfNot = (row, key, isValid) => {
@@ -56,28 +66,47 @@ const isDate = (value) => value === undefined || value === null || /^\d{4}-\d{2}
 /** A map key that names a real day, or null. */
 const dateOr = (value) => (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null);
 
-const PRICES = new Set(['receipt', 'recorded', 'estimated', 'unknown']);
+/**
+ * The canonical price-source vocabulary, for list-row provenance.
+ *
+ * One set, derived from the app's own tables rather than re-invented here:
+ * every value in `PRICE_SOURCES` (price-provenance.js) plus the resolver's
+ * `recorded`/`checked` states and the honest `unknown`. Writers stamp
+ * 'manual', 'receipt', 'retailer', 'recorded', 'estimated', 'observed' and
+ * friends (see shopping-list-mutations, receipt-import, price-evidence) —
+ * nulling a valid source on load would erase provenance the household or
+ * the till actually recorded. Anything outside this set is bogus and is
+ * removed rather than believed.
+ */
+const PRICES = new Set([...Object.keys(PRICE_SOURCES), 'recorded', 'checked', 'unknown']);
 
 const REPAIRS = {
   // A pantry row. "Use first" sorts on `expiry`, so a malformed one would read
   // as fresh food that never needs using.
-  pantry: (rows) => rowsWithId(rows).map((row) => dropIfNot(
+  pantry: (rows) => rowsWithIdAndName(rows).map((row) => dropIfNot(
     dropIfNot(row, 'expiry', isDate),
     'qty',
     (v) => v === undefined || v === null || typeof v === 'string' || typeof v === 'number',
   )),
-  shoppingList: (rows) => rowsWithId(rows).map((row) => {
+  shoppingList: (rows) => rowsWithIdAndName(rows).map((row) => {
     const priced = dropIfNot(row, 'price', isAmount);
     // A price must say where it came from. An unsourced number is a guess, and
     // a guess is exactly what this app must never print as a fact.
     return dropIfNot(priced, 'priceSource', (v) => v === undefined || PRICES.has(v));
   }),
-  shops: (rows) => rowsWithId(rows).map((row) => ({
+  // Shops are trip records ({id,date,store,total,items[]}), not named rows:
+  // they never carried `name`, and a dated trip without an id (a hand-edited
+  // export, an imported history) is still real spend — it is kept as long as
+  // it can be placed in time. A row with neither id nor date cannot be
+  // anchored to anything and is dropped rather than guessed at.
+  shops: (rows) => rowsWithLegacyId(rows, { nameKey: 'date' }).map((row) => ({
     ...dropIfNot(row, 'date', isDate),
     items: Array.isArray(row.items) ? row.items.filter(isObject) : [],
   })),
-  cooked: (rows) => rowsWithId(rows).map((row) => dropIfNot(row, 'date', isDate)),
-  waste: (rows) => rowsWithId(rows).map((row) => dropIfNot(row, 'date', isDate)),
+  // Cooks are outcome records ({recipeId,date}), not named rows.
+  cooked: (rows) => rowsWithLegacyId(rows, { nameKey: 'recipeId' }).map((row) => dropIfNot(row, 'date', isDate)),
+  // Waste rows predate ids too; keep anything naming what was thrown.
+  waste: (rows) => rowsWithLegacyId(rows, { nameKey: 'name' }).map((row) => dropIfNot(row, 'date', isDate)),
   // A plan is `{ day: { slot: recipeId } }`. A non-object day, a non-object
   // meal, or a slot without a recipe id is dropped rather than rendered.
   plan: (plan) => {
@@ -107,6 +136,14 @@ const REPAIRS = {
 
 
 export const hydrate = (stored = {}) => {
+  // Pure transformation: stored bytes → validated canonical state.
+  //
+  // Deliberately lifecycle-free. Day rollover, missed-meal capture and any
+  // other `today`-dependent behaviour live in `applyBootLifecycle()` below,
+  // which boot calls exactly once per session. Hydration itself must be
+  // idempotent (hydrate(hydrate(x)) === hydrate(x)), must not read the clock,
+  // and must be safe to call from export, import, cross-tab adoption and
+  // tests without changing logical state.
   const candidate = isObject(stored) ? stored : {};
   // A fresh object, never the caller's: hydration must not hand back a live
   // reference into a backup object somebody may still hold.
@@ -164,7 +201,25 @@ export const hydrate = (stored = {}) => {
     .filter((p) => p && typeof p === 'object' && p.id && typeof p.name === 'string')
     .slice(-500);
   state.autopilotOutcomes = (Array.isArray(state.autopilotOutcomes) ? state.autopilotOutcomes : []).slice(-500);
-  const rolled = rolloverDay(state);
+  return state;
+};
+
+/**
+ * Runtime boot lifecycle, applied once per session AFTER pure hydration.
+ *
+ * Separated because hydration must be a deterministic `stored → canonical`
+ * mapping while rollover is intentionally time-dependent: the same stored
+ * bytes opened tomorrow must roll the day forward and mark silent misses,
+ * but re-reading them today (export, second tab, second hydrate call) must
+ * not. Callers that load persisted state for boot use
+ * `applyBootLifecycle(hydrate(bytes))`; callers that serialise, import or
+ * adopt state use `hydrate()` alone.
+ *
+ * `today` is injectable so tests pin the clock instead of racing it.
+ */
+export const applyBootLifecycle = (stored, { today } = {}) => {
+  const state = hydrate(stored);
+  const rolled = today === undefined ? rolloverDay(state) : rolloverDay(state, today);
   // A day actually passed since this household last opened the app: any
   // planned slot dated before today that never got cooked, skipped or
   // swapped is now a silent miss — mark it so the waste log sees it.
@@ -202,8 +257,11 @@ export const loadStoredState = () => {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? parseBackup(raw) : null;
     const vault = localStorage.getItem(HEALTH_VAULT_KEY);
+    // Boot read, not a pure re-parse: the household's day rolls forward here
+    // (once per session) while export/import/cross-tab paths stay pure.
+    const booted = raw ? applyBootLifecycle(parsed) : null;
     return raw
-      ? { state: parsed.healthVaultEnabled && vault ? withoutHealth(parsed, EMPTY_STATE) : parsed, issue: null }
+      ? { state: booted.healthVaultEnabled && vault ? withoutHealth(booted, EMPTY_STATE) : booted, issue: null }
       : { state: { ...EMPTY_STATE }, issue: null };
   } catch (error) {
     let raw = null;

@@ -29,12 +29,20 @@
 
 import { dayStamp, daysUntil, weekDates } from './kitchen-dates.js';
 import { expiringSoon } from './kitchen.js';
+import { spentInWeek } from './kitchen-spending.js';
 import { compareLedgerEvents } from './event-ledger.js';
 import { inferWeekRecoveryTrigger, inferWeekRecoveryTriggers } from './week-recovery-triggers.js';
 import { pantryCoverageOf } from './pantry-coverage.js';
 
 export { inferWeekRecoveryTrigger, inferWeekRecoveryTriggers, pantryCoverageOf };
 
+// Name matching runs on the SAME normalisation `pantryCoverageOf` uses
+// (see pantry-coverage.js norm): the coverage prefilter asks
+// `pantryNames.has(trim().toLowerCase())`, so a different key here silently
+// reports every ingredient as missing and the engine stops choosing
+// pantry swaps. Product identity on the shopping surface uses
+// shoppingNameKey; this set is an internal prefilter that must agree with
+// its consumer.
 const norm = (s) => String(s || '').trim().toLowerCase();
 
 const ingredientsOf = (recipe) => (recipe?.ingredients || []).map((i) => norm(i.name || i));
@@ -164,7 +172,8 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
   const pantryNames = new Set(pantry.map((p) => norm(p.name)));
   const listNames = new Set(shoppingList.map((r) => norm(r.name)));
   // Learned ingredient aliases, so coverage reads rows the way the
-  // household actually names them.
+  // household actually names them. The `norm` key above is deliberately the
+  // naive one pantryCoverageOf matches on — see the note at its definition.
   const learnedAliases = state.aliasMemory || {};
 
   const expiring = expiringSoon(pantry, 3, today);
@@ -432,7 +441,9 @@ export const recoverWeek = (state = {}, { today = dayStamp(), trigger = null, tr
     .reduce((s, r) => s + (Number(r.price) || 0) * (Number(r.qty) || 1), 0);
   const addedTotal = shoppingAdd.reduce((s, r) => s + (Number(r.price) || 0), 0);
   const weeklyBudget = Number(state.weeklyBudget) || 0;
-  const spent = Number(state.spentThisWeek) || 0;
+  // One spend source of truth: recorded trips via spentInWeek, never the
+  // legacy in-memory spentThisWeek counter (which no writer maintains).
+  const spent = Math.round(spentInWeek(state.shops || [], today) * 100) / 100;
   const budgetNote = weeklyBudget
     ? {
       budget: weeklyBudget, spent, listTotal: Math.round((listTotal + addedTotal) * 100) / 100,

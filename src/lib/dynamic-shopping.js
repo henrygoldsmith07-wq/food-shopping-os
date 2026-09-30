@@ -10,15 +10,17 @@ import { householdPortionsFor } from './portions.js';
 const reliable = (item, today) => ['confirmed_sufficient', 'probably_available'].includes(pantryTruthForNeed(item, null, { today }));
 const priorityFor = (row) => row.expiryPressure ? 'urgent' : row.mealDependency ? 'planned' : row.staple ? 'routine' : 'normal';
 
-export const deriveDynamicShoppingList = (state = {}, { dates = null } = {}) => {
+export const deriveDynamicShoppingList = (state = {}, { dates = null, planNeed = null } = {}) => {
   const planDates = dates || Object.keys(state.plan || {}).sort();
   const recipePool = state.recipes || [];
   // Plan rows scale to the household's portions — the learned appetite when
   // recorded cooks disagree with the profile, the same decision every other
-  // list path uses.
+  // list path uses. `planNeed` lets the week-loop reconciler share its exact
+  // rows (see weekPlanNeed) instead of recomputing them; otherwise they are
+  // derived here from the same helpers.
   const household = householdPortionsFor(state);
   const entries = planEntries(state.plan || {}, planDates);
-  const planRows = shoppingForPlan(state.plan || {}, planDates, {
+  const planRows = planNeed || shoppingForPlan(state.plan || {}, planDates, {
     pantry: state.pantry || [],
     today: state.day,
     learnedAliases: state.aliasMemory || {},

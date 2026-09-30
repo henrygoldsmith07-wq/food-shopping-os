@@ -14,53 +14,34 @@ import { mergeQtys } from './pantry.js';
 import { entityKey } from './aliases.js';
 import { compareUnitPrices, unitPriceOf } from './measure.js';
 import { applyOffers, cheapestFor } from './shopping-prices.js';
+import { parseVoiceShopping } from './shopping-voice.js';
+import { shoppingNameKey } from './shopping-names.js';
 
 /* Prices read off your own receipts, and the offers you entered, live next
    door; re-exported here so the shopping surface stays one import. */
 export * from './shopping-prices.js';
 
-const key = (name) => String(name || '').trim().toLowerCase();
+/**
+ * One product-name normalisation for the shopping surface.
+ *
+ * `shoppingNameKey` (see shopping-names.js) is the canonical key: lowercase,
+ * `& → and`, punctuation → space, trailing-plural singularised. The naive
+ * `trim().toLowerCase()` alias below survives only for store names, where
+ * plural-folding would merge distinct shops. Every product comparison —
+ * price history, aisle memory, duplicates, offers, staples, suggestions —
+ * uses the canonical key so the same product cannot read as two items in
+ * different parts of the app.
+ */
+const storeKey = (name) => String(name || '').trim().toLowerCase();
+const key = shoppingNameKey;
 const round2 = (n) => Math.round(n * 100) / 100;
 
-const VOICE_NUMBERS = {
-  an: '1', a: '1', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6',
-  seven: '7', eight: '8', nine: '9', ten: '10', couple: '2', few: '3',
-};
-const VOICE_UNIT_PATTERN = 'kilograms?|kg|grams?|grammes?|g|millilitres?|milliliters?|ml|litres?|liters?|l|packs?|bags?|boxes?|cartons?|bottles?|jars?|tins?|cans?|bunch|bunches|loaf|loaves|pieces?|slices?|portions?|servings?|dozens?';
-const VOICE_UNIT_ALIASES = {
-  kilogram: 'kg', kilograms: 'kg', gram: 'g', grams: 'g', gramme: 'g', grammes: 'g',
-  litre: 'l', litres: 'l', liter: 'l', liters: 'l', millilitre: 'ml', millilitres: 'ml',
-  milliliter: 'ml', milliliters: 'ml',
-};
-const normaliseVoiceQty = (value) => String(value || '').replace(/\b(kilograms?|grams?|grammes?|litres?|liters?|millilitres?|milliliters?)\b/gi, (unit) => VOICE_UNIT_ALIASES[unit.toLowerCase()] || unit.toLowerCase());
-
-const voiceItem = (chunk) => {
-  const text = String(chunk || '').trim().replace(/\s+/g, ' ');
-  if (!text) return null;
-  const bulk = text.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s*x\\s*(\\d+(?:\\.\\d+)?\\s*(?:${VOICE_UNIT_PATTERN}))\\s+(?:of\\s+)?(.+)$`, 'i'));
-  if (bulk) {
-    const packed = normaliseVoiceQty(bulk[2]).replace(/\s+/g, '');
-    return { name: bulk[3].replace(/[.!?]+$/, '').trim(), qty: `${bulk[1]} x ${packed}` };
-  }
-  const prefix = text.match(new RegExp(`^(\\d+(?:\\.\\d+)?|${Object.keys(VOICE_NUMBERS).join('|')})\\s*((${VOICE_UNIT_PATTERN})\\b)?\\s*(?:of\\s+)?(.+)$`, 'i'));
-  if (!prefix) return { name: text.replace(/[.!?]+$/, '').trim(), qty: '' };
-  const number = VOICE_NUMBERS[prefix[1].toLowerCase()] || prefix[1];
-  const unit = prefix[3] ? (VOICE_UNIT_ALIASES[prefix[3].toLowerCase()] || prefix[3].toLowerCase()) : '';
-  const name = prefix[4].replace(/[.!?]+$/, '').trim();
-  return name ? { name, qty: unit ? `${number} ${unit}` : number } : null;
-};
-
-/** Turn a spoken shopping sentence into separate, editable list items. */
-export const parseVoiceShopping = (text) => {
-  const body = String(text || '')
-    .trim()
-    .replace(/^(?:please\s+)?(?:add|buy|put\s+on\s+the\s+list|we\s+need|need)\s+/i, '');
-  if (!body || /^(?:add|buy|please|need)$/i.test(body)) return { items: [], heard: body };
-  const chunks = body.split(/\s*(?:,|;|\band\b|\bplus\b)\s*/i)
-    .map((chunk) => voiceItem(chunk))
-    .filter((item) => item?.name.length >= 2);
-  return { items: chunks, heard: body };
-};
+/**
+ * Voice parsing lives in `shopping-voice.js` — the number words, the unit
+ * table and the two regexes that lean on them. Re-exported here so the
+ * shopping surface stays a single import for its components.
+ */
+export { parseVoiceShopping };
 
 /**
  * What a row costs per 100 g, per 100 ml or per item — the number that says
@@ -89,9 +70,11 @@ export const compareSizes = (rows = []) =>
  * `shopping-names.js` — a module that imports nothing, because
  * `price-alerts.js` needs it at hydration time and hydration must not pull
  * the whole shopping surface (and through it the recipe book) in just to
- * compare two names.
+ * compare two names. Imported locally above (not `export ... from`) so this
+ * module's own helpers share the same binding instead of throwing
+ * `ReferenceError: shoppingNameKey is not defined`.
  */
-export { shoppingNameKey } from './shopping-names.js';
+export { shoppingNameKey };
 
 /** Suggest the quantity this household most often recorded for a product. */
 export const quantitySuggestion = (name, shops = []) => {
@@ -145,14 +128,20 @@ export const findShoppingDuplicate = (name, items = []) => {
  * Where an item goes: what you filed it under last time, otherwise the guess
  * from its name. Correcting an aisle once is meant to stick.
  */
-export const aisleFor = (name, memory = {}) => memory[key(name)] || guessAisle(name);
+export const aisleFor = (name, memory = {}) => {
+  const remembered = memory[key(name)] ?? memory[storeKey(name)];
+  return remembered || guessAisle(name);
+};
 
 export const rememberAisle = (memory = {}, name, aisle) =>
   (aisle ? { ...memory, [key(name)]: aisle } : memory);
 
 /** Re-file a list with everything you've taught it since. */
 export const refile = (items = [], memory = {}) =>
-  items.map((i) => (memory[key(i.name)] ? { ...i, aisle: memory[key(i.name)] } : i));
+  items.map((item) => {
+    const remembered = memory[key(item.name)] ?? memory[storeKey(item.name)];
+    return remembered ? { ...item, aisle: remembered } : item;
+  });
 
 /**
  * The order to walk the aisles in: the route you actually took last time you

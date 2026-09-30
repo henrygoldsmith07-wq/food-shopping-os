@@ -12,6 +12,7 @@
 
 import { createLedgerEvent, appendLedgerEvent } from './event-ledger.js';
 import { buildShopRecord, listSnapshotSync } from './shopping-predictions.js';
+import { shoppingNameKey } from './shopping-names.js';
 import { allRecipes } from '../data/recipes.js';
 import { leftoverEntry } from './mealplan.js';
 import { createLeftover as createLeftoverRecord } from './leftover-planning.js';
@@ -91,14 +92,17 @@ export const applyWeekRecoveryTo = (state, result) => {
     changed.push(`removed ${removeIds.size} list row${removeIds.size === 1 ? '' : 's'}`);
   }
   if (result.shoppingAdd?.length) {
-    const have = new Set((next.shoppingList || []).map((i) => String(i.name || '').trim().toLowerCase()));
+    const have = new Set((next.shoppingList || []).map((i) => shoppingNameKey(i.name)));
     const fresh = result.shoppingAdd
-      .filter((r) => r.name && !have.has(String(r.name).trim().toLowerCase()))
+      .filter((r) => r.name && !have.has(shoppingNameKey(r.name)))
       .map((r) => ({
         id: r.id || `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
         name: r.name,
         checked: false,
         price: Number(r.price) || 0,
+        // Unknown stays unknown: a recovery add with no observed till price
+        // carries no provenance rather than a fabricated £0 "recorded" one.
+        priceSource: Number(r.price) > 0 ? (r.priceSource || 'recorded') : undefined,
         qty: r.qty || 1,
         note: r.reason || '',
         priority: r.priority || 'normal',

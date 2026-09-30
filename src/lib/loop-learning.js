@@ -103,6 +103,12 @@ export const wasteAwareList = (items = [], { waste = [], cooked = null, recipes,
     : new Map();
   return (Array.isArray(items) ? items : []).map((item) => {
     if (!item?.name) return item;
+    // Already adapted. The reduction is not a pure function of the profile —
+    // applying it to a row that carries one compounds it ("3 tins" → "2 tins"
+    // → "1 tin"). One pass per row keeps re-derivation idempotent: callers
+    // that recompose a list (weekPlanNeed, reconcile) can safely run over
+    // rows that were already adjusted in the same derivation.
+    if (item.autoReduction) return item;
     const key = canonicalName(item.name, learnedAliases) || String(item.name).toLowerCase();
     // Rejected key: the household undid this adaptation. Quantities pass
     // through untouched — no reduction, no scrap trim, no annotation that

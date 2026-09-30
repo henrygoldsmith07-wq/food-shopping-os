@@ -10,11 +10,18 @@
  *
  * Split out of shopping.js to keep both readable; the whole surface is still
  * re-exported from there, so callers import from `shopping.js` as before.
+ *
+ * Product names key through the one canonical `shoppingNameKey` (see
+ * shopping-names.js) — the same key the list, aisle memory and duplicate
+ * detection use — so "Milk", "milk " and "Milks" share one price history
+ * instead of three. Store names compare case-insensitively only; plural
+ * folding would merge distinct shops.
  */
 
-import { priceHistory } from './kitchen.js';
+import { priceHistory as priceHistoryFromSpending } from './kitchen-spending.js';
+import { shoppingNameKey } from './shopping-names.js';
 
-const key = (name) => String(name || '').trim().toLowerCase();
+const key = shoppingNameKey;
 const round2 = (n) => Math.round(n * 100) / 100;
 
 /* ---------- Price comparison, from your own receipts ---------- */
@@ -38,7 +45,7 @@ const priceAt = (entry, store) => {
  * a total built from two known prices is not a comparison, and says so.
  */
 export const compareStores = (items = [], shops = []) => {
-  const history = priceHistory(shops);
+  const history = priceHistoryFromSpending(shops);
   const stores = [...new Set(shops.map((s) => s.store))];
   return stores
     .map((store) => {
@@ -59,7 +66,7 @@ export const compareStores = (items = [], shops = []) => {
 
 /** Items on the list you have bought cheaper somewhere else. */
 export const savingsAvailable = (items = [], shops = []) => {
-  const history = priceHistory(shops);
+  const history = priceHistoryFromSpending(shops);
   return items
     .map((item) => {
       const best = cheapestFor(item.name, history);
@@ -71,7 +78,7 @@ export const savingsAvailable = (items = [], shops = []) => {
 };
 
 export const priceAlertMatches = (alerts = [], shops = []) => {
-  const history = priceHistory(shops);
+  const history = priceHistoryFromSpending(shops);
   return alerts.map((alert) => {
     const item = history.find((entry) => key(entry.name) === key(alert.name));
     const latestByStore = new Map();
@@ -107,12 +114,13 @@ const matches = (item, offer) => {
 export const applyOffers = (items = [], offers = [], { store = '', today = '' } = {}) => {
   const lines = [];
   let saved = 0;
+  const storeName = (value) => String(value || '').trim().toLowerCase();
   const hasStoreAssignments = items.some((item) => item.store);
   for (const offer of offers) {
-    if (offer.store && store && key(offer.store) !== key(store)) continue;
+    if (offer.store && store && storeName(offer.store) !== storeName(store)) continue;
     if (offer.expiry && today && offer.expiry < today) continue;
     const hits = items.filter((i) => matches(i, offer)
-      && (!offer.store || !hasStoreAssignments || key(i.store) === key(store || offer.store)));
+      && (!offer.store || !hasStoreAssignments || storeName(i.store) === storeName(store || offer.store)));
     if (!hits.length) continue;
     const spend = hits.reduce((sum, i) => sum + (Number(i.price) || 0), 0);
     let off = 0;

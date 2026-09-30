@@ -6,7 +6,8 @@ import {
   recipesUsing, runningLow, savingsSummary, spendByMonth, spentInMonth, spentInWeek,
   streakFrom, weekDates, weekStart,
 } from '../src/lib/kitchen.js';
-import { groupByAisle, guessAisle, itemsFromRecipes, totalOf, checkedTotalOf } from '../src/data/stores.js';
+import { guessAisle, itemsFromRecipes, totalOf, checkedTotalOf } from '../src/data/stores.js';
+import { groupForStore } from '../src/lib/shopping.js';
 import { RECIPES } from '../src/data/recipes.js';
 
 const TODAY = '2026-07-27'; // a Monday
@@ -118,7 +119,9 @@ describe('shopping list', () => {
     ];
     expect(totalOf(list)).toBeCloseTo(2.65, 2);
     expect(checkedTotalOf(list)).toBeCloseTo(1.45, 2);
-    expect(groupByAisle(list).map(([aisle]) => aisle)).toEqual(['Bakery', 'Dairy & eggs']);
+    // One grouper for the whole app (groupForStore in shopping.js): the
+    // dead duplicate in data/stores.js was removed rather than kept in step.
+    expect(groupForStore(list).map(([aisle]) => aisle)).toEqual(['Bakery', 'Dairy & eggs']);
   });
 
   it('pulls a recipe’s missing ingredients, skipping what the pantry has', () => {

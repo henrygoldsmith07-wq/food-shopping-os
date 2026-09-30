@@ -105,6 +105,21 @@ describe('migrating a saved install', () => {
     expect(withVault.healthVault).toEqual({ version: 1, ciphertext: 'x' });
   });
 
+  it('keeps spend, cook and waste history through every version', () => {
+    // A migration that drops historical rows deletes money the household
+    // spent, meals they cooked and food they binned — the evidence every
+    // spend chart, streak and price comparison is built from.
+    for (const fixture of [V1_INSTALL, V2_INSTALL, V3_INSTALL, V4_INSTALL]) {
+      const state = hydrate(clone(fixture));
+      expect(state.shops.length, 'shops').toBeGreaterThan(0);
+      expect(state.shops[0].total).toBe(23.4);
+    }
+    const v4 = hydrate(clone(V4_INSTALL));
+    expect(v4.shops.length).toBeGreaterThanOrEqual(2);
+    expect(v4.cooked.map((row) => row.recipeId)).toContain('chickpea-curry');
+    expect(v4.waste.length).toBeGreaterThanOrEqual(2);
+  });
+
 
   describe('a damaged install', () => {
     const damaged = () => hydrate(clone(DAMAGED_INSTALL));
@@ -188,6 +203,38 @@ describe('migrating a saved install', () => {
       // A day that is not a date, and a day that is not an array.
       expect(log.yesterday).toBeUndefined();
       expect(log['2026-05-18']).toBeUndefined();
+    });
+
+    it('keeps valid trip, cook and waste history that predates the id rule', () => {
+      // Shops are trip records {id?,date,store,total,items} — never carried a
+      // `name`, and a dated trip without an id is still real spend. Cooks are
+      // {recipeId,date} outcomes and waste rows are {name,…,date}; neither
+      // carries an id at all. The old repair demanded id AND name on every
+      // row, which silently deleted all three — spend, price history,
+      // streaks and the waste log with them.
+      const legacy = hydrate({
+        onboarded: true,
+        day: '2026-05-20',
+        shops: [{ date: '2026-02-08', store: 'Sainsbury', total: 23.4, items: [{ name: 'Milk', price: 1.35 }] }],
+        cooked: [{ recipeId: 'chickpea-curry', date: '2026-05-18' }],
+        waste: [{ name: 'Spinach', qty: '200 g', date: '2026-05-14' }],
+      });
+      expect(legacy.shops).toHaveLength(1);
+      expect(legacy.shops[0].total).toBe(23.4);
+      expect(legacy.cooked).toHaveLength(1);
+      expect(legacy.cooked[0].recipeId).toBe('chickpea-curry');
+      expect(legacy.waste).toHaveLength(1);
+    });
+
+    it('still drops rows that are not objects at all', () => {
+      const state = hydrate({
+        onboarded: true,
+        day: '2026-05-20',
+        shops: [null, 'a string', { id: 'sh1', date: '2026-05-18', store: 'Tesco', total: 5, items: [] }],
+        cooked: [null, { recipeId: 'r1', date: '2026-05-18' }],
+      });
+      expect(state.shops).toHaveLength(1);
+      expect(state.cooked).toHaveLength(1);
     });
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { captureMissedMeals, missedMealSlots } from '../src/lib/plan-outcome.js';
-import { hydrate } from '../src/lib/store-persistence.js';
+import { applyBootLifecycle, hydrate } from '../src/lib/store-persistence.js';
 
 const stamp = (offset) => {
   const date = new Date();
@@ -55,7 +55,7 @@ describe('captureMissedMeals', () => {
   });
 });
 
-describe('hydrate captures silent misses only when a day actually passed', () => {
+describe('boot lifecycle captures silent misses only when a day actually passed', () => {
   it('marks unresolved past slots after a real rollover', () => {
     // The household last opened the app yesterday; dinner that day was never
     // cooked, skipped or swapped — so it is now a never-cooked meal.
@@ -65,7 +65,10 @@ describe('hydrate captures silent misses only when a day actually passed', () =>
       plan: { [stamp(-1)]: { dinner: 'r1' } },
       mealPlanEvents: [],
     };
-    const next = hydrate(stored);
+    // Pure hydration never invents the miss…
+    expect(hydrate(JSON.parse(JSON.stringify(stored))).mealPlanEvents).toEqual([]);
+    // …the once-per-boot lifecycle does.
+    const next = applyBootLifecycle(stored);
     expect(next.mealPlanEvents).toHaveLength(1);
     expect(next.mealPlanEvents[0]).toMatchObject({
       date: stamp(-1), slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'missed',
@@ -73,7 +76,7 @@ describe('hydrate captures silent misses only when a day actually passed', () =>
   });
 
   it('leaves resolved slots and same-day loads alone', () => {
-    const sameDay = hydrate({
+    const sameDay = applyBootLifecycle({
       onboarded: true,
       day: stamp(0),
       plan: { [stamp(0)]: { dinner: 'r1' } },

@@ -25,7 +25,7 @@ import {
 } from './persistent-state.js';
 import { EMPTY_STATE } from './state.js';
 import { STORAGE_KEY, STATE_VERSION } from './state-versions.js';
-import { futureVersionIssue, hydrate, isFutureVersion, parseBackup } from './store-persistence.js';
+import { futureVersionIssue, hydrate, applyBootLifecycle, isFutureVersion, parseBackup } from './store-persistence.js';
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -77,7 +77,7 @@ export const loadCanonicalState = async () => {
   if (!idbSupported()) {
     const legacy = readLegacyCopy();
     return {
-      state: legacy.state ? hydrate(legacy.state) : { ...EMPTY_STATE },
+      state: legacy.state ? applyBootLifecycle(legacy.state) : { ...EMPTY_STATE },
       issue: legacy.issue,
       storage: 'localStorage',
       migrated: false,
@@ -92,7 +92,7 @@ export const loadCanonicalState = async () => {
     // perfectly readable, so the app runs from it rather than refusing to start.
     const legacy = readLegacyCopy();
     return {
-      state: legacy.state ? hydrate(legacy.state) : { ...EMPTY_STATE },
+      state: legacy.state ? applyBootLifecycle(legacy.state) : { ...EMPTY_STATE },
       issue: legacy.issue || unavailable(error?.message),
       storage: 'localStorage',
       migrated: false,
@@ -119,7 +119,7 @@ export const loadCanonicalState = async () => {
       };
     }
     try {
-      return { state: hydrate(record.state), issue: null, storage: 'indexedDB', migrated: false };
+      return { state: applyBootLifecycle(record.state), issue: null, storage: 'indexedDB', migrated: false };
     } catch (error) {
       // A canonical record we cannot parse is still not destroyed. The raw
       // text goes back to whoever owns it.
@@ -147,7 +147,7 @@ export const loadCanonicalState = async () => {
       migrated: false,
     };
   }
-  const state = hydrate(legacy.state);
+  const state = applyBootLifecycle(legacy.state);
   try {
     const written = await writeSnapshot(state, { schemaVersion: STATE_VERSION });
     // The drop happens last, and only after the record is committed.
