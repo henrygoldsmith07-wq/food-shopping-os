@@ -1,5 +1,8 @@
+import { useMemo, useState } from 'react';
 import { ArrowRight, BookOpen, Check, ChefHat, Clock3, Leaf, RotateCcw, ShoppingCart } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
+import { collectAdaptations } from '../lib/adaptations.js';
+import { outcomeMetrics } from '../lib/outcome-metrics.js';
 import { Card, Meter, Pill, Section } from './ui.jsx';
 
 const EMPTY_LOOP = {
@@ -39,6 +42,7 @@ const stageIcon = (id) => ({
  */
 export default function LearnTab({ goTab, openGuidance }) {
   const app = useApp();
+  const [status, setStatus] = useState('');
   const loop = app.closedLoop || EMPTY_LOOP;
   const outcome = app.planOutcome || {};
   const learning = outcome.learning || {};
@@ -46,6 +50,17 @@ export default function LearnTab({ goTab, openGuidance }) {
   const cooking = app.cookingTimeLearning || {};
   const preferences = app.learnedHouseholdPreferences || {};
   const steps = loop.steps || [];
+  // What Forq is about to change for the next week — the same adaptation
+  // collection the "Changed for you" card reads, so the review's keep/reject
+  // acts on the real thing rather than a parallel list.
+  const upcoming = useMemo(
+    () => collectAdaptations(app, { today: app.day }).adaptations,
+    [app],
+  );
+  // What the week was worth — every number carries its evidence; a metric
+  // with no honest figure stays silent rather than showing zero.
+  const metrics = useMemo(() => outcomeMetrics(app), [app]);
+  const metricList = Object.values(metrics).filter((m) => m.value != null);
   const hasOutcome = Boolean(
     outcome.planned || outcome.takeaway || app.waste?.length || app.shops?.length || app.cooked?.length,
   );
@@ -148,6 +163,93 @@ export default function LearnTab({ goTab, openGuidance }) {
         </Card>
       </Section>
 
+      {/* What will change next week — the adaptations Forq is about to apply
+          to the next plan, each with the evidence behind it and a real
+          keep/reject that the suppression store remembers. */}
+      <Section title="What will change next week" className="rise rise-2">
+        <Card className="!p-4 space-y-3">
+          {upcoming.length === 0 ? (
+            <p className="text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Nothing yet. Changes appear here as Forq learns from what you cooked, skipped and threw away —
+              and you can veto each one before it happens.
+            </p>
+          ) : (
+            upcoming.map((row) => (
+              <div key={row.id} className="border-t pt-3 first:border-t-0 first:pt-0" style={{ borderColor: 'var(--line)' }}>
+                <p className="text-[0.8125rem] font-extrabold leading-snug">{row.title}</p>
+                <p className="mt-0.5 text-[0.71875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
+                  {row.evidence}
+                </p>
+                <div className="mt-1.5 flex items-center gap-3">
+                  {row.undo ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        app.undoAdaptation?.(row);
+                        app.respondToRecommendation?.({
+                          recommendationId: `adaptation:${row.key}`,
+                          accepted: false,
+                          context: { kind: 'adaptation', key: row.key, source: 'week-review' },
+                        });
+                        setStatus(`Noted — Forq will not apply “${row.title}” again until the evidence changes.`);
+                      }}
+                      className="press inline-flex items-center gap-1 text-[0.71875rem] font-extrabold"
+                      style={{ color: 'var(--muted)' }}
+                      aria-label={`Not this week: ${row.title}`}
+                    >
+                      Not this week
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        app.respondToRecommendation?.({
+                          recommendationId: `adaptation:${row.key}`,
+                          accepted: true,
+                          context: { kind: 'adaptation', key: row.key, source: 'week-review' },
+                        });
+                        setStatus('Kept — Forq will use that going forward.');
+                      }}
+                      className="press inline-flex items-center gap-1 text-[0.71875rem] font-extrabold"
+                      style={{ color: 'var(--accent)' }}
+                      aria-label={`Keep this: ${row.title}`}
+                    >
+                      Keep this
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </Card>
+      </Section>
+
+      {/* What the week was worth — the brief's outcome layer. Each row is one
+          evidence-backed number with its calculation, never an engagement
+          score; unproven metrics are simply absent rather than shown as zero. */}
+      {metricList.length > 0 && (
+        <Section title="What the week was worth" className="rise rise-2">
+          <Card className="!p-4 space-y-3">
+            {metricList.map((metric) => (
+              <div key={metric.label} className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[0.8125rem] font-extrabold leading-snug">{metric.label}</p>
+                  <p className="mt-0.5 text-[0.71875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
+                    {metric.evidence}
+                  </p>
+                </div>
+                <p className="shrink-0 text-[1.0625rem] font-extrabold tabular-nums">
+                  {metric.unit === '£' ? `£${Number(metric.value).toFixed(2)}` : metric.value}
+                </p>
+              </div>
+            ))}
+            <p className="border-t pt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)', borderColor: 'var(--line)' }}>
+              Every figure comes from your own recorded shops, plans and waste — nothing here is estimated unless it says so.
+            </p>
+          </Card>
+        </Section>
+      )}
+
       <Section title="Signals Forq can use next" className="rise rise-2">
         <Card className="!p-4 space-y-3">
           {cooking.samples > 0 && (
@@ -182,6 +284,12 @@ export default function LearnTab({ goTab, openGuidance }) {
           )}
         </Card>
       </Section>
+
+      {status && (
+        <p role="status" className="px-5 text-[0.78125rem] font-semibold" style={{ color: 'var(--accent)' }}>
+          {status}
+        </p>
+      )}
 
       <Section className="rise rise-2">
         <div className="grid gap-2.5 sm:grid-cols-2">

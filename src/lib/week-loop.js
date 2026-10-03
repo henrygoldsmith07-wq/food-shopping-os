@@ -78,6 +78,9 @@ export const pantryCheckForPlan = (app, dates = weekDates(app.day)) => {
   return {
     totalIngredients: need.length,
     coveredByPantry: covered.length,
+    // The covered rows themselves, so outcome metrics can quote money from
+    // the same derivation rather than re-counting coverage.
+    coveredItems: covered,
     missing: missing.length,
     missingItems: missing,
     leftoverMeals: leftoverCovered.length,

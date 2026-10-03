@@ -18,6 +18,7 @@ import RecommendationExplanation from './RecommendationExplanation.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
 import LoopConfirmCard from './LoopConfirmCard.jsx';
 import NextActionCard from './NextActionCard.jsx';
+import AutopilotWeek from './AutopilotWeek.jsx';
 import AdaptationsCard from './AdaptationsCard.jsx';
 import GuidancePreview from './GuidancePreview.jsx';
 import HomeNumbers from './HomeNumbers.jsx';
@@ -113,6 +114,20 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   const tonightRecipe = tonight?.recipe || pantryHero?.recipe || null;
   const tonightExplanation = tonight?.explanation || pantryHero?.explanation || null;
   const tonightReasons = tonight?.reasons || null;
+  // The runner-up, from the same ranking as the pick — "Best tonight: X.
+  // Alternative: Y" is the use-what-I-have surface, not a second decision.
+  const tonightAlternative = useMemo(() => {
+    if (!tonightRecipe || !app.safeRecipes.length) return null;
+    const dinners = app.safeRecipes.filter((r) => r.meal === 'dinner' && r.id !== tonightRecipe.id);
+    if (!dinners.length) return null;
+    const month = Number(String(app.day).slice(5, 7)) || new Date().getMonth() + 1;
+    return bestForSlot(dinners, {
+      pantry: app.pantry, today: app.day, date: app.day, availability,
+      people: Math.max(1, Math.round(app.portions || 1)),
+      budget: app.weeklyBudget ? Math.min(4, Math.max(1, app.weeklyBudget / 7)) : 2.5,
+      month, taste: app.tasteProfile,
+    });
+  }, [tonightRecipe, app.safeRecipes, app.pantry, app.day, app.portions, app.weeklyBudget, app.tasteProfile, availability]);
   const tonightConfidence = tonight?.confidence || app.tonightDecision?.confidence || null;
 
   const plannedCount = Object.keys(app.plan || {}).filter((d) => d >= app.day).length;
@@ -156,8 +171,18 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     <div className="pb-6 space-y-6">
       {/* 1 — One next action. The ranking lives in lib/next-action.js so a
           screen can add urgency without adding a card; the cards it can name
-          are all still further down this page. */}
-      <NextActionCard action={leading} onRun={() => leading?.run?.()} />
+          are all still further down this page. When the week has no plan, the
+          autopilot proposal *is* the next action — not a CTA into a form. */}
+      {leading?.id === 'plan-week' ? (
+        <div className="px-5">
+          <AutopilotWeek
+            onOpenRecipe={openRecipe}
+            onAccept={() => goTab('list')}
+          />
+        </div>
+      ) : (
+        <NextActionCard action={leading} onRun={() => leading?.run?.()} />
+      )}
 
       {/* 2 — Tonight's meal (one decision engine) */}
       <section className="px-5" aria-label="Tonight's meal">
@@ -192,6 +217,25 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
               </div>
               <div className="px-4 pb-4">
                 {tonightExplanation && <RecommendationExplanation explanation={tonightExplanation} compact />}
+                {tonightAlternative?.recipe && (
+                  <button
+                    type="button"
+                    onClick={() => openRecipe(tonightAlternative.recipe)}
+                    className="press mt-2 flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left"
+                    style={{ borderColor: 'var(--line)' }}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
+                        Alternative
+                      </span>
+                      <span className="block text-[0.8125rem] font-extrabold truncate">{tonightAlternative.recipe.name}</span>
+                      <span className="block text-[0.6875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
+                        {tonightAlternative.explanation?.coverage?.pct ?? 0}% in your kitchen · {tonightAlternative.recipe.time} min
+                      </span>
+                    </span>
+                    <ChevronRight size={14} style={{ color: 'var(--faint)' }} />
+                  </button>
+                )}
                 {tonightReasons && !tonightExplanation && (
                   <ul className="mt-1 space-y-0.5">
                     {tonightReasons.slice(0, 3).map((r) => (
@@ -242,13 +286,6 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           )}
         </Card>
       </section>
-
-      <WeekRecoveryPreview
-        recovery={recovery}
-        onApply={app.applyWeekRecovery}
-        onUndo={app.undoLast}
-        goTab={goTab}
-      />
 
       {/* Today's planned slots, compact */}
       <Section title="Today’s meals" action="Full plan →" onAction={() => goTab('plan')} className="rise rise-2">
@@ -369,7 +406,17 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </Card>
       </section>
 
-      {/* 5 — What Forq changed, said plainly and undoable. Learning only
+      {/* 5 — Has anything changed from the original plan? The recovery
+          preview only appears when the week drifted and Forq has repairs to
+          propose or undo. */}
+      <WeekRecoveryPreview
+        recovery={recovery}
+        onApply={app.applyWeekRecovery}
+        onUndo={app.undoLast}
+        goTab={goTab}
+      />
+
+      {/* 6/7 — What Forq handled automatically and learned. Learning only
           shows when it changed something; hidden when it hasn't. */}
       <AdaptationsCard />
 

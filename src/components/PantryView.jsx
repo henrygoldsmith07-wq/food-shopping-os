@@ -14,6 +14,8 @@ import { quantityRangeLabel } from '../lib/pantry-intelligence.js';
 import { expiryBuckets } from '../lib/shopping.js';
 import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_LOCATION, LOCATIONS } from '../data/pantry.js';
 import { Card, Chip, Empty, GestureMenu, Pill, Section } from './ui.jsx';
+import CorrectionSheet from './CorrectionSheet.jsx';
+import { pantryRowCorrections } from '../lib/corrections.js';
 import { Glyph } from './icons.jsx';
 import { NumberField } from './FoodDetail.jsx';
 import PantryCapture from './PantryCapture.jsx';
@@ -37,6 +39,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
   const [capturing, setCapturing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [stocking, setStocking] = useState(false);
+  const [correcting, setCorrecting] = useState(null); // pantry row being corrected
   const [removed, setRemoved] = useState(null); // { id, name } — fuels the undo offer
   const removePantryItem = (id) => {
     const item = app.pantry.find((entry) => entry.id === id);
@@ -350,6 +353,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
               const menuActions = [
                 { label: p.low ? 'Mark stocked' : 'Mark running low', onClick: () => app.togglePantryLow(p.id) },
                 { label: useLabel, onClick: () => app.usePantryItem(p.id) },
+                { label: 'Correct this…', onClick: () => setCorrecting(p) },
                 { label: p.openedDate ? 'Opened — reset opened date' : 'Mark opened today', onClick: () => app.updatePantryItem(p.id, { openedDate: p.openedDate ? null : app.day }) },
                 { label: 'Add to shopping list', onClick: () => app.addToList({ name: p.name, emoji: p.emoji, qty: p.qty }) },
                 { label: 'Remove', tone: 'danger', onClick: () => removePantryItem(p.id) },
@@ -493,6 +497,13 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
         </>
       )}
       <PantryShare />
+      <CorrectionSheet
+        open={Boolean(correcting)}
+        onClose={() => setCorrecting(null)}
+        title={correcting ? `Correct “${correcting.name}”` : 'Correct this'}
+        corrections={correcting ? pantryRowCorrections(correcting) : []}
+        context={{ item: correcting || {}, pantryId: correcting?.id }}
+      />
     </div>
   );
 }
