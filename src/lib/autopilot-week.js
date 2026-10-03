@@ -34,9 +34,21 @@ import { rescuedExpiringCount } from './loop-learning.js';
  * there is anything for them to work with.
  *
  * @param {any} app
+ * @param {string} [emphasis] one high-level intent — never a filter panel
  */
-export const autopilotForm = (app = {}) => {
+export const autopilotForm = (app = {}, emphasis = null) => {
   const portions = householdPortionsFor(app);
+  // Each emphasis is one knob on the same engine — not a second planner.
+  // A person says what the week should lean towards; the generator already
+  // has an input for every one of these.
+  const lean = {
+    'use-what-i-have': { usePantry: true, availabilityOnly: true, budget: 4 },
+    'spend-less': { budget: 1.8, usePantry: true, batch: true },
+    'quick-meals': { quick: true, timeAvailable: 25 },
+    'more-variety': { variety: true, minimiseWaste: false },
+    'less-waste': { minimiseWaste: true, leftoverFirst: true },
+  }[emphasis] || {};
+
   return {
     scope: 'A week',
     people: portions.portions,
@@ -52,8 +64,19 @@ export const autopilotForm = (app = {}) => {
     leftoverFirst: (app.leftovers || []).length > 0,
     variety: true,
     minimiseWaste: true,
+    ...lean,
+    emphasis,
   };
 };
+
+/** The five intents a household actually means when they steer a week. */
+export const WEEK_EMPHASIS = [
+  { id: 'use-what-i-have', label: 'Use what I have' },
+  { id: 'spend-less', label: 'Spend less' },
+  { id: 'quick-meals', label: 'Quick meals' },
+  { id: 'more-variety', label: 'More variety' },
+  { id: 'less-waste', label: 'Less waste' },
+];
 
 /**
  * How much of the plan's ingredient need the kitchen already covers — the
@@ -81,10 +104,10 @@ const rescuedExpiring = (app, generated) =>
  * the entries ready to write through the normal plan path.
  *
  * @param {any} app
- * @param {{ seed?: number }} [options]
+ * @param {{ seed?: number, emphasis?: string }} [options]
  */
-export function autopilotWeekProposal(app = {}, { seed = 0 } = {}) {
-  const form = autopilotForm(app);
+export function autopilotWeekProposal(app = {}, { seed = 0, emphasis = null } = {}) {
+  const form = autopilotForm(app, emphasis);
   const weekDatesInScope = weekDates(app.day);
   const model = planGeneratorModel(app, {
     scope: 'A week',
@@ -98,15 +121,24 @@ export function autopilotWeekProposal(app = {}, { seed = 0 } = {}) {
   const generated = buildPlan(input, seed)?.meals || [];
   const entries = entriesForGenerated(generated, 'A week', model.planDates, app.day);
 
+  // Locked meals win before anything else: "keep this meal, change the
+  // rest" must hold inside the proposal itself, so a regenerate never even
+  // proposes changing what the household locked.
+  const locked = app.lockedMeals || {};
+  const merged = entries.map((entry) => {
+    const key = `${entry.date}|${entry.slot}`;
+    return key in locked ? { ...entry, recipeId: locked[key] } : entry;
+  });
+
   const plan = {};
-  for (const entry of entries) {
+  for (const entry of merged) {
     if (!entry?.recipeId) continue;
     plan[entry.date] = { ...(plan[entry.date] || {}), [entry.slot]: entry.recipeId };
   }
 
   const stats = planStats(plan, model.planDates, { people: form.people });
   const coverage = coverageOf(app, plan, model.planDates);
-  const rows = listRowsForGenerated(entries, app, form.people);
+  const rows = listRowsForGenerated(merged, app, form.people);
   const leftoverCovered = leftoverCoverageForPlan(plan, model.planDates, app.pantry || [], { people: form.people });
 
   const busyDates = model.planDates.filter((date) => model.busyDates.has(date));
@@ -117,7 +149,9 @@ export function autopilotWeekProposal(app = {}, { seed = 0 } = {}) {
   return {
     form,
     model,
-    entries,
+    // The merged set: generated meals with locked meals held in place, so
+    // accepting writes exactly what the household reviewed.
+    entries: merged,
     plan,
     generated: generated || [],
     stats,
@@ -177,6 +211,11 @@ export function autopilotWeekSummary(proposal) {
  * @param {{ seed?: number, exclude?: string[] }} [options]
  */
 export function regenerateProposalMeal(app, proposal, date, { seed = 1, exclude = [] } = {}) {
+  const locked = app.lockedMeals || {};
+  // A locked meal is never swapped — "keep this meal" outranks the user's
+  // own swap button too, and the UI disables it. Guarded here so any other
+  // caller respects the same rule.
+  if (`${date}|dinner` in locked) return null;
   const blocked = new Set([...exclude, proposal.plan?.[date]?.dinner].filter(Boolean));
   const form = proposal.form;
   const model = proposal.model;
@@ -187,6 +226,11 @@ export function regenerateProposalMeal(app, proposal, date, { seed = 1, exclude 
   if (!replacement) return null;
 
   const plan = { ...proposal.plan, [date]: { ...(proposal.plan?.[date] || {}), dinner: replacement.id } };
+  // Locked meals elsewhere in the week survive the rebuild untouched.
+  for (const [key, recipeId] of Object.entries(locked)) {
+    const [lockedDate, slot] = key.split('|');
+    plan[lockedDate] = { ...(plan[lockedDate] || {}), [slot]: recipeId };
+  }
   const entries = Object.entries(plan).flatMap(([d, slots]) =>
     Object.entries(slots).map(([slot, recipeId]) => ({ date: d, slot, recipeId })));
   const stats = planStats(plan, proposal.model.planDates, { people: form.people });

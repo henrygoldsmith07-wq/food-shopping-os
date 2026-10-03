@@ -139,6 +139,7 @@ export const EMPTY_STATE = {
   // silently.
   autoUsePantry: true,
   plan: {}, // { 'YYYY-MM-DD': {breakfast,lunch,dinner} }
+  lockedMeals: {}, // { 'YYYY-MM-DD|slot': recipeId } — "keep this meal, change the rest"; survives regeneration, recovery and reload
   mealPlanEvents: [], // {id,date,slot,plannedRecipeId,actualRecipeId,status,reason,at}
   calendarBusy: [], // [{date,source,importedAt}] imported from a connected calendar
   myRecipes: [], // dishes you generated, imported or were sent

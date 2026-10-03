@@ -139,10 +139,32 @@ export const planActions = (set) => ({
       createLedgerEvent('MealPlanned', { date: to?.date, slot: to?.slot, recipeId: moved, movedFrom: from }, { origin: 'user' }));
   }),
   applyPlanEntries: (entries) => set((s) => {
-    const plan = applyEntries(s.plan, entries);
-    const added = (entries || []).filter((e) => e?.date && e?.slot && e?.recipeId).length;
-    if (!added) return { ...s, plan };
+    // Locked meals are untouchable: "keep this meal, change the rest" must
+    // survive every regeneration, recovery and Autopilot refresh.
+    const locked = s.lockedMeals || {};
+    const allowed = (entries || []).filter((e) => {
+      if (!e?.date || !e?.slot || !e?.recipeId) return false;
+      const key = `${e.date}|${e.slot}`;
+      return !(key in locked) || locked[key] === e.recipeId;
+    });
+    const plan = applyEntries(s.plan, allowed);
+    const added = allowed.length;
+    if (!added) return {};
     return withEvent(s, { plan }, createLedgerEvent('MealPlanned', { batch: added }, { origin: 'user' }));
+  }),
+  toggleMealLock: (date, slot) => set((s) => {
+    const recipeId = s.plan?.[date]?.[slot] || null;
+    if (!recipeId) return {}; // nothing to lock
+    const key = `${date}|${slot}`;
+    const lockedMeals = { ...(s.lockedMeals || {}) };
+    const nowLocked = !(key in lockedMeals);
+    if (nowLocked) lockedMeals[key] = recipeId;
+    else delete lockedMeals[key];
+    return withEvent(s, { lockedMeals }, createLedgerEvent(
+      nowLocked ? 'MealLocked' : 'MealUnlocked',
+      { date, slot, recipeId },
+      { origin: 'user' },
+    ));
   }),
   saveLeftovers: (recipe, portions) =>
     set((s) => {

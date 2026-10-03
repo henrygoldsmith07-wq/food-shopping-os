@@ -6,6 +6,7 @@ import {
   autopilotWeekProposal,
   autopilotWeekSummary,
   regenerateProposalMeal,
+  WEEK_EMPHASIS,
 } from '../lib/autopilot-week.js';
 import { gbp } from '../lib/utils.js';
 import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
@@ -27,12 +28,23 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   const app = useApp();
   const [seed, setSeed] = useState(1);
   const [accepted, setAccepted] = useState(false);
-  const [locked, setLocked] = useState(() => new Set());
   const [eatingOut, setEatingOut] = useState(() => new Set());
   const [peopleOverride, setPeopleOverride] = useState(null);
+  const [emphasis, setEmphasis] = useState(null);
   const [status, setStatus] = useState('');
 
-  const base = useMemo(() => autopilotWeekProposal(app, { seed }), [app, seed]);
+  // Locks live in real state (lockedMeals), so they survive regeneration,
+  // week recovery and a reload — a session-local set would lose them the
+  // moment the proposal rebuilt.
+  const lockedDates = useMemo(() => {
+    const dates = new Set();
+    for (const key of Object.keys(app.lockedMeals || {})) {
+      dates.add(key.split('|')[0]);
+    }
+    return dates;
+  }, [app.lockedMeals]);
+
+  const base = useMemo(() => autopilotWeekProposal(app, { seed, emphasis }), [app, seed, emphasis]);
   const proposal = useMemo(() => {
     if (!peopleOverride) return base;
     // People changed: rescale the same week rather than rerolling it — the
@@ -44,10 +56,10 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   const dates = proposal.model.planDates;
 
   const regenerateMeal = (date) => {
-    if (locked.has(date)) return;
+    if (lockedDates.has(date)) return;
     const next = regenerateProposalMeal(app, proposal, date, {
       seed: seed + 1,
-      exclude: [...locked].map((d) => proposal.plan?.[d]?.dinner).filter(Boolean),
+      exclude: [...lockedDates].map((d) => proposal.plan?.[d]?.dinner).filter(Boolean),
     });
     if (!next) {
       setStatus('No alternative dinner found for that day — try "Not this week" instead.');
@@ -58,12 +70,12 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   };
 
   const toggleLock = (date) => {
-    setLocked((current) => {
-      const next = new Set(current);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
-      return next;
-    });
+    // The real lock command: persisted, ledgered, and honoured by every
+    // regeneration and recovery path.
+    app.toggleMealLock?.(date, 'dinner');
+    setStatus(lockedDates.has(date)
+      ? `${dayShort(date)} unlocked — it can change with the rest of the week.`
+      : `${dayShort(date)} locked — Forq keeps this meal whatever else changes.`);
   };
 
   const toggleEatingOut = (date) => {
@@ -132,6 +144,38 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
             onChange={(n) => setPeopleOverride(n)}
           />
         </div>
+
+        {/* One high-level intent — five knobs on the same engine, not a
+            filter panel. Choosing one re-prepares only what it affects. */}
+        <div>
+          <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
+            Optimise this week for
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {WEEK_EMPHASIS.map((intent) => (
+              <button
+                key={intent.id}
+                type="button"
+                aria-pressed={emphasis === intent.id}
+                onClick={() => {
+                  const next = emphasis === intent.id ? null : intent.id;
+                  setEmphasis(next);
+                  setStatus(next
+                    ? `The week now leans towards ${intent.label.toLowerCase()}.`
+                    : 'Back to the balanced week.');
+                }}
+                className="press rounded-full border px-3 py-1.5 text-[0.71875rem] font-extrabold"
+                style={{
+                  borderColor: emphasis === intent.id ? 'var(--accent)' : 'var(--line)',
+                  background: emphasis === intent.id ? 'var(--accent-soft)' : 'transparent',
+                  color: emphasis === intent.id ? 'var(--accent)' : 'var(--muted)',
+                }}
+              >
+                {intent.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </Card>
 
       <div className="mt-3 space-y-2">
@@ -139,7 +183,7 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
           const recipeId = proposal.plan?.[date]?.dinner;
           const recipe = recipeId ? byId(recipeId) : null;
           const isOut = eatingOut.has(date);
-          const isLocked = locked.has(date);
+          const isLocked = lockedDates.has(date);
           return (
             <Card key={date} className="!p-3">
               <div className="flex items-center gap-3">

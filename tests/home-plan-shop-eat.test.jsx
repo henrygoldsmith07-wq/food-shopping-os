@@ -48,16 +48,16 @@ vi.mock('../src/components/OutcomeDashboard.jsx', () => ({ default: () => <div /
 describe('home: plan → shop → eat', () => {
   const props = { openRecipe: () => {}, openPantry: () => {}, openGuidance: () => {}, goTab: () => {}, goLog: () => {} };
 
-  it('leads with the one next action, tonight, buy/use soon and outlook', () => {
-    // One primary next action (lib/next-action.js), not three competing
-    // "Plan, shop, eat" cards: HomeTab's header comment documents the move
-    // from three cards to one, and the ranking is covered behaviourally in
-    // next-action.test.js.
+  it('leads with the one next action, tonight, and the week status / needs attention pair', () => {
+    // One primary next action (lib/next-action.js), tonight's meal, and the
+    // Week Manager's third area: one derived week status plus exceptions —
+    // the fragmented buy/use-soon and weekly-outlook sections are gone by
+    // design; their content surfaces as exceptions or quiet success instead.
     render(<HomeTab {...props} />);
     expect(screen.getByLabelText('best next action')).toBeTruthy();
     expect(screen.getByLabelText("Tonight's meal")).toBeTruthy();
-    expect(screen.getByLabelText('Items to buy or use soon')).toBeTruthy();
-    expect(screen.getByLabelText('Weekly outlook')).toBeTruthy();
+    expect(screen.getByLabelText('Week status')).toBeTruthy();
+    expect(screen.getByLabelText('Needs attention')).toBeTruthy();
   });
 
   it('keeps plan, pantry, shop and cook reachable without competing CTAs', () => {
@@ -66,7 +66,8 @@ describe('home: plan → shop → eat', () => {
     render(<HomeTab {...props} />);
     expect(screen.getByText('Open pantry →')).toBeTruthy();
     expect(screen.getByText('Open shopping list →')).toBeTruthy();
-    expect(screen.getByText('Full plan →')).toBeTruthy();
+    // "Full plan" lives once — on the Today’s meals section header.
+    expect(screen.getAllByText('Full plan →')).toHaveLength(1);
   });
 
   it('shows no flashcards and no debate content', () => {

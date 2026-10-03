@@ -340,4 +340,5 @@ export const DOMAIN_EVENTS = [
   'MealPlanned', 'MealCooked', 'MealSkipped', 'IngredientPurchased',
   'IngredientWasted', 'LeftoverCreated', 'PantryCorrected',
   'RecommendationAccepted', 'RecommendationRejected', 'WeekRecovered',
+  'MealLocked', 'MealUnlocked',
 ];

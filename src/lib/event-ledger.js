@@ -30,6 +30,8 @@ export const LEDGER_EVENT_TYPES = [
   'RecommendationAccepted',
   'RecommendationRejected',
   'WeekRecovered',
+  'MealLocked',
+  'MealUnlocked',
 ];
 
 /** Where an event came from — provenance for audits and replay. */
