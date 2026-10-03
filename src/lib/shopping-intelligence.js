@@ -13,33 +13,53 @@ import { priceHistory } from './kitchen.js';
 import { compareUnitPrices, unitPriceOf } from './measure.js';
 import { rankSubstitutions as rankIntelligentSubstitutions } from './intelligent-substitutions.js';
 import { priceExpectationFor } from './price-expectations.js';
+import { PRICE_SOURCES as PROVENANCE_SOURCES } from './price-provenance.js';
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 const round1 = (value) => Math.round(Number(value || 0) * 10) / 10;
 const clean = (value) => String(value || '').trim();
 
 /**
- * Confidence table for list-price claims. Kept local rather than importing
- * PRICE_SOURCES from price-provenance.js: the two answer different
- * questions. Provenance ranks *evidence* (receipt > live > reference >
- * community > estimate) for raw price rows; this scores *what a list row
- * claims*, including the honest "no price" state every unpriced row is in.
- * Both label observed prices as low-confidence, never live — see
- * price-provenance.js for the canonical wording rules.
+ * Confidence table for list-price claims. The scoring axis is local because
+ * it answers a different question from price-provenance.js: this scores *what
+ * a list row claims*, including the honest "no price" state every unpriced
+ * row is in. The source vocabulary itself is not duplicated — recognition
+ * goes through price-provenance's canonical PRICE_SOURCES, so a scraped or
+ * AI-read price is labelled by its real provenance here too and can never be
+ * misread as "typed into the list".
  */
-const PRICE_SOURCES = {
-  receipt: { score: 0.95, label: 'Receipt-backed', detail: 'Recorded from a completed shop.' },
-  recorded: { score: 0.9, label: 'Recorded price', detail: 'Entered from your own shopping evidence.' },
-  manual: { score: 0.7, label: 'Entered price', detail: 'Typed into the list; confirm at the till.' },
-  retailer: { score: 0.65, label: 'Retailer reference', detail: 'A retailer reference that may change.' },
-  observed: { score: 0.55, label: 'Community observed', detail: 'Dated community observation, not a live quote.' },
-  estimated: { score: 0.35, label: 'Estimated', detail: 'An estimate rather than a recorded purchase.' },
-  unknown: { score: 0, label: 'No price', detail: 'No price evidence yet.' },
+
+const CLAIM_SCORES = {
+  receipt: 0.95,
+  recorded: 0.9,
+  manual: 0.7,
+  retailer: 0.65,
+  observed: 0.55,
+  estimated: 0.35,
+  unknown: 0,
 };
+
+const CLAIM_DETAIL = {
+  receipt: 'Recorded from a completed shop.',
+  recorded: 'Entered from your own shopping evidence.',
+  manual: 'Typed into the list; confirm at the till.',
+  retailer: 'A retailer reference that may change.',
+  observed: 'Dated community observation, not a live quote.',
+  estimated: 'An estimate rather than a recorded purchase.',
+  unknown: 'No price evidence yet.',
+};
+
+const claimInfo = (source) => ({
+  score: CLAIM_SCORES[source] ?? 0.3,
+  label: source === 'unknown'
+    ? 'No price'
+    : PROVENANCE_SOURCES[source]?.label || 'Price source unrecorded',
+  detail: CLAIM_DETAIL[source] || 'Read from a retailer page; confirm at the shelf.',
+});
 
 const sourceFor = (item = {}) => {
   if (!(Number(item.price) > 0)) return 'unknown';
-  if (item.priceSource && PRICE_SOURCES[item.priceSource]) return item.priceSource;
+  if (item.priceSource && (item.priceSource in CLAIM_SCORES || PROVENANCE_SOURCES[item.priceSource])) return item.priceSource;
   if (item.receiptPrice || item.recordedAt) return 'receipt';
   if (item.observedPrice || item.source === 'open-prices') return 'observed';
   return 'manual';
@@ -50,7 +70,7 @@ const levelFor = (score) => score >= 0.8 ? 'high' : score >= 0.5 ? 'medium' : sc
 /** Explain how much trust a list price deserves. */
 export const priceConfidenceFor = (item = {}) => {
   const source = sourceFor(item);
-  const sourceInfo = PRICE_SOURCES[source] || PRICE_SOURCES.unknown;
+  const sourceInfo = claimInfo(source);
   const unit = unitPriceOf(item.price, item.qty, { ingredient: canonicalName(item.name) });
   const score = unit?.confidence === 'approximate'
     ? round2(sourceInfo.score * 0.75)

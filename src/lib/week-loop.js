@@ -9,7 +9,12 @@ import { weekDates } from './kitchen.js';import { coveredByLeftovers,
 } from './mealplan.js';
 import { canonicalName } from './aliases.js';
 import { aisleFor, compareStores, groupForStore, savingsAvailable } from './shopping.js';
-import { WEEK_LOOP_STEPS } from '../data/weekLoop.js';
+import {
+  WEEK_LOOP_STAGES,
+  WEEK_LOOP_TASKS,
+  weekLoopStageOf,
+  weekLoopTasksFor,
+} from '../data/weekLoop.js';
 import { wasteAwareList } from './loop-learning.js';
 import { heldAdaptationKeys } from './adaptation-suppression.js';
 import { replacePredictionsForList } from './shopping-predictions.js';
@@ -120,7 +125,22 @@ export const weekLoopSnapshot = (app) => {
     }) || leftovers.length === 0,
   };
 
-  const firstOpen = WEEK_LOOP_STEPS.find((s) => !done[s.id]) || WEEK_LOOP_STEPS[WEEK_LOOP_STEPS.length - 1];
+  // Stage rollups: a stage is complete when its required tasks are —
+  // optional tasks (prices, leftovers, reuse) never hold a stage open, but
+  // each stage still reports them for the "what Forq handled" summary.
+  const stages = WEEK_LOOP_STAGES.map((stage) => {
+    const tasks = weekLoopTasksFor(stage.id);
+    const required = tasks.filter((t) => !t.optional);
+    return {
+      ...stage,
+      tasks: tasks.map((task) => ({ ...task, done: done[task.id] })),
+      done: required.every((t) => done[t.id]),
+    };
+  });
+  const firstOpenStage = stages.find((s) => !s.done) || stages[stages.length - 1];
+  const firstOpen = WEEK_LOOP_TASKS.find((t) => t.stage === firstOpenStage.id && !done[t.id])
+    || WEEK_LOOP_TASKS.find((t) => !done[t.id])
+    || WEEK_LOOP_TASKS[WEEK_LOOP_TASKS.length - 1];
 
   return {
     dates,
@@ -138,8 +158,10 @@ export const weekLoopSnapshot = (app) => {
     savings,
     aisleGroups,
     done,
+    stages,
+    nextStageId: firstOpenStage.id,
     nextStepId: firstOpen.id,
-    stepIndex: WEEK_LOOP_STEPS.findIndex((s) => s.id === firstOpen.id),
+    stepIndex: WEEK_LOOP_TASKS.findIndex((t) => t.id === firstOpen.id),
   };
 };
 
@@ -363,14 +385,31 @@ export const withAutoListSync = (state, changes) => {
   return changes;
 };
 
+/**
+ * Stage and task navigation. Legacy step ids resolve through
+ * weekLoopStageOf, so old deep links keep working across the four-stage
+ * redesign.
+ */
+export const nextWeekLoopStage = (currentId) => {
+  const i = WEEK_LOOP_STAGES.findIndex((s) => s.id === weekLoopStageOf(currentId));
+  if (i < 0 || i >= WEEK_LOOP_STAGES.length - 1) return null;
+  return WEEK_LOOP_STAGES[i + 1];
+};
+
+export const prevWeekLoopStage = (currentId) => {
+  const i = WEEK_LOOP_STAGES.findIndex((s) => s.id === weekLoopStageOf(currentId));
+  if (i <= 0) return null;
+  return WEEK_LOOP_STAGES[i - 1];
+};
+
 export const nextWeekLoopStep = (currentId) => {
-  const i = WEEK_LOOP_STEPS.findIndex((s) => s.id === currentId);
-  if (i < 0 || i >= WEEK_LOOP_STEPS.length - 1) return null;
-  return WEEK_LOOP_STEPS[i + 1];
+  const i = WEEK_LOOP_TASKS.findIndex((t) => t.id === currentId);
+  if (i < 0 || i >= WEEK_LOOP_TASKS.length - 1) return null;
+  return WEEK_LOOP_TASKS[i + 1];
 };
 
 export const prevWeekLoopStep = (currentId) => {
-  const i = WEEK_LOOP_STEPS.findIndex((s) => s.id === currentId);
+  const i = WEEK_LOOP_TASKS.findIndex((t) => t.id === currentId);
   if (i <= 0) return null;
-  return WEEK_LOOP_STEPS[i - 1];
+  return WEEK_LOOP_TASKS[i - 1];
 };

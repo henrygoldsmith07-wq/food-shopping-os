@@ -1,44 +1,44 @@
 # Forq — Food Shopping OS
 
-> Plan meals, buy exactly what you need and waste less food.
->
-> **See the value in 30 seconds:** [Open the instant demo](/demo) (replace with your deployed URL, e.g. `https://your-forq-domain.example/demo`).
+> **Tell Forq what you're eating. It works out what you need to buy and helps you waste less.**
 
-## Why this is different
+**Live:** [food-shopping-os.vercel.app](https://food-shopping-os.vercel.app) · **Demo (30 seconds, no account):** [food-shopping-os.vercel.app/demo](https://food-shopping-os.vercel.app/demo)
 
-Most AI food tools show a recommendation or a score. Forq makes the whole loop inspectable:
-
-**Plan meals → subtract the pantry → shop one aisle-ready list → cook → learn what to use next.**
-
-It does not invent a pretend household or hide uncertainty behind a polished number. The demo is seeded, requires no account, and is isolated from real data so visitors can click through the plan, shopping list, pantry, receipts and coaching surfaces safely.
-
-## See it in 10 seconds
-
-Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping, receipt history, a coach recommendation and the complete loop. Then choose **Explore an example week first** to enter the interactive sandbox. Nothing is saved, synced, or counted toward analytics.
-
-### Product loop
+Forq is a local-first food shopping operating system built around one closed loop:
 
 ```text
-┌──────────────┐    ┌───────────────────┐    ┌──────────────┐
-│ Plan meals   │ -> │ Subtract pantry   │ -> │ Shop list    │
-└──────────────┘    └───────────────────┘    └──────┬───────┘
-                                                     │
-                                                     v
-┌──────────────┐    ┌───────────────────┐    ┌──────────────┐
-│ Waste less   │ <- │ Learn from reality│ <- │ Cook & log   │
-└──────────────┘    └───────────────────┘    └──────────────┘
+Plan meals → subtract the pantry → one accurate shopping list → shop
+   ↑                                                              ↓
+   └── learn from leftovers & waste ← cook ← stock the pantry ←──┘
 ```
+
+Decide what to eat; Forq works out what is missing, minus what's already in
+your kitchen and what leftovers already cover. Buy it, cook it, and what you
+actually ate — and binned — improves the next plan. Nothing is invented to
+look impressive: every number is computed from what you log, buy, cook and
+plan.
+
+## See it in 30 seconds
+
+Open **[/demo](https://food-shopping-os.vercel.app/demo)**: a seeded week where
+you can watch the plan become a pantry-aware list, tick it off, and see how the
+shop and cook outcomes change what Forq recommends next. Then choose
+**Explore an example week first** to enter the interactive sandbox. Nothing is
+saved, synced, or counted toward analytics — it runs in an isolated demo
+session, and your own start is untouched.
 
 ### Demo media
 
-The `/demo` route is the canonical visual walkthrough. Add a short screen recording or GIF at `public/demo/forq-demo.gif` when one is available, then embed it here:
+The `/demo` route is the canonical visual walkthrough: meal plan →
+pantry-deducted list → shop → cook → the next plan improving. Add a short
+screen recording at `public/demo/forq-demo.gif` when one is available and embed
+it here:
 
 ```md
 ![Forq demo: from meal plan to pantry-aware shopping list](public/demo/forq-demo.gif)
 ```
 
-The demo itself centres on the product loop: the meal decision, the pantry-aware list, and the closed loop after cooking.
-
+## What Forq is
 
 One app for planning, shopping, cooking, nutrition, budgeting and reducing
 waste. Mobile-first PWA-style web app built with Next.js 16 + React 18 + Tailwind
@@ -797,6 +797,18 @@ npm run dev      # local dev server
 npm run build    # production build to .next/ (installable PWA with service worker)
 npm test         # vitest suite
 ```
+
+## Testing & quality
+
+The full pipeline is `npm run verify` — lint, typecheck, strict typecheck, the
+vitest suite and a production build — and the release gate adds Playwright E2E
+(`npm run test:e2e`, chromium + mobile), axe-core accessibility checks, a
+production dependency audit, performance budgets and a secret scan (see
+"Release gates and branch protection" below). Behaviour guarantees that are
+locked down with tests include the plan → list single derivation, the
+household conflict/merge rules, deterministic hydration, price provenance
+labelling, and the service worker's cache safety (it never caches `/api/*`,
+auth or personalised responses).
 
 ## Release gates and branch protection
 

@@ -161,16 +161,23 @@ export const planDishes = (plan = {}, dates = []) => {
   return [...counts.values()].sort((a, b) => b.slots.length - a.slots.length);
 };
 
+/**
+ * What a set of recipes costs to cook for a household. The one plan-cost
+ * derivation: `planStats` and the plan generator quote the same number.
+ */
+export const planCostFor = (recipes, people = 1) =>
+  Math.round(recipes.reduce((sum, r) => sum + r.costPerServing * people, 0) * 100) / 100;
+
 /** Cost, calories and coverage for a range — everything the header quotes. */
 export const planStats = (plan = {}, dates = [], { people = 1 } = {}) => {
   const entries = planEntries(plan, dates);
-  const cost = entries.reduce((sum, e) => sum + e.recipe.costPerServing * people, 0);
+  const cost = planCostFor(entries.map((e) => e.recipe), people);
   const kcal = entries.reduce((sum, e) => sum + e.recipe.kcal, 0);
   const daysPlanned = new Set(entries.map((e) => e.date)).size;
   const slots = dates.length * SLOT_KEYS.length;
   return {
     meals: entries.length,
-    cost: Math.round(cost * 100) / 100,
+    cost,
     kcal,
     kcalPerDay: daysPlanned ? Math.round(kcal / daysPlanned) : 0,
     daysPlanned,

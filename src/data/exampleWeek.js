@@ -53,9 +53,16 @@ export const DEMO_WALKTHROUGH = [
     action: 'recordShop',
   },
   {
+    id: 'cook',
+    title: 'Cook & see the loop learn',
+    blurb: 'Cook tonight’s planned meal. The pantry spends what it used, and what Forq suggests next changes.',
+    tab: 'cook',
+    action: 'cookToday',
+  },
+  {
     id: 'done',
-    title: 'See the loop',
-    blurb: 'Plan → list → shop → pantry. Exit anytime — your real kitchen is untouched.',
+    title: 'The loop, closed',
+    blurb: 'Planned → list shrank by the pantry → shopped → cooked. Next week’s list already accounts for this one. Exit anytime — your real kitchen is untouched.',
   },
 ];
 

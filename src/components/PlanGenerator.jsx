@@ -5,7 +5,7 @@ import {
 import { gbp } from '../lib/utils.js';
 import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from '../lib/planner.js';
 import { householdPortionsFor } from '../lib/portions.js';
-import { shoppingForGeneratedEntries } from '../lib/mealplan.js';
+import { shoppingForGeneratedEntries, planCostFor } from '../lib/mealplan.js';
 import { useApp } from '../lib/store.jsx';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
 import { monthOf, peakNow } from '../data/seasons.js';
@@ -174,7 +174,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       { waste: app.waste, cooked: app.cooked, today: app.day, learnedAliases: app.aliasMemory || {} },
     ));
     setAddedToList(true);
-  };  const cost = generated ? generated.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
+  };  const cost = generated ? planCostFor(generated, people) : 0;
   const kcal = generated ? Math.round(generated.reduce((s, r) => s + r.kcal, 0) / generated.length) : 0;
   const distinct = generated ? new Set(generated.map((r) => r.id)).size : 0;
   const wastePlan = plan?.wastePlan || null;

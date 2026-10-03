@@ -2,7 +2,7 @@
 
 ## Primary promise
 
-> **Plan meals, buy exactly what you need and waste less food.**
+> **Tell Forq what you're eating. It works out what you need to buy and helps you waste less.**
 
 That is the product. Everything else is optional support.
 

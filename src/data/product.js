@@ -2,7 +2,8 @@
  * Forq product positioning — single source of truth.
  *
  * Primary promise (what the product is for):
- *   Plan meals, buy exactly what you need and waste less food.
+ *   Tell Forq what you're eating. It works out what you need to buy and
+ *   helps you waste less.
  *
  * Everything else (nutrition diary, health, exercise, analytics, budgets,
  * sustainability) supports that loop. It must not compete as a second
@@ -14,13 +15,13 @@ export const PRODUCT = {
   /** Short brand line for headers / PWA */
   shortName: 'Forq',
   /** One-sentence promise — use this before any feature list */
-  promise: 'Plan meals, buy exactly what you need and waste less food.',
+  promise: 'Tell Forq what you’re eating. It works out what you need to buy and helps you waste less food.',
   /** Slightly longer for meta / about */
   promiseLong:
-    'Forq is a meal-planning and shopping app: plan what you will cook, build a list from that plan (minus the pantry), and waste less food. Nutrition, health and analytics support the plan — they are not a separate product.',
+    'Forq is a local-first food shopping OS: plan what you will cook and it works out what you need to buy — subtracting the pantry and covering meals with leftovers. Cook it, and what you actually ate (and binned) makes the next plan better.',
   /** Meta description (≤ ~155 chars) */
   metaDescription:
-    'Plan meals, buy exactly what you need and waste less food. Local-first meal planning and shopping for real households.',
+    'Plan meals and Forq works out what you need to buy — minus your pantry. Waste less food with one accurate, local-first shopping list.',
   /** Document / install title */
   title: 'Forq — Plan meals, buy less waste',
   /** Tag used in older copy; keep only as secondary */

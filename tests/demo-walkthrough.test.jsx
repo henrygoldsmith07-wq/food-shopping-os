@@ -10,11 +10,16 @@ import App from '../src/App.jsx';
 describe('demo walkthrough', () => {
   afterEach(cleanup);
 
-  it('finishing the tour exits the sandbox', () => {
+  // A full App render plus five tour steps; the 5s default is too tight on a
+  // machine also serving a production build, and this test is about behaviour,
+  // not speed.
+  it('finishing the tour exits the sandbox', { timeout: 20000 }, () => {
     render(<App />);
     fireEvent.click(screen.getByText('Explore an example week first'));
 
     const next = () => screen.getByText('Next');
+    // The tour walks plan → list → shop → pantry → cook → closed loop.
+    fireEvent.click(next());
     fireEvent.click(next());
     fireEvent.click(next());
     fireEvent.click(next());

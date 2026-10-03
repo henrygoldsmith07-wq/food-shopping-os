@@ -1,98 +1,90 @@
 /**
- * The one perfect Forq end-to-end workflow: plan → list → shop → pantry → cook → leftovers → next plan.
+ * The Forq week loop: what the user sees, and the work each stage contains.
  *
- * Steps are ordered hand-offs. Each has a clear “done when” so the UI can advance
- * without dumping the user onto an unrelated tab.
+ * The visible loop is four stages — Prepare, Shop, Put away, Cook. The ten
+ * hand-offs the domain logic walks (plan → portions → pantry → list → prices →
+ * shop → stock → cook → leftovers → reuse) still exist as TASKS grouped under
+ * those stages: the user makes the decisions that need a human, and the
+ * machinery between them runs automatically and is summarised, not stepped
+ * through. Tasks marked `optional` never hold a stage open.
  */
 
-export const WEEK_LOOP_STEPS = [
+export const WEEK_LOOP_STAGES = [
   {
-    id: 'plan',
+    id: 'prepare',
     n: 1,
-    title: 'Select meals',
-    short: 'Plan',
-    blurb: 'Pick dinners for the week. Leftovers already in the fridge are called out.',
-    doneHint: 'At least one meal planned',
-  },
-  {
-    id: 'portions',
-    n: 2,
-    title: 'Adjust portions',
-    short: 'Portions',
-    blurb: 'How many people you cook for. This scales the shopping list quantities.',
-    doneHint: 'Portions set',
-  },
-  {
-    id: 'pantry',
-    n: 3,
-    title: 'Check the pantry',
-    short: 'Pantry',
-    blurb: 'See what the plan already covers and what you still need to buy.',
-    doneHint: 'Reviewed pantry cover',
-  },
-  {
-    id: 'list',
-    n: 4,
-    title: 'Generate the list',
-    short: 'List',
-    blurb: 'One deduplicated list from the plan, minus pantry and leftover-covered meals.',
-    doneHint: 'List on your shopping tab',
-  },
-  {
-    id: 'prices',
-    n: 5,
-    title: 'Compare prices',
-    short: 'Prices',
-    blurb: 'Where you’ve actually paid less for the same items — from your own shops.',
-    doneHint: 'Prices checked (optional)',
-    optional: true,
+    title: 'Prepare',
+    short: 'Prepare',
+    blurb: 'Choose meals. Forq subtracts the pantry and works out what you actually need.',
+    cta: 'Add what’s needed to the list',
+    doneHint: 'Meals chosen and list ready',
   },
   {
     id: 'shop',
-    n: 6,
-    title: 'Shop the aisles',
+    n: 2,
+    title: 'Shop',
     short: 'Shop',
-    blurb: 'Tick items in aisle order as you walk the store.',
+    blurb: 'One aisle-ready list. Tick items as you go — prices are there when they help.',
+    cta: 'Finish shopping',
     doneHint: 'Items ticked off',
   },
   {
-    id: 'stock',
-    n: 7,
-    title: 'Stock the pantry',
-    short: 'Stock',
-    blurb: 'Record the shop and put bought items into the pantry automatically.',
+    id: 'putAway',
+    n: 3,
+    title: 'Put away',
+    short: 'Put away',
+    blurb: 'Record the shop and Forq moves what you bought into the pantry.',
+    cta: 'Record shop & stock pantry',
     doneHint: 'Shop recorded',
   },
   {
     id: 'cook',
-    n: 8,
-    title: 'Cook a planned meal',
+    n: 4,
+    title: 'Cook',
     short: 'Cook',
-    blurb: 'Start cooking mode for a meal on the plan.',
+    blurb: 'Cook the planned meals, save what’s left over — and Forq plans a better week next time.',
+    cta: 'Done',
     doneHint: 'Meal cooked',
-  },
-  {
-    id: 'leftovers',
-    n: 9,
-    title: 'Save leftovers',
-    short: 'Leftovers',
-    blurb: 'Spare portions go in the fridge with a use-by, ready for the next plan.',
-    doneHint: 'Leftovers saved or skipped',
-    optional: true,
-  },
-  {
-    id: 'reuse',
-    n: 10,
-    title: 'Use leftovers next',
-    short: 'Reuse',
-    blurb: 'Slot fridge leftovers into upcoming days so the next list buys less.',
-    doneHint: 'Leftovers scheduled',
-    optional: true,
   },
 ];
 
-export const weekLoopStepBy = Object.fromEntries(WEEK_LOOP_STEPS.map((s) => [s.id, s]));
-export const WEEK_LOOP_IDS = WEEK_LOOP_STEPS.map((s) => s.id);
+/**
+ * The internal hand-offs, grouped by the stage whose screen they serve.
+ * Order matters: it is the order the domain walks and the order each
+ * stage's panels stack in.
+ */
+export const WEEK_LOOP_TASKS = [
+  { id: 'plan', stage: 'prepare', title: 'Select meals', doneHint: 'At least one meal planned' },
+  { id: 'portions', stage: 'prepare', title: 'Adjust portions', doneHint: 'Portions set' },
+  { id: 'pantry', stage: 'prepare', title: 'Check the pantry', doneHint: 'Reviewed pantry cover' },
+  { id: 'list', stage: 'prepare', title: 'Generate the list', doneHint: 'List on your shopping tab' },
+  { id: 'prices', stage: 'shop', title: 'Compare prices', doneHint: 'Prices checked (optional)', optional: true },
+  { id: 'shop', stage: 'shop', title: 'Shop the aisles', doneHint: 'Items ticked off' },
+  { id: 'stock', stage: 'putAway', title: 'Stock the pantry', doneHint: 'Shop recorded' },
+  { id: 'cook', stage: 'cook', title: 'Cook a planned meal', doneHint: 'Meal cooked' },
+  { id: 'leftovers', stage: 'cook', title: 'Save leftovers', doneHint: 'Leftovers saved or skipped', optional: true },
+  { id: 'reuse', stage: 'cook', title: 'Use leftovers next', doneHint: 'Leftovers scheduled', optional: true },
+];
+
+export const WEEK_LOOP_IDS = WEEK_LOOP_STAGES.map((s) => s.id);
+export const WEEK_LOOP_TASK_IDS = WEEK_LOOP_TASKS.map((s) => s.id);
+
+export const weekLoopStageBy = Object.fromEntries(WEEK_LOOP_STAGES.map((s) => [s.id, s]));
+export const weekLoopTaskBy = Object.fromEntries(WEEK_LOOP_TASKS.map((s) => [s.id, s]));
+
+/**
+ * Accepts any legacy step id (and any task id) and answers with the stage
+ * that now hosts it — so guidance targets, deep links and old bookmarks land
+ * in the right place instead of falling back to the start.
+ */
+export const weekLoopStageOf = (id) => {
+  if (weekLoopStageBy[id]) return id;
+  const task = weekLoopTaskBy[id];
+  return task ? task.stage : WEEK_LOOP_IDS[0];
+};
+
+/** Tasks grouped for one stage, in walk order. */
+export const weekLoopTasksFor = (stageId) => WEEK_LOOP_TASKS.filter((t) => t.stage === stageId);
 
 export const WEEK_LOOP_PROMISE =
-  'One loop: plan meals, shop only what you need, cook, save leftovers, plan again.';
+  'Plan meals, shop only what you need, cook, and let what happened feed the next plan.';

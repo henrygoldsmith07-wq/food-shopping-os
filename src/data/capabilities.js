@@ -1,9 +1,10 @@
 /**
  * What Forq does, what it can't, and what it refuses to.
  *
- * Product promise (see product.js): plan meals, buy exactly what you need,
- * waste less food. This register is for capability honesty — not a second
- * product definition. Nutrition, health and integrations sit under that loop.
+ * Product promise (see product.js): tell Forq what you're eating and it
+ * works out what you need to buy, helping you waste less food. This register
+ * is for capability honesty — not a second product definition. Nutrition,
+ * health and integrations sit under that loop.
  *
  * Most apps answer "does it integrate with X?" with a Coming Soon badge. This
  * is the register instead: every capability people ask for, its actual status,

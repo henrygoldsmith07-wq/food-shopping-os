@@ -1,10 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { WEEK_LOOP_STEPS, WEEK_LOOP_IDS, WEEK_LOOP_PROMISE } from '../src/data/weekLoop.js';
+import {
+  WEEK_LOOP_STAGES,
+  WEEK_LOOP_TASKS,
+  WEEK_LOOP_IDS,
+  WEEK_LOOP_PROMISE,
+  WEEK_LOOP_TASK_IDS,
+  weekLoopStageOf,
+  weekLoopTasksFor,
+} from '../src/data/weekLoop.js';
 import {
   scaleQty,
   shoppingForWeekLoop,
   householdPortionsFor,
   pantryCheckForPlan,
+  nextWeekLoopStage,
+  prevWeekLoopStage,
   nextWeekLoopStep,
   prevWeekLoopStep,
   weekLoopSnapshot,
@@ -15,15 +25,46 @@ import { deriveApp } from '../src/lib/derive.js';
 const day = '2026-07-28';
 
 describe('week loop workflow', () => {
-  it('defines the full plan→shop→cook→leftover hand-off chain', () => {
-    expect(WEEK_LOOP_IDS).toEqual([
+  it('shows four stages while keeping the full hand-off chain as tasks', () => {
+    expect(WEEK_LOOP_IDS).toEqual(['prepare', 'shop', 'putAway', 'cook']);
+    expect(WEEK_LOOP_STAGES).toHaveLength(4);
+    // The domain chain is intact — just grouped under stages rather than
+    // stepped through one by one.
+    expect(WEEK_LOOP_TASK_IDS).toEqual([
       'plan', 'portions', 'pantry', 'list', 'prices', 'shop', 'stock', 'cook', 'leftovers', 'reuse',
     ]);
-    expect(WEEK_LOOP_STEPS).toHaveLength(10);
+    expect(WEEK_LOOP_TASKS).toHaveLength(10);
     expect(WEEK_LOOP_PROMISE).toMatch(/plan meals/i);
   });
 
-  it('walks next/prev steps in order', () => {
+  it('groups every task under a stage and maps legacy step ids onto stages', () => {
+    for (const task of WEEK_LOOP_TASKS) {
+      expect(WEEK_LOOP_IDS).toContain(task.stage);
+    }
+    expect(weekLoopTasksFor('prepare').map((t) => t.id)).toEqual(['plan', 'portions', 'pantry', 'list']);
+    expect(weekLoopTasksFor('shop').map((t) => t.id)).toEqual(['prices', 'shop']);
+    expect(weekLoopTasksFor('putAway').map((t) => t.id)).toEqual(['stock']);
+    expect(weekLoopTasksFor('cook').map((t) => t.id)).toEqual(['cook', 'leftovers', 'reuse']);
+    // Old deep links (guidance targets, bookmarks) land in the right stage.
+    expect(weekLoopStageOf('plan')).toBe('prepare');
+    expect(weekLoopStageOf('list')).toBe('prepare');
+    expect(weekLoopStageOf('prices')).toBe('shop');
+    expect(weekLoopStageOf('stock')).toBe('putAway');
+    expect(weekLoopStageOf('reuse')).toBe('cook');
+    expect(weekLoopStageOf('prepare')).toBe('prepare');
+    expect(weekLoopStageOf('nonsense')).toBe('prepare');
+  });
+
+  it('walks next/prev stages in order', () => {
+    expect(nextWeekLoopStage('prepare').id).toBe('shop');
+    expect(nextWeekLoopStage('cook')).toBe(null);
+    expect(prevWeekLoopStage('shop').id).toBe('prepare');
+    expect(prevWeekLoopStage('prepare')).toBe(null);
+    // Legacy ids walk the stages too, not the old ten-step chain.
+    expect(nextWeekLoopStage('list').id).toBe('shop');
+  });
+
+  it('walks the internal task chain for machinery that needs it', () => {
     expect(nextWeekLoopStep('plan').id).toBe('portions');
     expect(nextWeekLoopStep('reuse')).toBe(null);
     expect(prevWeekLoopStep('portions').id).toBe('plan');
@@ -214,7 +255,10 @@ describe('week loop workflow', () => {
     const snap = weekLoopSnapshot(app);
     expect(snap.done.plan).toBe(false);
     expect(snap.nextStepId).toBe('plan');
+    expect(snap.nextStageId).toBe('prepare');
     expect(snap.dates).toHaveLength(7);
+    expect(snap.stages.map((s) => s.id)).toEqual(['prepare', 'shop', 'putAway', 'cook']);
+    expect(snap.stages.find((s) => s.id === 'prepare').done).toBe(false);
   });
 
   it('snapshot marks plan done once a meal is set', () => {
@@ -228,6 +272,26 @@ describe('week loop workflow', () => {
     const snap = weekLoopSnapshot(app);
     expect(snap.done.plan).toBe(true);
     expect(snap.stats.meals).toBeGreaterThan(0);
+  });
+
+  it('rolls tasks up into stages, with optional tasks never blocking one', () => {
+    const state = {
+      ...EMPTY_STATE,
+      day,
+      onboarded: true,
+      plan: { [day]: { dinner: 'chicken-traybake' } },
+      shoppingList: [{ id: 's1', name: 'Chicken thighs', checked: false }],
+    };
+    const app = { ...state, ...deriveApp(state) };
+    const snap = weekLoopSnapshot(app);
+    // Prepare's required tasks (plan, portions, pantry, list) are all done,
+    // so the stage is done even though nothing has been shopped yet.
+    expect(snap.stages.find((s) => s.id === 'prepare').done).toBe(true);
+    expect(snap.stages.find((s) => s.id === 'shop').done).toBe(false);
+    expect(snap.nextStageId).toBe('shop');
+    // The optional prices task reports its state but cannot hold Shop open.
+    const shopTasks = snap.stages.find((s) => s.id === 'shop').tasks;
+    expect(shopTasks.find((t) => t.id === 'prices').optional).toBe(true);
   });
 
   it('previews exactly the list its list step generates, pantry already subtracted', () => {
