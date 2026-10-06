@@ -257,6 +257,14 @@ describe('Guidance', () => {
     fireEvent.click(screen.getByLabelText('Guidance — what matters now'));
     const guidance = dialogFor('Guidance');
     expect(within(guidance).getByText('What matters now')).toBeDefined();
+    // AI coach is parked: opt in the way a user does.
+    fireEvent.click(within(guidance).getByText('Tools'));
+    fireEvent.click(within(guidance).getByText('Add tools'));
+    const toggle = await within(guidance).findByRole('switch', {
+      name: /(?:Enable|Disable) Food coach \(AI\)/,
+    });
+    if (toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+    fireEvent.click(within(guidance).getByText('Next'));
     fireEvent.click(within(guidance).getByText('Ask'));
     expect(await within(guidance).findByText(/there’s not much there yet/)).toBeDefined();
 

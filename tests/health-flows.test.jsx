@@ -31,21 +31,45 @@ const dialogFor = (title) => {
   return dialog;
 };
 
-const openCard = (name, title) => {
+const enableTools = async (...labels) => {
+  fireEvent.click(screen.getByRole('button', { name: 'Guidance — what matters now' }));
+  const guidance = dialogFor('Guidance');
+  fireEvent.click(within(guidance).getByText('Tools'));
+  fireEvent.click(within(guidance).getByText('Add tools'));
+  for (const label of labels) {
+    const toggle = await within(guidance).findByRole('switch', {
+      name: new RegExp(`(?:Enable|Disable) ${label}`),
+    });
+    if (toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  }
+  fireEvent.click(within(guidance).getByLabelText('Close'));
+};
+
+const openCard = async (name, title) => {
   openProfile();
-  const section = screen.getByText('Health & training').closest('section');
+  let section = screen.queryByText('Health & training')?.closest('section');
+  if (!section || !within(section).queryByText(name)) {
+    // Health surfaces are parked: opt in the way a user does.
+    // Cycle is excluded here: enabling it flips the Health card to
+    // "Weight, vitals, sleep, cycle" and breaks non-cycle assertions.
+    // Cycle tests already opt in via onboarding (trackCycle).
+    fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
+    await enableTools('Health vault and body log', 'Exercise log', 'Blood results', 'Fasting windows');
+    openProfile();
+    section = screen.getByText('Health & training').closest('section');
+  }
   fireEvent.click(within(section).getByText(name));
   return dialogFor(title);
 };
 
-const openHealth = (view) => {
-  const sheet = openCard('Health', 'Health');
+const openHealth = async (view) => {
+  const sheet = await openCard('Health', 'Health');
   if (view) fireEvent.click(within(sheet).getByText(view));
   return sheet;
 };
 
-const logWeight = (kg) => {
-  const sheet = openHealth();
+const logWeight = async (kg) => {
+  const sheet = await openHealth();
   fireEvent.change(within(sheet).getByLabelText(/^Weight \(kg\)/), { target: { value: String(kg) } });
   fireEvent.click(within(sheet).getByText('Log'));
   return sheet;
@@ -58,9 +82,9 @@ describe('health tracking starts with nothing in it', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it('says the page is empty rather than showing a placeholder body', () => {
+  it('says the page is empty rather than showing a placeholder body', async () => {
     onboard();
-    const sheet = openHealth();
+    const sheet = await openHealth();
     expect(within(sheet).getByText(/Nothing measured yet/)).toBeTruthy();
     expect(within(sheet).queryByText('BMI')).toBeNull();
     // And the card that opened it doesn't pretend to know a weight.
@@ -68,9 +92,9 @@ describe('health tracking starts with nothing in it', () => {
     expect(screen.getByText('Weight, vitals, sleep')).toBeTruthy();
   });
 
-  it('carries the medical disclaimer on every page that bands a number', () => {
+  it('carries the medical disclaimer on every page that bands a number', async () => {
     onboard();
-    const sheet = openHealth();
+    const sheet = await openHealth();
     expect(within(sheet).getByText(/not a diagnosis/)).toBeTruthy();
     fireEvent.click(within(sheet).getByText('Vitals'));
     expect(within(sheet).getByText(/not a diagnosis/)).toBeTruthy();
@@ -115,9 +139,9 @@ describe('what setup asks for, and why', () => {
     expect(screen.getByText(/2,333 kcal/)).toBeTruthy();
   });
 
-  it('carries the stated sex into the waist banding, which needs one', () => {
+  it('carries the stated sex into the waist banding, which needs one', async () => {
     onboard({ stats: { weightKg: 80, heightCm: 180, age: 30, sex: 'Male' } });
-    const sheet = openHealth();
+    const sheet = await openHealth();
     fireEvent.click(within(sheet).getByText('Waist'));
     fireEvent.change(within(sheet).getByLabelText(/^Waist \(cm\)/), { target: { value: '96' } });
     fireEvent.click(within(sheet).getByText('Log'));
@@ -126,22 +150,22 @@ describe('what setup asks for, and why', () => {
     expect(within(sheet).getByText('24.7')).toBeTruthy();
   });
 
-  it('leaves the cycle page out until you ask for it, and adds it when you do', () => {
+  it('leaves the cycle page out until you ask for it, and adds it when you do', async () => {
     onboard();
-    const off = openHealth();
+    const off = await openHealth();
     expect(within(off).queryByText('Cycle')).toBeNull();
     fireEvent.click(within(off).getByLabelText('Close'));
     cleanup();
     localStorage.clear();
 
     onboard({ cycle: true });
-    const on = openHealth();
+    const on = await openHealth();
     expect(within(on).getByText('Cycle')).toBeTruthy();
     fireEvent.click(within(on).getByLabelText('Close'));
     expect(screen.getByText('Weight, vitals, sleep, cycle')).toBeTruthy();
   });
 
-  it('can be turned on later from Goals without redoing setup', () => {
+  it('can be turned on later from Goals without redoing setup', async () => {
     onboard();
     openProfile();
     const section = screen.getByText('Goals & targets').closest('section');
@@ -150,7 +174,7 @@ describe('what setup asks for, and why', () => {
     expect(within(goals).getByText(/turning it on adds a page under Health/i)).toBeTruthy();
     fireEvent.click(within(goals).getAllByRole('switch')[0]);
     fireEvent.click(within(goals).getByLabelText('Close'));
-    expect(within(openHealth()).getByText('Cycle')).toBeTruthy();
+    expect(within(await openHealth()).getByText('Cycle')).toBeTruthy();
   });
 });
 
@@ -158,35 +182,35 @@ describe('taking a reading', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it('keeps the weight, and asks for a height instead of guessing a BMI', () => {
+  it('keeps the weight, and asks for a height instead of guessing a BMI', async () => {
     onboard();
-    const sheet = logWeight(82);
+    const sheet = await logWeight(82);
     expect(within(sheet).getByText('82 kg')).toBeTruthy();
     expect(within(sheet).getByText('one reading')).toBeTruthy();
     expect(within(sheet).getByText(/Add your height under Goals/)).toBeTruthy();
     expect(within(sheet).queryByText('BMI')).toBeNull();
   });
 
-  it('logging again on the same day replaces the reading, it does not stack one on it', () => {
+  it('logging again on the same day replaces the reading, it does not stack one on it', async () => {
     onboard();
-    logWeight(82);
-    const sheet = logWeight(81.4);
+    await logWeight(82);
+    const sheet = await logWeight(81.4);
     expect(within(sheet).getByText('81.4 kg')).toBeTruthy();
     expect(within(sheet).queryByText('82 kg')).toBeNull();
     expect(within(sheet).getByText('one reading')).toBeTruthy();
   });
 
-  it('shows the weight it now knows on the profile card, and in the goals maths', () => {
+  it('shows the weight it now knows on the profile card, and in the goals maths', async () => {
     onboard();
-    const sheet = logWeight(82);
+    const sheet = await logWeight(82);
     fireEvent.click(within(sheet).getByLabelText('Close'));
     const section = screen.getByText('Health & training').closest('section');
     expect(within(section).getByText('82 kg')).toBeTruthy();
   });
 
-  it('will not band a waist until it knows which thresholds apply', () => {
+  it('will not band a waist until it knows which thresholds apply', async () => {
     onboard();
-    const sheet = openHealth();
+    const sheet = await openHealth();
     fireEvent.click(within(sheet).getByText('Waist'));
     fireEvent.change(within(sheet).getByLabelText(/^Waist \(cm\)/), { target: { value: '96' } });
     fireEvent.click(within(sheet).getByText('Log'));
@@ -198,9 +222,9 @@ describe('vitals', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it('labels a reading with the published band and the advice that goes with it', () => {
+  it('labels a reading with the published band and the advice that goes with it', async () => {
     onboard();
-    const sheet = openHealth('Vitals');
+    const sheet = await openHealth('Vitals');
     expect(within(sheet).getByText(/No blood pressure readings yet/)).toBeTruthy();
     fireEvent.change(within(sheet).getByLabelText('Systolic'), { target: { value: '148' } });
     fireEvent.change(within(sheet).getByLabelText('Diastolic'), { target: { value: '94' } });
@@ -210,9 +234,9 @@ describe('vitals', () => {
     expect(within(sheet).getByText(/worth a GP appointment/)).toBeTruthy();
   });
 
-  it('keeps each vital separate — glucose is not a blood pressure', () => {
+  it('keeps each vital separate — glucose is not a blood pressure', async () => {
     onboard();
-    const sheet = openHealth('Vitals');
+    const sheet = await openHealth('Vitals');
     fireEvent.click(within(sheet).getByText('Blood glucose'));
     fireEvent.change(within(sheet).getByLabelText('Glucose'), { target: { value: '5.2' } });
     fireEvent.click(within(sheet).getByText('Save reading'));
@@ -227,9 +251,9 @@ describe('rest and cycle', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it('summarises the nights it has, and says how many that is', () => {
+  it('summarises the nights it has, and says how many that is', async () => {
     onboard();
-    const sheet = openHealth('Rest');
+    const sheet = await openHealth('Rest');
     fireEvent.change(within(sheet).getByLabelText(/^Hours slept/), { target: { value: '6' } });
     fireEvent.click(within(sheet).getByText('Poor'));
     fireEvent.click(within(sheet).getByText('Log sleep'));
@@ -239,9 +263,9 @@ describe('rest and cycle', () => {
     expect(card.textContent).toContain('quality 2/5');
   });
 
-  it('records how a day felt, with the reason you gave', () => {
+  it('records how a day felt, with the reason you gave', async () => {
     onboard();
-    const sheet = openHealth('Rest');
+    const sheet = await openHealth('Rest');
     fireEvent.click(within(sheet).getByText('Stressed'));
     fireEvent.change(within(sheet).getByLabelText('Stress note'), { target: { value: 'deadline week' } });
     fireEvent.click(within(sheet).getByText('Log how today felt'));
@@ -250,9 +274,9 @@ describe('rest and cycle', () => {
     expect(within(sheet).getByText(/deadline week/)).toBeTruthy();
   });
 
-  it('refuses to predict a cycle from one period, and says what it needs', () => {
+  it('refuses to predict a cycle from one period, and says what it needs', async () => {
     onboard({ cycle: true });
-    const sheet = openHealth('Cycle');
+    const sheet = await openHealth('Cycle');
     expect(within(sheet).getByText(/Log a period start/)).toBeTruthy();
     fireEvent.click(within(sheet).getByText('Medium'));
     fireEvent.click(within(sheet).getByText('Cramps'));
@@ -262,9 +286,9 @@ describe('rest and cycle', () => {
     expect(within(sheet).getByText('What you’ve noted').closest('.card').textContent).toContain('Cramps');
   });
 
-  it('predicts only from your own cycles once there are two of them', () => {
+  it('predicts only from your own cycles once there are two of them', async () => {
     onboard({ cycle: true });
-    const sheet = openHealth('Cycle');
+    const sheet = await openHealth('Cycle');
     for (const start of ['2026-06-02', '2026-06-30']) {
       fireEvent.change(within(sheet).getByLabelText('Period start'), { target: { value: start } });
       fireEvent.click(within(sheet).getByText('Save'));
@@ -278,17 +302,17 @@ describe('exercise', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  const openExercise = () => openCard('Exercise', 'Exercise');
+  const openExercise = async () => await openCard('Exercise', 'Exercise');
 
-  it('says there is no step counter behind it before anything is logged', () => {
+  it('says there is no step counter behind it before anything is logged', async () => {
     onboard();
-    const sheet = openExercise();
+    const sheet = await openExercise();
     expect(within(sheet).getByText(/there is no\s+step counter behind it/)).toBeTruthy();
   });
 
-  it('will not estimate a burn without a weight, and says why', () => {
+  it('will not estimate a burn without a weight, and says why', async () => {
     onboard();
-    const sheet = openExercise();
+    const sheet = await openExercise();
     expect(within(sheet).getByText(/it would be inventing a body/)).toBeTruthy();
     fireEvent.click(within(sheet).getByText('Running'));
     fireEvent.click(within(sheet).getByText('Log workout'));
@@ -297,10 +321,10 @@ describe('exercise', () => {
     expect(within(sheet).queryByText(/≈ \d+ kcal/)).toBeNull();
   });
 
-  it('estimates the burn once it knows a weight, and labels it an estimate', () => {
+  it('estimates the burn once it knows a weight, and labels it an estimate', async () => {
     onboard();
-    fireEvent.click(within(logWeight(80)).getByLabelText('Close'));
-    const sheet = openExercise();
+    fireEvent.click(within(await logWeight(80)).getByLabelText('Close'));
+    const sheet = await openExercise();
     fireEvent.click(within(sheet).getByText('Running'));
     expect(within(sheet).getByText('≈ 412 kcal')).toBeTruthy();
     fireEvent.click(within(sheet).getByText('Log workout'));
@@ -308,10 +332,10 @@ describe('exercise', () => {
     expect(within(sheet).getAllByText(/≈ 412 kcal/).length).toBeGreaterThan(1);
   });
 
-  it('leaves the day’s target alone until you ask for the calories back', () => {
+  it('leaves the day’s target alone until you ask for the calories back', async () => {
     onboard();
-    fireEvent.click(within(logWeight(80)).getByLabelText('Close'));
-    const sheet = openExercise();
+    fireEvent.click(within(await logWeight(80)).getByLabelText('Close'));
+    const sheet = await openExercise();
     fireEvent.click(within(sheet).getByText('Running'));
     fireEvent.click(within(sheet).getByText('Log workout'));
     expect(within(sheet).getByText(/Exercise isn’t added to your target/)).toBeTruthy();
@@ -319,9 +343,9 @@ describe('exercise', () => {
     expect(within(sheet).getByText(/\+ 412 =/)).toBeTruthy();
   });
 
-  it('reads an exported file rather than offering a sync button that could not work', () => {
+  it('reads an exported file rather than offering a sync button that could not work', async () => {
     onboard();
-    const sheet = openExercise();
+    const sheet = await openExercise();
     expect(within(sheet).getByText(/can’t read HealthKit, Health Connect or a watch directly/)).toBeTruthy();
     expect(within(sheet).queryByText(/Connect Apple Health/)).toBeNull();
     fireEvent.click(within(sheet).getByText('Example'));

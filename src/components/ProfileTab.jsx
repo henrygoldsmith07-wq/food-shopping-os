@@ -167,7 +167,8 @@ export default function ProfileTab({ openGuidance }) {
           </Card>
         </div>
       </Section>
-<Section title="Health & training" className="rise rise-1" hidden={!app.moduleOn('health') || (!app.hasTool?.('health-vault') && !app.hasTool?.('exercise') && !app.hasTool?.('fasting') && !app.hasTool?.('bloods') && !app.hasTool?.('cycle'))}>
+<Section title="Health & training" className="rise rise-1" hidden={!app.moduleOn('health')}>
+        {(app.hasTool?.('health-vault') || app.hasTool?.('exercise') || app.hasTool?.('fasting') || app.hasTool?.('bloods') || app.hasTool?.('cycle')) && (
         <div className="grid grid-cols-2 gap-2.5">
           <Card onClick={() => setHealthOpen(true)}>
             <HeartPulse size={17} style={{ color: 'var(--muted)' }} />
@@ -188,6 +189,7 @@ export default function ProfileTab({ openGuidance }) {
             </p>
           </Card>
         </div>
+        )}
         <Card className="mt-2.5" onClick={() => setRemindersOpen(true)}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
