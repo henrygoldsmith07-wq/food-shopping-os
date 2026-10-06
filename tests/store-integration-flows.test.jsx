@@ -26,8 +26,22 @@ describe('store integrations', () => {
     localStorage.clear();
   });
 
-  it('shows supported retailers and keeps price claims on recorded history', () => {
+  const enableLivePrices = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Guidance — what matters now' }));
+    const guidance = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => d.querySelector('h2')?.textContent === 'Guidance');
+    fireEvent.click(within(guidance).getByText('Tools'));
+    fireEvent.click(within(guidance).getByText('Add tools'));
+    const toggle = await within(guidance).findByRole('switch', {
+      name: /(?:Enable|Disable) Live retailer prices/,
+    });
+    if (toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+    fireEvent.click(within(guidance).getByLabelText('Close'));
+  };
+
+  it('shows supported retailers and keeps price claims on recorded history', async () => {
     render(<App />);
+    await enableLivePrices();
     // Returning users reopen on the shopping list, where Stores lives.
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('List'));
     fireEvent.click(screen.getByText('Stores'));
@@ -44,8 +58,9 @@ describe('store integrations', () => {
     expect(screen.getByRole('link', { name: 'Shop Tesco delivery' }).href).toContain('tesco.com');
   });
 
-  it('labels retailers without direct full-basket delivery honestly', () => {
+  it('labels retailers without direct full-basket delivery honestly', async () => {
     render(<App />);
+    await enableLivePrices();
     // Returning users reopen on the shopping list, where Stores lives.
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('List'));
     fireEvent.click(screen.getByText('Stores'));

@@ -16,13 +16,15 @@ import { deriveApp } from '../src/lib/derive.js';
 import { preferenceActions } from '../src/lib/preference-actions.js';
 
 describe('progressive disclosure / optional tools', () => {
-  it('defines the core plan–list–shop–pantry–cook loop', () => {
-    expect(CORE_LOOP.map((s) => s.id)).toEqual(['plan', 'list', 'shop', 'pantry', 'cook']);
+  it('defines the core plan-buy-waste loop', () => {
+    expect(CORE_LOOP.map((s) => s.id)).toEqual(['plan', 'list', 'waste']);
   });
 
   it('lists secondary tools that new users should not see by default', () => {
     for (const id of [
-      'exercise', 'cycle', 'bloods', 'fasting', 'carbon', 'receipt', 'reports', 'coach', 'assistant',
+      'live-prices', 'assistant', 'coach', 'gamification', 'carbon',
+      'exercise', 'fasting', 'health-vault', 'bloods', 'cycle',
+      'receipt', 'reports',
     ]) {
       expect(OPTIONAL_TOOL_IDS).toContain(id);
     }

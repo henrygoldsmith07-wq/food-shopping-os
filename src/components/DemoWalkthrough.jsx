@@ -178,7 +178,7 @@ export function DemoBanner() {
     >
       <span className="inline-flex items-center gap-1.5">
         <FlaskConical size={13} style={{ color: 'var(--warn)' }} />
-        {DEMO_LABEL} — not saved · does not affect streaks, XP or analytics
+        {DEMO_LABEL} — not saved · does not affect analytics
         <button
           type="button"
           onClick={() => app.exitDemoMode()}

@@ -48,6 +48,18 @@ const openProgress = () => {
   return dialogFor('Progress');
 };
 
+const enableGamification = async () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Guidance — what matters now' }));
+  const guidance = dialogFor('Guidance');
+  fireEvent.click(within(guidance).getByText('Tools'));
+  fireEvent.click(within(guidance).getByText('Add tools'));
+  const toggle = await within(guidance).findByRole('switch', {
+    name: /(?:Enable|Disable) Streaks, XP and badges/,
+  });
+  if (toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  fireEvent.click(within(guidance).getByLabelText('Close'));
+};
+
 const cookARecipe = (name = 'Coconut Chickpea Curry') => {
   fireEvent.click(screen.getByText('Recipes'));
   fireEvent.change(screen.getByLabelText('Search recipes'), { target: { value: name } });
@@ -65,19 +77,21 @@ describe('a fresh app has nothing to show off', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it('starts at level one with no XP, and doesn’t make a badge of it', () => {
+  it('starts at level one with no XP, and doesn’t make a badge of it', async () => {
     onboard();
-    // Nothing earned yet, so Home shows no level pill at all.
+    // Gamification is parked: no level pill until enabled in Add tools.
     expect(screen.queryByText(/Level 1 ·/)).toBeNull();
 
+    await enableGamification();
     const sheet = openProgress();
     expect(within(sheet).getByText('Getting started')).toBeDefined();
     expect(within(sheet).getByText('0 XP')).toBeDefined();
     expect(within(sheet).getByText(/160 XP to level 2/)).toBeDefined();
   });
 
-  it('shows today’s goals, all empty', () => {
+  it('shows today’s goals, all empty', async () => {
     onboard();
+    await enableGamification();
     // Goals live in Progress now, not on Home — the simplified Home shows
     // the cooking, the Progress sheet shows the counters.
     const sheet = openProgress();
@@ -86,8 +100,9 @@ describe('a fresh app has nothing to show off', () => {
     expect(within(sheet).getByText('Log three meals')).toBeDefined();
   });
 
-  it('has no badges or achievements yet, and says so', () => {
+  it('has no badges or achievements yet, and says so', async () => {
     onboard();
+    await enableGamification();
     const sheet = openProgress();
     fireEvent.click(within(sheet).getByText('Earned'));
     expect(within(sheet).getByText(/Badges · 0 of 12/)).toBeDefined();
@@ -100,8 +115,9 @@ describe('earning it', () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it('counts a cooked recipe into XP, streaks, goals and achievements', () => {
+  it('counts a cooked recipe into XP, streaks, goals and achievements', async () => {
     onboard();
+    await enableGamification();
     cookARecipe();
 
     // 60 for the cook and 4 for the meal it logged, plus whatever weekly
@@ -129,8 +145,9 @@ describe('earning it', () => {
     expect(within(sheet).getByText(/Badges · 1 of 12/)).toBeDefined();
   });
 
-  it('moves a weekly challenge on, and keeps the same challenges all week', () => {
+  it('moves a weekly challenge on, and keeps the same challenges all week', async () => {
     onboard();
+    await enableGamification();
     const before = openProgress();
     fireEvent.click(within(before).getByText('This week'));
     const ids = within(before).getAllByText(/\d\/\d/).map((n) => n.textContent);
@@ -145,15 +162,17 @@ describe('earning it', () => {
     expect(now).toHaveLength(ids.length); // but the set is the same size, same week
   });
 
-  it('runs a seasonal event tied to the real month', () => {
+  it('runs a seasonal event tied to the real month', async () => {
     onboard();
+    await enableGamification();
     const sheet = openProgress();
     fireEvent.click(within(sheet).getByText('This week'));
     expect(within(sheet).getByText(/Seasonal ·/)).toBeDefined();
   });
 
-  it('takes the XP back if you take the thing back', () => {
+  it('takes the XP back if you take the thing back', async () => {
     onboard();
+    await enableGamification();
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
     fireEvent.click(screen.getAllByText('+ Dinner')[0]);
     fireEvent.click(within(dialogFor('Plan a meal')).getByText('Coconut Chickpea Curry'));

@@ -19,18 +19,18 @@ const Loading = () => (
   </div>
 );
 
-const TABS = [
-  ['next', 'Next', Lightbulb],
-  ['review', 'Review', BarChart3],
-  ['tools', 'Tools', Wrench],
-  ['ask', 'Ask', MessageCircle],
-];
-
 export default function GuidancePanel({
   initialView = 'next', onNavigate, onOpenPantry, onOpenProfile,
   onOpenWeekLoop = () => onNavigate('plan'),
 }) {
   const app = useApp();
+  const hasAssistant = app.hasTool?.('assistant') ?? false;
+  const TABS = [
+    ['next', 'Next', Lightbulb],
+    ['review', 'Review', BarChart3],
+    ['tools', 'Tools', Wrench],
+    ...(hasAssistant ? [['ask', 'Ask', MessageCircle]] : []),
+  ];
   const [view, setView] = useState(initialView);
   const [reviewMode, setReviewMode] = useState('dashboards');
   const [toolMode, setToolMode] = useState('smart');
@@ -137,7 +137,7 @@ export default function GuidancePanel({
 
       {view === 'ask' && (
         <Suspense fallback={<Loading />}>
-          <AiAssistant />
+          {hasAssistant ? <AiAssistant /> : <AddToolsPanel />}
         </Suspense>
       )}
     </div>

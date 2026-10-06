@@ -39,7 +39,13 @@ const MODULE_OF = {
 
 const reachable = (app, key) => {
   const owner = MODULE_OF[key];
-  return !owner || !app.moduleOn || app.moduleOn(owner);
+  if (owner && app.moduleOn && !app.moduleOn(owner)) return false;
+  // Parked tools stay out of the palette until enabled in Add tools.
+  if (key === 'assistant' && app.hasTool && !app.hasTool('assistant')) return false;
+  if ((key === 'add-food' || key === 'barcode' || key === 'food') && app.hasTool) {
+    // Food diary entry itself is core; barcode scan stays core. No gate.
+  }
+  return true;
 };
 
 const resource = (type, item, subtitle) => ({
