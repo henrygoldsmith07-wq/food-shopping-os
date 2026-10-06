@@ -413,7 +413,27 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
         </Section>
       )}
       {stats.meals === 0
-        ? <PrimaryAction label={`Fill this ${view} for me`} onClick={() => setShowGenerator(true)} />
+        ? (
+          <>
+            {onOpenWeekLoop && (
+              <PrimaryAction
+                label="Start the week loop"
+                hint="Plan · buy what you need · waste less"
+                onClick={() => onOpenWeekLoop('plan')}
+              />
+            )}
+            <div className="mt-2 text-center">
+              <button
+                type="button"
+                onClick={() => setShowGenerator(true)}
+                className="press text-[0.8125rem] font-extrabold"
+                style={{ color: 'var(--muted)' }}
+              >
+                Or fill this {view} for me →
+              </button>
+            </div>
+          </>
+        )
         : <PrimaryAction
             label={addedToList ? 'Added to your shopping list' : `Shop for this ${view}`}
             hint={addedToList ? undefined : `${stats.meals} meal${stats.meals === 1 ? '' : 's'}`}

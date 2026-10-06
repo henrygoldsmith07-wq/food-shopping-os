@@ -9,6 +9,12 @@ import { requireHousehold } from '../../../server/households.js';
 import { getDatabase } from '../../../server/database.js';
 import { coachShareSchema } from '../../../server/schemas.js';
 
+export const COACH_SHARES_ENABLED = process.env.FORQ_COACH_SHARES_ENABLED === 'true';
+
+const assertCoachEnabled = () => {
+  if (!COACH_SHARES_ENABLED) throw new ApiError(403, 'Coach-share links are disabled in this build. Enable FORQ_COACH_SHARES_ENABLED and the coach tool to use them.');
+};
+
 const requireAdmin = (membership) => {
   if (!['owner', 'admin'].includes(membership.role) && !membership.permissions?.includes('admin')) {
     throw new ApiError(403, 'Household admin access required.');
@@ -28,6 +34,7 @@ const publicShare = (share) => ({
 
 export async function GET(request) {
   try {
+    assertCoachEnabled();
     const user = await requireUser();
     await rateLimit(`coach-shares:get:${user.id}`, 60, 3600000);
     const { household, membership } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
@@ -45,6 +52,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
+    assertCoachEnabled();
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`coach-shares:create:${user.id}`, 10, 3600000);
@@ -81,6 +89,7 @@ export async function POST(request) {
 
 export async function DELETE(request) {
   try {
+    assertCoachEnabled();
     assertSameOrigin(request);
     const user = await requireUser();
     await rateLimit(`coach-shares:revoke:${user.id}`, 20, 3600000);

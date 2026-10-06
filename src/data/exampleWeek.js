@@ -13,7 +13,7 @@ import { byId } from './recipes.js';
 
 export const DEMO_LABEL = 'Demonstration data';
 export const DEMO_BANNER =
-  'Example week — temporary demo kitchen. Nothing here is saved, and it never counts toward streaks, XP or analytics.';
+  'Example week — temporary demo kitchen. Nothing here is saved, and it never counts toward analytics.';
 
 /** Dinner ids used across the sample week (real recipe catalogue). */
 export const DEMO_DINNER_IDS = [

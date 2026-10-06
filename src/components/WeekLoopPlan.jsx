@@ -193,7 +193,20 @@ export default function WeekLoopPlan({
           </Card>
           {pantry.missingItems.slice(0, 12).map((item) => (
             <Card key={item.name} className="!p-3 flex items-center justify-between gap-2">
-              <span className="text-[0.8125rem] font-bold truncate">{item.name}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[0.8125rem] font-bold truncate">{item.name}</span>
+                <span className="block text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  Need {item.requiredQty || item.qty || '—'}
+                  {item.pantryQty ? ` · pantry ${item.pantryQty}` : ' · pantry none'}
+                  {` · buy ${item.qty || '—'}`}
+                  {item.sourceRecipes?.length ? ` · for ${item.sourceRecipes.slice(0, 2).join(', ')}` : ''}
+                </span>
+                {item.explanation && (
+                  <span className="block text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                    {item.explanation}
+                  </span>
+                )}
+              </span>
               <span className="text-[0.75rem] font-semibold shrink-0" style={{ color: 'var(--muted)' }}>
                 {item.qty || '—'}
               </span>
@@ -229,9 +242,22 @@ export default function WeekLoopPlan({
           </Card>
           <div className="space-y-1.5">
             {weekList.slice(0, 20).map((item) => (
-              <div key={item.name} className="flex justify-between gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--card-2)' }}>
-                <span className="text-[0.8125rem] font-bold truncate">{item.name}</span>
-                <span className="text-[0.75rem] font-semibold shrink-0" style={{ color: 'var(--muted)' }}>{item.qty}</span>
+              <div key={item.name} className="rounded-xl px-3 py-2" style={{ background: 'var(--card-2)' }}>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[0.8125rem] font-bold truncate">{item.name}</span>
+                  <span className="text-[0.75rem] font-semibold shrink-0" style={{ color: 'var(--muted)' }}>{item.qty}</span>
+                </div>
+                <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  Need {item.requiredQty || item.qty || '—'}
+                  {item.pantryQty ? ` · pantry ${item.pantryQty}` : ' · pantry none'}
+                  {` · buy ${item.qty || '—'}`}
+                  {item.sourceRecipes?.length ? ` · for ${item.sourceRecipes.slice(0, 2).join(', ')}` : ''}
+                </p>
+                {(item.explanation || item.wasteNote) && (
+                  <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                    {[item.explanation, item.wasteNote].filter(Boolean).join(' · ')}
+                  </p>
+                )}
               </div>
             ))}
           </div>

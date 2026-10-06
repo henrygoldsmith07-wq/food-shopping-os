@@ -42,6 +42,9 @@ export default function ShopBasket({
                 </span>
               )}
             </p>
+            <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {shoppingMode ? 'Running total of ticked items at your recorded prices.' : 'Estimate from your receipts (“you paid this”) — not live prices.'}
+            </p>
             {basket.saved > 0 && (
               <p className="text-[0.75rem] font-bold" style={{ color: 'var(--good)' }}>
                 {gbp(basket.total, { always: true })} less {gbp(basket.saved, { always: true })} of your offers

@@ -2,7 +2,7 @@
  * Forq product positioning — single source of truth.
  *
  * Primary promise (what the product is for):
- *   Plan meals, buy exactly what you need and waste less food.
+ *   Tell Forq what you are eating; it works out what to buy; it helps you waste less.
  *
  * Everything else (nutrition diary, health, exercise, analytics, budgets,
  * sustainability) supports that loop. It must not compete as a second
@@ -14,17 +14,17 @@ export const PRODUCT = {
   /** Short brand line for headers / PWA */
   shortName: 'Forq',
   /** One-sentence promise — use this before any feature list */
-  promise: 'Plan meals, buy exactly what you need and waste less food.',
+  promise: 'Tell Forq what you are eating; it works out what to buy; it helps you waste less.',
   /** Slightly longer for meta / about */
   promiseLong:
-    'Forq is a meal-planning and shopping app: plan what you will cook, build a list from that plan (minus the pantry), and waste less food. Nutrition, health and analytics support the plan — they are not a separate product.',
+    'Forq is a meal-planning and shopping app: tell Forq what you are eating; it works out what to buy; it helps you waste less. Nutrition, health and analytics support the plan — they are not a separate product.',
   /** Meta description (≤ ~155 chars) */
   metaDescription:
-    'Plan meals, buy exactly what you need and waste less food. Local-first meal planning and shopping for real households.',
+    'Tell Forq what you are eating; it works out what to buy; it helps you waste less. Local-first meal planning and shopping.',
   /** Document / install title */
-  title: 'Forq — Plan meals, buy less waste',
-  /** Tag used in older copy; keep only as secondary */
-  legacySubtitle: 'Food Shopping OS',
+  title: 'Forq — Tell Forq what you are eating',
+  /** Tag used in older copy; do not use — kept only so old imports do not break */
+  legacySubtitle: 'Forq',
 };
 
 /** Core product loop — order is intentional */

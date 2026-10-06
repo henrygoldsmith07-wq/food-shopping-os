@@ -2,18 +2,17 @@
  * Progressive disclosure — secondary capabilities stay off until the user
  * adds them. The default experience is the core food loop only:
  *
- *   Plan meals → shopping list → shop → update pantry → cook → repeat
+ *   Tell Forq what you are eating; it works out what to buy; it helps you waste less.
+ *   1. Plan meals · 2. Buy exactly what you need · 3. Waste less.
  *
  * Optional tools are never deleted; enabling one only surfaces UI entry points.
  */
 
 /** Always-on product loop (not stored — documentation + copy). */
 export const CORE_LOOP = [
-  { id: 'plan', label: 'Plan meals', summary: 'Decide what you will cook.' },
-  { id: 'list', label: 'Generate shopping list', summary: 'One list from the plan, minus the pantry.' },
-  { id: 'shop', label: 'Shop', summary: 'Buy what is on the list.' },
-  { id: 'pantry', label: 'Update pantry', summary: 'Put stock away and mark what is low.' },
-  { id: 'cook', label: 'Cook', summary: 'Cook what you planned, then repeat.' },
+  { id: 'plan', label: 'Plan meals', summary: 'Tell Forq what you are eating.' },
+  { id: 'list', label: 'Buy exactly what you need', summary: 'One list from the plan, minus pantry and leftovers.' },
+  { id: 'waste', label: 'Waste less', summary: 'Cook, save leftovers, record waste — the next plan changes because of it.' },
 ];
 
 const tool = (id, label, blurb, category = 'extra') => ({ id, label, blurb, category });
@@ -24,21 +23,39 @@ const tool = (id, label, blurb, category = 'extra') => ({ id, label, blurb, cate
  */
 export const OPTIONAL_TOOLS = [
   tool(
+    'live-prices',
+    'Live retailer prices',
+    'Check retailer search pages for context. Dated, sourced, never a live basket total.',
+    'shopping',
+  ),
+  tool(
+    'assistant',
+    'Food coach (AI)',
+    'Ask questions about your plan, pantry and diary. Optional — the app works without it.',
+    'insights',
+  ),
+  tool(
+    'coach',
+    'Coach links',
+    'Time-limited read-only links for a coach or clinician you choose to share with. Disabled unless enabled here.',
+    'sharing',
+  ),
+  tool(
+    'gamification',
+    'Streaks, XP and badges',
+    'Cooking streaks, XP, badges and quests. Hidden from the core loop until enabled.',
+    'insights',
+  ),
+  tool(
+    'carbon',
+    'Sustainability estimates',
+    'Rough food-footprint estimates from logged names and category factors. Not certified.',
+    'insights',
+  ),
+  tool(
     'exercise',
     'Exercise log',
     'Workouts and training minutes. Adjusts targets only if you choose to eat exercise calories back.',
-    'health',
-  ),
-  tool(
-    'cycle',
-    'Cycle tracking',
-    'Periods and symptoms under Health. Off by default and never inferred.',
-    'health',
-  ),
-  tool(
-    'bloods',
-    'Blood results & glucose',
-    'Lab panels and CGM imports you type or paste yourself — not clinical advice.',
     'health',
   ),
   tool(
@@ -48,10 +65,22 @@ export const OPTIONAL_TOOLS = [
     'health',
   ),
   tool(
-    'carbon',
-    'Carbon analysis',
-    'Rough food-footprint estimates from logged names and category factors.',
-    'insights',
+    'health-vault',
+    'Health vault and body log',
+    'Encrypted local record for body, sleep, vitals and progress photos. Never sent to AI or analytics.',
+    'health',
+  ),
+  tool(
+    'bloods',
+    'Blood results & glucose',
+    'Lab panels and CGM imports you type or paste yourself — not clinical advice.',
+    'health',
+  ),
+  tool(
+    'cycle',
+    'Cycle tracking',
+    'Periods and symptoms under Health. Off by default and never inferred.',
+    'health',
   ),
   tool(
     'receipt',
@@ -63,18 +92,6 @@ export const OPTIONAL_TOOLS = [
     'reports',
     'Advanced reports',
     'Dashboards, exports and deeper reviews beyond the next-step guidance.',
-    'insights',
-  ),
-  tool(
-    'coach',
-    'Coach links',
-    'Time-limited read-only links for a coach or clinician you choose to share with.',
-    'sharing',
-  ),
-  tool(
-    'assistant',
-    'Food coach (AI)',
-    'Ask questions about your plan, pantry and diary. Optional — the app works without it.',
     'insights',
   ),
 ];

@@ -192,9 +192,9 @@ export default function PriceCompare() {
       <CheapestBasket
         items={app.shoppingList}
         liveResults={priceSources.scraped}
-        shops={app.shops}
-      />
+        shops={app.shops}      />
 
+      {(app.hasTool?.('live-prices') ?? false) ? (
       <LivePriceCheck
         items={app.shoppingList}
         offlineMode={Boolean(app.shoppingPreferences?.offlineMode)}
@@ -204,6 +204,17 @@ export default function PriceCompare() {
         alertConfig={app.priceAlertConfig}
         onChecked={() => setPriceEpoch((value) => value + 1)}
       />
+      ) : (
+        <Section className="rise rise-1" title="Live retailer prices">
+          <Card className="text-center py-6">
+            <p className="font-bold">Live prices are a parked tool</p>
+            <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Your receipts stay the trusted price. Enable Live retailer prices under Guidance → Tools → Add tools
+              to check retailer search pages for dated context (date, URL, source shown).
+            </p>
+          </Card>
+        </Section>
+      )}
 
       <Section className="rise rise-1" title="Community observed prices">
         <p className="text-[0.75rem] font-semibold mb-3" style={{ color: 'var(--muted)' }}>

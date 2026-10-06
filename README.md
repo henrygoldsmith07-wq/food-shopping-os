@@ -1,6 +1,6 @@
-# Forq — Food Shopping OS
+# Forq
 
-> Plan meals, buy exactly what you need and waste less food.
+> Tell Forq what you are eating; it works out what to buy; it helps you waste less.
 >
 > **See the value in 30 seconds:** [Open the instant demo](/demo) (replace with your deployed URL, e.g. `https://your-forq-domain.example/demo`).
 
@@ -8,13 +8,13 @@
 
 Most AI food tools show a recommendation or a score. Forq makes the whole loop inspectable:
 
-**Plan meals → subtract the pantry → shop one aisle-ready list → cook → learn what to use next.**
+**1. Plan meals — 2. Buy exactly what you need — 3. Waste less.**
 
-It does not invent a pretend household or hide uncertainty behind a polished number. The demo is seeded, requires no account, and is isolated from real data so visitors can click through the plan, shopping list, pantry, receipts and coaching surfaces safely.
+It does not invent a pretend household or hide uncertainty behind a polished number. The demo is seeded, requires no account, and is isolated from real data so visitors can click through the plan, shopping list, pantry, receipts and cooking surfaces safely.
 
 ## See it in 10 seconds
 
-Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping, receipt history, a coach recommendation and the complete loop. Then choose **Explore an example week first** to enter the interactive sandbox. Nothing is saved, synced, or counted toward analytics.
+Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping, receipt history and the complete loop. Then choose **Explore an example week first** to enter the interactive sandbox. Nothing is saved, synced, or counted toward analytics.
 
 ### Product loop
 
@@ -40,8 +40,8 @@ The `/demo` route is the canonical visual walkthrough. Add a short screen record
 The demo itself centres on the product loop: the meal decision, the pantry-aware list, and the closed loop after cooking.
 
 
-One app for planning, shopping, cooking, nutrition, budgeting and reducing
-waste. Mobile-first PWA-style web app built with Next.js 16 + React 18 + Tailwind
+One app for the weekly food loop: plan meals, buy exactly what you need, waste less.
+Mobile-first PWA-style web app built with Next.js 16 + React 18 + Tailwind
 CSS 4, styled in the calm monochrome Le Studio design language (see
 `apps/le-studio-site`): ink-on-neutral surfaces, border-first cards,
 black-on-white CTAs, and monochrome stroke iconography (lucide-react)
@@ -817,7 +817,7 @@ Protect `main` on GitHub with:
 - **Require approvals:** 1 for a normal repository, 2 for a public production repository
 - **Dismiss stale pull request approvals when new commits are pushed**
 - **Require review from Code Owners** once a `CODEOWNERS` file is added
-- **Require status checks to pass:** `Food Shopping OS / quality`
+- **Require status checks to pass:** `Forq / quality`
 - **Require branches to be up to date before merging**
 - **Require linear history**
 - **Restrict pushes that create matching branches** to maintainers only

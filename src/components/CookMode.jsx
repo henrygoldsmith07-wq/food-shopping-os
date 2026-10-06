@@ -184,7 +184,9 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
           <PartyPopper size={56} strokeWidth={1.4} style={{ color: 'var(--accent)' }} />
           <h2 className="mt-4 text-[1.5rem] font-extrabold">Chef’s kiss!</h2>
           <p className="mt-2 text-[0.90625rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            +60 XP · cooking streak: {app.streak} days.<br />Nutrition logged to today’s totals.
+            {app.hasTool?.('gamification')
+              ? <>+60 XP · cooking streak: {app.streak} days.<br />Nutrition logged to today’s totals.</>
+              : <>Saved. Nutrition logged to today’s totals.</>}
           </p>
 
           {pantryEvent && (
@@ -231,6 +233,11 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
                   ? `${spare} portion${spare === 1 ? '' : 's'} of ${recipe.name} in the fridge — the next plan uses them before buying again.`
                   : 'Nothing saved for later — adjust if some is left.'}
               </p>
+              {spare > 0 && (
+                <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                  Source: cooked {recipe.name} just now · {spare} saved · best before use-by on the leftover row.
+                </p>
+              )}
             </Card>
           )}
 

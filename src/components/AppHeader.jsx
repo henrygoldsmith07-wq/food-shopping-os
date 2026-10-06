@@ -118,7 +118,7 @@ export default function AppHeader({ tab, onProfile, onGuidance }) {
         </div>
       </div>
 
-      {tab === 'home' && (app.streak > 0 || app.xp > 0) && (
+      {tab === 'home' && app.hasTool?.('gamification') && (app.streak > 0 || app.xp > 0) && (
         <div className="mt-3 flex gap-2">
           {app.streak > 0 && <Pill tone="accent"><Flame size={12} /> {app.streak}-day cooking streak</Pill>}
           <Pill tone="muted">Level {app.level.level} · {app.xp.toLocaleString()} XP</Pill>

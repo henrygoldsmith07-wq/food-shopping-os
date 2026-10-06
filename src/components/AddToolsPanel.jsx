@@ -22,7 +22,10 @@ export default function AddToolsPanel() {
           Default experience
         </p>
         <p className="mt-1 text-[0.875rem] font-extrabold tracking-tight">
-          Plan meals · list · shop · pantry · cook · repeat
+          Tell Forq what you are eating; it works out what to buy; it helps you waste less.
+        </p>
+        <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+          1. Plan meals · 2. Buy exactly what you need · 3. Waste less.
         </p>
         <ol className="mt-3 space-y-1.5">
           {CORE_LOOP.map((step, index) => (

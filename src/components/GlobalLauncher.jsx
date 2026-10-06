@@ -127,9 +127,9 @@ export function CommandPalette({ open, onClose, onRun }) {
 }
 
 export function QuickAdd({ open, onClose, onRun, onAddShopping }) {
+  const app = useApp();
   const [shoppingName, setShoppingName] = useState('');
   const shoppingInput = useRef(null);
-
   useEffect(() => {
     if (!open) return undefined;
     setShoppingName('');
@@ -150,7 +150,7 @@ export function QuickAdd({ open, onClose, onRun, onAddShopping }) {
     ['pantry', 'Pantry item', 'Put something into your kitchen', Package],
     ['plan', 'Meal plan', 'Choose a meal or generate a plan', BookOpen],
     ['water', 'Glass of water', 'Add 250 ml now', Waves],
-    ['assistant', 'Ask Forq', 'Open Guidance and ask a question', Sparkles],
+    ...((app.hasTool?.('assistant') ?? false) ? [['assistant', 'Ask Forq', 'Open Guidance and ask a question', Sparkles]] : []),
     ['undo', 'Undo last action', 'Revert your latest saved change', Undo2],
   ];
   return (

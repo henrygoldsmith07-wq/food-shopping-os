@@ -16,15 +16,15 @@ export default function DemoPage() {
       <p className="text-[0.6875rem] font-black uppercase tracking-[0.18em]" style={{ color: 'var(--accent)' }}>
         Forq · instant demo
       </p>
-      <h1 className="mt-3 text-4xl font-black tracking-tight">Plan → Shop → Eat.</h1>
+      <h1 className="mt-3 text-4xl font-black tracking-tight">Tell Forq what you are eating; it works out what to buy; it helps you waste less.</h1>
       <p className="mx-auto mt-4 max-w-2xl text-base font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
-        A seeded week with a plan, a pantry-aware shopping list, receipts and coaching.
+        A seeded week with a plan, a pantry-aware shopping list and receipts.
         Explore it in an isolated sandbox — nothing is saved or counted.
       </p>
       <ol className="mx-auto mt-6 max-w-xl space-y-2 text-left text-[0.875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-        <li><strong style={{ color: 'var(--ink)' }}>1. Plan the week</strong> — seven dinners already on the calendar.</li>
-        <li><strong style={{ color: 'var(--ink)' }}>2. Shop once</strong> — one aisle-ready list, pantry already subtracted.</li>
-        <li><strong style={{ color: 'var(--ink)' }}>3. Cook &amp; learn</strong> — leftovers, waste and next-week lessons.</li>
+        <li><strong style={{ color: 'var(--ink)' }}>1. Plan meals</strong> — seven dinners already on the calendar.</li>
+        <li><strong style={{ color: 'var(--ink)' }}>2. Buy exactly what you need</strong> — one aisle-ready list, pantry already subtracted.</li>
+        <li><strong style={{ color: 'var(--ink)' }}>3. Waste less</strong> — leftovers, waste and next-week lessons.</li>
       </ol>
       <Link
         href="/?demo=1"

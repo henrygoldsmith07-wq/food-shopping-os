@@ -65,10 +65,16 @@ export default function ProfileTab({ openGuidance }) {
           </div>
           <div className="flex-1">
             <h3 className="text-[1.375rem] font-extrabold tracking-tight">{app.name}</h3>
+            {app.hasTool?.('gamification') ? (
             <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
               Level {app.level.level} · {app.level.title} · {app.xp.toLocaleString()} XP
             </p>
-            <div className="mt-1.5"><Meter value={app.level.into} max={app.level.into + app.level.need} height={5} /></div>
+            ) : (
+            <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Tell Forq what you are eating; it works out what to buy; it helps you waste less.
+            </p>
+            )}
+            {app.hasTool?.('gamification') && <div className="mt-1.5"><Meter value={app.level.into} max={app.level.into + app.level.need} height={5} /></div>}
           </div>
         </div>
         <div className="mt-4 grid grid-cols-3 gap-2.5 rise rise-1">
@@ -162,6 +168,7 @@ export default function ProfileTab({ openGuidance }) {
         </div>
       </Section>
 <Section title="Health & training" className="rise rise-1" hidden={!app.moduleOn('health')}>
+        {(app.hasTool?.('health-vault') || app.hasTool?.('exercise') || app.hasTool?.('fasting') || app.hasTool?.('bloods') || app.hasTool?.('cycle')) && (
         <div className="grid grid-cols-2 gap-2.5">
           <Card onClick={() => setHealthOpen(true)}>
             <HeartPulse size={17} style={{ color: 'var(--muted)' }} />
@@ -182,6 +189,7 @@ export default function ProfileTab({ openGuidance }) {
             </p>
           </Card>
         </div>
+        )}
         <Card className="mt-2.5" onClick={() => setRemindersOpen(true)}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -302,7 +310,7 @@ export default function ProfileTab({ openGuidance }) {
           </Card>
         </Section>
       )}
-<Section title="Achievements" className="rise rise-3" hidden={!app.moduleOn('progress')}>
+<Section title="Achievements" className="rise rise-3" hidden={!app.moduleOn('progress') || !app.hasTool?.('gamification')}>
         <Card onClick={() => setQuestsOpen(true)}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">

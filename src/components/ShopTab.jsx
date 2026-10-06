@@ -190,10 +190,10 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
     <div className={cx('pb-6 space-y-6', shoppingMode && largeTouch && 'shopping-large-touch')}><CloudSyncRow />
       {/* Rows both devices changed while apart need a person, not a last writer. */}
       <ListConflictCard app={app} />
-      {/* Five views don't fit a 320px phone on one line, so this scrolls. */}
+      {/* Five views don't fit a 320px phone on one line, so this scrolls. Stores is a parked tool. */}
       <div className="hero-gradient pt-1 pb-3">
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar scroll-x-fade px-5 rise rise-1">
-          {[['list', 'List', ShoppingCart], ['history', 'Shops', Receipt], ['prices', 'Prices', TrendingUp], ['stores', 'Stores', Building2], ['budget', 'Budget', Banknote]].map(([k, label, Icon]) => (
+          {[['list', 'List', ShoppingCart], ['history', 'Shops', Receipt], ['prices', 'Prices', TrendingUp], ...((app.hasTool?.('live-prices') ?? false) ? [['stores', 'Stores', Building2]] : []), ['budget', 'Budget', Banknote]].map(([k, label, Icon]) => (
             <Chip key={k} active={view === k} onClick={() => {
               setView(k);
               if (k === 'prices') recordProductEvent('price_comparison_opened');
