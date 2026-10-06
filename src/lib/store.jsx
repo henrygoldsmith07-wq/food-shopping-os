@@ -212,7 +212,7 @@ export function AppProvider({ children }) {
         } else if (update.status.kind !== 'ready' && (!fromLiveEvent || !liveConnection.current)) {
           setCloudStatus((current) => current.kind === 'reconnecting'
             ? current
-            : { kind: 'reconnecting', message: update.status.message || 'Live sync paused. Reconnectingâ€¦' });
+            : { kind: 'reconnecting', message: update.status.message || 'Live sync paused. Reconnecting...' });
         }
       } finally {
         cloudPulling.current = false;
@@ -223,7 +223,7 @@ export function AppProvider({ children }) {
       }
     };
     const refreshCloud = () => {
-      setCloudStatus({ kind: 'connecting', message: 'Checking household changesâ€¦' });
+      setCloudStatus({ kind: 'connecting', message: 'Checking household changes...' });
       if (cloudMeta.current) pullNewerState();
       else loadCloud();
     };
