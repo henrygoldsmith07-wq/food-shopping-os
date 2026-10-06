@@ -21,12 +21,25 @@ export const invitationSchema = z.object({
   permissions: z.array(z.enum(['shopping', 'pantry', 'recipes', 'health'])).max(4),
 });
 
+const AI_CONTEXT_ALLOWLIST = ['mealNames', 'pantryItems', 'listGaps'];
+const AI_HEALTH_DENYLIST = [
+  'body', 'measurements', 'vitals', 'sleep', 'stress', 'cycles', 'cycle',
+  'workouts', 'exercise', 'bloods', 'glucose', 'cgm', 'targets', 'goal',
+  'goals', 'diets', 'allergies', 'intolerances', 'health', 'healthVault', 'vault',
+];
+
 export const aiRequestSchema = z.object({
   task: z.enum(['shopping', 'nutrition', 'recipe', 'pantry', 'substitution', 'meal-plan', 'budget', 'waste', 'route', 'cooking']),
   prompt: z.string().trim().min(1).max(4000),
   context: z.record(z.string(), z.unknown()).optional(),
 }).refine((value) => JSON.stringify(value.context || {}).length <= 12000, {
   message: 'AI context is too large.',
+  path: ['context'],
+}).refine((value) => Object.keys(value.context || {}).every((key) => AI_CONTEXT_ALLOWLIST.includes(key)), {
+  message: 'AI context may only include mealNames, pantryItems and listGaps.',
+  path: ['context'],
+}).refine((value) => !Object.keys(value.context || {}).some((key) => AI_HEALTH_DENYLIST.includes(key)), {
+  message: 'AI context must never include health fields.',
   path: ['context'],
 });
 
