@@ -172,7 +172,10 @@ export default function Onboarding() {
           {step === 0 ? 'Welcome to Forq' : step === 1 ? 'A little context' : 'Your first win'}
         </h1>
         <p className="mt-1.5 text-[0.875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-          {step === 0 && 'Choose what you want help with first. Nothing is filled in for you, and you can change direction at any time.'}
+          Tell Forq what you are eating; it works out what to buy; it helps you waste less.
+        </p>
+        <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+          {step === 0 && '1. Plan meals · 2. Buy exactly what you need · 3. Waste less. Nothing is filled in for you, and you can change direction at any time.'}
           {step === 1 && 'A few high-signal details make your first plan and shop useful. Everything else can be learned as you go.'}
           {step === 2 && 'Pick up to three meals and Forq will turn them into a first plan and one shopping list.'}
         </p>
