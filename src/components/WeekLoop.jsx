@@ -352,6 +352,27 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
                     {item.portions || 1} portion{(item.portions || 1) === 1 ? '' : 's'}
                     {item.expiry ? ` · best by ${item.expiry}` : ''}
                   </p>
+                  <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                    Source: saved leftover{item.cookedDate ? ` · cooked ${item.cookedDate}` : item.addedAt ? ` · saved ${item.addedAt}` : ''}{item.recipeId ? ` · ${item.recipeId}` : ''}.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => scheduleLeftover(item)}
+                      className="press rounded-xl border px-3 py-1.5 text-[0.75rem] font-extrabold"
+                      style={{ borderColor: 'var(--line)' }}
+                    >
+                      Plan it
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => app.binPantryItem?.(item.id) ?? app.binPantryItem?.(`p-${item.id}`)}
+                      className="press rounded-xl border px-3 py-1.5 text-[0.75rem] font-extrabold"
+                      style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+                    >
+                      Record waste
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -380,7 +401,10 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
                   <div className="min-w-0">
                     <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
                     <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                      {item.portions || 1} left
+                      {item.portions || 1} left{item.expiry ? ` · best by ${item.expiry}` : ''}
+                    </p>
+                    <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                      Source: leftover{item.cookedDate ? ` from ${item.cookedDate}` : item.addedAt ? ` saved ${item.addedAt}` : ''} · next list skips covered meals.
                     </p>
                   </div>
                   <button

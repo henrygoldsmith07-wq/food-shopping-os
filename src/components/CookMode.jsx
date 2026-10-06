@@ -233,6 +233,11 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
                   ? `${spare} portion${spare === 1 ? '' : 's'} of ${recipe.name} in the fridge — the next plan uses them before buying again.`
                   : 'Nothing saved for later — adjust if some is left.'}
               </p>
+              {spare > 0 && (
+                <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                  Source: cooked {recipe.name} just now · {spare} saved · best before use-by on the leftover row.
+                </p>
+              )}
             </Card>
           )}
 
