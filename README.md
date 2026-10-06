@@ -817,7 +817,7 @@ Protect `main` on GitHub with:
 - **Require approvals:** 1 for a normal repository, 2 for a public production repository
 - **Dismiss stale pull request approvals when new commits are pushed**
 - **Require review from Code Owners** once a `CODEOWNERS` file is added
-- **Require status checks to pass:** `Food Shopping OS / quality`
+- **Require status checks to pass:** `Forq / quality`
 - **Require branches to be up to date before merging**
 - **Require linear history**
 - **Restrict pushes that create matching branches** to maintainers only

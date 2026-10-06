@@ -24,7 +24,7 @@ export const PRODUCT = {
   /** Document / install title */
   title: 'Forq — Tell Forq what you are eating',
   /** Tag used in older copy; do not use — kept only so old imports do not break */
-  legacySubtitle: 'Food Shopping OS',
+  legacySubtitle: 'Forq',
 };
 
 /** Core product loop — order is intentional */
