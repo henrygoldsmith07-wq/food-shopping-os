@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, Check, FlaskConical, X } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { DEMO_BANNER, DEMO_LABEL, DEMO_WALKTHROUGH } from '../data/exampleWeek.js';
+import { byId } from '../data/recipes.js';
 import { weekDates } from '../lib/kitchen.js';
 import { shoppingForPlan } from '../lib/mealplan.js';
 import { householdPortionsFor } from '../lib/portions.js';
@@ -64,6 +65,22 @@ export default function DemoWalkthrough({ onNavigate }) {
         location: 'Cupboard',
       });
       setNote(`${checked.length} items recorded into the demo pantry. Your real kitchen is untouched.`);
+      return;
+    }
+    if (action === 'cookToday') {
+      // Cook tonight's planned dinner through the same write the cook screen
+      // uses: one action logs the meal, spends the pantry it used and marks
+      // the planned slot cooked — so what Forq suggests next visibly changes.
+      const dinnerId = app.plan?.[app.day]?.dinner;
+      const recipe = dinnerId ? byId(dinnerId) : null;
+      if (!recipe) {
+        setNote('Nothing is planned for today — choose a dinner in the plan first.');
+        return;
+      }
+      const before = app.pantry.length;
+      app.completeRecipe(recipe, { leftovers: 1 });
+      const spent = Math.max(0, before - app.pantry.length);
+      setNote(`Cooked ${recipe.name}${spent ? ` — ${spent} pantry item${spent === 1 ? '' : 's'} spent` : ''}. See what Forq suggests next.`);
     }
   };
 

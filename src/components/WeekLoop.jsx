@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, Check, ChefHat, ClipboardList, Package, ShoppingCart, Snowflake, Sparkles,
+  ArrowLeft, ArrowRight, Check, ChefHat, Package, ShoppingCart, Snowflake, Sparkles,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
-import { WEEK_LOOP_IDS, WEEK_LOOP_PROMISE, WEEK_LOOP_STEPS } from '../data/weekLoop.js';
+import { WEEK_LOOP_PROMISE, WEEK_LOOP_STAGES, weekLoopStageOf } from '../data/weekLoop.js';
 import { expiringSoon, weekDates } from '../lib/kitchen.js';
 import { planEntries, planVariety } from '../lib/mealplan.js';
 import {
-  nextWeekLoopStep,
-  prevWeekLoopStep,
+  nextWeekLoopStage,
+  prevWeekLoopStage,
   weekLoopSnapshot,
 } from '../lib/week-loop.js';
 import { gbp } from '../lib/utils.js';
@@ -20,20 +20,28 @@ const dayShort = (date) =>
   new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
 
 /**
- * One guided end-to-end Forq loop. Every step hands straight to the next —
- * no hunting between unrelated tabs.
+ * One guided end-to-end Forq loop, in four stages:
+ *
+ *   Prepare → Shop → Put away → Cook
+ *
+ * The ten internal hand-offs (plan, portions, pantry, list, prices, shop,
+ * stock, cook, leftovers, reuse) still run — they are grouped under the stage
+ * whose screen they serve and summarised there instead of being clicked
+ * through one by one. Portion scaling, pantry deduction, list derivation and
+ * waste learning all happen automatically in Prepare; the household only
+ * makes the decisions that need a human.
  */
 export default function WeekLoop({ onClose, onCook, initialStep }) {
   const app = useApp();
   const snap = useMemo(() => weekLoopSnapshot(app), [app]);
-  const [stepId, setStepId] = useState(initialStep || snap.nextStepId || 'plan');
+  const [stageId, setStageId] = useState(() => weekLoopStageOf(initialStep || snap.nextStageId || 'prepare'));
   const [storeName, setStoreName] = useState('');
   const [toPantry, setToPantry] = useState(true);
   const [status, setStatus] = useState('');
   const [pickerDate, setPickerDate] = useState(null);
 
-  const step = WEEK_LOOP_STEPS.find((s) => s.id === stepId) || WEEK_LOOP_STEPS[0];
-  const stepIndex = WEEK_LOOP_STEPS.findIndex((s) => s.id === stepId);
+  const stageIndex = WEEK_LOOP_STAGES.findIndex((s) => s.id === stageId);
+  const stage = WEEK_LOOP_STAGES[stageIndex] || WEEK_LOOP_STAGES[0];
   const dates = snap.dates;
   // Dishes that use something going off are offered first — the pantry's
   // urgency is the week's plan.
@@ -52,18 +60,18 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
   const variety = useMemo(() => planVariety(app.plan, dates), [app.plan, dates]);
 
   const goNext = () => {
-    const n = nextWeekLoopStep(stepId);
+    const n = nextWeekLoopStage(stageId);
     if (n) {
-      setStepId(n.id);
+      setStageId(n.id);
       setStatus('');
     } else {
       onClose?.();
     }
   };
   const goBack = () => {
-    const p = prevWeekLoopStep(stepId);
+    const p = prevWeekLoopStage(stageId);
     if (p) {
-      setStepId(p.id);
+      setStageId(p.id);
       setStatus('');
     }
   };
@@ -136,27 +144,45 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
   const weekList = snap.listPreview;
   const portionSource = snap.portions;
 
+  const planProps = {
+    byId,
+    dates,
+    dayShort,
+    dinnerRecipes,
+    expiringNames,
+    generateList,
+    pantry,
+    pickerDate,
+    setDinner,
+    setPickerDate,
+    snap,
+    usesExpiring,
+    variety,
+    weekList,
+    portionSource,
+  };
+
   return (
     <div className="pb-10">
-      {/* Progress */}
+      {/* Stage progress */}
       <div className="px-5 pb-3 border-b" style={{ borderColor: 'var(--line)' }}>
         <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-          Week loop · step {step.n} of {WEEK_LOOP_STEPS.length}
+          Week loop · stage {stage.n} of {WEEK_LOOP_STAGES.length}
         </p>
-        <h2 className="mt-1 text-[1.25rem] font-extrabold tracking-tight">{step.title}</h2>
-        <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>{step.blurb}</p>
+        <h2 className="mt-1 text-[1.25rem] font-extrabold tracking-tight">{stage.title}</h2>
+        <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>{stage.blurb}</p>
         <div className="mt-3 flex gap-1" aria-hidden="true">
-          {WEEK_LOOP_STEPS.map((s, i) => (
+          {WEEK_LOOP_STAGES.map((s, i) => (
             <button
               key={s.id}
               type="button"
               title={s.title}
-              onClick={() => setStepId(s.id)}
+              onClick={() => setStageId(s.id)}
               className="h-1.5 flex-1 rounded-full"
               style={{
-                background: i <= stepIndex
+                background: i <= stageIndex
                   ? 'var(--accent)'
-                  : snap.done[s.id]
+                  : snap.stages.find((x) => x.id === s.id)?.done
                     ? 'color-mix(in srgb, var(--accent) 40%, var(--line))'
                     : 'var(--line)',
               }}
@@ -169,31 +195,18 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
       </div>
 
       <div className="px-5 pt-4 space-y-3">
-        {/* WeekLoopPlan owns the loop's first five steps — plan, portions,
-            pantry, list, prices — not just the plan step. */}
-        {WEEK_LOOP_IDS.slice(0, 5).includes(stepId) && (
-          <WeekLoopPlan
-            app={app}
-            byId={byId}
-            dates={dates}
-            dayShort={dayShort}
-            dinnerRecipes={dinnerRecipes}
-            expiringNames={expiringNames}
-            generateList={generateList}
-            pantry={pantry}
-            pickerDate={pickerDate}
-            setDinner={setDinner}
-            setPickerDate={setPickerDate}
-            snap={snap}
-            stepId={stepId}
-            usesExpiring={usesExpiring}
-            variety={variety}
-            weekList={weekList}
-            portionSource={portionSource}
-          />
+        {/* Prepare — the decisions (meals) plus the machinery Forq runs for
+            you (portions, pantry subtraction, list derivation). One screen. */}
+        {stageId === 'prepare' && (
+          <>
+            <WeekLoopPlan {...planProps} stepId="plan" />
+            <WeekLoopPlan {...planProps} stepId="portions" />
+            <WeekLoopPlan {...planProps} stepId="pantry" />
+            <WeekLoopPlan {...planProps} stepId="list" />
+          </>
         )}
 
-        {stepId === 'shop' && (
+        {stageId === 'shop' && (
           <>
             <Card>
               <p className="font-extrabold text-[0.9375rem] inline-flex items-center gap-1.5">
@@ -206,7 +219,7 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
             {(app.shoppingList || []).length === 0 ? (
               <Card>
                 <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  List is empty. Go back one step to generate it from the plan.
+                  List is empty. Go back one stage to generate it from the plan.
                 </p>
               </Card>
             ) : (
@@ -252,10 +265,27 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
                 </div>
               ))
             )}
+
+            {/* Price intelligence is optional machinery: useful when the
+                household has recorded shops, invisible when it hasn't. */}
+            <details className="group">
+              <summary
+                className="flex cursor-pointer list-none items-center justify-between rounded-2xl border px-4 py-3 text-[0.8125rem] font-extrabold"
+                style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
+              >
+                Prices you’ve paid
+                <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  from your own receipts
+                </span>
+              </summary>
+              <div className="mt-3">
+                <WeekLoopPlan {...planProps} stepId="prices" />
+              </div>
+            </details>
           </>
         )}
 
-        {stepId === 'stock' && (
+        {stageId === 'putAway' && (
           <Card className="space-y-3">
             <p className="font-extrabold text-[0.9375rem] inline-flex items-center gap-1.5">
               <Package size={16} /> Record shop → pantry
@@ -288,12 +318,12 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
               className="press w-full rounded-2xl py-3 text-[0.875rem] font-extrabold"
               style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
             >
-              Finish shop & continue
+              Record shop & stock pantry
             </button>
           </Card>
         )}
 
-        {stepId === 'cook' && (
+        {stageId === 'cook' && (
           <>
             <Card>
               <p className="font-extrabold text-[0.9375rem] inline-flex items-center gap-1.5">
@@ -325,110 +355,63 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
             {!snap.plannedToday.length && !planEntries(app.plan, dates).length && (
               <Card>
                 <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  No meals on the plan yet — go back to Select meals.
+                  No meals on the plan yet — go back to Prepare and choose some.
                 </p>
               </Card>
             )}
-          </>
-        )}
 
-        {stepId === 'leftovers' && (
-          <Card className="space-y-2">
-            <p className="font-extrabold text-[0.9375rem] inline-flex items-center gap-1.5">
-              <Snowflake size={16} /> Fridge leftovers
-            </p>
-            <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              After cooking mode finishes, spare portions are saved here. You can also save from the cook screen.
-            </p>
-            {(app.leftovers || []).length === 0 ? (
-              <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                No leftovers yet — cook a multi-serving meal and save spare portions on the finish screen.
-              </p>
-            ) : (
-              (app.leftovers || []).map((item) => (
-                <div key={item.id} className="rounded-xl p-3" style={{ background: 'var(--card-2)' }}>
-                  <p className="font-bold text-[0.875rem]">{item.name}</p>
-                  <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {item.portions || 1} portion{(item.portions || 1) === 1 ? '' : 's'}
-                    {item.expiry ? ` · best by ${item.expiry}` : ''}
-                  </p>
-                  <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-                    Source: saved leftover{item.cookedDate ? ` · cooked ${item.cookedDate}` : item.addedAt ? ` · saved ${item.addedAt}` : ''}{item.recipeId ? ` · ${item.recipeId}` : ''}.
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => scheduleLeftover(item)}
-                      className="press rounded-xl border px-3 py-1.5 text-[0.75rem] font-extrabold"
-                      style={{ borderColor: 'var(--line)' }}
-                    >
-                      Plan it
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => app.binPantryItem?.(item.id) ?? app.binPantryItem?.(`p-${item.id}`)}
-                      className="press rounded-xl border px-3 py-1.5 text-[0.75rem] font-extrabold"
-                      style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
-                    >
-                      Record waste
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </Card>
-        )}
-
-        {stepId === 'reuse' && (
-          <>
-            <Card>
+            {/* Leftovers and reuse are one capture, not two screens: save
+                what's left, slot it into a free dinner, done. */}
+            <Card className="space-y-2">
               <p className="font-extrabold text-[0.9375rem] inline-flex items-center gap-1.5">
-                <Sparkles size={16} /> Next plan uses the fridge first
+                <Snowflake size={16} /> Leftovers & what’s next
               </p>
-              <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Schedule leftovers into empty dinner slots. The next shopping list will skip covered meals.
+              <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Save spare portions after cooking — the next plan uses the fridge first and buys less.
               </p>
-            </Card>
-            {(app.leftovers || []).filter((l) => l.recipeId).length === 0 ? (
-              <Card>
+              {(app.leftovers || []).length === 0 ? (
                 <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  When you have leftovers with a linked recipe, one tap puts them on the plan.
+                  No leftovers yet — spare portions appear here after a cook, ready for the next plan.
                 </p>
-              </Card>
-            ) : (
-              (app.leftovers || []).filter((l) => l.recipeId).map((item) => (
-                <Card key={item.id} className="!p-3 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
-                    <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                      {item.portions || 1} left{item.expiry ? ` · best by ${item.expiry}` : ''}
-                    </p>
-                    <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-                      Source: leftover{item.cookedDate ? ` from ${item.cookedDate}` : item.addedAt ? ` saved ${item.addedAt}` : ''} · next list skips covered meals.
-                    </p>
+              ) : (
+                (app.leftovers || []).map((item) => (
+                  <div key={item.id} className="rounded-xl p-3" style={{ background: 'var(--card-2)' }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
+                        <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                          {item.portions || 1} portion{(item.portions || 1) === 1 ? '' : 's'}
+                          {item.expiry ? ` · best by ${item.expiry}` : ''}
+                        </p>
+                        <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                          Source: saved leftover{item.cookedDate ? ` · cooked ${item.cookedDate}` : item.addedAt ? ` · saved ${item.addedAt}` : ''}{item.recipeId ? ` · ${item.recipeId}` : ''} · next list skips covered meals.
+                        </p>
+                      </div>
+                      {item.recipeId && (
+                        <button
+                          type="button"
+                          onClick={() => scheduleLeftover(item)}
+                          className="press shrink-0 rounded-xl border px-3 py-2 text-[0.75rem] font-extrabold"
+                          style={{ borderColor: 'var(--line)' }}
+                        >
+                          <span className="inline-flex items-center gap-1"><Sparkles size={13} /> Slot into plan</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => app.binPantryItem?.(item.id) ?? app.binPantryItem?.(`p-${item.id}`)}
+                        className="press rounded-xl border px-3 py-1.5 text-[0.75rem] font-extrabold"
+                        style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+                      >
+                        Record waste
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => scheduleLeftover(item)}
-                    className="press shrink-0 rounded-xl border px-3 py-2 text-[0.75rem] font-extrabold"
-                    style={{ borderColor: 'var(--line)' }}
-                  >
-                    Slot in
-                  </button>
-                </Card>
-              ))
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setStepId('plan');
-                setStatus('Back to plan — the loop repeats.');
-              }}
-              className="press w-full rounded-2xl border py-3 text-[0.8125rem] font-extrabold"
-              style={{ borderColor: 'var(--line)' }}
-            >
-              Start the loop again
-            </button>
+                ))
+              )}
+            </Card>
           </>
         )}
 
@@ -443,12 +426,12 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
       <div className="sticky bottom-0 mt-6 flex gap-2 border-t px-5 py-4" style={{ borderColor: 'var(--line)', background: 'var(--bg)' }}>
         <button
           type="button"
-          onClick={stepIndex === 0 ? onClose : goBack}
+          onClick={stageIndex === 0 ? onClose : goBack}
           className="press rounded-2xl border px-4 py-3.5 font-extrabold"
           style={{ borderColor: 'var(--line)' }}
         >
           <span className="inline-flex items-center gap-1.5">
-            <ArrowLeft size={16} /> {stepIndex === 0 ? 'Close' : 'Back'}
+            <ArrowLeft size={16} /> {stageIndex === 0 ? 'Close' : 'Back'}
           </span>
         </button>
         <button
@@ -458,11 +441,11 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
           style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
           <span className="inline-flex items-center justify-center gap-2">
-            {stepIndex >= WEEK_LOOP_STEPS.length - 1 ? (
+            {stageIndex >= WEEK_LOOP_STAGES.length - 1 ? (
               <><Check size={16} strokeWidth={3} /> Done</>
             ) : (
               <>
-                {WEEK_LOOP_STEPS[stepIndex + 1]?.short || 'Next'}
+                {WEEK_LOOP_STAGES[stageIndex + 1]?.short || 'Next'}
                 <ArrowRight size={16} />
               </>
             )}
@@ -470,10 +453,10 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
         </button>
       </div>
 
-      {/* Step chips for jump (still one flow) */}
+      {/* Stage chips for jump (still one flow) */}
       <div className="px-5 pb-6 flex flex-wrap gap-1.5">
-        {WEEK_LOOP_STEPS.map((s) => (
-          <Chip key={s.id} active={s.id === stepId} onClick={() => setStepId(s.id)}>
+        {WEEK_LOOP_STAGES.map((s) => (
+          <Chip key={s.id} active={s.id === stageId} onClick={() => setStageId(s.id)}>
             {s.n}. {s.short}
           </Chip>
         ))}

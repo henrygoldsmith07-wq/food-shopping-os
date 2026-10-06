@@ -164,36 +164,27 @@ test('privacy disclosure is reachable and accessible without an account', async 
  * Turn on one of the optional tools, the way the Add tools panel does.
  *
  * Several features are behind progressive disclosure and simply do not render
- * until their tool is enabled, so a test that asserts their copy has to turn
+ * until their tool is enabled, so a test that asserting their copy has to turn
  * the tool on first — otherwise it is asserting against a product decision
- * rather than a bug.
+ * rather than a bug. The toggle is driven through the UI, because the
+ * canonical store boots from IndexedDB: a localStorage patch written before
+ * boot is migrated, not adopted as the live record, so patching storage no
+ * longer changes what the app sees.
  */
-const enableTool = async (page, tool) => {
-  // Patched from an init script rather than a plain evaluate: the running app
-  // holds state in memory and saves it back, so a patch written while it is
-  // live gets overwritten before the reload reads it. An init script runs
-  // before the page's own scripts, so the app boots from the patched value.
-  await page.addInitScript((id) => {
-    try {
-      const raw = localStorage.getItem('forq-state-v2');
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const state = parsed && typeof parsed.state === 'object' ? parsed.state : parsed;
-      const tools = Array.isArray(state.enabledTools) ? state.enabledTools : [];
-      if (tools.includes(id)) return;
-      state.enabledTools = [...tools, id];
-      localStorage.setItem('forq-state-v2', JSON.stringify(parsed));
-    } catch {
-      // A browser blocking storage is a different test's problem.
-    }
-  }, tool);
-  await page.reload();
+const enableTool = async (page, toolId, toolLabel) => {
+  await page.getByRole('button', { name: 'Guidance — what matters now' }).click();
+  const guidance = page.getByRole('dialog', { name: 'Guidance' });
+  await guidance.getByRole('button', { name: 'Tools', exact: true }).click();
+  await guidance.getByRole('button', { name: 'Add tools', exact: true }).click();
+  await guidance.getByRole('switch', { name: `Enable ${toolLabel}` }).click();
+  await expect(guidance.getByRole('switch', { name: `Disable ${toolLabel}` })).toBeVisible();
+  await page.keyboard.press('Escape');
 };
 
 test('exposes collaboration and calendar planning controls', async ({ page }) => {
   await onboard(page);
   // Coach access lives behind the 'coach' tool and is off for new users.
-  await enableTool(page, 'coach');
+  await enableTool(page, 'coach', 'Coach links');
   await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 

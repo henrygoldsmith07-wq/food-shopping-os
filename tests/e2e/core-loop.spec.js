@@ -82,19 +82,15 @@ test('opens cooking mode directly from a planned meal', async ({ page }) => {
 
 test('applies a pasted receipt onto the list and into the pantry', async ({ page }) => {
   await onboard(page);
-  // Receipt capture is an optional tool — enable it the way the app does.
-  await page.addInitScript(() => {
-    try {
-      const raw = localStorage.getItem('forq-state-v2');
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const state = parsed && typeof parsed.state === 'object' ? parsed.state : parsed;
-      const tools = Array.isArray(state.enabledTools) ? state.enabledTools : [];
-      if (!tools.includes('receipt')) state.enabledTools = [...tools, 'receipt'];
-      localStorage.setItem('forq-state-v2', JSON.stringify(parsed));
-    } catch { /* a storage-blocked browser is a different test's problem */ }
-  });
-  await page.reload();
+  // Receipt capture is an optional tool — enable it the way the app does,
+  // through Add tools (the canonical store boots from IndexedDB, so patching
+  // localStorage before boot no longer reaches what the app sees).
+  await page.getByRole('button', { name: 'Guidance — what matters now' }).click();
+  const guidance = page.getByRole('dialog', { name: 'Guidance' });
+  await guidance.getByRole('button', { name: 'Tools', exact: true }).click();
+  await guidance.getByRole('button', { name: 'Add tools', exact: true }).click();
+  await guidance.getByRole('switch', { name: 'Enable Receipt capture' }).click();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Ada/)).toBeVisible({ timeout: 15000 });
 

@@ -7,9 +7,9 @@ import {
 } from '../src/data/product.js';
 
 describe('Forq product positioning', () => {
-  it('states a single primary promise about plan, buy, waste', () => {
-    expect(PRODUCT.promise).toMatch(/plan meals/i);
-    expect(PRODUCT.promise).toMatch(/buy exactly what you need/i);
+  it('states a single primary promise about what to eat, buy and waste', () => {
+    expect(PRODUCT.promise).toMatch(/what you.re eating/i);
+    expect(PRODUCT.promise).toMatch(/what you need to buy/i);
     expect(PRODUCT.promise).toMatch(/waste less food/i);
   });
 

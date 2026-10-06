@@ -1,23 +1,23 @@
 import { useMemo, useState } from 'react';
-import { AlarmClock, CheckCircle2, ChevronRight } from 'lucide-react';
+import { CheckCircle2, ChevronRight } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
-import { gbp, expiryStatus } from '../lib/utils.js';
+import { gbp } from '../lib/utils.js';
 import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS } from '../data/plan.js';
 import {
-  daysUntil, expiringSoon, leftovers, planForDay, runningLow,
+  expiringSoon, planForDay, runningLow,
 } from '../lib/kitchen.js';
-import { rankLeftovers } from '../lib/food-suitability.js';
-import { totalOf } from '../data/stores.js';
 import { bestForSlot } from '../lib/recommend.js';
 import { weeklyFoodLoop } from '../lib/food-loop.js';
 import { nextAction } from '../lib/next-action.js';
-import { Section, Card, Pill, Meter, FoodArt } from './ui.jsx';
-import { Glyph } from './icons.jsx';
+import { weekManager } from '../lib/week-manager.js';
+import { Section, Card, FoodArt } from './ui.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
 import LoopConfirmCard from './LoopConfirmCard.jsx';
 import NextActionCard from './NextActionCard.jsx';
+import AutopilotWeek from './AutopilotWeek.jsx';
+import { WeekStatusCard, NeedsAttentionCard } from './WeekStatus.jsx';
 import AdaptationsCard from './AdaptationsCard.jsx';
 import GuidancePreview from './GuidancePreview.jsx';
 import HomeNumbers from './HomeNumbers.jsx';
@@ -52,14 +52,6 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     ? app.useSoonIngredients.map((row) => row.item)
     : expiringSoon(app.pantry, 3, app.day);
   const low = runningLow(app.pantry);
-  const leftoverItems = rankLeftovers(leftovers(app.pantry), {
-    ...app.prefs,
-    today: app.day,
-    members: app.members || [],
-    diets: app.diets || app.prefs?.diets || [],
-  });
-  const listTotal = totalOf(app.shoppingList);
-  const budgetLeft = (Number(app.weeklyBudget) || 0) - (Number(app.spentThisWeek) || 0);
 
   const availability = useMemo(() => {
     const map = {};
@@ -113,9 +105,22 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   const tonightRecipe = tonight?.recipe || pantryHero?.recipe || null;
   const tonightExplanation = tonight?.explanation || pantryHero?.explanation || null;
   const tonightReasons = tonight?.reasons || null;
+  // The runner-up, from the same ranking as the pick — "Best tonight: X.
+  // Alternative: Y" is the use-what-I-have surface, not a second decision.
+  const tonightAlternative = useMemo(() => {
+    if (!tonightRecipe || !app.safeRecipes.length) return null;
+    const dinners = app.safeRecipes.filter((r) => r.meal === 'dinner' && r.id !== tonightRecipe.id);
+    if (!dinners.length) return null;
+    const month = Number(String(app.day).slice(5, 7)) || new Date().getMonth() + 1;
+    return bestForSlot(dinners, {
+      pantry: app.pantry, today: app.day, date: app.day, availability,
+      people: Math.max(1, Math.round(app.portions || 1)),
+      budget: app.weeklyBudget ? Math.min(4, Math.max(1, app.weeklyBudget / 7)) : 2.5,
+      month, taste: app.tasteProfile,
+    });
+  }, [tonightRecipe, app.safeRecipes, app.pantry, app.day, app.portions, app.weeklyBudget, app.tasteProfile, availability]);
   const tonightConfidence = tonight?.confidence || app.tonightDecision?.confidence || null;
 
-  const plannedCount = Object.keys(app.plan || {}).filter((d) => d >= app.day).length;
   const recovery = app.weekRecovery;
   const foodLoop = weeklyFoodLoop(app);
   const runGuidanceAction = (item) => {
@@ -132,15 +137,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       else goTab(action.target);
     } else goTab(action.target);
   };
-  const outlookLines = [
-    plannedCount ? `${plannedCount} day${plannedCount === 1 ? '' : 's'} planned ahead` : 'Nothing planned yet',
-    app.shoppingList.length ? `${app.shoppingList.length} items on the list · about ${gbp(listTotal, { always: true })}` : 'Shopping list empty',
-    app.weeklyBudget ? `${gbp(Math.max(0, budgetLeft), { always: true })} left this week` : null,
-    recovery?.explanations?.[0] || null,
-  ].filter(Boolean).slice(0, 4);
-
-  const useSoon = expiring.slice(0, 4);
-  const buySoon = app.shoppingList.filter((r) => !r.checked).slice(0, 4);
+  // The Week Manager: one derivation for week status, exceptions and the
+  // quiet-success line. Home's third area reads this and nothing else.
+  const week = useMemo(() => weekManager(app), [app]);
 
   // The one thing the screen leads with. Memoised on exactly the derived
   // signals the ranking reads, so it doesn't recompute on unrelated changes.
@@ -156,8 +155,18 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     <div className="pb-6 space-y-6">
       {/* 1 — One next action. The ranking lives in lib/next-action.js so a
           screen can add urgency without adding a card; the cards it can name
-          are all still further down this page. */}
-      <NextActionCard action={leading} onRun={() => leading?.run?.()} />
+          are all still further down this page. When the week has no plan, the
+          autopilot proposal *is* the next action — not a CTA into a form. */}
+      {leading?.id === 'plan-week' ? (
+        <div className="px-5">
+          <AutopilotWeek
+            onOpenRecipe={openRecipe}
+            onAccept={() => goTab('list')}
+          />
+        </div>
+      ) : (
+        <NextActionCard action={leading} onRun={() => leading?.run?.()} />
+      )}
 
       {/* 2 — Tonight's meal (one decision engine) */}
       <section className="px-5" aria-label="Tonight's meal">
@@ -192,6 +201,25 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
               </div>
               <div className="px-4 pb-4">
                 {tonightExplanation && <RecommendationExplanation explanation={tonightExplanation} compact />}
+                {tonightAlternative?.recipe && (
+                  <button
+                    type="button"
+                    onClick={() => openRecipe(tonightAlternative.recipe)}
+                    className="press mt-2 flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left"
+                    style={{ borderColor: 'var(--line)' }}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
+                        Alternative
+                      </span>
+                      <span className="block text-[0.8125rem] font-extrabold truncate">{tonightAlternative.recipe.name}</span>
+                      <span className="block text-[0.6875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
+                        {tonightAlternative.explanation?.coverage?.pct ?? 0}% in your kitchen · {tonightAlternative.recipe.time} min
+                      </span>
+                    </span>
+                    <ChevronRight size={14} style={{ color: 'var(--faint)' }} />
+                  </button>
+                )}
                 {tonightReasons && !tonightExplanation && (
                   <ul className="mt-1 space-y-0.5">
                     {tonightReasons.slice(0, 3).map((r) => (
@@ -243,13 +271,6 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </Card>
       </section>
 
-      <WeekRecoveryPreview
-        recovery={recovery}
-        onApply={app.applyWeekRecovery}
-        onUndo={app.undoLast}
-        goTab={goTab}
-      />
-
       {/* Today's planned slots, compact */}
       <Section title="Today’s meals" action="Full plan →" onAction={() => goTab('plan')} className="rise rise-2">
         <div className="space-y-2.5">
@@ -276,100 +297,22 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </div>
       </Section>
 
-      {/* 3 — Buy / use soon */}
-      <section className="px-5" aria-label="Items to buy or use soon">
-        <Card>
-          <div className="flex items-baseline justify-between">
-            <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Buy / use soon</p>
-            <button
-              type="button" onClick={openPantry}
-              className="press text-[0.75rem] font-extrabold" style={{ color: 'var(--accent)' }}
-            >
-              Open pantry →
-            </button>
-          </div>
-          {useSoon.length === 0 && buySoon.length === 0 && leftoverItems.length === 0 ? (
-            <>
-              {app.pantry.length === 0 && (
-                <button onClick={openPantry} className="press w-full flex items-center gap-3 text-left">
-                  <span>
-                    <span className="block font-bold text-[0.875rem]">Nothing tracked yet</span>
-                    <span className="block text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                      Add what’s in your cupboards to see value, expiry and what recipes need.
-                    </span>
-                  </span>
-                </button>
-              )}
-              {app.shoppingList.length === 0 && (
-                <p className="mt-2 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  Empty — add items or send a recipe's ingredients over.
-                </p>
-              )}
-              {app.pantry.length > 0 && app.shoppingList.length > 0 && (
-                <p className="mt-2 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  Nothing urgent — your kitchen is in a good rhythm.
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              {useSoon.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-[0.75rem] font-bold mb-2 flex items-center gap-1.5" style={{ color: 'var(--danger)' }}>
-                    <AlarmClock size={13} /> Use first
-                  </p>
-                  <div className="flex gap-2 flex-wrap">
-                    {useSoon.map((p) => {
-                      const d = daysUntil(p.expiry, app.day);
-                      return (
-                        <Pill key={p.id} tone={d <= 1 ? 'danger' : 'warn'}>
-                          <Glyph e={p.emoji} size={12} /> {p.name} · {d <= 0 ? 'today' : `${d}d`}
-                        </Pill>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {buySoon.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-[0.75rem] font-bold mb-2" style={{ color: 'var(--muted)' }}>Next shop</p>
-                  <ul className="space-y-1">
-                    {buySoon.map((r) => (
-                      <li key={r.id} className="text-[0.8125rem] font-semibold" style={{ color: 'var(--ink)' }}>
-                        · {r.name}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    type="button" onClick={() => goTab('shop')}
-                    className="press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}
-                  >
-                    Open shopping list →
-                  </button>
-                </div>
-              )}
-              {leftoverItems.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-[0.75rem] font-bold mb-2" style={{ color: 'var(--muted)' }}>Leftovers to use</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {leftoverItems.slice(0, 3).map((l) => {
-                      const days = l.expiry ? daysUntil(l.expiry, app.day) : null;
-                      const st = days === null ? null : expiryStatus(days);
-                      return (
-                        <Pill key={l.id} tone={st?.tone || 'muted'}>
-                          <Glyph e={l.emoji} size={12} /> {l.name}
-                        </Pill>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </Card>
-      </section>
+      {/* 3 — Week status + needs attention, from the one Week Manager
+          derivation. Exceptions only; quiet success when nothing is wrong. */}
+      <WeekStatusCard manager={week} onOpenWeekLoop={onOpenWeekLoop} />
+      <NeedsAttentionCard manager={week} app={app} goTab={goTab} openPantry={openPantry} />
 
-      {/* 5 — What Forq changed, said plainly and undoable. Learning only
+      {/* 5 — Has anything changed from the original plan? The recovery
+          preview only appears when the week drifted and Forq has repairs to
+          propose or undo. */}
+      <WeekRecoveryPreview
+        recovery={recovery}
+        onApply={app.applyWeekRecovery}
+        onUndo={app.undoLast}
+        goTab={goTab}
+      />
+
+      {/* 6/7 — What Forq handled automatically and learned. Learning only
           shows when it changed something; hidden when it hasn't. */}
       <AdaptationsCard />
 
@@ -424,29 +367,6 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           </Card>
         </div>
       )}
-
-      {/* 4 — The week command centre: one set of week stats, one CTA into
-          the loop (Home's documented "Start the week" entry) rather than a
-          second route to the Plan tab the nav already provides. */}
-      <section className="px-5" aria-label="Weekly outlook">        <Card>
-          <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>This week</p>
-          <ul className="mt-2 space-y-1.5">
-            {outlookLines.map((line) => (
-              <li key={line} className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>· {line}</li>
-            ))}
-          </ul>
-          <div className="mt-2">
-            <Meter value={app.shoppingList.filter((i) => i.checked).length} max={Math.max(1, app.shoppingList.length)} height={5} />
-          </div>
-          <button
-            type="button"
-            onClick={() => (onOpenWeekLoop ? onOpenWeekLoop(null) : goTab('plan'))}
-            className="press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}
-          >
-            Start the week →
-          </button>
-        </Card>
-      </section>
 
       {widgets.has('loop') && (
         <>

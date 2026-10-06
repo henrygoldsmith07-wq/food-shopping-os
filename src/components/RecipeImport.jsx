@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { BookmarkPlus, Check, ClipboardPaste, ShoppingCart, Sparkles } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { importRecipeText, recipeTextFromMarkup } from '../lib/foodlog.js';
@@ -6,6 +6,9 @@ import { isVideoLink, recipeFromImport } from '../lib/recipe-tools.js';
 import { provenanceFrom } from '../lib/recipe-import.js';
 import { buildEntry, mealForTime, timeStamp } from '../lib/nutrition.js';
 import { shoppingItemsForRecipe } from '../lib/recipe-shopping.js';
+import { pantryCoverage } from '../lib/planner.js';
+import { expiringSoon, weekDates } from '../lib/kitchen.js';
+import { planEntries } from '../lib/mealplan.js';
 import { PRIVACY_COPY } from '../data/privacy.js';
 import { Card, Chip, Pill, Stepper } from './ui.jsx';
 import RecipeImportSource from './RecipeImportSource.jsx';
@@ -120,6 +123,34 @@ export default function RecipeImport({ defaultMeal, onDone }) {
     : null;
   const canLog = Boolean(result?.matchedCount);
 
+  // Post-import context — the brief's "connect it into the rest of Forq
+  // instead of an isolated recipe library". Coverage and missing cost come
+  // from the same pantry deduction the shopping list uses; the best-fit day
+  // is the first open dinner slot this week.
+  const importContext = useMemo(() => {
+    if (!result?.recipe && !result?.ingredients?.length) return null;
+    const recipeLike = {
+      name: result.title,
+      ingredients: (result.ingredients || []).map((ing) => ({ name: ing.name || ing, qty: ing.qty || '' })),
+    };
+    const coverage = pantryCoverage(recipeLike, app.pantry || []);
+    const missing = shoppingItemsForRecipe(recipeLike, app.pantry || [], {
+      today: app.day,
+      learnedAliases: app.aliasMemory || {},
+    });
+    const missingCost = missing.reduce((sum, row) => sum + (Number(row.price) || 0), 0);
+    const dates = weekDates(app.day);
+    const plannedDays = new Set(planEntries(app.plan || {}, dates).map((entry) => entry.date));
+    const openDay = dates.find((date) => date >= app.day && !plannedDays.has(date)) || null;
+    const expiring = expiringSoon(app.pantry || [], 3, app.day)
+      .map((p) => p.name.toLowerCase())
+      .filter((name) => recipeLike.ingredients.some((ing) => {
+        const n = String(ing.name || '').toLowerCase();
+        return n.includes(name) || name.includes(n);
+      }));
+    return { coverage, missingCount: missing.length, missingCost, openDay, expiring };
+  }, [result, app.pantry, app.day, app.aliasMemory, app.plan]);
+
   return (
     <div className="px-5 pb-10 space-y-4">
       <div className="flex gap-2">
@@ -193,6 +224,32 @@ export default function RecipeImport({ defaultMeal, onDone }) {
             <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
               <MacroSummary macros={macros} size="sm" />
             </div>
+            {/* Post-import context: connect the recipe into the loop instead
+                of dropping it in an isolated library. */}
+            {importContext && (
+              <div className="mt-3 pt-3 border-t space-y-1" style={{ borderColor: 'var(--line)' }}>
+                <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  You already have {importContext.coverage.have} of {importContext.coverage.total} ingredients.
+                </p>
+                {importContext.missingCount > 0 && (
+                  <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                    {importContext.missingCost > 0
+                      ? `About £${importContext.missingCost.toFixed(2)} to buy`
+                      : `${importContext.missingCount} to buy`}
+                  </p>
+                )}
+                {importContext.openDay && (
+                  <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--accent)' }}>
+                    Best fit: {new Date(`${importContext.openDay}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' })}
+                  </p>
+                )}
+                {importContext.expiring.length > 0 && (
+                  <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--warn)' }}>
+                    Uses your {importContext.expiring.slice(0, 2).join(' and ')} before it goes off
+                  </p>
+                )}
+              </div>
+            )}
             {result.matchedCount === 0 && (
               <Pill tone="warn">Nothing matched the local food catalogue, so logging is paused. You can still save the recipe or shop its ingredients.</Pill>
             )}

@@ -6,6 +6,14 @@ import RecipeDetail from '../src/components/RecipeDetail.jsx';
 import PantryView from '../src/components/PantryView.jsx';
 import GuidancePanel from '../src/components/GuidancePanel.jsx';
 import { CommandPalette, LauncherButtons, QuickAdd } from '../src/components/GlobalLauncher.jsx';
+import { configure } from '@testing-library/react';
+
+// findBy* / waitFor poll for 1s by default, and on a slow machine the
+// lazy-loaded panels (AnalyticsPanel, AddToolsPanel, AdvancedPanel) lose that
+// race after the click that mounts them. The assertions are sound — they pass
+// given the time — so the harness allowance goes up here rather than each
+// test carrying its own timeout. Nothing is loosened except the clock.
+configure({ asyncUtilTimeout: 15000 });
 
 globalThis.__FORQ_TEST_SCREENS__ = {
   PlanTab,

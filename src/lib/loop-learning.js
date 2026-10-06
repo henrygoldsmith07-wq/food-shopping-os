@@ -9,7 +9,7 @@
  */
 
 import { canonicalName } from './aliases.js';
-import { daysUntil } from './kitchen.js';
+import { daysUntil, expiringSoon } from './kitchen.js';
 import { shoppingForPlan } from './mealplan.js';
 import { planEntries } from './mealplan.js';
 import { householdPortionsFor } from './portions.js';
@@ -304,4 +304,26 @@ export const loopHealth = (state, today = state?.day) => {
   }
 
   return { issues, checkedAt: today };
+};
+
+/**
+ * Ingredients a set of meals rescues before they go off — the one derivation
+ * behind both the Autopilot Week summary and the outcome metrics, so the two
+ * can never quote different rescue counts. Counts distinct ingredient names,
+ * from the same three-day expiring window the plan focuses on.
+ *
+ * @param {any[]} recipes the meals being considered
+ * @param {any} state needs `pantry` and `day`
+ */
+export const rescuedExpiringCount = (recipes = [], state = {}) => {
+  const expiring = expiringSoon(state.pantry || [], 3, state.day).map((p) => p.name.toLowerCase());
+  if (!expiring.length || !recipes?.length) return 0;
+  const names = new Set();
+  for (const recipe of recipes) {
+    for (const ing of recipe?.ingredients || []) {
+      const name = String(ing?.name || ing || '').toLowerCase();
+      if (expiring.some((e) => name.includes(e) || e.includes(name))) names.add(name);
+    }
+  }
+  return names.size;
 };

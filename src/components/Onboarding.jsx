@@ -237,11 +237,33 @@ export default function Onboarding() {
 
         {step === 1 && (
           <>
+            {/* Ordered by what actually changes the first output: how many
+                people scales the list and what you eat filters the meals.
+                Age and budget are asked last, optional, and explained. */}
+            <Card className="flex items-center justify-between">
+              <div>
+                <p className="font-bold text-[0.875rem]">People you cook for</p>
+                <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>Including you — scales the shopping list</p>
+              </div>
+              <Stepper value={household} onChange={setHousehold} min={1} max={10} />
+            </Card>
+            <Card>
+              <p className="text-[0.6875rem] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--faint)' }}>
+                How you eat
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {DIET_PATTERNS.map((d) => (
+                  <Chip key={d.id} active={diets.includes(d.id)} onClick={() => toggleDiet(d.id)}>{d.label}</Chip>
+                ))}
+              </div>
+              <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                Pick any that apply, or none. They filter the meals offered next — nothing else is locked in.
+              </p>
+            </Card>
             <Card>
               <NumberField label="Your age" value={age} onChange={setAge} suffix="yrs" step={1} />
               <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Asked here rather than buried in the nutrition settings, because it decides how the
-                rest of the app behaves. Leave it blank and Forq stays as it is.
+                Optional, and only used for nutrition targets. Leave it blank and Forq stays as it is.
               </p>
               {youth && (
                 <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: 'var(--accent)', background: 'var(--accent-soft)' }}>
@@ -254,13 +276,6 @@ export default function Onboarding() {
                 </div>
               )}
             </Card>
-            <Card className="flex items-center justify-between">
-              <div>
-                <p className="font-bold text-[0.875rem]">People you cook for</p>
-                <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>Including you</p>
-              </div>
-              <Stepper value={household} onChange={setHousehold} min={1} max={10} />
-            </Card>
             <Card>
               <NumberField
                 label="Weekly food budget"
@@ -271,19 +286,6 @@ export default function Onboarding() {
               />
               <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
                 Leave it at 0 if you'd rather not track spending.
-              </p>
-            </Card>
-            <Card>
-              <p className="text-[0.6875rem] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--faint)' }}>
-                How you eat
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {DIET_PATTERNS.map((d) => (
-                  <Chip key={d.id} active={diets.includes(d.id)} onClick={() => toggleDiet(d.id)}>{d.label}</Chip>
-                ))}
-              </div>
-              <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Pick any that apply, or none. They filter recipes and shape your macro split.
               </p>
             </Card>
           </>

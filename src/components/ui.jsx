@@ -111,9 +111,6 @@ export const GestureMenu = ({
       <div
         role="group"
         aria-label={`Actions for ${label}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
         tabIndex={0}
         draggable={draggable}
         onDragStart={onDragStart}
@@ -135,6 +132,22 @@ export const GestureMenu = ({
         onTouchMove={move}
         onTouchEnd={end}
       >
+        {/* The menu trigger is a real button — aria-haspopup/aria-expanded
+            belong to button semantics, not to the row's role="group". Hidden
+            visually: the row already shows its own controls, and keyboard
+            users open this menu with Shift+F10 on the row. */}
+        <button
+          type="button"
+          className="sr-only"
+          tabIndex={-1}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          aria-label={`More actions for ${label}`}
+          onClick={() => setOpen((v) => !v)}
+        >
+          More actions
+        </button>
         {children}
       </div>
       {open && (
@@ -310,141 +323,12 @@ export const Meter = ({ value, max, color = 'var(--accent)', height = 6 }) => (
 
 /* ---------- Overlays ---------- */
 
-/** Bottom sheet / full-screen page overlay. Dismisses on backdrop tap, Escape, or swipe-down. */
-export const Sheet = ({ open, onClose, children, full = false, title }) => {
-  const [render, setRender] = useState(open);
-  const [dragY, setDragY] = useState(0);
-  const panel = useRef(null);
-  const previousFocus = useRef(null);
-  const titleId = useId();
-  const touch = useRef({ startY: null, scroller: null }).current;
-  useEffect(() => {
-    if (open) setRender(true);
-    else {
-      const t = setTimeout(() => setRender(false), 200);
-      return () => clearTimeout(t);
-    }
-  }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    setDragY(0);
-    previousFocus.current = document.activeElement;
-    const timer = setTimeout(() => {
-      const focusable = panel.current?.querySelector(
-        '[autofocus], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-      );
-      (focusable || panel.current)?.focus();
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      if (previousFocus.current?.isConnected) previousFocus.current.focus();
-      else document.getElementById('main')?.focus?.();
-    };
-  }, [open]);
-  useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [open]);
-  if (!render) return null;
-  const onTouchStart = (e) => {
-    touch.scroller = e.currentTarget.querySelector('[data-sheet-scroll]');
-    touch.startY = e.touches[0].clientY;
-  };
-  const onTouchMove = (e) => {
-    if (touch.startY === null) return;
-    const dy = e.touches[0].clientY - touch.startY;
-    if (dy > 0 && (!touch.scroller || touch.scroller.scrollTop <= 0)) setDragY(dy);
-  };
-  const onTouchEnd = () => {
-    setDragY((dy) => {
-      if (dy > 110) onClose();
-      return 0;
-    });
-    touch.startY = null;
-  };
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div
-        className="absolute inset-0 transition-opacity duration-200"
-        style={{ background: 'rgba(10,10,12,0.45)', opacity: open ? 1 : 0 }}
-        onClick={onClose}
-      />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-hidden={open ? undefined : true}
-        aria-labelledby={title ? titleId : undefined}
-        aria-label={title ? undefined : 'Dialog'}
-        tabIndex={-1}
-        className={cx('sheet-up relative w-full max-w-lg flex flex-col', full ? 'h-full' : 'max-h-[92%] rounded-t-3xl')}
-        style={{
-          background: 'var(--bg)',
-          transition: dragY ? 'none' : 'transform 200ms',
-          transform: open ? `translateY(${dragY}px)` : 'translateY(30px)',
-        }}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.stopPropagation();
-            onClose();
-            return;
-          }
-          if (event.key !== 'Tab') return;
-          const open = [...document.querySelectorAll('[aria-modal="true"]:not([aria-hidden="true"])')];
-          if (open.length && open[open.length - 1] !== event.currentTarget) return;
-          const focusable = [...event.currentTarget.querySelectorAll(
-            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-          )].filter((element) => {
-            if (element.closest('[aria-hidden="true"]')) return false;
-            const style = typeof window !== 'undefined' ? window.getComputedStyle(element) : null;
-            return style?.display !== 'none' && style?.visibility !== 'hidden';
-          });
-          if (!focusable.length) {
-            event.preventDefault();
-            event.currentTarget.focus();
-            return;
-          }
-          const first = focusable[0], last = focusable[focusable.length - 1];
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first.focus();
-          } else if (!event.currentTarget.contains(document.activeElement)) {
-            event.preventDefault();
-            first.focus();
-          }
-        }}
-      >
-        {!full && <div className="mx-auto mt-2.5 mb-1 h-1 w-10 rounded-full shrink-0" style={{ background: 'var(--line)' }} />}
-        {title && (
-          <div className="flex items-center justify-between px-5 pt-3 pb-2 shrink-0">
-            <h2 id={titleId} className="text-lg font-extrabold tracking-tight">{title}</h2>
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="tap press flex h-10 w-10 items-center justify-center rounded-full"
-              style={{ background: 'var(--card-2)', color: 'var(--muted)' }}
-            >
-              <X size={18} strokeWidth={2.4} />
-            </button>
-          </div>
-        )}
-        <div
-          data-sheet-scroll
-          tabIndex={0}
-          className="overflow-y-auto no-scrollbar flex-1 overscroll-contain"
-        >
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
+/**
+ * The sheet overlay lives in its own module (it is the largest single piece of
+ * this file, and ui.jsx is held under a 500-line boundary). Re-exported here
+ * so every existing `import { Sheet } from "./ui.jsx"` keeps working.
+ */
+export { default as Sheet } from './Sheet.jsx';
 
 export const Stepper = ({ value, onChange, min = 1, max = 12 }) => (
   <div className="inline-flex items-center gap-3 rounded-full border px-2 py-1" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>

@@ -7,6 +7,12 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'line',
+  // Each test drives a full onboarding plus a multi-step flow, and the
+  // production build behind it is slow: 30s defaults lose the race to the
+  // clock on modest hardware (a two-test run needs ~6 minutes wall-clock here)
+  // while the assertions themselves are sound. Generous, not unbounded.
+  timeout: 120000,
+  expect: { timeout: 15000 },
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'on-first-retry',

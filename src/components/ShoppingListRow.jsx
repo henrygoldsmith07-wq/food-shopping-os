@@ -8,11 +8,14 @@ import { shoppingNameKey, unitPrice } from '../lib/shopping.js';
 import { gbp } from '../lib/utils.js';
 import { Glyph } from './icons.jsx';
 import { Chip, GestureMenu, Pill } from './ui.jsx';
+import CorrectionSheet from './CorrectionSheet.jsx';
+import { listRowCorrections } from '../lib/corrections.js';
 
 export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, largeTouch = false, pastCap = false, guardOver = false }) {
   const app = useApp();
   const [moving, setMoving] = useState(false);
   const [swapping, setSwapping] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
   const [qtyEditing, setQtyEditing] = useState(false);
   const [qtyDraft, setQtyDraft] = useState('');
   const commitQty = () => {
@@ -30,10 +33,12 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
     if (!item.checked) haptic();
   };
   return (
+    <>
     <GestureMenu
       label={item.name}
       actions={[
         { label: item.checked ? 'Mark not bought' : 'Mark bought', onClick: toggle },
+        { label: 'Correct this…', onClick: () => setCorrecting(true) },
         { label: item.priority === 'high' ? 'Normal priority' : 'High priority', onClick: () => app.updateListItem(item.id, { priority: item.priority === 'high' ? 'normal' : 'high' }) },
         { label: favourite ? 'Remove favourite' : 'Save as favourite', onClick: () => app.toggleFavouriteShopping(item) },
         ...(substitutions.length ? [{ label: 'Find a substitution', onClick: () => setSwapping(true) }] : []),
@@ -297,5 +302,13 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
       )}
       </div>
     </GestureMenu>
+    <CorrectionSheet
+      open={correcting}
+      onClose={() => setCorrecting(false)}
+      title={`Correct “${item.name}”`}
+      corrections={listRowCorrections(item)}
+      context={{ item, itemId: item.id }}
+    />
+    </>
   );
 }
