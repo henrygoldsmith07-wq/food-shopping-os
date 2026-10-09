@@ -482,7 +482,11 @@ flag; Forq's own data is never deleted or moved.
   twice gets a cook-once schedule: which day, how many batches, how much time it
   saves. **Leftovers** you save after cooking sit in the fridge with a use-by
   date, cover planned meals, and drop out of the shopping list. The list itself
-  generates from whichever range you're looking at, minus your pantry. Planning
+  generates from whichever range you're looking at, minus your pantry — and
+  every derived row states its own arithmetic: the required amount, the pantry
+  stock it deducted (or "no confirmed stock" when the pantry is unknown, never
+  a confident zero), and what is left to buy, with the full reasoning behind
+  "Why am I buying this?". Planning
   also surfaces use-soon and perishable ingredients, lets you replan around the
   time and ingredients you actually have, records adherence and skip reasons,
   and learns household preferences, repeat fatigue and real cooking times.

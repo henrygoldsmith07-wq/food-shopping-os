@@ -115,6 +115,26 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
             />
           )}
           {item.priority === 'high' && <p className="text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>Need it</p>}
+          {/* The arithmetic behind the number — required, what the pantry
+              already covers, and what is left to buy. Derived rows carry all
+              three from shoppingForPlan; a manually added row carries none,
+              so the line stays hidden rather than inventing an accounting it
+              never had. "No confirmed stock" is deliberately not "none": an
+              unknown pantry must not read as an empty one. */}
+          {item.requiredQty && !qtyEditing && (
+            <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Need {item.requiredQty}
+              {' · '}
+              {item.pantryQty ? `pantry ${item.pantryQty}` : 'pantry: no confirmed stock'}
+              {' · '}
+              {/* The row's own qty is the final figure — waste adaptations and
+                  hand corrections change qty without rewriting shortfallQty,
+                  so quoting shortfall here could contradict the number above.
+                  Which meals need it lives in the details below, keeping this
+                  line to the arithmetic alone. */}
+              buy {item.qty || '—'}
+            </p>
+          )}
           {pastCap && (
             <p className="mt-0.5 inline-flex items-center gap-1 text-[0.65625rem] font-extrabold" style={{ color: 'var(--warn)' }}>
               Past the week's cap — ranked last so you see what fits first
@@ -137,11 +157,12 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
           {item.fromRecipe && (
             <p className="text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>for {item.fromRecipe}</p>
           )}
-          {item.shoppingExplanation?.reasons?.length > 0 && (
+          {(item.shoppingExplanation?.reasons?.length > 0 || item.explanation) && (
             <details className="mt-1">
               <summary className="cursor-pointer text-[0.6875rem] font-bold" style={{ color: 'var(--accent)' }}>Why am I buying this?</summary>
               <div className="mt-1 space-y-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                {item.shoppingExplanation.reasons.map((reason) => <p key={reason}>· {reason}</p>)}
+                {item.explanation && <p>{item.explanation}</p>}
+                {item.shoppingExplanation?.reasons?.map((reason) => <p key={reason}>· {reason}</p>)}
               </div>
             </details>
           )}
