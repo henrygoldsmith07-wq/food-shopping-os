@@ -39,7 +39,7 @@ import { createExampleWeekState } from '../data/exampleWeek.js';
 export { PHOTO_LIMIT } from './health-actions.js';
 
 import {
-  ACCENT_IDS, emojiFor, EMPTY_STATE, rolloverDay, STATE_VERSION, todayStamp, uid,
+  ACCENT_IDS, EMPTY_STATE, rolloverDay, STATE_VERSION, todayStamp, uid,
 } from './state.js';
 
 export {

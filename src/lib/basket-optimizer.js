@@ -1,6 +1,7 @@
 import { canonicalName } from './aliases.js';
 import { parseQuantity } from './measure.js';
 import { shoppingNameKey } from './shopping.js';
+import { offerPrefersBrand } from './product-preferences.js';
 import {
   classifyProductMatch,
   comparableForRanking,
@@ -32,7 +33,7 @@ const nonNegative = (value, fallback) => {
   return Number.isFinite(number) && number >= 0 ? number : fallback;
 };
 
-const offerFor = (offers, item) => {
+const offerFor = (offers, item, preference = null) => {
   const values = [];
   for (const candidate of itemKeys(item.name)) {
     const value = offers?.[candidate];
@@ -46,12 +47,22 @@ const offerFor = (offers, item) => {
   if (!valid.length) return null;
   // A retailer may return several hits for one query. Prefer an equivalent
   // product before price, otherwise a cheap lookalike can hide the valid item
-  // and make the whole store appear unavailable.
+  // and make the whole store appear unavailable. The household's usual brand
+  // — told, never inferred — then breaks EXACT price ties between
+  // equivalents: a cheaper equivalent never loses to it, and the brand
+  // never lifts a worse-matched product.
   return valid.sort((a, b) => {
     const aMatch = matchFor(item, a);
     const bMatch = matchFor(item, b);
-    return Number(bMatch.equivalent) - Number(aMatch.equivalent)
-      || a.price - b.price;
+    const aEquivalent = Number(aMatch.equivalent);
+    const bEquivalent = Number(bMatch.equivalent);
+    if (aEquivalent !== bEquivalent) return bEquivalent - aEquivalent;
+    if (Math.abs(a.price - b.price) < 0.005 && preference?.brand) {
+      const aPref = offerPrefersBrand(a, preference) ? 0 : 1;
+      const bPref = offerPrefersBrand(b, preference) ? 0 : 1;
+      if (aPref !== bPref) return aPref - bPref;
+    }
+    return a.price - b.price;
   })[0];
 };
 
@@ -212,6 +223,11 @@ export const compareBaskets = (items = [], offersByStore = {}, options = {}) => 
     : Object.keys(offersByStore || {});
   const unmatchedPenalty = nonNegative(settings.unmatchedPenalty, 1.5);
   const substitutionPenalty = nonNegative(settings.substitutionPenalty, 0.25);
+  // The household's usual product per shopping row, keyed the way the row
+  // names are keyed: { shoppingNameKey → {brand, packSize} }.
+  const preferences = settings.preferences && typeof settings.preferences === 'object'
+    ? settings.preferences
+    : null;
 
   const rows = stores.map((store) => {
     const offers = offersByStore?.[store] || {};
@@ -222,7 +238,10 @@ export const compareBaskets = (items = [], offersByStore = {}, options = {}) => 
     let confidenceTotal = 0;
 
     for (const item of list) {
-      const offer = normaliseOffer(offerFor(offers, item), item);
+      const offer = normaliseOffer(
+        offerFor(offers, item, preferences?.[shoppingNameKey(item.name)]),
+        item,
+      );
       if (!offer) {
         missing.push(item.name);
         continue;

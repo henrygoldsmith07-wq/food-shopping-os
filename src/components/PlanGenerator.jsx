@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from '../lib/planner.js';
+import { parsePlanBrief, briefToControls, enforceIngredientCounts } from '../lib/plan-brief.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { shoppingForGeneratedEntries } from '../lib/mealplan.js';
 import { useApp } from '../lib/store.jsx';
@@ -12,6 +13,7 @@ import { monthOf, peakNow } from '../data/seasons.js';
 import { expiringSoon } from '../lib/kitchen.js';
 import { wasteAwareList } from '../lib/loop-learning.js';
 import { explainRecommendation } from '../lib/recommend.js';
+import { PLAN_TEMPLATES } from '../lib/plan-templates.js';
 import { Card, Chip, Pill, Stepper, FoodArt } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
@@ -40,8 +42,13 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const [variety, setVariety] = useState(true);
   const [minimiseWaste, setMinimiseWaste] = useState(true);
   const [seed, setSeed] = useState(() => (app.calendarBusy?.length ? Date.now() % 100000 : 0));
+  const [templateId, setTemplateId] = useState('normal');
   const [generating, setGenerating] = useState(false);
   const [addedToList, setAddedToList] = useState(false);
+  // "Plan 5 dinners for 4 people, under £60…" — parsed into the very controls
+  // this panel shows, never a private second generator.
+  const [briefText, setBriefText] = useState('');
+  const [brief, setBrief] = useState(null);
   const month = monthOf(app.day); const dates = scope === 'A month' ? monthDates : weekDates;
   const busyDates = new Set((app.calendarBusy || []).map((item) => item.date));
   const busyInScope = [...busyDates].filter((date) => dates.includes(date)).length;
@@ -124,6 +131,39 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent, weeklyCap, weekChunks ? weekChunks.join(',') : null, focusList.join(',')]);
 
   const generated = plan?.meals ?? null;
+
+  // The brief's "use X twice" lands AFTER generation: swaps tail slots so the
+  // requested ingredient reaches its count, and reports what couldn't be met.
+  const briefApplied = useMemo(() => {
+    if (!generated) return { meals: [], changes: [], unmet: [] };
+    const rows = brief?.days ? generated.slice(0, brief.days) : generated;
+    if (!brief?.counts?.length) return { meals: rows, changes: [], unmet: [] };
+    return enforceIngredientCounts(rows, brief.counts, app.safeRecipes, {
+      pantry: app.pantry,
+      people,
+      today: app.day,
+    });
+  }, [generated, brief, app.safeRecipes, app.pantry, people, app.day]);
+
+  const understandBrief = () => {
+    const parsed = parsePlanBrief(briefText);
+    const controls = briefToControls(parsed);
+    if (controls.people) setPeople(controls.people);
+    if (controls.budget) setBudget(controls.budget);
+    if (controls.timeAvailable) setTimeAvailable(controls.timeAvailable);
+    if (controls.quick) setQuick(true);
+    if (controls.scope === '1 meal') setScope('1 meal');
+    const notes = [...(controls.notes || [])];
+    if (controls.days && controls.days > planDates.length) {
+      notes.push(`${controls.days} dinners asked for, but only ${planDates.length} open night${planDates.length === 1 ? '' : 's'} in scope — the rest stay open.`);
+    }
+    setBrief({ ...controls, understood: parsed.understood, rest: parsed.rest, notes });
+    setAddedToList(false);
+    setSeed(Date.now() % 100000);
+    setGenerating(false);
+    recordProductEvent('plan_brief_applied', { understood: parsed.understood.join('|'), dinners: controls.days || null });
+  };
+
   const generate = () => {
     if (noOpenDates) return;
     setAddedToList(false);
@@ -146,8 +186,10 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       return scopeMeals('A day').map((slot, i) => ({ date: app.day, slot, recipeId: generated[i]?.id }));
     }
     if (scope === '1 meal') return [{ date: app.day, slot: 'dinner', recipeId: generated[0]?.id }];
-    return planDates.map((date, i) => ({ date, slot: 'dinner', recipeId: generated[i]?.id }));
-  }, [generated, scope, planDates, app.day]);
+    // A brief's dinner count trims the run to exactly what was asked for.
+    const nights = brief?.days ? planDates.slice(0, brief.days) : planDates;
+    return nights.map((date, i) => ({ date, slot: 'dinner', recipeId: briefApplied.meals?.[i]?.id }));
+  }, [generated, scope, planDates, app.day, briefApplied, brief]);
 
   const apply = () => {
     app.applyPlanEntries(entries.filter((e) => e.recipeId));
@@ -174,9 +216,10 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       { waste: app.waste, cooked: app.cooked, today: app.day, learnedAliases: app.aliasMemory || {} },
     ));
     setAddedToList(true);
-  };  const cost = generated ? generated.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
-  const kcal = generated ? Math.round(generated.reduce((s, r) => s + r.kcal, 0) / generated.length) : 0;
-  const distinct = generated ? new Set(generated.map((r) => r.id)).size : 0;
+  };  const effectiveMeals = briefApplied.meals || [];
+  const cost = effectiveMeals.length ? effectiveMeals.reduce((s, r) => s + r.costPerServing * people, 0) : 0;
+  const kcal = effectiveMeals.length ? Math.round(effectiveMeals.reduce((s, r) => s + r.kcal, 0) / effectiveMeals.length) : 0;
+  const distinct = effectiveMeals.length ? new Set(effectiveMeals.map((r) => r.id)).size : 0;
   const wastePlan = plan?.wastePlan || null;
   const wasteMetric = (value) => value === null || value === undefined ? '—' : `${Math.round(value)}%`;
   const planNotes = [plan?.note, generated && busyInScope > 0 ? `Leaving ${busyInScope} calendar-busy evening${busyInScope === 1 ? '' : 's'} empty.` : null].filter(Boolean);
@@ -207,6 +250,36 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
             {SCOPES.map((s) => <Chip key={s} active={scope === s} onClick={() => setScope(s)}>{s}</Chip>)}
           </div>
+        </div>
+
+        <div className="rounded-2xl border p-3 space-y-2" style={{ borderColor: 'var(--line)' }}>
+          <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Say it in a sentence</p>
+          <input
+            value={briefText}
+            onChange={(e) => setBriefText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') understandBrief(); }}
+            placeholder="Plan 5 dinners for 4 people, under £60, 30 minutes max, use chicken twice"
+            aria-label="Describe the week you want"
+            className="w-full rounded-xl border px-3 py-2.5 text-[0.8125rem] font-semibold outline-none"
+            style={{ background: 'var(--card-2)', borderColor: 'var(--line)', color: 'var(--ink)' }}
+          />
+          <button
+            type="button"
+            onClick={understandBrief}
+            className="press w-full rounded-xl border py-2 text-[0.8125rem] font-extrabold"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+          >
+            Set the controls from this
+          </button>
+          {brief && (
+            <div className="text-[0.71875rem] font-semibold space-y-0.5" style={{ color: 'var(--muted)' }}>
+              {brief.understood?.length
+                ? <p>Understood: {brief.understood.join(' · ')}</p>
+                : <p>Nothing in that sentence maps to a control yet — set people, budget and time below.</p>}
+              {(brief.notes || []).map((note) => <p key={note}>{note}</p>)}
+              {brief.rest ? <p style={{ color: 'var(--faint)' }}>Not read: “{brief.rest}” — set that yourself if it matters.</p> : null}
+            </div>
+          )}
         </div>
 
         {weeklyBudget !== null && <p className="rounded-2xl border px-3 py-2 text-center text-[0.75rem] font-bold" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
@@ -271,6 +344,28 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
           <p className="text-[0.75rem] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--faint)' }}>Occasion</p>
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
             {PLANNER_OCCASIONS.map((o) => <Chip key={o} active={occasion === o} onClick={() => setOccasion(o)}>{o}</Chip>)}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[0.75rem] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--faint)' }}>Week template — a strategy, not fixed meals</p>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+            {PLAN_TEMPLATES.map((t) => (
+              <Chip
+                key={t.id}
+                active={templateId === t.id}
+                onClick={() => {
+                  setTemplateId(t.id);
+                  if (t.buildPlanInput.budget) setBudget(t.buildPlanInput.budget);
+                  if (t.buildPlanInput.maxTime) { setQuick(true); setTimeAvailable(t.buildPlanInput.maxTime); }
+                  if (t.buildPlanInput.batch) setBatch(true);
+                  if (t.buildPlanInput.occasion) setOccasion(t.buildPlanInput.occasion);
+                  recordProductEvent('plan_template_applied', { template: t.id });
+                }}
+              >
+                {t.label}
+              </Chip>
+            ))}
           </div>
         </div>
 
@@ -376,6 +471,20 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
 
       {generated && !generating && (
         <div className="mt-3 space-y-3">
+          {(briefApplied.changes.length > 0 || briefApplied.unmet.length > 0) && (
+            <Card className="!p-3 space-y-1" style={{ background: 'var(--card-2)' }}>
+              {briefApplied.changes.map((change, i) => (
+                <p key={`chg-${i}`} className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  Swapped {change.from} → {change.to} so {change.ingredient} lands the number of times you asked.
+                </p>
+              ))}
+              {briefApplied.unmet.map((row) => (
+                <p key={row.name} className="text-[0.75rem] font-bold" style={{ color: 'var(--warn, #a55a12)' }}>
+                  “use {row.name}” is still short: {row.have} of {row.want} — the book has no more fitting dishes that cook it.
+                </p>
+              ))}
+            </Card>
+          )}
           {planNotes.length > 0 && (
             <Card className="!p-3 flex items-start gap-2" style={{ background: 'var(--card-2)' }}>
               <Info size={15} className="shrink-0 mt-0.5" style={{ color: 'var(--muted)' }} />

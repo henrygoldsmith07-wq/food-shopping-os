@@ -18,6 +18,9 @@ import { householdPermission } from './household.js';
 import { uid } from './state.js';
 import { emojiFor } from './food-lookup.js';
 import { householdPortionsFor } from './portions.js';
+import { buildPlan, windowBudget } from './planner.js';
+import { monthOf } from '../data/seasons.js';
+import { expiringSoon } from './kitchen.js';
 
 /** Single scaling implementation — see portions.js. Kept as a re-export so
  * existing imports from this module keep working. */
@@ -29,6 +32,55 @@ export { scaleQty } from './portions.js';
  * disagree with the plan generator about how much to buy.
  */
 export { householdPortionsFor } from './portions.js';
+
+/**
+ * One-tap week fill, for the loop's "fill it for me".
+ *
+ * Open dinners only — dinners already chosen, and leftover-night / eating-out
+ * markers, are kept untouched and fill nothing — week order, cooked through
+ * the very same `buildPlan` call PlanGenerator makes with its default
+ * controls, so the loop and the calendar can never disagree about what a
+ * good week looks like. Returns `{date, slot, recipeId}` rows for
+ * `applyPlanEntries`.
+ */
+export const autoPlanWeekEntries = (app) => {
+  const dates = weekDates(app.day).filter(
+    (date) => date >= app.day && !(app.plan?.[date] || {}).dinner,
+  );
+  if (!dates.length) return [];
+  const run = buildPlan(
+    {
+      scope: 'A week',
+      diets: app.planDiets,
+      goal: app.goal,
+      budget: 2.5, // the generator's opening per-serving slider position
+      people: Math.round(householdPortionsFor(app).portions),
+      pantry: app.usePantry === false ? [] : app.pantry.map((p) => p.name),
+      month: monthOf(app.day),
+      days: dates.length,
+      recipes: app.safeRecipes,
+      taste: app.tasteProfile,
+      leftovers: (app.leftovers || []).length > 0 ? app.leftovers : [],
+      equipment: (app.equipment || []).length ? app.equipment : null,
+      pantryItems: app.pantry,
+      expiry: expiringSoon(app.pantry, 3, app.day).map((p) => p.name),
+      variety: true,
+      wasteOptimisation: true,
+      multiObjective: true,
+      wasteProfile: app.wasteProfile,
+      dates,
+      today: app.day,
+      learnedAliases: app.aliasMemory || {},
+      weeklyBudget: windowBudget(app.weeklyBudget, 7),
+      budgetSpent: Number(app.spentThisWeek) || 0,
+      skipProfile: app.skipReasonProfile,
+    },
+    Date.now() % 100000,
+  );
+  return (run.meals || [])
+    .map((meal, i) => ({ date: dates[i], slot: 'dinner', recipeId: meal?.id }))
+    .filter((entry) => entry.recipeId);
+};
 
 /**
  * Shopping list for the week plan, scaled to household portions and

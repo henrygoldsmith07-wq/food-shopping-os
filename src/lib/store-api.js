@@ -47,6 +47,8 @@ import {
 import { buildDomainCommands } from './store-commands.js';
 import { ledgerCommands } from './event-ledger.js';
 import { pantryLifecycleActions } from './store-pantry-slice.js';
+import { cookFeedbackActions } from './cook-feedback.js';
+import { insightActions } from './household-insights.js';
 export function useStoreApi({
   blockPersistence, cloudStatus, latest, setState, setStorageIssue, storageIssue,
   undoHistory, undoBatch, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
@@ -271,6 +273,8 @@ export function useStoreApi({
       }),
       // Pantry lifecycle lives in its own domain slice (see store-pantry-slice.js).
       ...pantryLifecycleActions(set, { householdPermission, uid }),
+      ...cookFeedbackActions(set),
+      ...insightActions(set),
       ...planActions(set),
       ...pantryFlowActions(set),
       ...householdActions(set, uid),

@@ -22,7 +22,7 @@ export const DOMAIN_SLICES = {
     keys: [
       'shoppingList', 'favouriteShopping', 'shops', 'shoppingPreferences', 'shoppingMeta',
       'aisleMemory', 'storeRoutes', 'offers', 'coupons', 'priceAlerts', 'priceAlertConfig',
-      'weeklyBudget', 'monthlyBudget', 'basketPredictions',
+      'weeklyBudget', 'monthlyBudget', 'basketPredictions', 'productPreferences',
     ],
   },
   household: {

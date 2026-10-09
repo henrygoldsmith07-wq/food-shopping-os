@@ -1,5 +1,6 @@
 import { householdPermission } from './household.js';
 import { aisleFor, applyOffers, shoppingNameKey, routeFromTicks } from './shopping.js';
+import { setProductPreference as applyProductPreference, clearProductPreference as removeProductPreference } from './product-preferences.js';
 import { reconcilePurchase } from './pantry-intelligence.js';
 import { moveBefore } from './utils.js';
 import { applyListConflictResolution } from './household-concurrency.js';
@@ -69,6 +70,24 @@ export const shoppingActions = (set) => ({
     if (!householdPermission(state, 'shopping')) return {};
     const value = text(store, 80);
     return { shoppingList: state.shoppingList.map((item) => (item.id === id ? { ...item, store: value } : item)) };
+  }),
+
+  // The household's usual product — brand and pack, told, never inferred.
+  // Written through the pure helpers in product-preferences.js so an empty
+  // patch removes the key rather than leaving an empty preference behind.
+  setProductPreference: (name, patch) => set((state) => {
+    if (!householdPermission(state, 'shopping')) return {};
+    return {
+      productPreferences: applyProductPreference(
+        state.productPreferences || {},
+        name,
+        { brand: patch?.brand, packSize: patch?.packSize, updatedAt: state.day },
+      ),
+    };
+  }),
+  clearProductPreference: (name) => set((state) => {
+    if (!householdPermission(state, 'shopping')) return {};
+    return { productPreferences: removeProductPreference(state.productPreferences || {}, name) };
   }),
 
   // Bulk variants are atomic on purpose: one snapshot, so one undo reverses

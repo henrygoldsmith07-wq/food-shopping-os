@@ -5,9 +5,11 @@ import {
 import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
 import { WEEK_LOOP_IDS, WEEK_LOOP_PROMISE, WEEK_LOOP_STEPS } from '../data/weekLoop.js';
+import { EATING_OUT, LEFTOVER_NIGHT, isPlanSpecial, planSpecialLabel } from '../data/plan.js';
 import { expiringSoon, weekDates } from '../lib/kitchen.js';
 import { planEntries, planVariety } from '../lib/mealplan.js';
 import {
+  autoPlanWeekEntries,
   nextWeekLoopStep,
   prevWeekLoopStep,
   weekLoopSnapshot,
@@ -78,6 +80,18 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
     setPickerDate(null);
   };
 
+  // One tap → the loop's own fill: open dinners in week order, through the
+  // same generator call the calendar button uses.
+  const autoFillWeek = () => {
+    const entries = autoPlanWeekEntries(app);
+    if (!entries.length) {
+      setStatus('Every dinner this week is already planned.');
+      return;
+    }
+    app.applyPlanEntries(entries);
+    setStatus(`Filled ${entries.length} dinner${entries.length === 1 ? '' : 's'} — review or change any of them below.`);
+  };
+
   const generateList = () => {
     // Exactly what the list step previewed: snap.listPreview is the one
     // pantry-subtracted, portion-scaled calculation (the same one PlanTab
@@ -115,7 +129,9 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
     for (const d of dates) {
       if (d < app.day) continue;
       const day = app.plan?.[d] || {};
-      if (!day.dinner) {
+      // A leftover-night marker is an empty decision, not a chosen dish —
+      // leftover cooking has first claim on it.
+      if (!day.dinner || isPlanSpecial(day.dinner)) {
         target = d;
         break;
       }
@@ -190,6 +206,7 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
             variety={variety}
             weekList={weekList}
             portionSource={portionSource}
+            autoFillWeek={autoFillWeek}
           />
         )}
 

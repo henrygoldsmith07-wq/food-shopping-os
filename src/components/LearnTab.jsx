@@ -1,6 +1,7 @@
 import { ArrowRight, BookOpen, Check, ChefHat, Clock3, Leaf, RotateCcw, ShoppingCart } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { Card, Meter, Pill, Section } from './ui.jsx';
+import ForqLearned from './ForqLearned.jsx';
 
 const EMPTY_LOOP = {
   steps: [],
@@ -149,6 +150,9 @@ export default function LearnTab({ goTab, openGuidance }) {
       </Section>
 
       <Section title="Signals Forq can use next" className="rise rise-2">
+      </Section>
+      <ForqLearned />
+      <Section className="rise rise-2">
         <Card className="!p-4 space-y-3">
           {cooking.samples > 0 && (
             <div className="flex items-start gap-2">

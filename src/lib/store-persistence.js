@@ -201,6 +201,15 @@ export const hydrate = (stored = {}) => {
     .filter((p) => p && typeof p === 'object' && p.id && typeof p.name === 'string')
     .slice(-500);
   state.autopilotOutcomes = (Array.isArray(state.autopilotOutcomes) ? state.autopilotOutcomes : []).slice(-500);
+  // Weekly-autopilot learning: insight dismissals/kept + cook feedback survive
+  // like the loops they describe; malformed rows are dropped, never invented.
+  state.insightDismissals = (Array.isArray(state.insightDismissals) ? state.insightDismissals : [])
+    .filter((r) => r && (typeof r.id === 'string' || typeof r === 'string')).slice(-100);
+  state.insightKept = (Array.isArray(state.insightKept) ? state.insightKept : [])
+    .filter((r) => r && (typeof r.id === 'string' || typeof r === 'string')).slice(-100);
+  state.cookFeedback = (Array.isArray(state.cookFeedback) ? state.cookFeedback : [])
+    .filter((r) => r && typeof r.recipeId === 'string').slice(-500);
+  state.planTemplates = (Array.isArray(state.planTemplates) ? state.planTemplates : []).slice(-20);
   return state;
 };
 

@@ -9,13 +9,16 @@
  * `plan-outcome.js` renders outcomes through `mealplan.js`, which resolves
  * recipes through the 2,200-row recipe book — and the boot path must not pull
  * the recipe book in just to decide whether a saved install has silent
- * misses. So this module works on the plan object alone (
- * `{ 'YYYY-MM-DD': { slot: recipeId } }` plus outcome events) and imports
- * nothing. Same rule, narrower footprint.
+ * misses. So this module works on the plan object alone
+ * (`{ 'YYYY-MM-DD': { slot: recipeId } }` plus outcome events) and imports
+ * nothing but the plan vocabulary (`data/plan.js` — pure constants, no
+ * catalogue, no recipe book). Same rule, narrower footprint.
  *
  * Pure: plan + events in, unresolved past slots out — nothing here reads the
  * recipe book.
  */
+
+import { isPlanSpecial } from '../data/plan.js';
 
 const eventKey = (date, slot) => `${date}|${slot}`;
 
@@ -36,7 +39,9 @@ export const missedMealSlots = (plan = {}, { before, events = [] } = {}) => {
   for (const [date, day] of Object.entries(plan)) {
     if (!day || typeof day !== 'object' || date >= before) continue;
     for (const [slot, recipeId] of Object.entries(day)) {
-      if (!recipeId || resolved.has(eventKey(date, slot))) continue;
+      // A leftover-night or eating-out marker is a decision, not a dish that
+      // went uncooked — it needs no outcome event and is never a miss.
+      if (!recipeId || isPlanSpecial(recipeId) || resolved.has(eventKey(date, slot))) continue;
       missed.push({ date, slot, recipeId });
     }
   }

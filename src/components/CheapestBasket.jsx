@@ -12,10 +12,10 @@ import { Card, Pill, Section } from './ui.jsx';
  * keeps missing or excluded products visible. The evidence is still labelled
  * as live, receipt or paid-data input by each matched line.
  */
-export default function CheapestBasket({ items = [], liveResults = {}, shops = [] }) {
+export default function CheapestBasket({ items = [], liveResults = {}, shops = [], preferences = {} }) {
   const comparison = useMemo(
-    () => optimiseLiveBasket(items, { liveResults, shops }),
-    [items, liveResults, shops],
+    () => optimiseLiveBasket(items, { liveResults, shops, preferences }),
+    [items, liveResults, shops, preferences],
   );
 
   if (!items.length) return null;

@@ -1,7 +1,8 @@
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Sparkles } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
+import { EATING_OUT, LEFTOVER_NIGHT, PLAN_SPECIALS, isPlanSpecial, planSpecialLabel } from '../data/plan.js';
 
 /**
  * The plan step of the week loop: the dinners already in the plan, the gaps
@@ -14,12 +15,16 @@ import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
 export default function WeekLoopPlan({
   byId, dates, dayShort, dinnerRecipes, expiringNames, generateList, pantry,
   pickerDate, setDinner, setPickerDate, snap, stepId, usesExpiring, variety, weekList,
-  portionSource,
+  portionSource, autoFillWeek = null,
 }) {
   // The week loop passes its store down, but the step must also stand alone
   // (the portions suite renders it with no app prop) — so the store comes
   // from context, and the prop-era call sites simply stop passing it.
   const app = useApp();
+  // What the one-tap fill reports: dinners from today on with nothing chosen.
+  const openDinners = (dates || []).filter(
+    (date) => date >= app.day && !(app.plan?.[date] || {}).dinner,
+  ).length;
   return (
     <>
       {stepId === 'plan' && (
@@ -45,10 +50,35 @@ export default function WeekLoopPlan({
               </p>
             )}
           </Card>
+          {autoFillWeek && (
+            <Card className="!p-0">
+              <div className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="text-[0.8125rem] font-extrabold inline-flex items-center gap-1.5">
+                    <Sparkles size={14} style={{ color: 'var(--accent)' }} /> Fill the rest of the week
+                  </p>
+                  <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                    {openDinners === 1
+                      ? 'One open dinner — dishes chosen lead off tonight.'
+                      : `Dishes for the ${openDinners} open dinners — ready tonight first, what's going off next.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={autoFillWeek}
+                  className="press shrink-0 rounded-2xl px-4 py-2.5 text-[0.8125rem] font-extrabold"
+                  style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+                >
+                  Fill my week
+                </button>
+              </div>
+            </Card>
+          )}
           <div className="space-y-2">
             {dates.map((date) => {
               const dinnerId = app.plan?.[date]?.dinner;
-              const recipe = dinnerId ? byId(dinnerId) : null;
+              const special = dinnerId && isPlanSpecial(dinnerId) ? dinnerId : null;
+              const recipe = dinnerId && !special ? byId(dinnerId) : null;
               const leftoverHit = recipe && (app.leftoverPortions?.get?.(recipe.id) || 0) > 0;
               return (
                 <button
@@ -61,7 +91,14 @@ export default function WeekLoopPlan({
                   <span className="w-14 shrink-0 text-[0.75rem] font-extrabold" style={{ color: 'var(--muted)' }}>
                     {dayShort(date)}
                   </span>
-                  {recipe ? (
+                  {special ? (
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[0.875rem] font-extrabold truncate">{planSpecialLabel(special)}</span>
+                      <span className="block text-[0.71875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+                        {PLAN_SPECIALS[special].hint}
+                      </span>
+                    </span>
+                  ) : recipe ? (
                     <>
                       <FoodArt recipe={recipe} className="h-10 w-10 shrink-0 rounded-xl" />
                       <span className="min-w-0 flex-1">
@@ -81,6 +118,22 @@ export default function WeekLoopPlan({
           </div>
           {pickerDate && (
             <Card className="!p-0 max-h-64 overflow-y-auto divide-y" style={{ borderColor: 'var(--line)' }}>
+              <div className="grid grid-cols-2 gap-2 p-2.5">
+                {[
+                  [LEFTOVER_NIGHT, 'Leftover night'],
+                  [EATING_OUT, 'Eating out'],
+                ].map(([special, label]) => (
+                  <button
+                    key={special}
+                    type="button"
+                    onClick={() => { setDinner(pickerDate, special); setPickerDate(null); }}
+                    className="press rounded-xl border px-3 py-2 text-[0.8125rem] font-extrabold text-left"
+                    style={{ borderColor: 'var(--line)' }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               {dinnerRecipes.map((r) => {
                 const portions = app.leftoverPortions?.get?.(r.id) || 0;
                 return (

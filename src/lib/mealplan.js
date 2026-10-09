@@ -14,7 +14,7 @@
  */
 
 import { byId } from '../data/recipes.js';
-import { MEAL_SLOTS } from '../data/plan.js';
+import { MEAL_SLOTS, isPlanSpecial } from '../data/plan.js';
 import { itemsFromRecipes } from '../data/stores.js';
 import { addDays, dayStamp, pantryAvailability, pantryTruthForNeed, weekStart } from './kitchen.js';
 import { canonicalName, displayNameFor } from './aliases.js';
@@ -166,17 +166,32 @@ export const planStats = (plan = {}, dates = [], { people = 1 } = {}) => {
   const entries = planEntries(plan, dates);
   const cost = entries.reduce((sum, e) => sum + e.recipe.costPerServing * people, 0);
   const kcal = entries.reduce((sum, e) => sum + e.recipe.kcal, 0);
-  const daysPlanned = new Set(entries.map((e) => e.date)).size;
+  const recipeDays = new Set(entries.map((e) => e.date));
+  // Slots that are deliberately not a recipe — leftover night, eating out.
+  // The day counts as planned (a decision was made), but the slot carries no
+  // cost, calories or cook time, so kcalPerDay still divides only by days
+  // that actually have dishes on them.
+  let specials = 0;
+  const specialDays = new Set();
+  for (const date of dates) {
+    for (const value of Object.values(plan[date] || {})) {
+      if (!isPlanSpecial(value)) continue;
+      specials += 1;
+      specialDays.add(date);
+    }
+  }
+  const daysPlanned = new Set([...recipeDays, ...specialDays]).size;
   const slots = dates.length * SLOT_KEYS.length;
   return {
     meals: entries.length,
     cost: Math.round(cost * 100) / 100,
     kcal,
-    kcalPerDay: daysPlanned ? Math.round(kcal / daysPlanned) : 0,
+    kcalPerDay: recipeDays.size ? Math.round(kcal / recipeDays.size) : 0,
     daysPlanned,
     emptyDays: dates.length - daysPlanned,
     fill: slots ? Math.round((entries.length / slots) * 100) : 0,
     minutes: entries.reduce((sum, e) => sum + e.recipe.time, 0),
+    specials,
   };
 };
 

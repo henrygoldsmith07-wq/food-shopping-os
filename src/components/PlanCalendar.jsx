@@ -1,7 +1,7 @@
 import { ChefHat, GripVertical, Snowflake } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { byId } from '../data/recipes.js';
-import { MEAL_SLOTS, WEEK_DAYS } from '../data/plan.js';
+import { MEAL_SLOTS, PLAN_SPECIALS, WEEK_DAYS, isPlanSpecial, planSpecialLabel } from '../data/plan.js';
 import { planCost } from '../lib/kitchen-spending.js';
 import { Card, FoodArt, Pill } from './ui.jsx';
 
@@ -72,11 +72,35 @@ export function WeekGrid({
             </div>
             <div className="grid grid-cols-3 gap-2">
               {MEAL_SLOTS.map(({ key, label }) => {
-                const recipe = slots[key] ? byId(slots[key]) : null;
+                const value = slots[key];
+                // A slot is either a recipe id, a deliberate non-recipe
+                // marker (leftover night / eating out), or empty. Markers
+                // resolve like recipes for moving and picking, but show a
+                // decision, not a dish — and offer nothing to cook.
+                const special = value && isPlanSpecial(value) ? value : null;
+                const recipe = value && !special ? byId(value) : null;
                 const target = { date, slot: key };
                 const armed = moving && (moving.date !== date || moving.slot !== key);
                 const fromFridge = recipe && (leftoverPortions.get(recipe.id) || 0) > 0;
-                return recipe ? (
+                return special ? (
+                  <button
+                    key={key}
+                    onClick={() => (moving ? onMove(moving, target) : onPick(target))}
+                    {...dropProps(target, onMove, setDragging, dragging)}
+                    className="press rounded-xl p-2 flex flex-col items-center justify-center gap-0.5 min-h-[60px]"
+                    style={{
+                      background: 'var(--card-2)',
+                      outline: armed ? '1.5px dashed var(--accent)' : 'none',
+                    }}
+                  >
+                    <span className="text-[0.6875rem] font-bold leading-tight" style={{ color: 'var(--ink)' }}>
+                      {planSpecialLabel(special)}
+                    </span>
+                    <span className="text-[0.5625rem] font-semibold leading-tight text-center" style={{ color: 'var(--faint)' }}>
+                      {PLAN_SPECIALS[special].hint}
+                    </span>
+                  </button>
+                ) : recipe ? (
                   <div
                     key={key}
                     draggable
@@ -163,7 +187,8 @@ export function MonthGrid({ cells, plan, today, onOpenDay, moving, onMove, dragg
         {cells.map(({ date, inMonth }) => {
           const slots = plan[date] || {};
           const meals = MEAL_SLOTS.map(({ key }) => (slots[key] ? byId(slots[key]) : null));
-          const filled = meals.filter(Boolean).length;
+          // A deliberate marker occupies the day as much as a recipe does.
+          const filled = MEAL_SLOTS.filter(({ key }) => slots[key]).length;
           const target = { date, slot: moving?.slot || dragging?.slot || 'dinner' };
           return (
             <button
@@ -184,9 +209,20 @@ export function MonthGrid({ cells, plan, today, onOpenDay, moving, onMove, dragg
                 {dayNumber(date)}
               </span>
               <span className="flex flex-wrap justify-center gap-0.5">
-                {meals.map((r, i) => (r ? (
-                  <FoodArt key={i} recipe={r} className="h-3 w-3 rounded-full" />
-                ) : null))}
+                {meals.map((r, i) => {
+                  const value = slots[MEAL_SLOTS[i].key];
+                  if (value && isPlanSpecial(value)) {
+                    return (
+                      <span
+                        key={i}
+                        aria-label={planSpecialLabel(value)}
+                        className="h-3 w-3 rounded-full"
+                        style={{ background: 'var(--faint)' }}
+                      />
+                    );
+                  }
+                  return r ? <FoodArt key={i} recipe={r} className="h-3 w-3 rounded-full" /> : null;
+                })}
               </span>
               {filled === 3 && (
                 <span className="h-1 w-1 rounded-full" style={{ background: 'var(--good)' }} />

@@ -5,6 +5,7 @@ import { AISLE_ORDER } from '../data/stores.js';
 import { cx } from '../lib/utils.js';
 import { haptic } from '../lib/haptics.js';
 import { shoppingNameKey, unitPrice } from '../lib/shopping.js';
+import { preferenceFor, preferenceLabel } from '../lib/product-preferences.js';
 import { gbp } from '../lib/utils.js';
 import { Glyph } from './icons.jsx';
 import { Chip, GestureMenu, Pill } from './ui.jsx';
@@ -15,6 +16,9 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
   const [swapping, setSwapping] = useState(false);
   const [qtyEditing, setQtyEditing] = useState(false);
   const [qtyDraft, setQtyDraft] = useState('');
+  const [prefEditing, setPrefEditing] = useState(false);
+  const [brandDraft, setBrandDraft] = useState('');
+  const [packDraft, setPackDraft] = useState('');
   const commitQty = () => {
     setQtyEditing(false);
     const next = String(qtyDraft || '').trim();
@@ -25,6 +29,21 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
   const substitutions = insight.substitutions?.candidates || [];
   const change = insight.priceChange;
   const favourite = app.favouriteShopping.some((saved) => shoppingNameKey(saved.name) === shoppingNameKey(item.name));
+  // The household's usual product — set here, read by the basket check.
+  const preference = preferenceFor(app.productPreferences, item.name);
+  const preferenceText = preferenceLabel(preference);
+  const openPrefEditor = () => {
+    setBrandDraft(preference?.brand || '');
+    setPackDraft(preference?.packSize || '');
+    setPrefEditing(true);
+  };
+  // An empty patch removes the key outright (see product-preferences.js) —
+  // "Save" with both fields blank and no preference already set is a no-op
+  // that costs nothing to allow.
+  const savePref = () => {
+    app.setProductPreference(item.name, { brand: brandDraft.trim(), packSize: packDraft.trim() });
+    setPrefEditing(false);
+  };
   const toggle = () => {
     app.toggleChecked(item.id);
     if (!item.checked) haptic();
@@ -36,6 +55,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
         { label: item.checked ? 'Mark not bought' : 'Mark bought', onClick: toggle },
         { label: item.priority === 'high' ? 'Normal priority' : 'High priority', onClick: () => app.updateListItem(item.id, { priority: item.priority === 'high' ? 'normal' : 'high' }) },
         { label: favourite ? 'Remove favourite' : 'Save as favourite', onClick: () => app.toggleFavouriteShopping(item) },
+        { label: preferenceText ? `Edit usual (${preferenceText})` : 'Set your usual product', onClick: openPrefEditor },
         ...(substitutions.length ? [{ label: 'Find a substitution', onClick: () => setSwapping(true) }] : []),
         { label: 'Move to another aisle', onClick: () => setMoving(true) },
         { label: 'Remove', tone: 'danger', onClick: () => app.removeListItem(item.id) },
@@ -158,6 +178,12 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
               £{comparablePrice.value.toFixed(2)} / {comparablePrice.unit}
             </p>
           )}
+          {preferenceText && !prefEditing && (
+            <p className="text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>
+              usual: {preferenceText}{' '}
+              <button type="button" onClick={openPrefEditor} className="press underline underline-offset-2" style={{ color: 'var(--faint)' }}>edit</button>
+            </p>
+          )}
           {/* `insight.price?.level !== 'unknown'` looked like a guard and was
               not one: with no insight at all the optional chain yields
               undefined, undefined !== 'unknown' is true, and the block below
@@ -268,6 +294,60 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
               <span className="mt-0.5 block text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>{option.rationale}</span>
             </button>
           ))}
+        </div>
+      )}
+      {prefEditing && (
+        <div className="mt-2 rounded-2xl border p-2.5 space-y-2" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+          <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Your usual product</p>
+          <p className="text-[0.6875rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+            Told to Forq, never inferred. When prices tie between equivalent brands this one is chosen first — a cheaper offer is never hidden.
+          </p>
+          <input
+            value={brandDraft}
+            onChange={(event) => setBrandDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') savePref(); if (event.key === 'Escape') setPrefEditing(false); }}
+            placeholder="Brand (e.g. Yeo Valley)"
+            aria-label={`Usual brand for ${item.name}`}
+            className="w-full rounded-lg border px-2.5 py-2 text-[0.8125rem] font-bold outline-none"
+            style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
+          />
+          <input
+            value={packDraft}
+            onChange={(event) => setPackDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') savePref(); if (event.key === 'Escape') setPrefEditing(false); }}
+            placeholder="Pack size (e.g. 2 × 170 g)"
+            aria-label={`Usual pack size for ${item.name}`}
+            className="w-full rounded-lg border px-2.5 py-2 text-[0.8125rem] font-bold outline-none"
+            style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={savePref}
+              className="press rounded-full px-3.5 py-1.5 text-[0.75rem] font-extrabold"
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+            >
+              Save
+            </button>
+            {preference && (
+              <button
+                type="button"
+                onClick={() => { app.clearProductPreference(item.name); setPrefEditing(false); }}
+                className="press rounded-full border px-3.5 py-1.5 text-[0.75rem] font-extrabold"
+                style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+              >
+                Forget
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setPrefEditing(false)}
+              className="press rounded-full px-3 py-1.5 text-[0.75rem] font-extrabold"
+              style={{ color: 'var(--muted)' }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       {moving && (

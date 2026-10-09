@@ -5,11 +5,14 @@ import { useApp } from '../lib/store.jsx';
 import { filterByDiet } from '../lib/goals.js';
 import { monthOf, seasonalHits } from '../data/seasons.js';
 import { tasteScore } from '../lib/taste.js';
+import { EATING_OUT, LEFTOVER_NIGHT } from '../data/plan.js';
 import { Card, Chip, Pill, FoodArt } from './ui.jsx';
 
 /**
- * Pick a recipe for one slot. Defaults to dishes for that meal — breakfasts for
- * a breakfast slot — filtered by everyone's dietary patterns, favourites first,
+ * Pick a recipe for one slot — or answer for the night without a recipe:
+ * leftover night (eat what's already cooked) and eating out (nothing to buy
+ * or cook) are the two decisions a household makes weekly. Defaults to dishes
+ * for that meal, filtered by everyone's dietary patterns, favourites first,
  * with what's in season and what your pantry covers called out.
  */
 export default function RecipePicker({ slot, onPick, onClear, hasMeal, initialQuery = '' }) {
@@ -53,6 +56,23 @@ export default function RecipePicker({ slot, onPick, onClear, hasMeal, initialQu
           <Chip active={inSeason} onClick={() => setInSeason((v) => !v)}>In season</Chip>
           <Chip active={!anyMeal} onClick={() => setAnyMeal((v) => !v)}>{`Just ${slot}`}</Chip>
         </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          [LEFTOVER_NIGHT, 'Leftover night', 'Eat what is already cooked'],
+          [EATING_OUT, 'Eating out', 'Nothing to buy or cook'],
+        ].map(([special, label, hint]) => (
+          <button
+            key={special}
+            type="button"
+            onClick={() => onPick(special)}
+            className="press flex flex-col items-start gap-0.5 rounded-2xl border px-3 py-2.5 text-left"
+            style={{ borderColor: 'var(--line)' }}
+          >
+            <span className="text-[0.8125rem] font-extrabold">{label}</span>
+            <span className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>{hint}</span>
+          </button>
+        ))}
       </div>
       {hasMeal && (
         <button

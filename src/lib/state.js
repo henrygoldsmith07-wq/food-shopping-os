@@ -112,6 +112,7 @@ export const EMPTY_STATE = {
   shoppingMeta: { lastChangedAt: 0, lastChangedBy: '' }, // shared-list freshness, not a second source of truth
   aisleMemory: {}, // name → the aisle you filed it under
   storeRoutes: {}, // store → the aisle order you actually walked
+  productPreferences: {}, // shopping name → {brand,packSize,updatedAt} — the usual product, told by the household (see lib/product-preferences.js)
   offers: [], // vouchers and deals you told it about
   coupons: [], // coupon/rewards vault — manual + photo-OCR draft (no feed, never invented)
   aliasMemory: {}, // scan/pantry corrections: 'tomatos' → 'tomatoes' — makes entity resolution learn
@@ -145,6 +146,13 @@ export const EMPTY_STATE = {
   favourites: [], // recipe ids
   tasteRatings: {}, // recipe id -> nope | like | love
   preferenceEvents: [], // eating/cooking outcomes used for multidimensional household learning
+  // Cook-verdict capture ("loved it / wouldn't repeat" + reason). Kept tiny and
+  // capped; feeds recommendation learning. See lib/cook-feedback.js.
+  cookFeedback: [], // {id, recipeId, verdict, reasons[], portions, at}
+  // Household insights the user explicitly kept or dismissed, so "Forq learned"
+  // respects their correction. See lib/household-insights.js.
+  insightKept: [], // [{id, at}]
+  insightDismissals: [], // [{id, at}]
   recipeCollections: [], // {id,name,recipeIds[],createdAt}
   // Folders are the other half of organising: a recipe is in at most one, and
   // the assignment lives on the folder itself. See lib/recipe-folders.js.

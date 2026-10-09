@@ -38,6 +38,7 @@ import ShopBasket from './ShopBasket.jsx';
 import ShopPrices from './ShopPrices.jsx';
 import ShopHistory from './ShopHistory.jsx';
 import ShoppingExport from './ShoppingExport.jsx';
+import ShopDecision from './ShopDecision.jsx';
 
 /* ---------- Tab ---------- */
 
@@ -190,6 +191,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
     <div className={cx('pb-6 space-y-6', shoppingMode && largeTouch && 'shopping-large-touch')}><CloudSyncRow />
       {/* Rows both devices changed while apart need a person, not a last writer. */}
       <ListConflictCard app={app} />
+      {view === 'list' && <ShopDecision />}
       {/* Five views don't fit a 320px phone on one line, so this scrolls. */}
       <div className="hero-gradient pt-1 pb-3">
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar scroll-x-fade px-5 rise rise-1">

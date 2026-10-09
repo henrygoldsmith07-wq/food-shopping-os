@@ -459,3 +459,29 @@ describe('cooking for a family', () => {
     expect(within(picker).queryByText('Lemon Chicken Traybake')).toBeNull();
   });
 });
+
+describe('planning a night without a recipe', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(cleanup);
+
+  it('marks dinner as leftover night, then as eating out, straight from the picker', () => {
+    onboard();
+    openPlan();
+    fireEvent.click(screen.getAllByText('+ Dinner')[0]);
+    const picker = dialogFor('Plan a meal');
+    // The two weekly decisions sit above the recipe search — no dish needed.
+    expect(within(picker).getByText('Eat what is already cooked')).toBeDefined();
+    fireEvent.click(within(picker).getByText('Leftover night'));
+
+    // The grid shows the decision, not a dish — so nothing offers to be cooked.
+    expect(screen.getByText('Leftover night')).toBeDefined();
+    expect(screen.queryByText('Cook now')).toBeNull();
+
+    fireEvent.click(screen.getAllByText('+ Dinner')[1]);
+    const second = dialogFor('Plan a meal');
+    fireEvent.click(within(second).getByText('Eating out'));
+    expect(screen.getByText('Eating out')).toBeDefined();
+    expect(within(screen.getByText('Eating out').closest('.card')).getByText('Nothing to buy or cook')).toBeDefined();
+  });
+});
+

@@ -18,6 +18,10 @@ import RecommendationExplanation from './RecommendationExplanation.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
 import LoopConfirmCard from './LoopConfirmCard.jsx';
 import NextActionCard from './NextActionCard.jsx';
+import WeeklyAutopilot from './WeeklyAutopilot.jsx';
+import ForqLearned from './ForqLearned.jsx';
+import ShopDecision from './ShopDecision.jsx';
+import LeftoverPlan from './LeftoverPlan.jsx';
 import AdaptationsCard from './AdaptationsCard.jsx';
 import GuidancePreview from './GuidancePreview.jsx';
 import HomeNumbers from './HomeNumbers.jsx';
@@ -158,6 +162,15 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           screen can add urgency without adding a card; the cards it can name
           are all still further down this page. */}
       <NextActionCard action={leading} onRun={() => leading?.run?.()} />
+
+      {/* 1b — Proposed week: the autopilot's coherent household-aware plan. */}
+      <WeeklyAutopilot goTab={goTab} />
+
+      {/* 1c — Best way to shop: the decision, not just the data. */}
+      <ShopDecision />
+
+      {/* 1d — Leftovers first: quantity, period, one-tap reuse. */}
+      <LeftoverPlan goTab={goTab} />
 
       {/* 2 — Tonight's meal (one decision engine) */}
       <section className="px-5" aria-label="Tonight's meal">
@@ -372,6 +385,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       {/* 5 — What Forq changed, said plainly and undoable. Learning only
           shows when it changed something; hidden when it hasn't. */}
       <AdaptationsCard />
+
+      {/* 5b — What Forq learned: restrained, evidence-backed, correctable. */}
+      <ForqLearned />
 
       {widgets.has('reminders') && app.remindersDue?.length > 0 && (
         <section className="px-5" aria-label="Reminders due">

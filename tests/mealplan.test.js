@@ -7,6 +7,10 @@ import {
 import { inMonth, monthOf, peakNow, seasonalHits, seasonScore } from '../src/data/seasons.js';
 import { weekDates } from '../src/lib/kitchen.js';
 import { byId } from '../src/data/recipes.js';
+import { EATING_OUT, LEFTOVER_NIGHT } from '../src/data/plan.js';
+import { missedMealSlots } from '../src/lib/missed-meals.js';
+import { briefToControls, enforceIngredientCounts, parsePlanBrief } from '../src/lib/plan-brief.js';
+import { wasteSwapSuggestions } from '../src/lib/waste-swaps.js';
 
 const CURRY = 'chickpea-curry';
 const SALMON = 'salmon-teriyaki';
@@ -315,4 +319,172 @@ describe('the shopping list for a plan', () => {
     expect(noodles[0].requiredQty).toBe('2 nests');
     expect(noodles[0].qty).toBe('2 nests');
   });
+
+describe('plan slots that are deliberately not a recipe', () => {
+  const WEEK = ['2026-07-06', '2026-07-07', '2026-07-08'];
+
+  it('planStats counts a marked night as planned but costs it nothing', () => {
+    const marked = {
+      '2026-07-06': { dinner: CURRY },
+      '2026-07-07': { dinner: LEFTOVER_NIGHT },
+      '2026-07-08': { dinner: EATING_OUT },
+    };
+    const stats = planStats(marked, WEEK, { people: 2 });
+    expect(stats.daysPlanned).toBe(3);
+    expect(stats.meals).toBe(1); // only the recipe is a meal
+    expect(stats.cost).toBeCloseTo(byId(CURRY).costPerServing * 2, 5);
+    expect(stats.minutes).toBe(byId(CURRY).time);
+    expect(stats.kcalPerDay).toBe(byId(CURRY).kcal);
+    expect(stats.specials).toBe(2);
+    expect(stats.emptyDays).toBe(0);
+  });
+
+  it('the shopping list reads straight over the markers', () => {
+    const rows = shoppingForPlan({
+      '2026-07-06': { dinner: CURRY },
+      '2026-07-07': { dinner: EATING_OUT },
+    }, WEEK.slice(0, 2), { pantry: [], people: 4, today: '2026-07-06' });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.some((row) => /eating|leftover/i.test(row.name))).toBe(false);
+  });
+
+  it('silent misses never accuse a marked night', () => {
+    const missed = missedMealSlots(
+      { '2026-07-06': { dinner: LEFTOVER_NIGHT }, '2026-07-07': { dinner: CURRY } },
+      { before: '2026-07-08', events: [] },
+    );
+    expect(missed.map((row) => `${row.date}|${row.slot}`)).toEqual(['2026-07-07|dinner']);
+  });
+});
+
+describe('reading a plan out of a sentence', () => {
+  it('parses the numbers, the budget, the time and "use X twice"', () => {
+    const brief = parsePlanBrief('Plan 5 dinners for 4 people, under £60, 30 minutes max, use chicken twice');
+    expect(brief.dinners).toBe(5);
+    expect(brief.people).toBe(4);
+    expect(brief.budgetTotal).toBe(60);
+    expect(brief.maxMinutes).toBe(30);
+    expect(brief.uses).toEqual([{ name: 'chicken', count: 2 }]);
+    expect(brief.rest).toBe('');
+  });
+
+  it('leaves what it could not read in `rest`, honestly', () => {
+    const brief = parsePlanBrief('Plan 3 dinners for 2, nothing spicy please');
+    expect(brief.dinners).toBe(3);
+    expect(brief.people).toBe(2);
+    expect(brief.rest).toContain('nothing spicy');
+    expect(brief.uses).toEqual([]);
+  });
+
+  it('maps the sentence onto the generator controls and owns the arithmetic', () => {
+    const controls = briefToControls(parsePlanBrief('Plan 5 dinners for 4 people, under £60'));
+    expect(controls.days).toBe(5);
+    expect(controls.people).toBe(4);
+    expect(controls.budget).toBe(3); // 60 / 20
+    expect(controls.counts).toEqual([]);
+    // A total that cannot reach £1 a serving is clamped and SAID, not hidden.
+    const clamped = briefToControls(parsePlanBrief('Plan 7 dinners for 4 people, under £20'));
+    expect(clamped.budget).toBe(1);
+    expect(clamped.notes.some((note) => note.includes('£1 a serving'))).toBe(true);
+    // A budget with no dinner count is reported, never guessed.
+    const orphan = briefToControls(parsePlanBrief('under £60 for the week'));
+    expect(orphan.budget).toBeNull();
+    expect(orphan.notes.some((note) => note.includes('not applied'))).toBe(true);
+  });
+});
+
+describe('enforcing "use X twice" on a generated week', () => {
+  const dish = (name, ingredients) => ({
+    id: name.toLowerCase(),
+    name,
+    ingredients: ingredients.map((n) => ({ name: n })),
+    time: 20,
+    costPerServing: 2,
+    kcal: 500,
+  });
+  const chicken = dish('Chicken traybake', ['Chicken']);
+  const fish = dish('Fish bake', ['Fish']);
+  const curry = dish('Chickpea curry', ['Chickpeas', 'Tomatoes']);
+
+  it('swaps tail slots until the count is met, never the chosen front', () => {
+    const result = enforceIngredientCounts(
+      [curry, fish],
+      [{ name: 'Tomatoes', count: 2 }],
+      [chicken, fish, curry],
+    );
+    expect(result.unmet).toEqual([]);
+    expect(result.changes).toEqual([{ ingredient: 'Tomatoes', from: 'Fish bake', to: 'Chickpea curry' }]);
+    expect(result.meals[0]).toBe(curry); // the front of the week stood
+    expect(result.meals.filter((row) => row.ingredients.some((i) => i.name === 'Tomatoes'))).toHaveLength(2);
+  });
+
+  it('says so when the book cannot meet a count', () => {
+    const result = enforceIngredientCounts(
+      [chicken, fish],
+      [{ name: 'Tomatoes', count: 2 }],
+      [fish],
+    );
+    expect(result.meals).toHaveLength(2); // nothing was invented
+    expect(result.changes).toEqual([]);
+    expect(result.unmet).toEqual([{ name: 'Tomatoes', want: 2, have: 0 }]);
+  });
+});
+
+describe('waste swaps', () => {
+  const today = '2026-07-06';
+  const dates = ['2026-07-06', '2026-07-07', '2026-07-08'];
+  const dish = (name, ingredients) => ({
+    id: name.toLowerCase(),
+    name,
+    ingredients: ingredients.map((n) => ({ name: n })),
+    time: 20,
+    costPerServing: 2,
+    kcal: 500,
+  });
+  const spinachCurry = dish('Spinach curry', ['Spinach']);
+  const pasta = dish('Pasta', ['Pasta']);
+  const spinach = { id: 'sp1', name: 'Spinach', qty: '1 bag', expiry: '2026-07-06', cat: 'Produce' };
+  const week = {
+    entries: [
+      { date: '2026-07-07', slot: 'dinner', recipe: pasta },
+      { date: '2026-07-08', slot: 'dinner', recipe: spinachCurry },
+    ],
+    dates,
+    today,
+  };
+
+  it('proposes moving a dated meal before its ingredient turns', () => {
+    // The curry sits on the 8th; the spinach turns on the 6th. Moving it to
+    // the empty 6th is the whole point of the suggestion.
+    const suggestions = wasteSwapSuggestions({ ...week, plan: { '2026-07-06': {} }, pantry: [spinach] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    const best = suggestions[0];
+    expect(best.kind).toBe('move');
+    expect(best.from.date).toBe('2026-07-08');
+    expect(best.to.date).toBe('2026-07-06');
+    expect(best.delta).toBeGreaterThan(0);
+    expect(best.reason).toContain('Spinach');
+  });
+
+  it('proposes nothing when nothing is at risk', () => {
+    const suggestions = wasteSwapSuggestions({
+      ...week,
+      plan: { '2026-07-06': {} },
+      pantry: [{ id: 'p1', name: 'Rice', qty: '1 kg' }], // undated: nothing to save
+    });
+    expect(suggestions).toEqual([]);
+  });
+
+  it('never lands a meal on a night already claimed by a marker', () => {
+    const suggestions = wasteSwapSuggestions({
+      ...week,
+      plan: { '2026-07-06': { dinner: LEFTOVER_NIGHT } },
+      pantry: [spinach],
+    });
+    expect(suggestions.every((row) => row.to.date !== '2026-07-06')).toBe(true);
+  });
+});
+
+
+
 });

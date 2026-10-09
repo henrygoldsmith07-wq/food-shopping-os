@@ -12,6 +12,11 @@ import {
 } from '../src/lib/cloud.js';
 import { AppProvider, EMPTY_STATE, STORAGE_KEY, useApp } from '../src/lib/store.jsx';
 import { deleteHouseholdData, ensurePersonalHousehold } from '../src/server/households.js';
+import {
+  clearProductPreference, offerPrefersBrand, preferenceFor, preferenceLabel, setProductPreference,
+} from '../src/lib/product-preferences.js';
+import { compareBaskets } from '../src/lib/basket-optimizer.js';
+import { shoppingNameKey } from '../src/lib/shopping.js';
 
 const CloudProbe = () => {
   const app = useApp();
@@ -345,5 +350,57 @@ describe('personal household recovery', () => {
     } finally {
       databaseSpy.mockRestore();
     }
+  });
+});
+
+
+describe('the household\u2019s usual product', () => {
+  it('round-trips set, update and clear, and an empty patch removes the key', () => {
+    let prefs = setProductPreference({}, 'Greek yoghurt', { brand: 'Fage', packSize: '500 g', updatedAt: '2026-07-06' });
+    expect(preferenceFor(prefs, 'greek yogurt')).toMatchObject({ brand: 'Fage', packSize: '500 g' });
+    expect(preferenceLabel(preferenceFor(prefs, 'Greek yoghurt'))).toBe('Fage · 500 g');
+    prefs = setProductPreference(prefs, 'Greek yoghurt', { brand: 'Fage', packSize: '1 kg', updatedAt: '2026-07-07' });
+    expect(preferenceFor(prefs, 'Greek yoghurt').packSize).toBe('1 kg');
+    expect(preferenceFor(prefs, 'Greek yoghurt').updatedAt).toBe('2026-07-07');
+    prefs = setProductPreference(prefs, 'Greek yoghurt', { brand: '', packSize: '' });
+    expect(preferenceFor(prefs, 'Greek yoghurt')).toBeNull();
+    expect(clearProductPreference(prefs, 'Greek yoghurt')).toBe(prefs); // already gone
+  });
+
+  it('matches the offer\u2019s own words only — never infers a preference', () => {
+    const pref = { brand: 'Yeo Valley' };
+    expect(offerPrefersBrand({ name: 'Yeo Valley organic yoghurt 450g' }, pref)).toBe(true);
+    expect(offerPrefersBrand({ brand: 'Yeo Valley' }, pref)).toBe(true);
+    expect(offerPrefersBrand({ name: 'Tesco yoghurt' }, pref)).toBe(false);
+    expect(offerPrefersBrand({ name: 'Anything' }, null)).toBe(false);
+  });
+
+  it('breaks a price tie with the usual brand but never hides a cheaper one', () => {
+    const items = [{ name: 'Yoghurt', qty: '1 pot', price: 1.5 }];
+    const tie = { Tesco: { yoghurt: [
+      { name: 'Own farm yoghurt', price: 1.5, equivalent: true },
+      { name: 'Yeo Valley yoghurt', price: 1.5, equivalent: true },
+    ] } };
+    const preferences = { [shoppingNameKey('Yoghurt')]: { brand: 'Yeo Valley' } };
+    const withPref = compareBaskets(items, tie, { preferences });
+    expect(withPref.rows[0].matchedItems[0].product).toBe('Yeo Valley yoghurt');
+
+    const preferredButPricier = { Tesco: { yoghurt: [
+      { name: 'Yeo Valley yoghurt', price: 1.8, equivalent: true },
+      { name: 'Own farm yoghurt', price: 1.5, equivalent: true },
+    ] } };
+    const stillCheapest = compareBaskets(items, preferredButPricier, { preferences });
+    expect(stillCheapest.rows[0].matchedItems[0].product).toBe('Own farm yoghurt');
+  });
+
+  it('carries the product-preferences slice in lockstep across state, slices and scope', async () => {
+    expect(EMPTY_STATE.productPreferences).toEqual({});
+    const { DOMAIN_SLICES, sliceForKey } = await import('../src/lib/store-slices.js');
+    expect(sliceForKey('productPreferences')).toBe('shopping');
+    expect(DOMAIN_SLICES.shopping.keys).toContain('productPreferences');
+    const { scopeHouseholdState } = await import('../src/server/household-scope.js');
+    const state = { productPreferences: { 'greek-yoghurt': { brand: 'Fage' } } };
+    expect(scopeHouseholdState(state, ['shopping']).productPreferences['greek-yoghurt'].brand).toBe('Fage');
+    expect(scopeHouseholdState(state, []).productPreferences).toEqual({});
   });
 });

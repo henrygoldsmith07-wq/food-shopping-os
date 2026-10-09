@@ -8,6 +8,35 @@ import { safeExternalUrl } from '../lib/recipe-tools.js';
 import { defaultLeftoverPortions } from '../lib/loop-learning.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { Card, Meter, Stepper } from './ui.jsx';
+import { COOK_VERDICTS, COOK_REASONS } from '../lib/cook-feedback.js';
+
+/** Lightweight cook outcome: 4 taps + optional reasons, seconds to finish. */
+export function CookFeedback({ recipe }) {
+  const app = useApp();
+  const existing = (app.cookFeedback || []).find((f) => f.recipeId === recipe.id && f.date === app.day);
+  if (existing) return null;
+  return (
+    <Card className="mt-6 w-full !p-3 text-left">
+      <p className="text-[0.8125rem] font-bold">How was it?</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {COOK_VERDICTS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => app.recordCookFeedback?.({ recipeId: recipe.id, verdict: v.id })}
+            className="press rounded-full border px-3 py-1.5 text-[0.78125rem] font-extrabold"
+            style={{ borderColor: 'var(--line)' }}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-[0.71875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+        One tap teaches Forq — reasons optional in the recipe.
+      </p>
+    </Card>
+  );
+}
 
 /**
  * Cooking mode: one step at a time, full screen, with timers that survive
@@ -212,6 +241,8 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
               )}
             </Card>
           )}
+
+          <CookFeedback recipe={recipe} />
 
           {recipe.servings > 1 && (
             <Card className="mt-6 w-full !p-3 text-left">

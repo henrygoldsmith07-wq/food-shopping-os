@@ -193,6 +193,7 @@ export default function PriceCompare() {
         items={app.shoppingList}
         liveResults={priceSources.scraped}
         shops={app.shops}
+        preferences={app.productPreferences || {}}
       />
 
       <LivePriceCheck

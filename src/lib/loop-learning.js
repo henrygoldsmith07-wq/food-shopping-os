@@ -16,6 +16,7 @@ import { householdPortionsFor } from './portions.js';
 import { scrapAdjustedQty, scrapIngredientRates } from './scrap-factors.js';
 import { heldAdaptationKeys } from './adaptation-suppression.js';
 import { allRecipes } from '../data/recipes.js';
+import { isPlanSpecial } from '../data/plan.js';
 
 /** How far back "you keep binning this" looks. */
 export const WASTE_LOOKBACK_DAYS = 28;
@@ -216,7 +217,9 @@ const unmarkedPastMeals = (plan = {}, cooked = [], events = [], today) => {
   for (const [date, slots] of Object.entries(plan || {})) {
     if (date >= today) continue;
     for (const [slot, recipeId] of Object.entries(slots || {})) {
-      if (!recipeId) continue;
+      // Leftover-night / eating-out markers are decisions, not dishes waiting
+      // to be marked cooked or skipped.
+      if (!recipeId || isPlanSpecial(recipeId)) continue;
       if (eventKeys.has(`${date}|${slot}`)) continue;
       if (cookedKeys.has(`${date}|${recipeId}`)) continue;
       rows.push({ date, slot, recipeId });

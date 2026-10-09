@@ -38,6 +38,16 @@ export default function BudgetPanel() {
   return (
     <div className="pb-6 space-y-5">
       <Section className="rise rise-1" title="Grocery budgets">
+        {app.budgetDecision?.hasBudget && (
+          <Card className="mb-2.5 !p-3" style={{ borderColor: 'var(--accent)' }}>
+            <p className="text-[0.8125rem] font-extrabold">{app.budgetDecision.message}</p>
+            {app.budgetDecision.over > 0 && (
+              <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                {app.budgetDecision.cheapestFix?.hint} Use the chicken already in the freezer where the plan allows.
+              </p>
+            )}
+          </Card>
+        )}
         <Card className="space-y-3">
           <div className="grid grid-cols-2 gap-2.5">
             <label>

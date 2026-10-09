@@ -3,7 +3,7 @@ import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, Clipboard
 import { gbp } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
-import { MEAL_SLOTS } from '../data/plan.js';
+import { MEAL_SLOTS, isPlanSpecial, planSpecialLabel } from '../data/plan.js';
 import { weekDates } from '../lib/kitchen.js';
 import {
   batchGroups, coveredByLeftovers, monthDates, monthGrid, monthLabel, planStats, mealPlanIcs, shiftMonth, shiftWeek, weekOffset,
@@ -25,6 +25,7 @@ import PlanSimulator from './PlanSimulator.jsx';
 import TonightSlotGuard from './TonightSlotGuard.jsx';
 import JustPlannedOffer from './JustPlannedOffer.jsx';
 import PlanConflictCard from './PlanConflictCard.jsx';
+import WasteSwapCard from './WasteSwapCard.jsx';
 
 const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -42,7 +43,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const [prepDone, setPrepDone] = useState([]);
   const [justPlanned, setJustPlanned] = useState(null); // a just-picked tonight dinner → shopping offer {id, rows}
   useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); }
-    if (tonightItem) { setView('week'); setOffset(0); const planned = byId((app.plan[app.day] || {}).dinner)?.name || null; setPicking({ date: app.day, slot: 'dinner', query: tonightItem, guard: planned }); }   }, [focusDate, focusItem, tonightItem, app.day]);
+    if (tonightItem) { setView('week'); setOffset(0); const value = (app.plan[app.day] || {}).dinner; const planned = value ? (planSpecialLabel(value) || byId(value)?.name || null) : null; setPicking({ date: app.day, slot: 'dinner', query: tonightItem, guard: planned }); }   }, [focusDate, focusItem, tonightItem, app.day]);
   const anchorWeek = shiftWeek(app.day, offset);
   const anchorMonth = shiftMonth(app.day, offset);
   const week = useMemo(() => weekDates(anchorWeek), [anchorWeek]);
@@ -99,6 +100,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   return (
     <div className="pb-6 space-y-6">
       <PlanConflictCard app={app} />
+      <WasteSwapCard app={app} onApplied={() => setAddedToList(false)} />
       <div className="hero-gradient px-5 pt-1 pb-3">
         <p className="text-[0.84375rem] font-semibold rise rise-1" style={{ color: 'var(--muted)' }}>
           {stats.meals
@@ -150,7 +152,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           <Card className="!p-3 mb-2.5 flex items-center justify-between gap-2" style={{ borderColor: 'var(--accent)' }}>
             <p className="text-[0.78125rem] font-bold inline-flex items-center gap-1.5">
               <Move size={14} style={{ color: 'var(--accent)' }} />
-              Moving {byId((app.plan[moving.date] || {})[moving.slot])?.name} — tap where it goes
+              Moving {planSpecialLabel((app.plan[moving.date] || {})[moving.slot]) || byId((app.plan[moving.date] || {})[moving.slot])?.name} — tap where it goes
             </p>
             <button onClick={() => setMoving(null)} className="press text-[0.78125rem] font-extrabold" style={{ color: 'var(--muted)' }}>
               Cancel
@@ -387,15 +389,19 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       <Sheet open={!!openDay} onClose={() => setOpenDay(null)} title={openDay ? dayLabel(openDay) : ''}>
         {openDay && (
           <div className="px-5 pb-10 space-y-2.5">
-            {MEAL_SLOTS.map(({ key, label }) => (
+          {MEAL_SLOTS.map(({ key, label }) => {
+            const value = (app.plan[openDay] || {})[key];
+            return (
               <MonthMealRow
                 key={key}
                 label={label}
-                recipe={byId((app.plan[openDay] || {})[key])}
+                recipe={value && !isPlanSpecial(value) ? byId(value) : null}
+                special={value && isPlanSpecial(value) ? value : null}
                 onEdit={() => { setPicking({ date: openDay, slot: key }); setOpenDay(null); }}
                 onCook={(recipe) => { setOpenDay(null); setMoving(null); setDragging(null); openRecipe?.(recipe, { startCooking: true }); }}
               />
-            ))}
+            );
+          })}
             <p className="pt-1 text-[0.78125rem] font-semibold inline-flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
               <Info size={13} /> Drag a meal in the week view to move it, or use its grip to pick it up.
             </p>

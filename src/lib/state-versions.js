@@ -13,4 +13,7 @@
  */
 
 export const STORAGE_KEY = 'forq-state-v2';
-export const STATE_VERSION = 4;
+// v5: brand/pack product preferences (productPreferences). New keys hydrate
+// from EMPTY_STATE defaults, so older installs keep reading their own records;
+// the bump means an older build refuses to silently rewrite a v5 record.
+export const STATE_VERSION = 5;

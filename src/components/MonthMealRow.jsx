@@ -1,7 +1,14 @@
-import { ChefHat, ChevronRight, Pencil, Utensils } from 'lucide-react';
+import { ChefHat, ChevronRight, Pencil, Snowflake, Utensils } from 'lucide-react';
 import { Card, FoodArt } from './ui.jsx';
+import { EATING_OUT, planSpecialLabel } from '../data/plan.js';
 
-export default function MonthMealRow({ label, recipe, onEdit, onCook }) {
+/**
+ * One meal row on the opened month day. A slot can hold a recipe, a
+ * deliberate marker (leftover night / eating out — shown as the decision it
+ * is, with no Cook button, because there is nothing to cook), or nothing.
+ */
+export default function MonthMealRow({ label, recipe, special, onEdit, onCook }) {
+  const specialLabel = special ? planSpecialLabel(special) : null;
   return (
     <Card className="!p-3">
       <div className="flex items-center gap-2">
@@ -13,10 +20,12 @@ export default function MonthMealRow({ label, recipe, onEdit, onCook }) {
         >
           {recipe
             ? <FoodArt recipe={recipe} className="h-11 w-11 shrink-0 rounded-xl" />
-            : <Utensils size={18} className="shrink-0" style={{ color: 'var(--faint)' }} />}
+            : special && special !== EATING_OUT
+              ? <Snowflake size={18} className="shrink-0" style={{ color: 'var(--accent)' }} />
+              : <Utensils size={18} className="shrink-0" style={{ color: 'var(--faint)' }} />}
           <span className="min-w-0 flex-1">
             <span className="block text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>{label}</span>
-            <span className="block truncate font-bold text-[0.90625rem]">{recipe ? recipe.name : 'Nothing planned yet'}</span>
+            <span className="block truncate font-bold text-[0.90625rem]">{recipe ? recipe.name : specialLabel || 'Nothing planned yet'}</span>
           </span>
           <Pencil size={14} className="shrink-0" style={{ color: 'var(--faint)' }} />
         </button>

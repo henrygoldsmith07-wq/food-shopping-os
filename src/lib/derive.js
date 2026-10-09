@@ -68,6 +68,12 @@ import { learnHouseholdPreferences, preferenceSummary } from './household-prefer
 import { predictUnusedIngredients } from './waste-prediction.js';
 import { predictionCalibration, predictionLearningProfile } from './prediction-feedback.js';
 import { buildHouseholdModel, householdModelSummary } from './household-model.js';
+import { intelligenceLoop } from './intelligence-loop.js';
+import { proposeHouseholdWeek } from './weekly-autopilot.js';
+import { deriveHouseholdInsights } from './household-insights.js';
+import { decideShop } from './shop-decision.js';
+import { budgetDecision } from './budget-decision.js';
+import { householdContextForAI } from './ai-household-context.js';
 import { decideTonight, learnMealDecisionProfile } from './meal-decision.js';
 import { inferWeekRecoveryTriggers, recoverWeek } from './week-recovery.js';
 import { evaluateHousehold } from './eval-metrics.js';
@@ -399,6 +405,43 @@ export const deriveApp = (state) => {
       try { return ledgerCounts(state); }
       catch { return { total: 0 }; }
     })(),
+    // ---- Weekly autopilot: one coherent household-aware proposal ----
+    weeklyProposal: memoIntelligence(state, 'weeklyProposal', () => {
+      try {
+        const safe = filterBySuitability(recipeBook, suitabilityCtx);
+        return proposeHouseholdWeek({ ...state, tasteProfile, planDiets }, { recipes: safe, today: state.day });
+      } catch { return { days: [], summary: 'Proposal unavailable.', confidence: 'none', provenance: [] }; }
+    }),
+    householdInsights: memoIntelligence(state, 'householdInsights', () => {
+      try { return deriveHouseholdInsights(state, { recipes: recipeBook, today: state.day }); }
+      catch { return []; }
+    }),
+    loopModel: memoIntelligence(state, 'loopModel', () => {
+      try { return intelligenceLoop(state, { recipes: recipeBook, today: state.day }); }
+      catch { return null; }
+    }),
+    shopDecision: memoIntelligence(state, 'shopDecision', () => {
+      try {
+        return decideShop(state.shoppingList, {
+          shops: state.shops, pantry: state.pantry,
+          routes: state.storeRoutes || {}, memory: state.aisleMemory || {},
+          // The stores this household actually walks are its stated preference;
+          // the decision leans to them where the saving is small.
+          preferredStores: Object.keys(state.storeRoutes || {}),
+          weeklyBudget: state.weeklyBudget, budgetSpent: spentInWeek(state.shops, state.day),
+        });
+      } catch { return { options: [], recommendation: null, empty: !state.shoppingList?.length }; }
+    }),
+    budgetDecision: (() => {
+      try { return budgetDecision(state, { today: state.day }); }
+      catch { return { hasBudget: false }; }
+    })(),
+    // Privacy-bounded structured context for AI tasks. A lazy getter over the
+    // slots above so it costs nothing until something actually asks for it, and
+    // it can never drift from the intelligence the UI is already showing.
+    get aiHouseholdContext() {
+      return householdContextForAI(this);
+    },
     shoppingOptimisation: (mode = 'balanced') => optimiseShopping(state.shoppingList, {
       shops: state.shops, pantry: state.pantry, mode, today: state.day, learnedAliases: state.aliasMemory,
       // Fastest mode walks the aisles the way this household actually does:

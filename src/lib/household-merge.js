@@ -50,7 +50,7 @@ const MAP_KEYS = [
   'tasteRatings', 'recipeRatings', 'aliasMemory', 'aisleMemory', 'storeRoutes',
   'reminderDone', 'skipReasonProfile', 'adventureCompleted', 'units', 'targets',
   'body', 'shoppingMeta', 'shoppingPreferences', 'priceAlertConfig',
-  'awayKitchenProfile',
+  'awayKitchenProfile', 'productPreferences',
 ];
 
 /** Arrays of records appended from real events (facts — never invented). */
