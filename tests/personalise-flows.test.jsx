@@ -215,7 +215,14 @@ describe('the Home layout', () => {
     fireEvent.click(within(sheet).getByText(/Back to the default layout/));
     fireEvent.click(within(sheet).getByLabelText('Close'));
     goTab('Week');
-    expect(within(document.querySelector('main')).getAllByText(/This week/).length).toBeGreaterThan(0);
+    // Week is the one screen that greets rather than titles itself: its <h1>
+    // lives in the header as "Good morning, <name>" (see TITLES.home in
+    // AppHeader.jsx), so the literal "This week" never appears in <main>.
+    // Assert the greeting the screen actually renders — a name we supplied at
+    // onboarding, so it cannot drift with the time of day.
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent).toMatch(/Good (morning|afternoon|evening), Sam/);
+    expect(document.querySelector('main')?.querySelector('h1')).toBeNull();
     // The default layout is the quiet one: no loop diagnostics, no numbers.
     const again = openPrefs('Home');
     expect(within(again).getByLabelText('Show Food loop and loop check').getAttribute('aria-checked')).toBe('false');

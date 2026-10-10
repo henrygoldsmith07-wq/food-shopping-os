@@ -24,12 +24,14 @@ export default function GuidancePanel({
   onOpenWeekLoop = () => onNavigate('plan'),
 }) {
   const app = useApp();
-  const hasAssistant = app.hasTool?.('assistant') ?? false;
+  // The assistant is always available — it is the on-device answer engine, not
+  // a secondary tool, so it is not gated by enabledTools. Hiding the Ask tab
+  // behind an opt-in meant a new user could never discover it existed.
   const TABS = [
     ['next', 'Next', Lightbulb],
     ['review', 'Review', BarChart3],
     ['tools', 'Tools', Wrench],
-    ...(hasAssistant ? [['ask', 'Ask', MessageCircle]] : []),
+    ['ask', 'Ask', MessageCircle],
   ];
   const [view, setView] = useState(initialView);
   const [reviewMode, setReviewMode] = useState('dashboards');
@@ -137,7 +139,9 @@ export default function GuidancePanel({
 
       {view === 'ask' && (
         <Suspense fallback={<Loading />}>
-          {hasAssistant ? <AiAssistant /> : <AddToolsPanel />}
+          {/* Always the assistant: it is on-device and ungated, so there is no
+              "not enabled" state left to redirect to Add tools from. */}
+          <AiAssistant />
         </Suspense>
       )}
     </div>

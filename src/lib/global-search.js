@@ -40,8 +40,8 @@ const MODULE_OF = {
 const reachable = (app, key) => {
   const owner = MODULE_OF[key];
   if (owner && app.moduleOn && !app.moduleOn(owner)) return false;
-  // Parked tools stay out of the palette until enabled in Add tools.
-  if (key === 'assistant' && app.hasTool && !app.hasTool('assistant')) return false;
+  // Parked tools stay out of the palette until enabled in Add tools. The
+  // assistant is exempt: it is on-device and always available.
   if ((key === 'add-food' || key === 'barcode' || key === 'food') && app.hasTool) {
     // Food diary entry itself is core; barcode scan stays core. No gate.
   }

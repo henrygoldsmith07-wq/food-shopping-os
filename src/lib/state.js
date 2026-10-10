@@ -67,6 +67,9 @@ export const EMPTY_STATE = {
   /**
    * Progressive disclosure: optional tool ids the user has added.
    * Empty = core loop only (plan → list → shop → pantry → cook).
+   *
+   * The assistant is not in here — it is not a secondary tool. See the note on
+   * DEFAULT_ENABLED_TOOLS in data/optionalTools.js.
    */
   enabledTools: [],
   starterRecipeIds: [],
