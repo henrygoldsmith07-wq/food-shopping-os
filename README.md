@@ -795,6 +795,11 @@ flag; Forq's own data is never deleted or moved.
 
 ## Run
 
+Requires **Node 22–24** (pinned in `engines`). Node 26 is not supported: jsdom
+does not expose `localStorage` there, so every component test fails with
+`Cannot read properties of undefined (reading 'clear')` — an environment
+problem that looks like a catastrophic suite failure. CI runs Node 22.
+
 ```bash
 npm install
 npm run dev      # local dev server

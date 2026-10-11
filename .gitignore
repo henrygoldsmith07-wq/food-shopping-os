@@ -8,3 +8,9 @@ test-results/
 coverage/
 tsconfig.tsbuildinfo
 tsconfig.strict.tsbuildinfo
+
+# Local tool state and run artefacts — never app input, never CI input.
+test-output.txt
+project-id
+.freebuff/
+.hoplite/
