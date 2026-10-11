@@ -11,6 +11,7 @@ import {
   nutrientRows, remaining, snackSummary, sumMacros, timingInsight,
 } from '../lib/nutrition.js';
 import { formatAmount, NUTRIENTS } from '../data/nutrients.js';
+import { nutritionDisclaimer } from '../lib/nutrition-safety.js';
 import { dailyMicroReport } from '../lib/micronutrition.js';
 import { Card, Meter, Pill, Ring, Section, Sheet } from './ui.jsx';
 import WaterGlasses from './WaterGlasses.jsx';
@@ -221,6 +222,18 @@ export default function LogTab({ initialSheet = null, onIntentUsed }) {
           </button>
           </details>
         </Card>
+
+        {/* The ring and the macro meters read as measured facts, so the
+            confidence behind them has to be stated — the same caveat the
+            analytics and shopping surfaces already carry. Placed outside the
+            collapsed details and outside the card's own emphasis: a caveat
+            nobody opens is not a caveat, and this one is about the numbers,
+            not a feature of them. */}
+        {totals.dataQuality?.confidence !== 'high' && (
+          <p className="mt-2 px-1 text-[0.71875rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+            {nutritionDisclaimer(totals)}
+          </p>
+        )}
       </div>
 
       {/* Capture shortcuts */}
