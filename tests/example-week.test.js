@@ -31,7 +31,19 @@ describe('example week demonstration data', () => {
     const stats = planStats(demo.plan, dates);
     expect(stats.meals).toBe(7);
     expect(demo.pantry.length).toBeGreaterThan(0);
-    expect(demo.shoppingList).toEqual([]);
+    // The /demo route promises "pantry-aware shopping" on arrival, so the seed
+    // ships the real list the plan generates — pantry already deducted — rather
+    // than an empty one the visitor has to click the walkthrough to fill.
+    expect(demo.shoppingList.length).toBeGreaterThan(0);
+    expect(demo.shoppingList.every((item) => item.demo)).toBe(true);
+    expect(demo.shoppingList.every((item) => item.id)).toBe(true);
+    // It is the same list the walkthrough claims to generate.
+    expect(demo.shoppingList.length).toBe(demo.demoMeta.listWouldContain);
+    // Pantry subtraction is real: staples held in the demo pantry are not bought.
+    const names = demo.shoppingList.map((item) => item.name.toLowerCase());
+    expect(names).not.toContain('olive oil');
+    expect(names).not.toContain('rice');
+    expect(demo.shoppingList.every((item) => item.checked === false)).toBe(true);
     // Diary stays empty; the one cooked entry references a real catalogue recipe
     expect(demo.log).toEqual({});
     demo.cooked.forEach((entry) => {

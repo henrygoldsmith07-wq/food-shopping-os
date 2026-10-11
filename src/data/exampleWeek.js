@@ -130,8 +130,16 @@ export const createExampleWeekState = (day = todayStamp()) => {
     diets: [],
     plan,
     pantry,
-    // Pre-seed an empty list; walkthrough generates it so the hand-off is visible
-    shoppingList: [],
+    // Seed the real pantry-aware list so the /demo route shows the promised
+    // "plan → pantry-subtracted list" the moment it loads, instead of an empty
+    // list that only fills in after the visitor clicks through the walkthrough.
+    // The walkthrough's `generateList` step runs addToList over this same set,
+    // which dedupes by item name — so following the tour can never duplicate.
+    shoppingList: listPreview.map((item) => ({
+      ...item,
+      // Clearly demonstration data wherever history or a list is rendered.
+      demo: true,
+    })),
     // Demonstration receipt history, marked `imported` so every surface that
     // shows it labels it as example data — never mistaken for real trips
     shops,

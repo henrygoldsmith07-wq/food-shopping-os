@@ -17,7 +17,9 @@ describe('demo walkthrough', () => {
     render(<App />);
     fireEvent.click(screen.getByText('Explore an example week first'));
 
-    const next = () => screen.getByText('Next');
+    // Address the tour control by its accessible name, not by visible text:
+    // seeded demo list content can legitimately contain the word "Next".
+    const next = () => screen.getByRole('button', { name: 'Next demo step' });
     // The tour walks plan → list → shop → pantry → cook → closed loop.
     fireEvent.click(next());
     fireEvent.click(next());
