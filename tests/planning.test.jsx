@@ -224,7 +224,12 @@ describe('the weekly planner', () => {
     fireEvent.click(within(picker).getByText('Tomato Pasta'));
 
     expect(screen.getByText(/1 meal planned/)).toBeDefined();
-    expect(screen.getByText('Tomato Pasta')).toBeDefined();
+    // Once planned, the dish's name is on the plan AND still in the picker's
+    // results, so the bare name is ambiguous. The picker is a dialog rendered
+    // outside <main>, while the plan lives inside it — so scoping to the main
+    // region reads the plan and nothing else.
+    const planSurface = document.querySelector('main');
+    expect(within(planSurface).getAllByText('Tomato Pasta').length).toBeGreaterThan(0);
   });
 });
 
@@ -237,7 +242,13 @@ describe('rearranging the plan', () => {
     openPlan();
     planFirstDinner();
 
-    const meal = screen.getByText('Coconut Chickpea Curry').closest('[draggable]');
+    // The dish's name is in the plan and still in the picker's results, so the
+    // bare name is ambiguous. `planFirstDinner` leaves the picker open; the plan
+    // itself is inside <main>, so read the draggable from there.
+    const meal = within(document.querySelector('main'))
+      .getAllByText('Coconut Chickpea Curry')
+      .map((node) => node.closest('[draggable]'))
+      .find(Boolean);
     fireEvent.dragStart(meal);
     fireEvent.drop(screen.getAllByText('+ Lunch')[1]); // Tuesday lunch
 
