@@ -34,7 +34,7 @@
   "overrides": {
     "brace-expansion@>=4": "5.0.9",
     "postcss": "8.5.24",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "jsdom": {
       "undici": "7.30.0"
     },
