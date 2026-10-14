@@ -89,9 +89,14 @@ export function NeedsAttentionCard({ manager, app, goTab, openPantry }) {
                     <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[0.84375rem] font-extrabold">{exception.title}</span>
+                    {/* anywhere, not break-word: a title like "5 days still
+                        unplanned" is a phrase with no break opportunity, and at
+                        200% text the column it lands in is narrower than its
+                        longest word, so it must be allowed to break mid-word
+                        rather than run past the card. */}
+                    <span className="block text-[0.84375rem] font-extrabold [overflow-wrap:anywhere]">{exception.title}</span>
                     {exception.detail && (
-                      <span className="mt-0.5 block text-[0.71875rem] font-semibold leading-snug" style={{ color: 'var(--muted)' }}>
+                      <span className="mt-0.5 block text-[0.71875rem] font-semibold leading-snug [overflow-wrap:anywhere]" style={{ color: 'var(--muted)' }}>
                         {exception.detail}
                       </span>
                     )}

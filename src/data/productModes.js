@@ -51,7 +51,11 @@ export const PRODUCT_MODES = [
     label: 'Meal Planning',
     blurb: 'Decide what to cook — the list comes from the plan.',
     entryGoal: 'plan',
-    widgets: ['rings', 'setup'],
+    // The food-loop widget is the product's own loop: plan, pantry, list, cook,
+    // waste. Every mode needs it — this mode especially, since "the list comes
+    // from the plan" is exactly what that widget shows. Without it a
+    // meal-planning household never sees the pantry entry point at all.
+    widgets: ['rings', 'setup', 'loop'],
     primaryTabs: ['home', 'plan', 'cook', 'recipes', 'shop'],
     setupOrder: ['plan', 'cook', 'pantry', 'shop', 'log', 'targets'],
     recommendationBoost: {

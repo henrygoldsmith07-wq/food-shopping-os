@@ -12,6 +12,7 @@ import {
   advancedToolsForMode,
   profileSectionVisible,
 } from '../src/data/productModes.js';
+import { DEFAULT_WIDGETS } from '../src/data/preferences.js';
 import { screenById } from '../src/lib/screens.js';
 import { setupProgress } from '../src/lib/setup.js';
 import { notificationPresets } from '../src/lib/reminder-suggest.js';
@@ -62,7 +63,9 @@ describe('product modes', () => {
   it('defaults are quiet: optional numbers, loop diagnostics and reports stay off until chosen', () => {
     const applied = applyProductMode('meal_planning', { name: 'Ada' });
     expect(applied.productMode).toBe('meal_planning');
-    expect(applied.widgets).toEqual(['rings', 'setup']);
+    // The food loop is not an optional extra: it is the product's own loop, so
+    // it is on in every mode. Numbers, diagnostics and reports stay off.
+    expect(applied.widgets).toEqual(['rings', 'setup', 'loop']);
     // The focused modes only turn on the extras that mode is for.
     const budget = applyProductMode('shopping_budget');
     expect(budget.widgets).toContain('numbers');
@@ -167,9 +170,10 @@ describe('product modes', () => {
     });
     expect(app.productMode).toBe('shopping_budget');
     expect(app.navTabs[1]).toBe('shop');
-    // Quiet defaults: no stored widgets → the core loop only; the mode's own
-    // widget set lands when the mode is applied, not merely selected.
-    expect(app.homeWidgets).toEqual(['rings', 'setup']);
+    // Quiet defaults: no stored widgets → the default Home layout, which is the
+    // same for every mode; the mode's own widget set lands when the mode is
+    // applied, not merely selected.
+    expect(app.homeWidgets).toEqual(DEFAULT_WIDGETS);
     const applied = deriveApp({
       ...EMPTY_STATE,
       productMode: 'shopping_budget',

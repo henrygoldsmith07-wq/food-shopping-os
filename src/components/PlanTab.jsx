@@ -110,8 +110,23 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       <Section className="rise rise-1">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex gap-2">
-            <Chip active={view === 'week'} onClick={() => { setView('week'); setOffset(0); clearRangeStatus(); }}>Week</Chip>
-            <Chip active={view === 'month'} onClick={() => { setView('month'); setOffset(0); clearRangeStatus(); }}>Month</Chip>
+            {/* These switch the calendar's range, so they say what they switch.
+                Labelling them "Week"/"Month" alone collides with the nav's own
+                Week tab, and tells a screen-reader user nothing about scope. */}
+            <Chip
+              active={view === 'week'}
+              aria-label="Show week view"
+              onClick={() => { setView('week'); setOffset(0); clearRangeStatus(); }}
+            >
+              Week
+            </Chip>
+            <Chip
+              active={view === 'month'}
+              aria-label="Show month view"
+              onClick={() => { setView('month'); setOffset(0); clearRangeStatus(); }}
+            >
+              Month
+            </Chip>
           </div>
           {/* Arrows keep their tap target; the date label gives way rather than pushing the page sideways. */}
           <div className="flex min-w-0 items-center gap-1">

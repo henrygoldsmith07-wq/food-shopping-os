@@ -37,7 +37,15 @@ test('main screens reflow at 200% text without page-level horizontal overflow', 
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
 
   for (const tab of TAB_LABELS) {
-    await page.getByRole('button', { name: tab, exact: true }).click();
+    // Click the bar's own tab at its own coordinates. Playwright's default
+    // scroll-into-view can leave a tall workspace card over the bar mid-click
+    // at 200% text, and the retry then races the scroll. The bar is fixed, so
+    // its box is stable — clicking the resolved element's centre directly
+    // removes the race without weakening what the test measures.
+    const navTab = page.getByLabel('Main navigation').getByRole('button', { name: tab, exact: true });
+    const box = await navTab.boundingBox();
+    if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    else await navTab.click();
     // Lazily-loaded panels land a beat after the tab does, and one of them
     // overflowing is exactly what this test is for — so settle twice, with the
     // wait in between, rather than measuring a screen that is still arriving.

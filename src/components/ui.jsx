@@ -331,7 +331,10 @@ export const Meter = ({ value, max, color = 'var(--accent)', height = 6 }) => (
 export { default as Sheet } from './Sheet.jsx';
 
 export const Stepper = ({ value, onChange, min = 1, max = 12 }) => (
-  <div className="inline-flex items-center gap-3 rounded-full border px-2 py-1" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
+  // shrink-0 is deliberate — a stepper whose buttons squash is unusable — but
+  // it must be allowed to sit on its own line, so the parent row wraps it
+  // rather than letting the pair push the page sideways at large text sizes.
+  <div className="inline-flex shrink-0 items-center gap-3 rounded-full border px-2 py-1" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
     <button className="press h-7 w-7 rounded-full font-bold" style={{ background: 'var(--card-2)' }} onClick={() => onChange(Math.max(min, value - 1))} aria-label="Decrease">−</button>
     <span className="w-5 text-center font-extrabold text-[0.9375rem]">{value}</span>
     <button className="press h-7 w-7 rounded-full font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent-deep)' }} onClick={() => onChange(Math.min(max, value + 1))} aria-label="Increase">+</button>

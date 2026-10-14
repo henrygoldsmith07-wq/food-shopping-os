@@ -132,8 +132,8 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
           ))}
         </ul>
 
-        <div className="flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+          <div className="min-w-0">
             <p className="text-[0.78125rem] font-extrabold">Cooking for {proposal.portions}</p>
             <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>Follows your recorded cooks</p>
           </div>
