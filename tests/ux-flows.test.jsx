@@ -23,17 +23,18 @@ const dialogFor = (title) => {
   return dialog;
 };
 
-/** The loop panel is optional and starts hidden — turn it on through the
- *  real Preferences sheet, the way a person who wants the diagnostics would. */
+/**
+ * The food loop is on by default now, so there is nothing to enable.
+ *
+ * This used to click the widget's toggle, which was the point — the loop was an
+ * opt-in extra. It is the product's own loop, so it ships on, and clicking the
+ * switch would turn it OFF and hide the very surface these tests drive. The
+ * helper stays so the tests read the same way, and it asserts the widget is
+ * already visible rather than reaching for a control that no longer means
+ * "enable".
+ */
 const enableLoopWidget = () => {
-  fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
-  const section = screen.getByText('Guidance & you').closest('section');
-  fireEvent.click(within(section).getByText('Preferences'));
-  const prefs = dialogFor('Preferences');
-  const chip = within(prefs).queryByRole('button', { name: 'Home preferences' });
-  fireEvent.click(chip || within(prefs).getByText('Home'));
-  fireEvent.click(within(prefs).getByLabelText('Show Food loop and loop check'));
-  fireEvent.click(within(prefs).getByLabelText('Close'));
+  expect(screen.queryByText('Add what’s in your cupboards')).not.toBeNull();
 };
 
 describe('global UX controls', () => {
