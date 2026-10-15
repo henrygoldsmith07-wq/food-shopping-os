@@ -47,6 +47,7 @@ import { RECIPES } from '../data/recipes.js';
 import { periodFootprint, swapIdeas } from './footprint.js';
 import { fastingSummary } from './fasting.js';
 import { DEFAULT_PERMISSIONS, permissionsForRole } from './household.js';
+import { YOUTH_PERMISSIONS } from './youth.js';
 import { buildTasteProfile } from './taste.js';
 import {
   cookingTimeLearning, householdPreferenceProfile, leftoverAwareness, mealPlanAdherence,
@@ -96,9 +97,15 @@ const memoIntelligence = (state, key, compute) => {
 export const deriveApp = (state) => {
   const activeMember = state.members.find((member) => member.id === state.activeMemberId) || null;
   const youth = youthPolicy(state);
+  // Under-18 mode comes from the age given at setup OR a child household
+  // profile, but permissions only came from the role — so a child using the
+  // app alone (no household member) kept full shopping access the youth policy
+  // says they should not have. The youth floor applies to both routes; a
+  // member's own explicit permissions still win over it.
+  const youthFloor = youth.on ? YOUTH_PERMISSIONS : DEFAULT_PERMISSIONS;
   const householdAccess = activeMember
-    ? { ...permissionsForRole(activeMember.role), ...(activeMember.permissions || {}) }
-    : { ...DEFAULT_PERMISSIONS };
+    ? { ...youthFloor, ...permissionsForRole(activeMember.role), ...(activeMember.permissions || {}) }
+    : { ...youthFloor };
 
   // One context object for every surface that asks "is this safe / preferred?".
   const planDiets = [...new Set([...state.diets, ...state.members.flatMap((m) => m.diets || [])])];

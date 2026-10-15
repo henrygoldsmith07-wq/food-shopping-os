@@ -207,3 +207,44 @@ describe('13–15 · consent, sharing and predictions', () => {
     expect(predictProgress({ ...state, body: { ...state.body, age: 30 } }, { today: '2026-08-09' }).ready).toBe(true);
   });
 });
+
+/* Permissions came from the household role alone, but under-18 mode comes from
+   the age given at setup OR a child profile. A child using the app alone has no
+   household member, so the role was never consulted and they kept full shopping
+   access the youth policy says they should not have. */
+describe('a child alone gets the youth permissions too', () => {
+  const member = (role, extra = {}) => ({ id: 'm1', name: 'Member', role, ...extra });
+  const accessFor = (state) => deriveApp(state).householdAccess;
+
+  it('withholds shopping from a child using the app alone', () => {
+    const child = person(15);
+    expect(deriveApp(child).childMode).toBe(true);
+    expect(accessFor(child).shopping).toBe(false);
+  });
+
+  it('treats a child alone exactly like a child household member', () => {
+    const byAge = person(15);
+    const byRole = { ...person(30), members: [member('child')], activeMemberId: 'm1' };
+    expect(accessFor(byAge)).toEqual(accessFor(byRole));
+  });
+
+  it('still lets an adult shop', () => {
+    expect(accessFor(person(30)).shopping).toBe(true);
+    expect(accessFor(EMPTY_STATE).shopping).toBe(true);
+  });
+
+  it('leaves a member\u2019s own permissions in charge', () => {
+    // A parent granting a child access must not be overridden by the floor.
+    const granted = {
+      ...person(30),
+      members: [member('child', { permissions: { shopping: true } })],
+      activeMemberId: 'm1',
+    };
+    expect(accessFor(granted).shopping).toBe(true);
+  });
+
+  it('keeps health off for everyone, as the default always has', () => {
+    expect(accessFor(person(30)).health).toBe(false);
+    expect(accessFor(person(15)).health).toBe(false);
+  });
+});
