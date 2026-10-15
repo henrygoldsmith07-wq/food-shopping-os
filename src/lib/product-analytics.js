@@ -1,6 +1,7 @@
 import {
   PRODUCT_EVENT_NAME_SET, PRODUCT_EVENT_PROPERTY_KEYS,
 } from '../data/analytics.js';
+import { isUnderEighteen } from './youth.js';
 
 export const ANALYTICS_CONSENT_KEY = 'forq-product-analytics-consent-v1';
 export const ANALYTICS_QUEUE_KEY = 'forq-product-events-v1';
@@ -19,11 +20,26 @@ const browserStorage = () => {
   }
 };
 
-export const readAnalyticsConsent = () => browserStorage()?.getItem(ANALYTICS_CONSENT_KEY) === 'granted';
+/**
+ * Consent is only honoured for an adult household. A child profile may have a
+ * stale 'granted' flag restored from a backup or set before a birthday, and the
+ * store's revocation effect only fires when the age value itself changes — so a
+ * grant survives an unrelated profile edit. Treating a child as not-consented
+ * here closes that at the single point every read passes through.
+ */
+export const readAnalyticsConsent = (state = undefined) => {
+  if (browserStorage()?.getItem(ANALYTICS_CONSENT_KEY) !== 'granted') return false;
+  return !isUnderEighteen(state);
+};
 
-export const setAnalyticsConsent = (enabled) => {
+/**
+ * Granting consent for a child profile is refused outright rather than stored
+ * and ignored, so the toggle never appears to have taken effect.
+ */
+export const setAnalyticsConsent = (enabled, state = undefined) => {
   const storage = browserStorage();
   if (!storage) return false;
+  if (enabled && isUnderEighteen(state)) return false;
   if (enabled) storage.setItem(ANALYTICS_CONSENT_KEY, 'granted');
   else {
     storage.setItem(ANALYTICS_CONSENT_KEY, 'denied');
@@ -89,8 +105,8 @@ const safeProperties = (properties) => Object.fromEntries(
     }),
 );
 
-export const recordProductEvent = (name, properties = {}, at = new Date().toISOString()) => {
-  if (!readAnalyticsConsent() || !PRODUCT_EVENT_NAME_SET.has(name)) return false;
+export const recordProductEvent = (name, properties = {}, at = new Date().toISOString(), state = undefined) => {
+  if (!readAnalyticsConsent(state) || !PRODUCT_EVENT_NAME_SET.has(name)) return false;
   const events = [...readQueue(), {
     id: newEventId(),
     name,
@@ -118,8 +134,8 @@ const canAttempt = () => {
 };
 
 /** Uploads only coarse, consented events for signed-in households. */
-export const flushProductEvents = async ({ request = globalThis.fetch, householdId = selectedHouseholdId() } = {}) => {
-  if (!readAnalyticsConsent() || !householdId || !request || !canAttempt()
+export const flushProductEvents = async ({ request = globalThis.fetch, householdId = selectedHouseholdId(), state = undefined } = {}) => {
+  if (!readAnalyticsConsent(state) || !householdId || !request || !canAttempt()
     || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
     return { sent: 0, skipped: true };
   }
@@ -145,7 +161,7 @@ export const flushProductEvents = async ({ request = globalThis.fetch, household
       body: JSON.stringify({ events: batch }),
     });
     if (!response.ok) return { sent: 0, skipped: false };
-    if (!readAnalyticsConsent()) return { sent: 0, skipped: true };
+    if (!readAnalyticsConsent(state)) return { sent: 0, skipped: true };
     const sentIds = new Set(batch.map((event) => event.id));
     writeQueue(readQueue().filter((event) => !sentIds.has(event.id)));
     return { sent: batch.length, skipped: false };

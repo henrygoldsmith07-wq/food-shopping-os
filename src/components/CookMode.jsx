@@ -118,7 +118,7 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
       actualMins: Math.max(1, Math.round((Date.now() - startedAt) / 60000)),
       recommendationId,
     });
-    recordProductEvent('recipe_cooked', { leftovers: spare });
+    recordProductEvent('recipe_cooked', { leftovers: spare }, undefined, app);
     setAuto(false);
     setFinished(true);
   };

@@ -136,7 +136,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       leftoverFirst,
       timeAvailable: timeAvailable || (quick ? 30 : null),
       availabilityOnly,
-    });
+    }, undefined, app);
   };
 
   /** Turn the generated run into dated slots. */
@@ -151,7 +151,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
 
   const apply = () => {
     app.applyPlanEntries(entries.filter((e) => e.recipeId));
-    recordProductEvent('plan_accepted', { scope, mealCount: entries.filter((e) => e.recipeId).length });
+    recordProductEvent('plan_accepted', { scope, mealCount: entries.filter((e) => e.recipeId).length }, undefined, app);
     onApplied?.();
   };
 

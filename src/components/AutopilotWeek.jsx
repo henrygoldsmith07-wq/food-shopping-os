@@ -94,7 +94,7 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
       meals: entries.length,
       people: proposal.portions,
       eatingOut: eatingOut.size,
-    });
+    }, undefined, app);
     setAccepted(true);
     setStatus('Week accepted — the list built itself from it.');
     onAccept?.(proposal);

@@ -354,10 +354,12 @@ export function AppProvider({ children }) {
 
   /* Under 18 the product-insights answer is "no" and stays "no". Hiding the
      toggle isn't enough — a consent granted before a birthday, or restored
-     from a backup, is revoked here rather than quietly honoured. */
+     from a backup, is revoked here rather than quietly honoured. Reading the
+     whole profile rather than one field means a consent restored by a backup,
+     or granted before a birthday, is revoked even when nothing else changed. */
   useEffect(() => {
-    if (isUnderEighteen(state) && readAnalyticsConsent()) setAnalyticsConsent(false);
-  }, [state.body?.age]);
+    if (isUnderEighteen(state) && readAnalyticsConsent(state)) setAnalyticsConsent(false, state);
+  }, [state]);
 
   // Your recipes join the book's lookup, so a plan slot or a cook history entry
   // pointing at one of yours resolves like any other dish.

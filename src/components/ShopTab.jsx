@@ -196,7 +196,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
           {[['list', 'List', ShoppingCart], ['history', 'Shops', Receipt], ['prices', 'Prices', TrendingUp], ...((app.hasTool?.('live-prices') ?? false) ? [['stores', 'Stores', Building2]] : []), ['budget', 'Budget', Banknote]].map(([k, label, Icon]) => (
             <Chip key={k} active={view === k} onClick={() => {
               setView(k);
-              if (k === 'prices') recordProductEvent('price_comparison_opened');
+              if (k === 'prices') recordProductEvent('price_comparison_opened', {}, undefined, app);
             }}>
               <span className="inline-flex items-center gap-1.5"><Icon size={13} /> {label}</span>
             </Chip>
@@ -466,7 +466,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
               label="Start shopping"
               hint={`${visibleList.length} item${visibleList.length === 1 ? '' : 's'}`}
               onClick={() => {
-                recordProductEvent('shopping_started', { count: visibleList.length, store: store || 'all' });
+                recordProductEvent('shopping_started', { count: visibleList.length, store: store || 'all' }, undefined, app);
                 shoppingSession.start(store);
               }}
             />

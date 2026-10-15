@@ -173,7 +173,7 @@ function Shell() {
   const goLog = (intent = null) => {
     setLogIntent(intent);
     setTab('log');
-    recordProductEvent('screen_viewed', { screen: 'log', intent: typeof intent === 'string' ? intent : 'shortcut' });
+    recordProductEvent('screen_viewed', { screen: 'log', intent: typeof intent === 'string' ? intent : 'shortcut' }, undefined, app);
   };
   const flash = (message) => {
     clearTimeout(noticeTimer.current);
@@ -266,8 +266,8 @@ function Shell() {
   useEffect(() => {
     if (!app.onboarded || analyticsOpened.current) return undefined;
     analyticsOpened.current = true;
-    recordProductEvent('app_opened');
-    const flush = () => { flushProductEvents(); };
+    recordProductEvent('app_opened', {}, undefined, app);
+    const flush = () => { flushProductEvents({ state: app }); };
     window.addEventListener('forq-product-event', flush);
     window.addEventListener('forq-analytics-consent', flush);
     window.addEventListener('online', flush);
@@ -286,7 +286,7 @@ function Shell() {
     if (id === 'profile') return setProfileOpen(true);
     if (id === 'plan') { setPlanFocus(context?.date || null); setPlanItem(context?.tonight ? null : (context?.item || null)); setTonightItem(context?.tonight && context?.item ? context.item : null); }
     setTab(id);
-    recordProductEvent('screen_viewed', { screen: id });
+    recordProductEvent('screen_viewed', { screen: id }, undefined, app);
     window.scrollTo({ top: 0 });
   };
   if (app.storageIssue?.kind === 'corrupt') return <StorageRecovery />;
