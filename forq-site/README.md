@@ -2,10 +2,8 @@
 
 Static landing page for `forq`.
 
-Same contract as `apps/le-studio-site`:
-
 - One `index.html` + icons — no build step.
-- Vercel project **Root Directory: `apps/forq-site`**, Framework Preset **Other**, no build command, output directory `.`.
-- Monochrome stroke icons, `@le-studio/tokens` palette.
+- Vercel project **Root Directory: `forq-site`**, Framework Preset **Other**, no build command, output directory `.` (see `forq-site/vercel.json`).
+- Monochrome stroke icons; the palette is inlined as CSS custom properties in `index.html`.
 
-Links back to the family hub (`apps/le-studio-site`) and to the app.
+Links to the app at <https://food-shopping-os.vercel.app/> and to the repository at <https://github.com/henrygoldsmith07-wq/food-shopping-os>.
