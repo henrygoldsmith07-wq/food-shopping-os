@@ -173,6 +173,8 @@ export function useStoreApi({
       addWaterMl: (ml) => set((s) => ({ waterExtraMl: Math.max(0, s.waterExtraMl + ml) })),
       claimAdventureMission: (id) => set((s) => ({ adventureCompleted: { ...(s.adventureCompleted || {}), [id]: true }, xp: (s.xp || 0) + 50 })),
       savePlanSimulation: (simulation) => set((s) => ({ planSimulations: [...(s.planSimulations || []), { ...simulation, id: uid('sim'), savedAt: Date.now() }].slice(-20) })),
+      loadPlanSimulation: (id) => latest.current?.planSimulations?.find((simulation) => simulation.id === id) || null,
+      deletePlanSimulation: (id) => set((s) => ({ planSimulations: (s.planSimulations || []).filter((simulation) => simulation.id !== id) })),
       ...targetActions(set),
       ...recipeActions(set),
       addPantryItem: (item = {}) =>
