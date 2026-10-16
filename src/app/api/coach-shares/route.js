@@ -4,7 +4,7 @@ import {
   ApiError, assertSameOrigin, handleApiError, objectId, rateLimit, readJsonBody, requireUser,
 } from '../../../server/api.js';
 import { writeAuditEvent } from '../../../server/audit.js';
-import { coachTokenHash } from '../../../server/coach-shares.js';
+import { coachTokenHash, effectiveShareScopes } from '../../../server/coach-shares.js';
 import { requireHousehold } from '../../../server/households.js';
 import { getDatabase } from '../../../server/database.js';
 import { coachShareSchema } from '../../../server/schemas.js';
@@ -63,6 +63,17 @@ export async function POST(request) {
       throw new ApiError(403, 'Health sharing permission is required.');
     }
     const db = await getDatabase();
+    // Under-18 protection is enforced here, not just hidden in the UI: a
+    // tampered client asking for the health scope gets a refusal, and the
+    // stored link can never carry a scope this household may not share.
+    const householdDoc = await db.collection('householdStates').findOne(
+      { householdId: household._id },
+      { projection: { state: 1 } },
+    );
+    const allowedScopes = effectiveShareScopes(householdDoc?.state, input.scopes);
+    if (allowedScopes.length !== input.scopes.length) {
+      throw new ApiError(403, 'Health records cannot be shared from an under-18 household.');
+    }
     const token = randomBytes(32).toString('base64url');
     const now = new Date();
     const document = {

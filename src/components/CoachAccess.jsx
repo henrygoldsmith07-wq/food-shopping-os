@@ -26,6 +26,11 @@ export default function CoachAccess() {
   const [link, setLink] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  // Coach links need the server build flag as well as the tool toggle.
+  // Without it the form would look live and then 403 on first use — say so
+  // up front instead. Unknown (fetch failed, offline) keeps today's
+  // behaviour: attempt the call and show whatever the server answers.
+  const [serverReady, setServerReady] = useState(null);
 
   const refresh = () => listCoachShares()
     .then(setShares)
@@ -33,6 +38,14 @@ export default function CoachAccess() {
 
   useEffect(() => {
     refresh();
+    fetch('/api/backend/status', { credentials: 'same-origin' })
+      .then((response) => response.json())
+      .then((backend) => {
+        if (backend && typeof backend.integrations?.coachShares?.ready === 'boolean') {
+          setServerReady(backend.integrations.coachShares.ready);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const toggle = (scope) => setScopes((current) => (
@@ -88,11 +101,19 @@ export default function CoachAccess() {
         <ShieldCheck size={17} className="mt-0.5 shrink-0" />
         <div>
           <p className="font-extrabold text-[0.875rem]">Coach or trainer access</p>
-          <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            Create a read-only, revocable link. Health records stay off unless you select them explicitly.
-          </p>
+          {serverReady === false ? (
+            <p className="mt-0.5 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Coach links are not enabled on this server — they need a signed-in backend with FORQ_COACH_SHARES_ENABLED. Nothing has been shared; your household data stays on this device.
+            </p>
+          ) : (
+            <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Create a read-only, revocable link. Health records stay off unless you select them explicitly.
+            </p>
+          )}
         </div>
       </div>
+      {serverReady !== false && (
+      <>
       <input
         value={label}
         onChange={(event) => setLabel(event.target.value)}
@@ -146,6 +167,8 @@ export default function CoachAccess() {
         </div>
       ))}
       {status && <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>{status}</p>}
+      </>
+      )}
     </Card>
   );
 }

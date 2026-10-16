@@ -8,6 +8,20 @@ import { writeAuditEvent } from '../../../../server/audit.js';
 
 const tokenHash = (token) => createHash('sha256').update(token).digest('hex');
 
+/**
+ * What an invitation may actually grant. An inviter cannot give away access
+ * they do not hold (owners implicitly hold everything), and a child profile
+ * never receives health access — mirroring YOUTH_PERMISSIONS — however the
+ * invite was composed.
+ */
+export const clampInvitationGrant = (membership = {}, role, permissions = []) => {
+  const mine = new Set(membership.role === 'owner'
+    ? ['shopping', 'pantry', 'recipes', 'health', 'admin']
+    : (membership.permissions || []));
+  const granted = [...new Set(permissions)].filter((p) => mine.has(p));
+  return role === 'child' ? granted.filter((p) => p !== 'health') : granted;
+};
+
 export async function POST(request) {
   try {
     assertSameOrigin(request);
@@ -18,11 +32,12 @@ export async function POST(request) {
     if (!['owner', 'admin'].includes(membership.role)) throw new ApiError(403, 'Household admin access required.');
     const token = randomBytes(32).toString('base64url');
     const db = await getDatabase();
+    const granted = clampInvitationGrant(membership, input.role, input.permissions);
     const inserted = await db.collection('invitations').insertOne({
       householdId: household._id,
       email: input.email.toLowerCase(),
       role: input.role,
-      permissions: input.permissions,
+      permissions: granted,
       tokenHash: tokenHash(token),
       createdBy: user.id,
       createdAt: new Date(),
@@ -31,7 +46,7 @@ export async function POST(request) {
     });
     await writeAuditEvent({
       db, householdId: household._id, user, action: 'invitation.created',
-      resource: inserted.insertedId.toString(), fields: input.permissions,
+      resource: inserted.insertedId.toString(), fields: granted,
     });
     return NextResponse.json({ token, expiresInHours: 168 }, { status: 201 });
   } catch (error) {

@@ -61,3 +61,36 @@ describe('parsing a pasted shopping list', () => {
     expect(parsePastedList(null)).toEqual([]);
   });
 });
+
+describe('pasting a copied printed grocery list (switching apps)', () => {
+  // Mealime offers no export: its lists leave as copied or printed text,
+  // grouped under category headers, sometimes with tick boxes. Headers name
+  // no food and must never land on the list as items called "Produce".
+  it('skips category headers and reads the items under them', () => {
+    expect(parsePastedList('Produce:\n2 avocados\n1 red onion\n\nDairy & Eggs:\n6 eggs\n2 pints of milk')).toEqual([
+      { name: 'avocados', qty: '2' },
+      { name: 'red onion', qty: '1' },
+      { name: 'eggs', qty: '6' },
+      { name: 'milk', qty: '2 pints' },
+    ]);
+  });
+
+  it('strips shared-list tick boxes', () => {
+    expect(parsePastedList('[ ] Olive oil\n[x] Bananas\n( ) Tea')).toEqual([
+      { name: 'Olive oil', qty: '' },
+      { name: 'Bananas', qty: '' },
+      { name: 'Tea', qty: '' },
+    ]);
+  });
+
+  it('handles tick boxes combined with bullets and quantities', () => {
+    expect(parsePastedList('- [ ] 2 tins of tomatoes\n- [x] Bread: 1 loaf')).toEqual([
+      { name: 'tomatoes', qty: '2 tins' },
+      { name: 'Bread', qty: '1 loaf' },
+    ]);
+  });
+
+  it('still reads a quantity after a colon — only bare headers are skipped', () => {
+    expect(parsePastedList('Bread: 1 loaf')).toEqual([{ name: 'Bread', qty: '1 loaf' }]);
+  });
+});

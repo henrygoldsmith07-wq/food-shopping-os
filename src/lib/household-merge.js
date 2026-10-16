@@ -244,6 +244,11 @@ export const mergeSharedState = (localState = {}, remoteState = {}, base = null)
     ...SET_KEYS, ...MAP_KEYS, ...RECORD_KEYS,
   ]);
   for (const key of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    // Never assign __proto__: a synced key with that name would invoke the
+    // prototype setter instead of creating a field (prototype pollution
+    // shared to every tab through sync). Unknown keys are dropped here;
+    // known state fields can never be named this.
+    if (key === '__proto__') continue;
     if (handled.has(key) || key === 'schemaVersion') continue;
     const inLocal = Object.prototype.hasOwnProperty.call(local, key);
     const inRemote = Object.prototype.hasOwnProperty.call(remote, key);
@@ -284,6 +289,9 @@ const baseListFingerprintAs = (rows = [], fields) => {
 const mergeDatedLog = (local = {}, remote = {}, base = {}) => {
   const out = {};
   for (const date of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    // Same prototype-setter guard as the whole-state merge below: a log key
+    // named __proto__ must never become an assignment.
+    if (date === '__proto__') continue;
     const rows = threeWayRecords(local[date] || [], remote[date] || [], base[date] || []);
     if (rows.length) out[date] = rows;
   }

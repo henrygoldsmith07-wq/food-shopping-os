@@ -72,6 +72,7 @@ import { decideTonight, learnMealDecisionProfile } from './meal-decision.js';
 import { inferWeekRecoveryTriggers, recoverWeek } from './week-recovery.js';
 import { evaluateHousehold } from './eval-metrics.js';
 import { ledgerCounts } from './event-ledger.js';
+import { buildFoodIntelligence } from './food-intelligence.js';
 
 /**
  * Memo for the heavier household-intelligence derivations below. deriveApp is
@@ -391,6 +392,28 @@ export const deriveApp = (state) => {
       }
       catch { return null; }
     }),
+    /* ---- Unified Food Intelligence: the ranked decision stack ----
+       The engines above stay authoritative; this composes them (next-action
+       for the lead, the week manager for exceptions, the waste predictor
+       for prevention, the adaptation collector for learning) into one
+       ranked list of decisions — lib/food-intelligence.js. Memoized per
+       state like the other heavy derivations, and defensive: one failing
+       engine must never break Home. */
+    get foodIntelligence() {
+      return memoIntelligence(state, 'foodIntelligence', () => {
+        try {
+          return buildFoodIntelligence(state, {
+            today: state.day,
+            wastePrediction,
+            weekRecovery: this.weekRecovery,
+            tonightDecision: this.tonightDecision,
+            useSoonIngredients: useSoon,
+            portions: this.portions,
+          });
+        }
+        catch { return { decisions: [], primary: null, quiet: true, weekState: null, generatedAt: state.day }; }
+      });
+    },
     householdEval: memoIntelligence(state, 'householdEval', () => {
       try { return evaluateHousehold(state, { today: state.day }); }
       catch { return null; }

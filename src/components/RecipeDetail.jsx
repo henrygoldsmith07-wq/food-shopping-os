@@ -191,7 +191,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
                     key={score}
                     onClick={() => app.rateRecipe(original.id, score)}
                     aria-label={`Rate ${score} star${score === 1 ? '' : 's'}`}
-                    className="press p-0.5"
+                    className="tap press p-0.5"
                     style={{ color: score <= rating ? 'var(--warn)' : 'var(--faint)' }}
                   >
                     <Star size={17} fill={score <= rating ? 'currentColor' : 'none'} />

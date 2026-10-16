@@ -6,8 +6,8 @@ import {
   autopilotWeekProposal,
   autopilotWeekSummary,
   regenerateProposalMeal,
-  WEEK_EMPHASIS,
 } from '../lib/autopilot-week.js';
+import { PLANNING_STRATEGIES, strategyComparison, strategyFor } from '../lib/planning-strategies.js';
 import { gbp } from '../lib/utils.js';
 import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
@@ -30,7 +30,9 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   const [accepted, setAccepted] = useState(false);
   const [eatingOut, setEatingOut] = useState(() => new Set());
   const [peopleOverride, setPeopleOverride] = useState(null);
-  const [emphasis, setEmphasis] = useState(null);
+  // One strategy at a time — words the household means, knobs the one
+  // generator already has (lib/planning-strategies.js).
+  const [strategyId, setStrategyId] = useState('usual');
   const [status, setStatus] = useState('');
 
   // Locks live in real state (lockedMeals), so they survive regeneration,
@@ -44,7 +46,18 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
     return dates;
   }, [app.lockedMeals]);
 
-  const base = useMemo(() => autopilotWeekProposal(app, { seed, emphasis }), [app, seed, emphasis]);
+  const strategy = strategyFor(strategyId);
+  const base = useMemo(
+    () => autopilotWeekProposal(app, { seed, emphasis: strategy.emphasis }),
+    [app, seed, strategy],
+  );
+  // The trade-off, measured: what this strategy's week gains and gives up
+  // against the usual week, in sentences built from the same proposal
+  // numbers the list is built from.
+  const comparison = useMemo(
+    () => (strategy.emphasis === null ? null : strategyComparison(app, { seed, strategyId })),
+    [app, seed, strategyId, strategy],
+  );
   const proposal = useMemo(() => {
     if (!peopleOverride) return base;
     // People changed: rescale the same week rather than rerolling it — the
@@ -145,36 +158,55 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
           />
         </div>
 
-        {/* One high-level intent — five knobs on the same engine, not a
-            filter panel. Choosing one re-prepares only what it affects. */}
+        {/* One strategy at a time — each is one knob on the same generator,
+            and each names its trade-off up front. Choosing one rebuilds the
+            week and says, in sentences, what it gains and gives up. */}
         <div>
           <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
             Optimise this week for
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {WEEK_EMPHASIS.map((intent) => (
+            {PLANNING_STRATEGIES.map((option) => (
               <button
-                key={intent.id}
+                key={option.id}
                 type="button"
-                aria-pressed={emphasis === intent.id}
+                aria-pressed={strategyId === option.id}
                 onClick={() => {
-                  const next = emphasis === intent.id ? null : intent.id;
-                  setEmphasis(next);
-                  setStatus(next
-                    ? `The week now leans towards ${intent.label.toLowerCase()}.`
-                    : 'Back to the balanced week.');
+                  const next = strategyId === option.id ? 'usual' : option.id;
+                  setStrategyId(next);
+                  const chosen = strategyFor(next);
+                  setStatus(next === 'usual'
+                    ? 'Back to your usual week.'
+                    : `The week now leans towards ${chosen.label.toLowerCase()}.`);
                 }}
                 className="press rounded-full border px-3 py-1.5 text-[0.71875rem] font-extrabold"
                 style={{
-                  borderColor: emphasis === intent.id ? 'var(--accent)' : 'var(--line)',
-                  background: emphasis === intent.id ? 'var(--accent-soft)' : 'transparent',
-                  color: emphasis === intent.id ? 'var(--accent)' : 'var(--muted)',
+                  borderColor: strategyId === option.id ? 'var(--accent)' : 'var(--line)',
+                  background: strategyId === option.id ? 'var(--accent-soft)' : 'transparent',
+                  color: strategyId === option.id ? 'var(--accent)' : 'var(--muted)',
                 }}
               >
-                {intent.label}
+                {option.label}
               </button>
             ))}
           </div>
+          <p className="mt-1.5 text-[0.71875rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+            {strategy.tradeOff}
+          </p>
+          {comparison?.lines.length > 0 && (
+            <div
+              role="note"
+              aria-label="What this week trades off"
+              className="mt-2 rounded-2xl border px-3 py-2"
+              style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}
+            >
+              {comparison.lines.map((line) => (
+                <p key={line} className="text-[0.71875rem] font-bold leading-relaxed" style={{ color: 'var(--muted)' }}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
 

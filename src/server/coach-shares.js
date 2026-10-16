@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from './api.js';
 import { getDatabase } from './database.js';
+import { youthPolicy, YOUTH_SHARE_SCOPES } from '../lib/youth.js';
 
 export const coachTokenHash = (token) => createHash('sha256').update(token).digest('hex');
 
@@ -17,6 +18,19 @@ const SCOPE_FIELDS = {
 export const coachSnapshot = (state, scopes) => ({
   ...Object.fromEntries(scopes.map((scope) => [scope, pick(state, SCOPE_FIELDS[scope] || [])])),
 });
+
+/**
+ * Scopes a link may actually carry for this household state. Under-18
+ * households never carry health records on a link — enforced here, not just
+ * hidden in the UI, so a tampered client cannot smuggle the scope in at
+ * creation, and links created before this check still stop serving health
+ * once the household state shows under-18 mode.
+ */
+export const effectiveShareScopes = (state, scopes = []) => (
+  youthPolicy(state || {}).strictSharing
+    ? (scopes || []).filter((scope) => YOUTH_SHARE_SCOPES.includes(scope))
+    : [...(scopes || [])]
+);
 
 export async function readCoachShare(token) {
   if (typeof token !== 'string' || token.length < 40 || token.length > 120) {
@@ -49,13 +63,16 @@ export async function readCoachShare(token) {
     deviceId: null,
     createdAt: new Date(),
   });
+  // Youth-strict households stop serving health on old links too — the audit
+  // keeps the requested scopes, the snapshot carries only what is allowed now.
+  const scopes = effectiveShareScopes(document.state, share.scopes);
   return {
     household: { name: household.name },
     label: share.label,
-    scopes: share.scopes,
+    scopes,
     expiresAt: share.expiresAt,
     updatedAt: document.updatedAt,
     version: document.version,
-    data: coachSnapshot(document.state, share.scopes),
+    data: coachSnapshot(document.state, scopes),
   };
 }

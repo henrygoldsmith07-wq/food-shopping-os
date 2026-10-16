@@ -238,6 +238,16 @@ describe('waste tracking lifecycle', () => {
   it('waste rate null when no events', () => {
     expect(wasteOutcome([], [], []).wasteRate).toBe(null);
   });
+  it('counts cooked meals as consumption evidence, so cooks see a rate', () => {
+    const waste = [{ name: 'Milk', cost: 1, cat: 'Fresh' }];
+    const events = [
+      { type: 'recipe_consumption', enabled: true },
+      { type: 'recipe_consumption', enabled: false },
+    ];
+    const out = wasteOutcome([], waste, events);
+    expect(out.totalConsumedEvents).toBe(2);
+    expect(out.wasteRate).toBeCloseTo(33.3, 1);
+  });
 });
 
 // ---------- plan-outcome tracking ----------

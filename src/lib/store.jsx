@@ -26,14 +26,14 @@ import {
 import { startCloudRetryLoop } from './cloud-retry.js';
 import { platformUnlockAvailable } from './health-vault.js';
 import {
-  applyBootLifecycle, hydrate, loadStoredState, parseBackup, serialiseBackup,
+  applyBootLifecycle, hydrate, isBlockingStorageIssue, loadStoredState, parseBackup, serialiseBackup,
 } from './store-persistence.js';
 import { loadCanonicalState } from './persistence-boot.js';
 import { idbSupported } from './persistent-state.js';
 import { usePersistence } from './store-persistence-hook.js';
 import { useStoreApi } from './store-api.js';
 import { isUnderEighteen } from './youth.js';
-import { readAnalyticsConsent, setAnalyticsConsent } from './product-analytics.js';
+import { readAnalyticsConsent, setAnalyticsConsent, setDemoAnalyticsSuppressed } from './product-analytics.js';
 import { createExampleWeekState } from '../data/exampleWeek.js';
 
 export { PHOTO_LIMIT } from './health-actions.js';
@@ -87,7 +87,7 @@ export function AppProvider({ children }) {
   // a silent rollback.
   const editedSinceBoot = useRef(false);
   const [cloudStatus, setCloudStatus] = useState({ kind: 'checking', message: 'Checking cloud sync…' });
-  const blockPersistence = useRef(initial.current.issue?.kind === 'corrupt');
+  const blockPersistence = useRef(isBlockingStorageIssue(initial.current.issue));
   const cloudMeta = useRef(null);
   const cloudReady = useRef(false);
   const skipCloudPush = useRef(false);
@@ -158,7 +158,13 @@ export function AppProvider({ children }) {
     loadCanonicalState().then((result) => {
       if (cancelled) return;
       setStorage(result.storage);
-      if (result.issue) setStorageIssue(result.issue);
+      if (result.issue) {
+        setStorageIssue(result.issue);
+        // The async canonical read can surface what the synchronous first
+        // paint could not: an unreadable or newer-version record. Either way
+        // the adopted empty kitchen must never be written back over it.
+        if (isBlockingStorageIssue(result.issue)) blockPersistence.current = true;
+      }
       if (editedSinceBoot.current) return; // the user got there first
       setState(result.state);
     }, () => { /* a boot that cannot read keeps the first paint it already has */ });
@@ -438,6 +444,9 @@ export function AppProvider({ children }) {
     // back into the sandbox (or a demo state back into the real app).
     realUndoStack.current = undoHistory.current;
     undoHistory.current = [];
+    // The sandbox never counts toward analytics — suppress recording for the
+    // whole session, not per call site.
+    setDemoAnalyticsSuppressed(true);
     setDemoState(demoSession);
   }, [undoHistory]);
 
@@ -446,6 +455,7 @@ export function AppProvider({ children }) {
     undoHistory.current = realUndoStack.current ?? [];
     realUndoStack.current = null;
     undoBatch.current = null;
+    setDemoAnalyticsSuppressed(false);
     setDemoState(null);
   }, [undoHistory]);
 

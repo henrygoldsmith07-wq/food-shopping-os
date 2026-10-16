@@ -197,7 +197,7 @@ export default function WeekLoopPlan({
                 <span className="block text-[0.8125rem] font-bold truncate">{item.name}</span>
                 <span className="block text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
                   Need {item.requiredQty || item.qty || '—'}
-                  {item.pantryQty ? ` · pantry ${item.pantryQty}` : ' · pantry none'}
+                  {item.pantryQty ? ` · pantry ${item.pantryQty}` : ' · pantry: no confirmed stock'}
                   {` · buy ${item.qty || '—'}`}
                   {item.sourceRecipes?.length ? ` · for ${item.sourceRecipes.slice(0, 2).join(', ')}` : ''}
                 </span>
@@ -249,7 +249,7 @@ export default function WeekLoopPlan({
                 </div>
                 <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
                   Need {item.requiredQty || item.qty || '—'}
-                  {item.pantryQty ? ` · pantry ${item.pantryQty}` : ' · pantry none'}
+                  {item.pantryQty ? ` · pantry ${item.pantryQty}` : ' · pantry: no confirmed stock'}
                   {` · buy ${item.qty || '—'}`}
                   {item.sourceRecipes?.length ? ` · for ${item.sourceRecipes.slice(0, 2).join(', ')}` : ''}
                 </p>

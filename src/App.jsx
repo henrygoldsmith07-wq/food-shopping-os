@@ -17,6 +17,7 @@ import { downloadFile } from './lib/notify.js';
 import { haptic } from './lib/haptics.js';
 import { flushProductEvents, recordProductEvent } from './lib/product-analytics.js';
 import { pulseForq } from './lib/pulse.js';
+import { isBlockingStorageIssue } from './lib/store-persistence.js';
 
 export { SCREENS, titleFor };
 
@@ -289,7 +290,10 @@ function Shell() {
     recordProductEvent('screen_viewed', { screen: id });
     window.scrollTo({ top: 0 });
   };
-  if (app.storageIssue?.kind === 'corrupt') return <StorageRecovery />;
+  // An unreadable record — or one saved by a newer Forq — stops the app in
+  // front of the recovery screen instead of an empty kitchen the first
+  // keystroke would write back over.
+  if (isBlockingStorageIssue(app.storageIssue)) return <StorageRecovery />;
 
   // Nothing is pre-filled, so the first run asks for the little it needs.
   if (!app.onboarded) {
@@ -363,7 +367,7 @@ function Shell() {
       <TabBar tabs={tabs} active={activeTab} onNavigate={goTab} />
 
       {/* Overlays */}
-      <Sheet open={!!recipe} onClose={() => { setRecipe(null); setRecipeStartCooking(false); }} full>
+      <Sheet open={!!recipe} onClose={() => { setRecipe(null); setRecipeStartCooking(false); }} full label={recipe ? `${recipe.name}, recipe details` : undefined}>
         <Suspense fallback={<ScreenFallback />}>
           {recipe && <RecipeDetail recipe={recipe} onClose={() => { setRecipe(null); setRecipeStartCooking(false); setRecipeRecommendation(null); }} goTab={goTab} startCooking={recipeStartCooking} recommendationId={recipeRecommendation} />}
         </Suspense>

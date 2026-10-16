@@ -60,7 +60,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
         <button
           onClick={toggle}
           aria-label={`Tick ${item.name}`}
-          className={cx('press flex items-center justify-center rounded-full border-2 shrink-0', largeTouch ? 'h-10 w-10' : 'h-6 w-6')}
+          className={cx('tap press flex items-center justify-center rounded-full border-2 shrink-0', largeTouch ? 'h-10 w-10' : 'h-6 w-6')}
           style={item.checked
             ? { background: 'var(--accent)', borderColor: 'var(--accent)', color: 'var(--on-accent)' }
             : { borderColor: 'var(--line)', color: 'transparent' }}
@@ -251,7 +251,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
           onClick={() => app.toggleFavouriteShopping(item)}
           aria-label={favourite ? `Remove favourite ${item.name}` : `Save ${item.name} as favourite`}
           aria-pressed={favourite}
-          className="press p-1 shrink-0"
+          className="tap press p-1 shrink-0"
           style={{ color: favourite ? 'var(--accent)' : 'var(--faint)' }}
         >
           <Star size={15} fill={favourite ? 'currentColor' : 'none'} />
@@ -259,7 +259,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
         <button
           onClick={() => app.removeListItem(item.id)}
           aria-label={`Remove ${item.name}`}
-          className="press p-1 shrink-0"
+          className="tap press p-1 shrink-0"
           style={{ color: 'var(--faint)' }}
         >
           <Trash2 size={15} />

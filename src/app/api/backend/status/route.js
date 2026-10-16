@@ -9,6 +9,7 @@ const integrationStatus = () => {
   const redis = Boolean(databaseConfigured);
   const openData = openDataStatus();
   const serverAvailable = Boolean(databaseConfigured && auth.secret);
+  const coachShares = serverAvailable && process.env.FORQ_COACH_SHARES_ENABLED === 'true';
   return {
     google: auth.google,
     apple: auth.apple,
@@ -33,6 +34,13 @@ const integrationStatus = () => {
       detail: !serverAvailable
         ? 'Requires backend sign-in'
         : openData.openPrices ? 'Community observations; not live retailer quotes' : 'Disabled by configuration',
+    },
+    coachShares: {
+      label: 'Coach-share links',
+      ready: coachShares,
+      detail: !serverAvailable
+        ? 'Requires backend sign-in'
+        : coachShares ? 'Read-only, expiring, revocable' : 'Disabled by configuration (FORQ_COACH_SHARES_ENABLED)',
     },
   };
 };

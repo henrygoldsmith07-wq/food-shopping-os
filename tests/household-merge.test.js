@@ -310,6 +310,23 @@ describe('mergeSharedState: real concurrent edits', () => {
     // ...and returns null when the copies already agree.
     expect(adoptRemoteSharedState(remote, remote, snapshot)).toBeNull();
   });
+
+  it('drops a __proto__ key from either side instead of polluting the prototype', () => {
+    const base = household({});
+    const snapshot = baseStateSnapshot(base, 3);
+    const poisoned = JSON.parse('{"__proto__":{"polluted":true},"weeklyBudget":60}');
+    const { state } = mergeSharedState(household({}), household(poisoned), snapshot);
+    expect(Object.prototype.hasOwnProperty.call(state, '__proto__')).toBe(false);
+    expect({}.polluted).toBeUndefined();
+    expect(state.weeklyBudget).toBe(60); // legitimate fields still merge
+    const logged = mergeSharedState(
+      household({}),
+      household({ log: JSON.parse('{"__proto__":[{"id":"e1"}]}') }),
+      snapshot,
+    );
+    expect(Object.prototype.hasOwnProperty.call(logged.state.log || {}, '__proto__')).toBe(false);
+    expect({}.polluted).toBeUndefined();
+  });
 });
 
 describe('resolving merged conflicts through the real actions', () => {

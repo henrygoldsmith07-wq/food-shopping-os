@@ -36,6 +36,12 @@ export default function SettingsPanel() {
 
   /** Your data, as the JSON it is stored as — yours to keep or move. */
   const exportData = () => {
+    // The demo kitchen is never saved, so there is nothing to back up from
+    // it — say so instead of handing over example data as forq-<day>.json.
+    if (app.isDemoMode) {
+      setDataStatus('This is the demo kitchen, which is never saved. Exit the demo to back up your own data.');
+      return;
+    }
     const blob = new Blob([app.exportData()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

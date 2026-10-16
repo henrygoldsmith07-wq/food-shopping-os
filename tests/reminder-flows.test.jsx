@@ -19,8 +19,15 @@ const dialogFor = (title) => {
 
 const openReminders = () => {
   openProfile();
-  const section = screen.getByText('Health & training').closest('section');
-  fireEvent.click(within(section).getByText('Reminders'));
+  // Reminders has its own section (ProfileTab "Reminders"); older builds kept
+  // the card inside "Health & training". Prefer the dedicated section heading.
+  const heading = screen.queryAllByText('Reminders').find((el) => el.tagName === 'H2')
+    || screen.getByText('Health & training');
+  const section = heading.closest('section');
+  // The card title is a <p> inside [role="button"]; the <h2> is the section title.
+  const cardTitle = within(section).getAllByText('Reminders').find((el) => el.tagName !== 'H2');
+  const card = cardTitle.closest('[role="button"]') || cardTitle;
+  fireEvent.click(card);
   return dialogFor('Reminders');
 };
 

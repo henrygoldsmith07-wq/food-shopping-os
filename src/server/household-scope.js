@@ -87,8 +87,15 @@ export const mergePermittedState = (
 ) => {
   const next = { ...current, ...incoming };
   for (const [field, permission] of Object.entries(FIELD_PERMISSION)) {
-    if ((!has(permissions, permission) || preservePermissions.includes(permission)) && field in current) {
-      next[field] = current[field];
+    if (!has(permissions, permission) || preservePermissions.includes(permission)) {
+      if (field in current) {
+        next[field] = current[field];
+      } else {
+        // Deny by default: on a document with no agreed value yet (first
+        // write), a member without the permission must not seed one — there
+        // is nothing to revert to, so the incoming value is dropped instead.
+        delete next[field];
+      }
     }
   }
   return next;

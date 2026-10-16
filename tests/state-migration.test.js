@@ -266,6 +266,11 @@ describe('migrating a saved install', () => {
       expect(isFutureVersion({ schemaVersion: 'nonsense' })).toBe(false);
     });
 
+    it('refuses a demo-kitchen backup instead of adopting example data', () => {
+      const demoBackup = serialiseBackup({ ...V4_INSTALL, isDemoSession: true });
+      expect(() => parseBackup(demoBackup)).toThrow(/demo kitchen/i);
+    });
+
     it('uses the same hydration path for a backup import as for a normal load', () => {
       // One path, one set of repairs. An import that skipped them would quietly
       // differ from a restore from storage.

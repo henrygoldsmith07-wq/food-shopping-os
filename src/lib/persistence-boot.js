@@ -109,11 +109,12 @@ export const loadCanonicalState = async () => {
     }
     // A record from a newer Forq is read, never rewritten. It comes back as an
     // empty kitchen with a recovery screen in front of it, and the record
-    // itself is left exactly as it was found.
+    // itself is left exactly as it was found. The raw text rides along so
+    // the owner can carry it to the newer version.
     if (isFutureVersion(record.state)) {
       return {
         state: { ...EMPTY_STATE },
-        issue: futureVersionIssue(record.state.schemaVersion),
+        issue: { ...futureVersionIssue(record.state.schemaVersion), raw: safeStringify(record.state) },
         storage: 'indexedDB',
         migrated: false,
       };

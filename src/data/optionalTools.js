@@ -31,7 +31,7 @@ export const OPTIONAL_TOOLS = [
   tool(
     'assistant',
     'Food coach (AI)',
-    'Ask questions about your plan, pantry and diary. Optional — the app works without it.',
+    'Server-backed AI relay for plan, pantry and diary questions. Per-session consent inside Ask, household monthly budget applies, never health data, never under 18. Local Ask answers on-device without this.',
     'insights',
   ),
   tool(

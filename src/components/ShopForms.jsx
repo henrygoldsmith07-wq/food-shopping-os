@@ -130,7 +130,7 @@ export function AddItem({ onAdd }) {
           <textarea
             value={pasted}
             onChange={(event) => setPasted(event.target.value)}
-            placeholder="One item per line, e.g.\n2 pints of milk\n6 eggs\nBread"
+            placeholder="One item per line, e.g.\n2 pints of milk\n6 eggs\nBread — paste a list copied from Mealime, AnyList, Notes or a printed page"
             aria-label="Paste your shopping list"
             rows={5}
             className="w-full rounded-xl border p-2.5 text-[0.8125rem] font-semibold outline-none"
@@ -145,7 +145,7 @@ export function AddItem({ onAdd }) {
             Add {parsePastedList(pasted).length || ''} items to the list
           </button>
           <p className="text-[0.65625rem] font-semibold" style={{ color: 'var(--faint)' }}>
-            Quantities like “2 pints of milk” or “6 eggs” are picked up; everything else stays as written and can be edited after.
+            Quantities like “2 pints of milk” or “6 eggs” are picked up; category headers and tick boxes are skipped; everything else stays as written and can be edited after. Switching from Mealime? It offers no export — copy the printed list (or your staples) and paste it here.
           </p>
         </div>
       )}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   changedStateFields, mergePermittedState, scopeHouseholdState,
 } from '../src/server/household-scope.js';
+import { clampInvitationGrant } from '../src/app/api/households/invitations/route.js';
 import { coachSnapshot } from '../src/server/coach-shares.js';
 import { busyFromIcs, busyMealDates, parseIcsEvents } from '../src/lib/calendar.js';
 import { buildPlan } from '../src/lib/planner.js';
@@ -55,6 +56,46 @@ describe('household permission boundaries', () => {
       log: state.log,
       glucose: state.glucose,
     });
+  });
+
+  it('drops restricted fields on first write instead of seeding them', () => {
+    // A member without the permission writes the first household document:
+    // health fields they send must not become the household's agreed values.
+    const incoming = { name: 'Sam', shoppingList: [{ id: 'i1', name: 'Milk' }], log: { mood: 'x' }, glucose: [{ value: 9 }] };
+    const next = mergePermittedState({}, incoming, ['shopping'], []);
+    expect(next.shoppingList).toEqual(incoming.shoppingList);
+    expect(next).not.toHaveProperty('log');
+    expect(next).not.toHaveProperty('glucose');
+  });
+
+  it('still seeds unrestricted fields on first write', () => {
+    const incoming = { name: 'Sam', shoppingList: [{ id: 'i1', name: 'Milk' }] };
+    expect(mergePermittedState({}, incoming, ['shopping'], [])).toMatchObject({
+      shoppingList: incoming.shoppingList,
+    });
+  });
+});
+
+describe('invitation permission boundaries', () => {
+  it('never grants access the inviter does not hold', () => {
+    expect(clampInvitationGrant(
+      { role: 'admin', permissions: ['shopping', 'pantry'] }, 'adult', ['shopping', 'pantry', 'health'],
+    )).toEqual(['shopping', 'pantry']);
+  });
+
+  it('lets owners grant anything, but never health to a child profile', () => {
+    expect(clampInvitationGrant(
+      { role: 'owner', permissions: [] }, 'adult', ['shopping', 'health'],
+    )).toEqual(['shopping', 'health']);
+    expect(clampInvitationGrant(
+      { role: 'owner', permissions: [] }, 'child', ['shopping', 'pantry', 'recipes', 'health'],
+    )).toEqual(['shopping', 'pantry', 'recipes']);
+  });
+
+  it('dedupes and drops nothing it should keep', () => {
+    expect(clampInvitationGrant(
+      { role: 'admin', permissions: ['shopping', 'health'] }, 'adult', ['health', 'health', 'shopping'],
+    )).toEqual(['health', 'shopping']);
   });
 });
 

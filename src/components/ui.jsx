@@ -233,13 +233,22 @@ export const Empty = ({ Icon, title, children, action, onAction, note }) => (
 );
 /* ---------- Data viz ---------- */
 
-/** Circular progress ring with centred label. */
+/** Circular progress ring with centred label. Exposes progressbar semantics so
+    screen readers announce the value, not just the painted text. */
 export const Ring = ({ value, max, size = 72, stroke = 7, color = 'var(--accent)', label, sub }) => {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const pct = clamp(max ? value / max : 0, 0, 1);
   return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+    <div
+      className="relative inline-flex items-center justify-center"
+      style={{ width: size, height: size }}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={Math.max(0, Math.round(max || 0))}
+      aria-valuenow={Math.round(clamp(value || 0, 0, max || 0))}
+      aria-valuetext={label != null ? `${label}${sub ? ` ${sub}` : ''}` : undefined}
+    >
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
         <circle
@@ -307,9 +316,18 @@ export const Bars = ({ data, height = 96, color = 'var(--series-1)', highlight, 
   );
 };
 
-/** Thin horizontal progress bar. */
-export const Meter = ({ value, max, color = 'var(--accent)', height = 6 }) => (
-  <div className="w-full rounded-full overflow-hidden" style={{ background: 'var(--line)', height }}>
+/** Thin horizontal progress bar. Exposes progressbar semantics; pass `label`
+    wherever the surrounding text does not already name what is measured. */
+export const Meter = ({ value, max, color = 'var(--accent)', height = 6, label }) => (
+  <div
+    className="w-full rounded-full overflow-hidden"
+    style={{ background: 'var(--line)', height }}
+    role="progressbar"
+    aria-valuemin={0}
+    aria-valuemax={Math.max(0, Math.round(max || 0))}
+    aria-valuenow={Math.round(clamp(value || 0, 0, max || 0))}
+    aria-label={label}
+  >
     <div
       className="h-full rounded-full"
       style={{
@@ -332,9 +350,9 @@ export { default as Sheet } from './Sheet.jsx';
 
 export const Stepper = ({ value, onChange, min = 1, max = 12 }) => (
   <div className="inline-flex items-center gap-3 rounded-full border px-2 py-1" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
-    <button className="press h-7 w-7 rounded-full font-bold" style={{ background: 'var(--card-2)' }} onClick={() => onChange(Math.max(min, value - 1))} aria-label="Decrease">−</button>
+    <button className="tap press h-7 w-7 rounded-full font-bold" style={{ background: 'var(--card-2)' }} onClick={() => onChange(Math.max(min, value - 1))} aria-label="Decrease">−</button>
     <span className="w-5 text-center font-extrabold text-[0.9375rem]">{value}</span>
-    <button className="press h-7 w-7 rounded-full font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent-deep)' }} onClick={() => onChange(Math.min(max, value + 1))} aria-label="Increase">+</button>
+    <button className="tap press h-7 w-7 rounded-full font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent-deep)' }} onClick={() => onChange(Math.min(max, value + 1))} aria-label="Increase">+</button>
   </div>
 );
 

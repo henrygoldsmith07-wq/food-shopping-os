@@ -1,12 +1,16 @@
 /**
  * Turn a pasted shopping list into list rows.
  *
- * People already keep lists — in Notes, in Messages, on paper they photographed.
+ * People already keep lists — in Notes, in Messages, on paper they photographed,
+ * or copied from a printed grocery list when switching apps (Mealime offers no
+ * export, so its lists only leave as copied or printed text, grouped under
+ * category headers).
  * Retyping them item by item is exactly the kind of chore that makes an app get
  * abandoned, so the add-item form accepts a whole list at once. The parser is
  * deliberately narrow: it handles the shapes people actually write and leaves
  * everything else as the item's name, because a wrong guess is worse than an
- * unguessable line. Quantity-deduping against what's already on the list is the
+ * unguessable line. Category headers and checkbox marks are skipped, never
+ * added as items. Quantity-deduping against what's already on the list is the
  * store's job (addToList), not the parser's.
  */
 
@@ -21,7 +25,14 @@ const qtyWithUnit = (number, unit) => `${number} ${unit}`;
 const line = (raw) => {
   let text = String(raw || '').trim();
   if (!text) return null;
+  // A copied printed or shared grocery list groups items under category
+  // headers ("Produce:", "Dairy & Eggs:"). A header names no food, so it is
+  // skipped rather than added as an item called "Produce". A line with a
+  // quantity after the colon ("Bread: 1 loaf") is an item, not a header.
+  if (/:\s*$/.test(text)) return null;
   text = text.replace(/^[-•*–—•▪◦>]+\s*/, '').replace(/\s+/g, ' ');
+  // Shared-list checkboxes ("[ ] Milk", "[x] Eggs") mark state, not food.
+  text = text.replace(/^(\[[ xX]\]|\(\s*\))\s*/, '');
   if (text.length < 2) return null;
 
   // "2x milk" / "2 x milk"

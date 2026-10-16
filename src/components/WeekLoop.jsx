@@ -112,6 +112,9 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
       total,
       toPantry,
       location: 'Cupboard',
+      // Scope the record to exactly the rows ticked here — the same verb as
+      // the Shop tab's finish flow, which scopes by itemIds too.
+      itemIds: bought.map((i) => i.id),
     });
     setStatus(toPantry
       ? `${bought.length} items recorded and added to the pantry.`
@@ -258,6 +261,16 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
                           {item.qty && (
                             <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>{item.qty}</span>
                           )}
+                          {/* Same arithmetic as the list step and the Shop tab:
+                              the trust moment is in-aisle, so the evidence
+                              rides along — required, pantry cover, buy. */}
+                          {item.requiredQty && (
+                            <span className="block text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                              Need {item.requiredQty}
+                              {item.pantryQty ? ` · pantry ${item.pantryQty}` : ' · pantry: no confirmed stock'}
+                              {` · buy ${item.qty || '—'}`}
+                            </span>
+                          )}
                         </span>
                       </button>
                     ))}
@@ -384,7 +397,7 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
                           {item.expiry ? ` · best by ${item.expiry}` : ''}
                         </p>
                         <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-                          Source: saved leftover{item.cookedDate ? ` · cooked ${item.cookedDate}` : item.addedAt ? ` · saved ${item.addedAt}` : ''}{item.recipeId ? ` · ${item.recipeId}` : ''} · next list skips covered meals.
+                          Source: saved leftover{item.addedAt ? ` · saved ${item.addedAt}` : ''} · next list skips covered meals.
                         </p>
                       </div>
                       {item.recipeId && (

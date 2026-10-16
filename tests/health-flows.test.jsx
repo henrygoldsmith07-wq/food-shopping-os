@@ -25,13 +25,27 @@ const onboard = ({ cycle = false, stats = null } = {}) => {
 };
 
 const dialogFor = (title) => {
-  const dialog = [...document.querySelectorAll('[role="dialog"]')]
-    .find((d) => d.querySelector('h2')?.textContent === title);
+  const visible = [...document.querySelectorAll('[role="dialog"]')]
+    .filter((d) => d.getAttribute('aria-hidden') !== 'true')
+    .filter((d) => d.querySelector('h2')?.textContent === title);
+  // Sheets linger in the DOM for their 200ms close animation (marked
+  // aria-hidden); the live one is the last match, never a closing one.
+  const dialog = visible.at(-1);
   if (!dialog) throw new Error(`No open sheet titled "${title}"`);
   return dialog;
 };
 
+/** Close any open sheet so the next surface opens unstacked. */
+const closeSheets = () => {
+  for (const button of [...document.querySelectorAll('[role="dialog"]:not([aria-hidden="true"]) [aria-label="Close"]')]) {
+    fireEvent.click(button);
+  }
+};
+
 const enableTools = async (...labels) => {
+  // Wedge opt-in, the way a user does it: Guidance → Tools → Add tools.
+  // Any open sheet is closed first so Guidance opens as the top surface.
+  closeSheets();
   fireEvent.click(screen.getByRole('button', { name: 'Guidance — what matters now' }));
   const guidance = dialogFor('Guidance');
   fireEvent.click(within(guidance).getByText('Tools'));
@@ -42,22 +56,32 @@ const enableTools = async (...labels) => {
     });
     if (toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
+  // Every requested tool ends ON — a toggle that doesn't stick is a product
+  // bug, not a passing test.
+  for (const label of labels) {
+    const toggle = await within(guidance).findByRole('switch', {
+      name: new RegExp(`Disable ${label}`),
+    });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+  }
   fireEvent.click(within(guidance).getByLabelText('Close'));
+  closeSheets();
 };
 
 const openCard = async (name, title) => {
+  // Health surfaces are parked behind Add tools: opt in explicitly before
+  // opening the card, unless the card is already visible.
+  // Cycle is excluded here: enabling it flips the Health card to
+  // "Weight, vitals, sleep, cycle" and breaks non-cycle assertions.
+  // Cycle tests already opt in via onboarding (trackCycle), which enables
+  // the cycle tool with it.
   openProfile();
-  let section = screen.queryByText('Health & training')?.closest('section');
-  if (!section || !within(section).queryByText(name)) {
-    // Health surfaces are parked: opt in the way a user does.
-    // Cycle is excluded here: enabling it flips the Health card to
-    // "Weight, vitals, sleep, cycle" and breaks non-cycle assertions.
-    // Cycle tests already opt in via onboarding (trackCycle).
-    fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
+  const visible = screen.queryByText('Health & training')?.closest('section');
+  if (!visible || !within(visible).queryByText(name)) {
     await enableTools('Health vault and body log', 'Exercise log', 'Blood results', 'Fasting windows');
     openProfile();
-    section = screen.getByText('Health & training').closest('section');
   }
+  const section = screen.getByText('Health & training').closest('section');
   fireEvent.click(within(section).getByText(name));
   return dialogFor(title);
 };

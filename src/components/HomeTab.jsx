@@ -11,6 +11,8 @@ import { bestForSlot } from '../lib/recommend.js';
 import { weeklyFoodLoop } from '../lib/food-loop.js';
 import { nextAction } from '../lib/next-action.js';
 import { weekManager } from '../lib/week-manager.js';
+import { runDecision } from '../lib/food-intelligence.js';
+import { DecisionStack } from './DecisionCard.jsx';
 import { Section, Card, FoodArt } from './ui.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
@@ -151,6 +153,34 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [app.wastePrediction, app.plan, app.shoppingList, app.weekRecovery, app.day, app.loopChecks, app.guidance]);
 
+  // 2.5 — The unified Food Intelligence stack (lib/food-intelligence.js):
+  // the same engines that rank the lead and the exceptions, composed into
+  // one ranked list of decisions. The lead stays the next-action card;
+  // the stack carries what else is worth deciding, each with its reason,
+  // evidence and impact. Learning changes stay on the Adaptations card and
+  // week repairs on the recovery preview — one fact, one surface.
+  const [dismissedDecisions, setDismissedDecisions] = useState([]);
+  const stackDecisions = useMemo(() => ((app.foodIntelligence?.decisions) || [])
+    .filter((row) => row.id !== leading?.id)
+    .filter((row) => !row.id.startsWith('adapt:'))
+    .filter((row) => row.id !== 'repair-week')
+    .filter((row) => !dismissedDecisions.includes(row.id))
+    .slice(0, 3), [app.foodIntelligence, leading, dismissedDecisions]);
+  const runDecisionNow = (row) => {
+    runDecision(row, { goTab, openPantry, openWeekLoop: onOpenWeekLoop, openGuidance });
+  };
+  const runDecisionAlternative = (row) => runDecisionNow({ ...row, action: row.alternative || row.action });
+  // "Not now" is a real answer and a logged one: a rejected recommendation
+  // is how the household teaches Forq what not to lead with again.
+  const dismissDecision = (row) => {
+    app.respondToRecommendation?.({
+      recommendationId: row.recommendationId || row.id,
+      accepted: false,
+      context: { source: 'home-decision', kind: row.kind },
+    });
+    setDismissedDecisions((current) => [...current, row.id]);
+  };
+
   return (
     <div className="pb-6 space-y-6">
       {/* 1 — One next action. The ranking lives in lib/next-action.js so a
@@ -271,6 +301,18 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </Card>
       </section>
 
+      {/* 2.5 — Worth deciding: ranked decisions from the unified Food
+          Intelligence layer. Each names what to do, why, the evidence, and
+          the benefit — and "Not now" is logged so a passed-on decision
+          teaches Forq as much as an accepted one. Quiet when there is
+          nothing worth deciding. */}
+      <DecisionStack
+        decisions={stackDecisions}
+        onDo={runDecisionNow}
+        onAlternative={runDecisionAlternative}
+        onDismiss={dismissDecision}
+      />
+
       {/* Today's planned slots, compact */}
       <Section title="Today’s meals" action="Full plan →" onAction={() => goTab('plan')} className="rise rise-2">
         <div className="space-y-2.5">
@@ -357,8 +399,8 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
               <p className="mt-0.5 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
                 {app.starterRecipeIds.length} dinner{app.starterRecipeIds.length === 1 ? '' : 's'} planned and one shopping list created.
               </p>
-              <button onClick={() => goTab('plan')} className="tap press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}>
-                View your plan →
+              <button onClick={() => onOpenWeekLoop?.()} className="tap press mt-2 text-[0.78125rem] font-extrabold" style={{ color: 'var(--accent)' }}>
+                Run the week loop →
               </button>
             </div>
             <button onClick={app.dismissWelcome} className="tap press text-[0.71875rem] font-bold" style={{ color: 'var(--muted)' }}>

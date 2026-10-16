@@ -11,7 +11,7 @@ import { cx } from '../lib/utils.js';
  * (tests/invariants.test.js); the public surface is unchanged and re-exported
  * from ui.jsx, so importers need no new path.
  */
-export default function Sheet({ open, onClose, children, full = false, title }) {
+export default function Sheet({ open, onClose, children, full = false, title, label }) {
   const [render, setRender] = useState(open);
   const [dragY, setDragY] = useState(0);
   const panel = useRef(null);
@@ -75,7 +75,7 @@ export default function Sheet({ open, onClose, children, full = false, title }) 
         aria-modal="true"
         aria-hidden={open ? undefined : true}
         aria-labelledby={title ? titleId : undefined}
-        aria-label={title ? undefined : 'Dialog'}
+        aria-label={title ? undefined : (label || 'Dialog')}
         tabIndex={-1}
         className={cx('sheet-up relative w-full max-w-lg flex flex-col', full ? 'h-full' : 'max-h-[92%] rounded-t-3xl')}
         style={{

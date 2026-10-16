@@ -40,8 +40,9 @@ const MODULE_OF = {
 const reachable = (app, key) => {
   const owner = MODULE_OF[key];
   if (owner && app.moduleOn && !app.moduleOn(owner)) return false;
-  // Parked tools stay out of the palette until enabled in Add tools.
-  if (key === 'assistant' && app.hasTool && !app.hasTool('assistant')) return false;
+  // Ask Forq answers on-device from pantry, diary, plan and shopping history
+  // (lib/ai-assistant.js) — nothing leaves the browser — so it stays in the
+  // palette. The `assistant` optional tool gates server-backed AI relay only.
   if ((key === 'add-food' || key === 'barcode' || key === 'food') && app.hasTool) {
     // Food diary entry itself is core; barcode scan stays core. No gate.
   }

@@ -39,18 +39,27 @@ export const firstSessionPlan = ({ day, recipes = [], pickedRecipeIds = [], hous
           id: `starter-${slug || shoppingByIngredient.size + 1}`,
           name,
           qty,
+          // First list, full evidence from the start: the need equals the
+          // buy — the pantry has never been seen, so no deduction is
+          // claimed and the row reads "no confirmed stock", never "none".
+          requiredQty: qty,
+          pantryQty: '',
           fromRecipe: recipe.name,
           sourceRecipes: [recipe.name],
+          explanation: `Planned for ${recipe.name}; pantry not checked at setup.`,
           autoListed: true,
         });
         continue;
       }
+      const mergedSources = existing.sourceRecipes.includes(recipe.name)
+        ? existing.sourceRecipes
+        : [...existing.sourceRecipes, recipe.name];
       shoppingByIngredient.set(key, {
         ...existing,
         qty: mergeQtys(existing.qty, qty, { ingredient: key }),
-        sourceRecipes: existing.sourceRecipes.includes(recipe.name)
-          ? existing.sourceRecipes
-          : [...existing.sourceRecipes, recipe.name],
+        requiredQty: mergeQtys(existing.requiredQty || existing.qty, qty, { ingredient: key }),
+        sourceRecipes: mergedSources,
+        explanation: `Planned for ${mergedSources.join(' and ')}; pantry not checked at setup.`,
       });
     }
   }

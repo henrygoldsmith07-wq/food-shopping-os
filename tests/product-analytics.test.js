@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANALYTICS_QUEUE_KEY, flushProductEvents, queuedProductEventCount, readAnalyticsConsent,
-  recordProductEvent, setAnalyticsConsent,
+  recordProductEvent, setAnalyticsConsent, setDemoAnalyticsSuppressed,
 } from '../src/lib/product-analytics.js';
 
 describe('privacy-safe product analytics', () => {
@@ -61,5 +61,18 @@ describe('privacy-safe product analytics', () => {
     setAnalyticsConsent(false);
     expect(queuedProductEventCount()).toBe(0);
     expect(readAnalyticsConsent()).toBe(false);
+  });
+
+  it('never records while a demo session is open, consent or not', () => {
+    setAnalyticsConsent(true);
+    setDemoAnalyticsSuppressed(true);
+    try {
+      expect(recordProductEvent('app_opened')).toBe(false);
+      expect(queuedProductEventCount()).toBe(0);
+    } finally {
+      setDemoAnalyticsSuppressed(false);
+    }
+    // ...and recording resumes when the demo ends.
+    expect(recordProductEvent('app_opened')).toBe(true);
   });
 });

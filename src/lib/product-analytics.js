@@ -89,7 +89,19 @@ const safeProperties = (properties) => Object.fromEntries(
     }),
 );
 
+/**
+ * While a demo session is open, no product event may be recorded — the demo
+ * banner promises the sandbox never counts toward analytics, and demo clicks
+ * would otherwise queue against the real household id and flush on sign-in.
+ * Wired to enterDemoMode/exitDemoMode in the store; defaults to recording.
+ */
+let demoSuppressed = false;
+export const setDemoAnalyticsSuppressed = (suppressed) => {
+  demoSuppressed = Boolean(suppressed);
+};
+
 export const recordProductEvent = (name, properties = {}, at = new Date().toISOString()) => {
+  if (demoSuppressed) return false;
   if (!readAnalyticsConsent() || !PRODUCT_EVENT_NAME_SET.has(name)) return false;
   const events = [...readQueue(), {
     id: newEventId(),

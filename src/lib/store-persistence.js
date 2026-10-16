@@ -233,6 +233,12 @@ export const parseBackup = (text) => {
   if (!isObject(candidate) || typeof candidate.onboarded !== 'boolean') {
     throw new Error('This is not a complete Forq backup.');
   }
+  // A demo-kitchen export is never adoptable as real state: the sandbox's
+  // whole promise is that nothing in it is saved. Refuse loudly with the way
+  // back instead of quietly adopting example data as the household.
+  if (candidate.isDemoSession) {
+    throw new Error('This backup is from the demo kitchen, which is never saved. Exit the demo to back up your own data.');
+  }
   // A record from a newer Forq is never reinterpreted through this build's
   // hydration rules, and never rewritten. It is refused, loudly, with the
   // version that produced it — that data is still its owner's.
@@ -266,6 +272,12 @@ export const loadStoredState = () => {
   } catch (error) {
     let raw = null;
     try { raw = localStorage.getItem(STORAGE_KEY); } catch { /* storage itself is unavailable */ }
+    // A refusal with an issue attached (a newer-version record) keeps its
+    // explanation — and its raw text, so the recovery screen can hand the
+    // data back instead of only offering to overwrite it.
+    if (error?.issue) {
+      return { state: { ...EMPTY_STATE }, issue: { ...error.issue, raw: raw ?? error.issue.raw ?? null } };
+    }
     return {
       state: { ...EMPTY_STATE },
       issue: {
@@ -298,4 +310,13 @@ export const isFutureVersion = (stored) => {
   const version = Number(stored?.schemaVersion);
   return Number.isFinite(version) && version > STATE_VERSION;
 };
+
+/**
+ * Issues that must stop all writes. An unreadable record and a newer-version
+ * record are both somebody's data that this build must not overwrite — the
+ * block is the only thing standing between the empty kitchen adopted above
+ * such a record and the record itself.
+ */
+export const isBlockingStorageIssue = (issue) =>
+  issue?.kind === 'corrupt' || issue?.kind === 'future';
 

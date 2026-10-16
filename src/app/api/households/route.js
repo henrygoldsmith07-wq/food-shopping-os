@@ -11,6 +11,9 @@ import { householdSchema } from '../../../server/schemas.js';
 export async function GET() {
   try {
     const user = await requireUser();
+    // This read fans out to three collections plus a possible first-time
+    // household write — cheap per call, expensive at abusive volume.
+    await rateLimit(`households:get:${user.id}`, 120, 60000);
     await ensurePersonalHousehold(user);
     const db = await getDatabase();
     const memberships = await db.collection('memberships').find({ userId: user.id }).toArray();

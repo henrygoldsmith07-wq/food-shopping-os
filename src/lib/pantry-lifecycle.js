@@ -55,6 +55,12 @@ export const recordLifecycleEvent = (pantryItem, toState, { qty, value, note, at
  * - estimated wasted value = sum of cost for discarded states
  * - avoided waste = leftovers consumed vs expired discarded
  * - frequently discarded categories
+ *
+ * Consumption evidence is every user-confirmed Eat signal: pantry rows marked
+ * consumed (or used in a recipe) AND recipe_consumption events from cooking.
+ * Without the cooks, the loop's main Eat signal never counts and the rate
+ * stays "no data" for households that cook but never touch lifecycle
+ * transitions by hand.
  */
 export const wasteOutcome = (pantry = [], waste = [], events = []) => {
   const discarded = waste || [];
@@ -75,15 +81,17 @@ export const wasteOutcome = (pantry = [], waste = [], events = []) => {
     .map(([cat, count]) => ({ cat, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Consumed proxy: pantry items marked consumed + cooked events
-  const consumedEvents = (events || []).filter((e) => ['consumed', 'used_in_recipe', 'partially_consumed'].includes(e.to));
+  // Consumed proxy: pantry items marked consumed, lifecycle transitions, and
+  // user-confirmed cooks. A recipe_consumption event is written by every
+  // completeRecipe cook — the loop's Eat signal — so it counts even though it
+  // carries no `to` transition of its own.
+  const consumedEvents = (events || []).filter((e) => ['consumed', 'used_in_recipe', 'partially_consumed'].includes(e.to)
+    || e.type === 'recipe_consumption');
   const consumedCount = consumedEvents.length;
   const discardedCount = discarded.length;
   const total = consumedCount + discardedCount;
   const wasteRate = total ? Math.round((discardedCount / total) * 1000) / 10 : null;
 
-  const leftovers = pantry.filter((p) => p.cat === 'Leftovers');
-  const leftoverConsumed = leftovers.length ? 0 : 0; // placeholder — real count comes from events
   const avoided = consumedEvents.filter((e) => e.from === 'leftover').length;
 
   return {
@@ -96,7 +104,7 @@ export const wasteOutcome = (pantry = [], waste = [], events = []) => {
     byCategory: byCategorySorted,
     assumption: wasteRate === null
       ? 'No consumption or waste events recorded — waste rate not calculable.'
-      : `Waste rate = discarded (${discardedCount}) / (consumed ${consumedCount} + discarded ${discardedCount}) in recorded events.`,
+      : `Waste rate = discarded (${discardedCount}) / (consumed ${consumedCount} + discarded ${discardedCount}) across recorded events and cooks.`,
   };
 };
 

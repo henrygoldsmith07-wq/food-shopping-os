@@ -26,8 +26,8 @@ Three steps, in this order:
 ## Parked behind Add tools (off by default, code gated not deleted)
 
 - Live retailer scraping (`live-prices`): context only, with date, URL, source.
-- AI food coach (`assistant`): meal names, pantry items, list gaps only.
-- Coach-share links (`coach`): disabled in default build, time-limited, revocable.
+- Server-backed AI food coach relay (`assistant`): meal names, pantry items, list gaps only. Local Ask under Guidance answers on-device from your own data and needs no opt-in; the relay needs per-session consent inside Ask, shows the household budget, keeps health questions local, and is unavailable under 18.
+- Coach-share links (`coach`): parked behind the tool toggle AND the `FORQ_COACH_SHARES_ENABLED` server flag (disabled in the default build). Time-limited, revocable, audited. The panel says so when the server lacks the flag instead of showing a form that would 403 — kept parked rather than deleted because the sharing path is complete and scoped; deleting token-auth code blind would risk more than it saves.
 - Gamification (`gamification`): XP, badges, quests, streaks display.
 - Sustainability estimates (`carbon`): rough footprint factors, not certified.
 - Exercise log (`exercise`), fasting windows (`fasting`).

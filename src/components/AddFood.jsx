@@ -188,6 +188,7 @@ function CustomFoodForm({ onCreated }) {
         value={draft.name}
         onChange={(e) => field('name')(e.target.value)}
         placeholder="Name (e.g. Mum’s lasagne)"
+        aria-label="Custom food name"
         className="w-full rounded-2xl border px-4 py-3 text-[0.875rem] font-semibold outline-none"
         style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
       />
@@ -195,6 +196,7 @@ function CustomFoodForm({ onCreated }) {
         value={draft.brand}
         onChange={(e) => field('brand')(e.target.value)}
         placeholder="Brand (optional)"
+        aria-label="Brand (optional)"
         className="w-full rounded-2xl border px-4 py-3 text-[0.875rem] font-semibold outline-none"
         style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
       />

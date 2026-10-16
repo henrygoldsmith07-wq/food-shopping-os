@@ -24,12 +24,14 @@ export default function GuidancePanel({
   onOpenWeekLoop = () => onNavigate('plan'),
 }) {
   const app = useApp();
-  const hasAssistant = app.hasTool?.('assistant') ?? false;
+  // Ask runs fully on-device (lib/ai-assistant.js reads pantry, diary, plan
+  // and shopping history — nothing leaves the browser), so it is always
+  // available. The `assistant` optional tool gates server-backed AI relay only.
   const TABS = [
     ['next', 'Next', Lightbulb],
     ['review', 'Review', BarChart3],
     ['tools', 'Tools', Wrench],
-    ...(hasAssistant ? [['ask', 'Ask', MessageCircle]] : []),
+    ['ask', 'Ask', MessageCircle],
   ];
   const [view, setView] = useState(initialView);
   const [reviewMode, setReviewMode] = useState('dashboards');
@@ -137,7 +139,7 @@ export default function GuidancePanel({
 
       {view === 'ask' && (
         <Suspense fallback={<Loading />}>
-          {hasAssistant ? <AiAssistant /> : <AddToolsPanel />}
+          <AiAssistant />
         </Suspense>
       )}
     </div>

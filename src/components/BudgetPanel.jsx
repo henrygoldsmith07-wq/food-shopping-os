@@ -7,7 +7,7 @@ import { spendByMonth, weekDates } from '../lib/kitchen.js';
 import { planStats } from '../lib/mealplan.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { gbp } from '../lib/utils.js';
-import { Bars, Card, Chip, Meter, Pill, Section } from './ui.jsx';
+import { Bars, Card, Meter, Pill, Section } from './ui.jsx';
 
 const PCT_CHOICES = [5, 10, 15, 20, 25, 30, 50];
 
@@ -198,7 +198,6 @@ export default function BudgetPanel() {
                             {gbp(r.baseline, { always: true })} → {gbp(r.latest, { always: true })} median → latest{r.store ? ` · ${r.store}` : ''}{r.date ? ` · ${r.date}` : ''} · {r.provenance}
                           </p>
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            <Chip active={false} onClick={() => {}}><span className="text-[0.6875rem]">Rise {r.risePct}%</span></Chip>
                             <select
                               value={r.risePct}
                               onChange={(e) => app.setPriceAlertOverride(r.name, 'rise', Number(e.target.value))}

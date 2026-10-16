@@ -168,7 +168,7 @@ export default function ProfileTab({ openGuidance }) {
         </div>
       </Section>
 <Section title="Health & training" className="rise rise-1" hidden={!app.moduleOn('health')}>
-        {(app.hasTool?.('health-vault') || app.hasTool?.('exercise') || app.hasTool?.('fasting') || app.hasTool?.('bloods') || app.hasTool?.('cycle')) && (
+        {(app.hasTool?.('health-vault') || app.hasTool?.('exercise') || app.hasTool?.('fasting') || app.hasTool?.('bloods') || app.hasTool?.('cycle')) ? (
         <div className="grid grid-cols-2 gap-2.5">
           <Card onClick={() => setHealthOpen(true)}>
             <HeartPulse size={17} style={{ color: 'var(--muted)' }} />
@@ -189,8 +189,16 @@ export default function ProfileTab({ openGuidance }) {
             </p>
           </Card>
         </div>
+        ) : (
+        <Card>
+          <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+            Health, exercise, fasting and cycle tracking are optional tools — add them under Guidance → Tools → Add tools. Nothing here is required for the plan → shop → waste loop.
+          </p>
+        </Card>
         )}
-        <Card className="mt-2.5" onClick={() => setRemindersOpen(true)}>
+      </Section>
+<Section title="Reminders" className="rise rise-1" hidden={!app.moduleOn('reminders')}>
+        <Card onClick={() => setRemindersOpen(true)}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="font-extrabold text-[0.90625rem]">Reminders</p>
