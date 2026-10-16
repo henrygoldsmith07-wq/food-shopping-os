@@ -399,13 +399,9 @@ export const deriveApp = (state) => {
       }
       catch { return null; }
     }),
-    /* ---- Unified Food Intelligence: the ranked decision stack ----
-       The engines above stay authoritative; this composes them (next-action
-       for the lead, the week manager for exceptions, the waste predictor
-       for prevention, the adaptation collector for learning) into one
-       ranked list of decisions — lib/food-intelligence.js. Memoized per
-       state like the other heavy derivations, and defensive: one failing
-       engine must never break Home. */
+    /* ---- Food intelligence: the engines above composed into one ranked
+       decision stack (lib/food-intelligence.js). One failing engine must
+       never break Home. */
     get foodIntelligence() {
       return memoIntelligence(state, 'foodIntelligence', () => {
         try {

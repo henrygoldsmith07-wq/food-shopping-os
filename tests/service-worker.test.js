@@ -18,6 +18,12 @@ const swSource = readFileSync(
   'utf8',
 );
 
+// Cache names follow the worker's own VERSION, so bumping it to ship a new
+// shell does not need a matching edit here.
+const VERSION_NUMBER = Number(/const VERSION = 'v(\d+)'/.exec(swSource)[1]);
+const CURRENT = `v${VERSION_NUMBER}`;
+const PREVIOUS = `v${VERSION_NUMBER - 1}`;
+
 const ORIGIN = 'https://forq.test';
 const keyOf = (request) => {
   const raw = typeof request === 'string' ? request : request.url;
@@ -150,25 +156,25 @@ describe('service worker caching is explicit and safe', () => {
   it('precaches the offline shell only', async () => {
     await install();
     const names = await worker.caches.keys();
-    expect(names).toEqual(['forq-shell-v6']);
+    expect(names).toEqual([`forq-shell-${CURRENT}`]);
     const shell = await worker.caches.open(names[0]);
     expect((await shell.keys()).map((k) => k.url)).toContain('https://forq.test/');
   });
 
   it('removes obsolete caches on activation and keeps the current versions', async () => {
-    await worker.caches.open('forq-shell-v5');
-    await worker.caches.open('forq-assets-v5');
-    await worker.caches.open('forq-shell-v6');
+    await worker.caches.open(`forq-shell-${PREVIOUS}`);
+    await worker.caches.open(`forq-assets-${PREVIOUS}`);
+    await worker.caches.open(`forq-shell-${CURRENT}`);
     worker.run('activate', makeRequest('/sw.js'));
     await worker.settle();
-    // v5 caches are gone; the current shell survives and assets start empty.
+    // Previous-version caches are gone; the current shell survives and assets start empty.
     const names = await worker.caches.keys();
-    expect(names).toEqual(['forq-shell-v6']);
+    expect(names).toEqual([`forq-shell-${CURRENT}`]);
     // An assets cache still in use (created by a runtime write) also survives.
-    await worker.caches.open('forq-assets-v6');
+    await worker.caches.open(`forq-assets-${CURRENT}`);
     worker.run('activate', makeRequest('/sw.js'));
     await worker.settle();
-    expect((await worker.caches.keys()).sort()).toEqual(['forq-assets-v6', 'forq-shell-v6']);
+    expect((await worker.caches.keys()).sort()).toEqual([`forq-assets-${CURRENT}`, `forq-shell-${CURRENT}`]);
   });
 
   it('never runtime-caches /api/* and never falls back to / HTML when offline', async () => {
@@ -228,7 +234,7 @@ describe('service worker caching is explicit and safe', () => {
     );
     await responded;
     await worker.settle();
-    const cache = await worker.caches.open('forq-assets-v6');
+    const cache = await worker.caches.open(`forq-assets-${CURRENT}`);
     expect(await cache.match('https://forq.test/logo.svg')).toBe(undefined);
   });
 
@@ -263,7 +269,7 @@ describe('service worker caching is explicit and safe', () => {
     worker.run('install', makeRequest('/sw.js'));
     await worker.settle();
     // Empty the shell cache to simulate a broken install.
-    (await worker.caches.open('forq-shell-v6')).store.clear();
+    (await worker.caches.open(`forq-shell-${CURRENT}`)).store.clear();
     const { responded } = worker.run('fetch', makeRequest('/plan', { mode: 'navigate' }), {
       network: () => Promise.reject(new Error('offline')),
     });
@@ -278,7 +284,7 @@ describe('service worker caching is explicit and safe', () => {
     });
     await responded;
     await worker.settle();
-    const cache = await worker.caches.open('forq-assets-v6');
+    const cache = await worker.caches.open(`forq-assets-${CURRENT}`);
     expect(await cache.match('https://forq.test/readiness-report.json')).toBe(undefined);
   });
 
@@ -291,7 +297,7 @@ describe('service worker caching is explicit and safe', () => {
       await responded;
       await worker.settle();
     }
-    const cache = await worker.caches.open('forq-assets-v6');
+    const cache = await worker.caches.open(`forq-assets-${CURRENT}`);
     const keys = await cache.keys();
     expect(keys.length).toBeLessThanOrEqual(80);
   });
