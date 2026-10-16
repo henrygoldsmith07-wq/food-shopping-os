@@ -40,6 +40,11 @@ export const prettyDate = (stamp) =>
   (stamp ? new Date(`${stamp}T12:00:00`) : new Date())
     .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
+/** A compact date for rows and checklists: "Fri 16 Oct". */
+export const shortDate = (stamp) =>
+  (stamp ? new Date(`${stamp}T12:00:00`) : new Date())
+    .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
 export const greeting = () => {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';

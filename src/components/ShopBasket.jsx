@@ -143,7 +143,8 @@ export default function ShopBasket({
             {isOnline ? <Check size={12} /> : <CloudOff size={12} />}
             {offlineMode
               ? 'Offline shopping mode · the list and aisle route stay available locally.'
-              : isOnline ? 'Online · changes save locally and sync when available.' : 'Offline · changes save locally; sync resumes when you reconnect.'}
+              : ['disabled', 'signed-out'].includes(app.cloudStatus?.kind || 'disabled') ? 'Saved on this device as you tick.'
+                : isOnline ? 'Online · changes save locally and sync when available.' : 'Offline · changes save locally; sync resumes when you reconnect.'}
           </p>
         )}
 

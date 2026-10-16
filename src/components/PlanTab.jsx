@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, ClipboardList, Info, Move, ShoppingCart, Snowflake, Sparkles, X } from 'lucide-react';
-import { gbp } from '../lib/utils.js';
+import { gbp, shortDate } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS } from '../data/plan.js';
@@ -343,7 +343,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
                   <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {item.portions} portion{item.portions === 1 ? '' : 's'} · best by {item.expiry}
+                    {item.portions} portion{item.portions === 1 ? '' : 's'} · best by {shortDate(item.expiry)}
                   </p>
                 </div>
                 <button

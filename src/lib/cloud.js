@@ -117,7 +117,7 @@ const request = async (url, options = {}) => {
 export async function initialiseCloud(localState) {
   try {
     const status = await request('/api/backend/status');
-    if (!status.enabled) return { status: { kind: 'disabled', message: 'Add backend environment variables to enable cloud sync.' } };
+    if (!status.enabled) return { status: { kind: 'disabled', message: 'Saved on this device. Cloud sync is not available on this server.' } };
     if (!status.authenticated) return { status: { kind: 'signed-out', message: 'Sign in to sync this device.' } };
     const saved = readMeta();
     const remote = await request('/api/sync', {

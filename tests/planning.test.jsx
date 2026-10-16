@@ -460,7 +460,7 @@ describe('cooking for a family', () => {
 
     // Robin is vegetarian, so every plan for the table now is.
     fireEvent.click(within(sheet).getAllByText('Vegetarian')[1]);
-    expect(within(sheet).getByText(/Plans avoid: vegetarian/)).toBeDefined();
+    expect(within(sheet).getByText(/Plans follow: vegetarian/)).toBeDefined();
 
     fireEvent.click(within(sheet).getByLabelText('Close'));
     openPlan();

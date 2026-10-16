@@ -64,7 +64,7 @@ export default function PeopleView() {
           {app.activeMember && <Pill tone="accent">{app.childMode ? 'under-18 mode' : 'profile'}: {app.activeMember.name}</Pill>}
         </div>
         <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-          {app.planDiets.length ? `Plans avoid: ${app.planDiets.join(' · ')}.` : 'No shared dietary patterns set.'}
+          {app.planDiets.length ? `Plans follow: ${app.planDiets.join(' · ')}.` : 'No shared dietary patterns set.'}
         </p>
         {app.activeMember && (
           <button

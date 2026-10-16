@@ -101,7 +101,7 @@ export default function AppHeader({ tab, onProfile, onGuidance }) {
           <button
             onClick={onProfile}
             // The one control that is in the same place on every screen.
-            aria-label={`You — profile and settings${setup.done < setup.total ? `, ${setup.total - setup.done} setup steps left` : ''}`}
+            aria-label={`You — profile and settings${setup.done < setup.total ? `, ${setup.total - setup.done} setup step${setup.total - setup.done === 1 ? '' : 's'} left` : ''}`}
             className="press relative flex h-11 w-11 items-center justify-center rounded-full text-lg font-extrabold"
             style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
