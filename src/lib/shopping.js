@@ -7,7 +7,9 @@
  * and offers you entered. Missing history is stated rather than guessed.
  */
 
-import { AISLE_ORDER, guessAisle } from '../data/stores.js';
+import { AISLE_ORDER, guessAisle, RECIPE_AISLE } from '../data/stores.js';
+
+const UNFILED = new Set([undefined, null, '', 'Other', RECIPE_AISLE]);
 import { dayStamp } from './kitchen-dates.js';
 import { priceHistory } from './kitchen-spending.js';
 import { mergeQtys } from './pantry.js';
@@ -163,7 +165,10 @@ export const groupForStore = (items = [], { store = null, routes = {}, memory = 
   const order = routeFor(store, routes);
   const map = new Map(order.map((a) => [a, []]));
   for (const item of refile(items, memory)) {
-    const aisle = map.has(item.aisle) ? item.aisle : 'Other';
+    // Rows saved under the old catch-alls ("From recipes", "Other") are filed
+    // by name instead, so a recipe's onions sit with the rest of the veg.
+    const filed = UNFILED.has(item.aisle) ? guessAisle(item.name) : item.aisle;
+    const aisle = map.has(filed) ? filed : 'Other';
     map.get(aisle).push(item);
   }
   return [...map.entries()].filter(([, list]) => list.length);
