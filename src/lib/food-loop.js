@@ -43,6 +43,9 @@ export const weeklyFoodLoop = (state, today = state.day) => {
   const planDone = plannedMeals > 0;
   const shopDone = shops.length > 0;
   const cookDone = cookedMeals > 0;
+  // The week's Cooked step is done when the plan is eaten, not at the first
+  // cook: one dinner of three is progress, not a finished week.
+  const weekCooked = planDone ? cookedMeals >= plannedMeals : cookDone;
 
   // Full 8-step evaluation
   const pantryDone = pantryItems > 0;
@@ -56,7 +59,7 @@ export const weeklyFoodLoop = (state, today = state.day) => {
   const completion = [pantryDone, planDone, listDone, purchaseDone, consumptionDone, leftoversDone, wasteDone, learningDone]
     .filter(Boolean).length;
 
-  const next = !planDone ? 'plan' : !shopDone && pendingItems > 0 ? 'shop' : !cookDone ? 'cook' : 'steady';
+  const next = !planDone ? 'plan' : !shopDone && pendingItems > 0 ? 'shop' : !weekCooked ? 'cook' : 'steady';
   const nextClosed = !pantryDone ? 'pantry' : !planDone ? 'plan' : !listDone ? 'list' : !purchaseDone ? 'purchase'
     : !consumptionDone ? 'consumption' : !leftoversDone ? 'leftovers' : !wasteDone ? 'waste' : !learningDone ? 'learning' : 'steady';
 
@@ -76,7 +79,7 @@ export const weeklyFoodLoop = (state, today = state.day) => {
     steps: [
       { id: 'plan', label: 'Meals', done: planDone },
       { id: 'shop', label: 'Basket', done: shopDone },
-      { id: 'cook', label: 'Cooked', done: cookDone },
+      { id: 'cook', label: 'Cooked', done: weekCooked },
     ],
     closedLoop: {
       steps: CLOSED_LOOP_STEPS.map((s) => ({

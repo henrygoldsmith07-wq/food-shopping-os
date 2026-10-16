@@ -33,4 +33,14 @@ describe('weekly food loop', () => {
     expect(loop.next).toBe('steady');
     expect(loop.steps.map((step) => step.done)).toEqual([true, true, true]);
   });
+
+  it('keeps the week on cooking until the planned meals are eaten', () => {
+    const plan = { [today]: { dinner: 'recipe-1' }, '2026-08-04': { dinner: 'recipe-2' }, '2026-08-05': { dinner: 'recipe-3' } };
+    const loop = weeklyFoodLoop({
+      day: today, plan, shoppingList: [], shops: [{ date: today, items: [] }],
+      cooked: [{ recipeId: 'recipe-1', date: today }],
+    }, today);
+    expect(loop.next).toBe('cook');
+    expect(loop.steps.map((step) => step.done)).toEqual([true, true, false]);
+  });
 });

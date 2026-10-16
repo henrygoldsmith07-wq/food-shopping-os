@@ -133,7 +133,7 @@ export function weekManager(app = {}, { today = app.day } = {}) {
       exceptions.push({
         id: 'leftovers',
         severity: 'info',
-        title: `${leftovers.length} leftover${leftovers.length === 1 ? '' : 's'} need using`,
+        title: `${leftovers.length} leftover${leftovers.length === 1 ? ' needs' : 's need'} using`,
         detail: 'Slotting them into the plan means buying less next time.',
         goTab: 'plan',
         actionLabel: 'Plan around them',

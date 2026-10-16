@@ -153,3 +153,30 @@ describe('the cap in the ranked list, row by row', () => {
     expect(screen.queryByText(/Past the week's cap/)).toBeNull();
   });
 });
+
+describe('the basket with nothing priced yet', () => {
+  afterEach(() => cleanup());
+
+  it('quotes the plan’s recipe estimate instead of £0.00, and says where it came from', () => {
+    const day = '2026-10-16';
+    render(<ShopBasket
+      {...baseProps}
+      basket={{ projected: 0, total: 0, saved: 0, priced: 0, unpriced: 4, spent: 0, left: 30, over: false }}
+      app={{ ...baseProps.app, day, portions: 2, plan: { [day]: { dinner: 'chickpea-curry' } } }}
+    />);
+    expect(screen.queryByText('£0.00')).toBeNull();
+    expect(screen.getByText(/^about £\d+\.\d\d$/)).toBeDefined();
+    expect(screen.getByText(/Rough estimate from this week’s recipes/)).toBeDefined();
+  });
+
+  it('keeps the receipt estimate once anything has a recorded price', () => {
+    const day = '2026-10-16';
+    render(<ShopBasket
+      {...baseProps}
+      basket={{ projected: 12, total: 12, saved: 0, priced: 2, unpriced: 2, spent: 0, left: 18, over: false }}
+      app={{ ...baseProps.app, day, plan: { [day]: { dinner: 'chickpea-curry' } } }}
+    />);
+    expect(screen.getByText('£12.00')).toBeDefined();
+    expect(screen.queryByText(/Rough estimate from this week’s recipes/)).toBeNull();
+  });
+});

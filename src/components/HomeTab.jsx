@@ -210,7 +210,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
             onAccept={() => goTab('list')}
           />
         </div>
-      ) : (
+      ) : (leading || !stackDecisions.length) && (
+        // With no lead, the quiet card would claim nothing needs you while
+        // the decision stack below lists something that does.
         <NextActionCard action={leading} onRun={() => leading?.run?.()} />
       )}
 
