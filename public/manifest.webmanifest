@@ -2,12 +2,36 @@
   "name": "Forq — Plan meals, buy less waste",
   "short_name": "Forq",
   "description": "Plan meals, buy exactly what you need and waste less food.",
+  "id": "/",
+  "scope": "/",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait-primary",
+  "dir": "ltr",
+  "lang": "en-GB",
+  "categories": ["food", "lifestyle", "utilities"],
   "background_color": "#fafafa",
   "theme_color": "#111111",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Plan this week",
+      "short_name": "Plan",
+      "description": "Open the meal planner",
+      "url": "/?shortcut=plan",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Shopping list",
+      "short_name": "Shop",
+      "description": "Open the shopping list",
+      "url": "/?shortcut=shop",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

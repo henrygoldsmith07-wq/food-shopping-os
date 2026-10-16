@@ -317,6 +317,10 @@ export function AppProvider({ children }) {
       unsubscribeRealtime?.();
       window.removeEventListener('forq-cloud-refresh', refreshCloud);
     };
+  // Mount-once by design: `adoptHouseholdCopy` is rebuilt every render, so
+  // listing it would re-initialise cloud sync (and its realtime subscription)
+  // on every store update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -350,6 +354,10 @@ export function AppProvider({ children }) {
       });
     }, 750);
     return () => clearTimeout(cloudTimer.current);
+  // Keyed on the state value only: refs and `adoptHouseholdCopy` are read at
+  // fire time inside the debounced push, and depending on the adopter (a new
+  // identity each render) would reset the debounce every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   /* Under 18 the product-insights answer is "no" and stays "no". Hiding the
@@ -467,7 +475,7 @@ export function AppProvider({ children }) {
       platformAvailable: platformUnlockAvailable(),
     },
     ...api,
-  }), [effectiveState, state.healthVaultEnabled, derived, alerts, api, vaultUnlocked, enterDemoMode, exitDemoMode]);
+  }), [effectiveState, state.healthVaultEnabled, derived, alerts, api, vaultUnlocked, enterDemoMode, exitDemoMode, beginImportBatch, endImportBatch, demo]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

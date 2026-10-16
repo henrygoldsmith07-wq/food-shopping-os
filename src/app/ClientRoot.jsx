@@ -28,6 +28,11 @@ function RootSession() {
       window.removeEventListener('online', announceOnlineState);
       window.removeEventListener('offline', announceOnlineState);
     };
+  // `enterDemoMode` is a stable callback; the whole `app` object is not (a new
+  // identity each store update), so depending on it would re-run boot setup
+  // — service-worker registration, online listeners, demo-param handling —
+  // on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.enterDemoMode]);
   return <AppContent />;
 }

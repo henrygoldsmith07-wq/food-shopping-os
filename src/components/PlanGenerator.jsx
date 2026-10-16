@@ -7,6 +7,7 @@ import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from 
 import { householdPortionsFor } from '../lib/portions.js';
 import { shoppingForGeneratedEntries, planCostFor } from '../lib/mealplan.js';
 import { useApp } from '../lib/store.jsx';
+import { slotsForScope } from '../lib/plan-generator-model.js';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
 import { monthOf, peakNow } from '../data/seasons.js';
 import { expiringSoon } from '../lib/kitchen.js';
@@ -25,6 +26,9 @@ const SCOPES = ['1 meal', 'A day', 'A week', 'A month'];
 export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApplied, goTab, focusItems = [] }) {
   const app = useApp();
   const [scope, setScope] = useState('A week');
+  // Weeks and months plan full days out of the box now — dinners-only is
+  // one tap away for households that freestyle breakfast and lunch.
+  const [mealScope, setMealScope] = useState('all');
   // The stepper opens on what recorded cooks say the household eats when
   // that disagrees with the profile — the same decision the list paths use.
   const [people, setPeople] = useState(() => Math.round(householdPortionsFor(app).portions));
@@ -43,6 +47,8 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const [generating, setGenerating] = useState(false);
   const [addedToList, setAddedToList] = useState(false);
   const month = monthOf(app.day); const dates = scope === 'A month' ? monthDates : weekDates;
+  const slotList = ['A week', 'A month'].includes(scope) ? slotsForScope({ mealScope }, scope) : null;
+  const allMeals = Array.isArray(slotList) && slotList.length > 1;
   const busyDates = new Set((app.calendarBusy || []).map((item) => item.date));
   const busyInScope = [...busyDates].filter((date) => dates.includes(date)).length;
   const planDates = dates.filter((date) => !busyDates.has(date));
@@ -70,7 +76,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const tasteKey = JSON.stringify(app.tasteProfile);
   const leftoversKey = app.leftovers.map((item) => `${item.recipeId}:${item.portions}:${item.expiry || ''}`).join(',');
   const generatorKey = [
-    scope, people, budget, occasion, quick, timeAvailable, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste,
+    scope, mealScope, people, budget, occasion, quick, timeAvailable, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste,
     planDates.join(','), pantryNames.join(','), (app.equipment || []).join(','), app.planDiets.join(','), app.goal, month,
     recipeKey, tasteKey, leftoversKey, JSON.stringify(app.wasteProfile), JSON.stringify(app.aliasMemory || {}),
   ].join('|');
@@ -94,6 +100,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
         pantry: usePantry ? pantryNames : [],
         month: seasonal ? month : null,
         days: ['A week', 'A month'].includes(scope) ? planDates.length : null,
+        slots: slotList,
         recipes: app.safeRecipes,
         taste: app.tasteProfile,
         leftovers: leftoverFirst ? app.leftovers : [],
@@ -121,7 +128,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
     );
     // pantryNames is rebuilt every render; its content is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, scope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent, weeklyCap, weekChunks ? weekChunks.join(',') : null, focusList.join(',')]);
+  }, [seed, scope, mealScope, app.planDiets, app.goal, app.safeRecipes, app.tasteProfile, budget, quick, timeAvailable, occasion, people, batch, usePantry, availabilityOnly, seasonal, leftoverFirst, variety, minimiseWaste, app.leftovers, app.pantry, app.wasteProfile, app.aliasMemory, month, planDates.length, (app.equipment || []).join(','), weeklyBudget, budgetSpent, weeklyCap, weekChunks ? weekChunks.join(',') : null, focusList.join(',')]);
 
   const generated = plan?.meals ?? null;
   const generate = () => {
@@ -136,6 +143,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       leftoverFirst,
       timeAvailable: timeAvailable || (quick ? 30 : null),
       availabilityOnly,
+      mealScope,
     }, undefined, app);
   };
 
@@ -146,12 +154,17 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
       return scopeMeals('A day').map((slot, i) => ({ date: app.day, slot, recipeId: generated[i]?.id }));
     }
     if (scope === '1 meal') return [{ date: app.day, slot: 'dinner', recipeId: generated[0]?.id }];
+    // An all-meals run is day-major triples: each date takes breakfast,
+    // lunch and dinner in order.
+    if (allMeals) {
+      return planDates.flatMap((date, i) => slotList.map((slot, k) => ({ date, slot, recipeId: generated[i * slotList.length + k]?.id })));
+    }
     return planDates.map((date, i) => ({ date, slot: 'dinner', recipeId: generated[i]?.id }));
-  }, [generated, scope, planDates, app.day]);
+  }, [generated, scope, planDates, app.day, allMeals, slotList]);
 
   const apply = () => {
     app.applyPlanEntries(entries.filter((e) => e.recipeId));
-    recordProductEvent('plan_accepted', { scope, mealCount: entries.filter((e) => e.recipeId).length }, undefined, app);
+    recordProductEvent('plan_accepted', { scope, mealScope, mealCount: entries.filter((e) => e.recipeId).length }, undefined, app);
     onApplied?.();
   };
 
@@ -189,12 +202,20 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
     if (!generated) return [];
     if (scope === 'A day') return Array(generated.length).fill(app.day);
     if (scope === '1 meal') return [app.day];
+    if (allMeals) return planDates.flatMap((date) => slotList.map(() => date));
     return planDates;
-  }, [generated, scope, planDates, app.day]);
+  }, [generated, scope, planDates, app.day, allMeals, slotList]);
 
   const labelFor = (i) => {
     if (scope === 'A day') return ['Breakfast', 'Lunch', 'Dinner'][i];
     if (scope === '1 meal') return 'Suggested';
+    if (allMeals) {
+      const dayIdx = Math.floor(i / slotList.length);
+      const slot = slotList[i % slotList.length];
+      const slotLabel = slot[0].toUpperCase() + slot.slice(1);
+      const date = planDates[dayIdx];
+      return date ? `${WEEK_DAYS[dayIdx % 7]} ${Number(date.slice(8, 10))} · ${slotLabel}` : slotLabel;
+    }
     const date = planDates[i];
     return date ? `${WEEK_DAYS[i % 7]} ${Number(date.slice(8, 10))}` : '';
   };
@@ -208,6 +229,16 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
             {SCOPES.map((s) => <Chip key={s} active={scope === s} onClick={() => setScope(s)}>{s}</Chip>)}
           </div>
         </div>
+
+        {['A week', 'A month'].includes(scope) && (
+          <div>
+            <p className="text-[0.75rem] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--faint)' }}>Meals to plan</p>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+              <Chip active={mealScope === 'all'} onClick={() => setMealScope('all')}>Breakfast, lunch & dinner</Chip>
+              <Chip active={mealScope === 'dinners'} onClick={() => setMealScope('dinners')}>Dinners only</Chip>
+            </div>
+          </div>
+        )}
 
         {weeklyBudget !== null && <p className="rounded-2xl border px-3 py-2 text-center text-[0.75rem] font-bold" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
           {weeklyBudget <= budgetSpent ? `This ${scope === 'A month' ? 'month' : 'week'} is over budget by ${gbp(budgetSpent - weeklyBudget, { always: true })}.` : `${gbp(budgetSpent, { always: true })} spent of ${gbp(weeklyBudget, { always: true })} this ${scope === 'A month' ? 'month' : 'week'} — ${gbp(weeklyBudget - budgetSpent, { always: true })} left to rank against.`}

@@ -277,6 +277,10 @@ function Shell() {
       window.removeEventListener('forq-analytics-consent', flush);
       window.removeEventListener('online', flush);
     };
+  // Intentionally keyed on the onboarded flag only: `flush` reads the latest
+  // state at call time, and re-subscribing on every store update would replay
+  // the app_opened event.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.onboarded]);
 
   /* Screens still ask to go to "profile" — it just isn't a tab any more, it's

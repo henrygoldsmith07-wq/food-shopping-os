@@ -214,7 +214,9 @@ export default function BarcodeAdd({ onPick, action = 'Add' }) {
       {online?.product && (
         <Card className="!p-3 space-y-2">
           <div className="flex items-start gap-3">
-            {online.product.imageUrl && <img src={online.product.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover" />}
+            {/* Remote Open Food Facts imagery on an unconfigured host: next/image would need remotePatterns + server optimisation for a thumbnail; a lazy plain img is the honest choice. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {online.product.imageUrl && <img src={online.product.imageUrl} alt={`${online.product.name} product photo`} loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />}
             <div className="min-w-0 flex-1">
               <p className="font-bold text-[0.875rem] truncate">{online.product.name}</p>
               <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>

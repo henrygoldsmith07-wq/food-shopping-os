@@ -19,7 +19,9 @@ export default function TabBar({ tabs, active, onNavigate }) {
       aria-label="Main navigation"
     >
       <div className="app-brand">
-        <img src="/logo.svg" alt="" width={36} height={36} className="h-9 w-9 rounded-xl" aria-hidden="true" />
+        {/* Static 36px brand mark above the fold: a plain img avoids next/image client JS for zero visual gain. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" width={36} height={36} className="h-9 w-9 rounded-xl" aria-hidden="true" decoding="async" />
         <div>
           <p className="text-[1.0625rem] font-black tracking-tight">Forq</p>
           <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>Food, sorted.</p>

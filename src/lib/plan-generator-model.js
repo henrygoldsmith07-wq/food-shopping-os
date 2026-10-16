@@ -47,6 +47,20 @@ export function planGeneratorModel(app, form) {
 }
 
 /**
+ * Which slots each day of a week/month run holds. 'A day' always plans all
+ * three and '1 meal' is one dinner; longer runs follow the form's meal
+ * scope, defaulting to dinners when the caller never offered the choice
+ * (Autopilot keeps its dinners-only behaviour through this default).
+ * @param {object} form
+ * @param {string} scope
+ */
+export function slotsForScope(form, scope) {
+  if (scope === 'A day') return ['breakfast', 'lunch', 'dinner'];
+  if (scope === '1 meal') return ['dinner'];
+  return form.mealScope === 'all' ? ['breakfast', 'lunch', 'dinner'] : ['dinner'];
+}
+
+/**
  * BuildPlan input from the form + derived model — one place, tested.
  * @param {any} app
  * @param {object} form
@@ -63,8 +77,10 @@ export function planGeneratorInput(app, form, model, seed) {
     ...focusList,
   ])];
   return {
+    slots: slotsForScope(form, form.scope),
     input: {
       scope: form.scope,
+      slots: slotsForScope(form, form.scope),
       diets: app.planDiets,
       goal: app.goal,
       budget: form.budget,
@@ -104,17 +120,23 @@ export function planGeneratorInput(app, form, model, seed) {
 
 /**
  * Generated entries for the plan scopes — the dated slots applyPlanEntries writes.
+ * An all-meals run lays day-major triples (each date gets breakfast, lunch
+ * and dinner in order); every other scope keeps its single-slot mapping.
  * @param {Array<any>|null} generated
  * @param {string} scope
  * @param {Array<string>} planDates
  * @param {string} today
+ * @param {Array<string>|null} [slots]
  */
-export function entriesForGenerated(generated, scope, planDates, today) {
+export function entriesForGenerated(generated, scope, planDates, today, slots = null) {
   if (!generated) return [];
   if (scope === 'A day') {
     return scopeMeals('A day').map((slot, i) => ({ date: today, slot, recipeId: generated[i]?.id }));
   }
   if (scope === '1 meal') return [{ date: today, slot: 'dinner', recipeId: generated[0]?.id }];
+  if (Array.isArray(slots) && slots.length > 1) {
+    return planDates.flatMap((date, i) => slots.map((slot, k) => ({ date, slot, recipeId: generated[i * slots.length + k]?.id })));
+  }
   return planDates.map((date, i) => ({ date, slot: 'dinner', recipeId: generated[i]?.id }));
 }
 

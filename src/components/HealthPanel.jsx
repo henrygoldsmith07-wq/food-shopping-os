@@ -261,7 +261,9 @@ function PhotosCard() {
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
           {[...app.photos].reverse().map((p) => (
             <div key={p.id} className="relative shrink-0">
-              <img src={p.thumb} alt={`Progress photo from ${p.date}`} className="h-28 w-20 rounded-xl object-cover" />
+              {/* Shrunk data-URL thumbnails kept on-device: next/image cannot optimise them; lazy-load the scroll row instead. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.thumb} alt={`Progress photo from ${p.date}`} loading="lazy" decoding="async" className="h-28 w-20 rounded-xl object-cover" />
               <button
                 onClick={() => app.removePhoto(p.id)}
                 aria-label={`Delete photo from ${p.date}`}
