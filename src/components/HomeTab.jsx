@@ -384,8 +384,11 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         </Section>
       )}
 
-      {/* Starter welcome: chosen dinners are planned, list created */}
-      {app.starterRecipeIds.length > 0 && !app.welcomeDismissed && (
+      {/* Starter welcome: chosen dinners are planned, list created. The ids
+          live on the raw state and are not surfaced through derive, so they are
+          read optionally — an unguarded .length here throws on an install whose
+          state predates the field. */}
+      {(app.starterRecipeIds?.length ?? 0) > 0 && !app.welcomeDismissed && (
         <div className="px-5 rise rise-1">
           <Card className="flex items-start gap-3 !p-4">
             <span

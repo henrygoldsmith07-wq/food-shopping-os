@@ -174,7 +174,7 @@ function Shell() {
   const goLog = (intent = null) => {
     setLogIntent(intent);
     setTab('log');
-    recordProductEvent('screen_viewed', { screen: 'log', intent: typeof intent === 'string' ? intent : 'shortcut' });
+    recordProductEvent('screen_viewed', { screen: 'log', intent: typeof intent === 'string' ? intent : 'shortcut' }, undefined, app);
   };
   const flash = (message) => {
     clearTimeout(noticeTimer.current);
@@ -267,8 +267,8 @@ function Shell() {
   useEffect(() => {
     if (!app.onboarded || analyticsOpened.current) return undefined;
     analyticsOpened.current = true;
-    recordProductEvent('app_opened');
-    const flush = () => { flushProductEvents(); };
+    recordProductEvent('app_opened', {}, undefined, app);
+    const flush = () => { flushProductEvents({ state: app }); };
     window.addEventListener('forq-product-event', flush);
     window.addEventListener('forq-analytics-consent', flush);
     window.addEventListener('online', flush);
@@ -278,6 +278,10 @@ function Shell() {
       window.removeEventListener('forq-analytics-consent', flush);
       window.removeEventListener('online', flush);
     };
+  // Intentionally keyed on the onboarded flag only: `flush` reads the latest
+  // state at call time, and re-subscribing on every store update would replay
+  // the app_opened event.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.onboarded]);
 
   /* Screens still ask to go to "profile" — it just isn't a tab any more, it's
@@ -287,7 +291,7 @@ function Shell() {
     if (id === 'profile') return setProfileOpen(true);
     if (id === 'plan') { setPlanFocus(context?.date || null); setPlanItem(context?.tonight ? null : (context?.item || null)); setTonightItem(context?.tonight && context?.item ? context.item : null); }
     setTab(id);
-    recordProductEvent('screen_viewed', { screen: id });
+    recordProductEvent('screen_viewed', { screen: id }, undefined, app);
     window.scrollTo({ top: 0 });
   };
   // An unreadable record — or one saved by a newer Forq — stops the app in

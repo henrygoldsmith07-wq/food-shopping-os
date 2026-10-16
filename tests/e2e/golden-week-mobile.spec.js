@@ -4,6 +4,9 @@ import { expect, test } from '@playwright/test';
  * Golden week on a phone: plan -> pantry-aware list -> bought -> leftover
  * -> changed next suggestion. Mobile viewport only. No scraping, no AI,
  * no parked tool. Copy must not claim live stock or a complete catalogue.
+ *
+ * Onboarding only seeds a starter plan when the user picks starter dinners, and
+ * this flow picks none - so the plan is empty and correctly leads with the loop.
  */
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -23,11 +26,15 @@ const onboard = async (page, name = 'Golden') => {
 test('a week completes on a phone without parked tools', async ({ page }) => {
   await onboard(page);
 
-  // Empty Plan leads with the loop.
+  // Onboarding does not seed a plan unless the user picks starter dinners, and
+  // this flow picks none - so the empty plan leads with the loop.
   await page.getByRole('button', { name: 'Plan', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start the week loop' })).toBeVisible();
   await page.getByRole('button', { name: 'Start the week loop' }).click();
-  await expect(page.getByText('Week loop')).toBeVisible();
+  // Scoped by role: the trigger's accessible name also contains "week loop",
+  // so a bare getByText('Week loop') matches two elements once the dialog opens.
+  const loop = page.getByRole('dialog');
+  await expect(loop.getByRole('heading', { name: 'Week loop' })).toBeVisible({ timeout: 15000 });
 
   // Pick a meal for the first open dinner, set portions, generate the list.
   await page.getByRole('button', { name: /Choose dinner/ }).first().click();
@@ -35,14 +42,15 @@ test('a week completes on a phone without parked tools', async ({ page }) => {
   await expect(page.getByText(/meal.*planned|planned/i).first()).toBeVisible({ timeout: 10000 });
 
   // The list step shows its working: need, pantry, buy.
-  const loop = page.getByRole('dialog', { name: 'Week loop' });
   await expect(loop.getByText(/Need .*pantry .*buy/i).first()).toBeVisible({ timeout: 10000 });
 
   // Home still leads with the loop and nothing else.
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Week', exact: true }).click();
   await expect(page.getByRole('button', { name: /Start the week/ })).toBeVisible();
-  await expect(page.getByText(/XP|badges|Live stock|complete catalogue/i)).toHaveCount(0);
+  // Word-boundary the gamification terms: a bare /XP/i also matches the "xp"
+  // inside "Explore", which is copy the product deliberately keeps.
+  await expect(page.getByText(/\bXP\b|\bbadges?\b|Live stock|complete catalogue/i)).toHaveCount(0);
 });
 
 test('demo and copy never claim live stock or a complete catalogue', async ({ page }) => {

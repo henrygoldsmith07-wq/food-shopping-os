@@ -66,7 +66,7 @@ export default function HomeFoodLoop({ app, foodLoop, expiring, low, goTab, open
             : foodLoop.next === 'shop' ? 'Open shopping list'
               : foodLoop.next === 'cook' ? 'Open today’s plan' : 'Review this week'}
         </button>
-        {app.pantry.length === 0 && !app.starterRecipeIds.length && (
+        {app.pantry.length === 0 && !(app.starterRecipeIds?.length) && (
           <button
             type="button"
             onClick={openPantry}

@@ -14,13 +14,17 @@ export const PRODUCT = {
   /** Short brand line for headers / PWA */
   shortName: 'Forq',
   /** One-sentence promise — use this before any feature list */
+  // The canonical sentence is locked by tests/copy-claims.test.js, which asserts
+  // this exact wording across README, the demo page, onboarding and docs/SCOPE.md.
+  // Do not reword here alone — change it in all five places or that test fails.
+  // (tests/product.test.js still expects an older phrasing; see the note there.)
   promise: 'Tell Forq what you are eating; it works out what to buy; it helps you waste less.',
   /** Slightly longer for meta / about */
   promiseLong:
     'Forq is a meal-planning and shopping app: tell Forq what you are eating; it works out what to buy; it helps you waste less. Nutrition, health and analytics support the plan — they are not a separate product.',
   /** Meta description (≤ ~155 chars) */
   metaDescription:
-    'Tell Forq what you are eating; it works out what to buy; it helps you waste less. Local-first meal planning and shopping.',
+    'Plan meals, buy exactly what you need and waste less food. Tell Forq what you are eating; it works out what to buy. Local-first meal planning and shopping.',
   /** Document / install title */
   title: 'Forq — Tell Forq what you are eating',
   /** Tag used in older copy; do not use — kept only so old imports do not break */

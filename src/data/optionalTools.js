@@ -106,7 +106,20 @@ export const TOOL_CATEGORIES = [
   { id: 'sharing', label: 'Sharing' },
 ];
 
-/** New users start with none of the secondary tools. */
+/**
+ * New users start with none of the secondary tools — the core loop only.
+ *
+ * The assistant is deliberately NOT in this list, and is not gated by it at
+ * all. It is the on-device answer engine (`lib/ai-assistant.js`): no API key, no
+ * server call, no per-request cost, and it answers from the household's own
+ * pantry, diary, plan and recorded prices. It is not a secondary tool, so the
+ * three surfaces that offer it (Guidance's Ask tab, the command palette and
+ * global search) present it unconditionally rather than consulting this list.
+ * That also keeps "Back to core loop only" meaning what it says: clearing the
+ * list must not silently take the assistant away.
+ *
+ * The server-backed AI relay is separately configured and is what costs money.
+ */
 export const DEFAULT_ENABLED_TOOLS = [];
 
 /** Full surface — used by the Everything product mode. */

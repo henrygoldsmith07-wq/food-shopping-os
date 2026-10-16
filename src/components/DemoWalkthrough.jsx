@@ -28,8 +28,10 @@ export default function DemoWalkthrough({ onNavigate }) {
         today: app.day,
         learnedAliases: app.aliasMemory || {},
       });
+      // addToList already dedupes by item name, so running this over the list
+      // the /demo seed ships is a no-op rather than a set of duplicate rows.
       app.addToList(items);
-      setNote(`Added ${items.length} items to the demo list (pantry already deducted).`);
+      setNote(`${items.length} items — pantry already deducted. Tick them as you “buy”.`);
       return;
     }
     if (action === 'tickHalf') {
@@ -145,6 +147,10 @@ export default function DemoWalkthrough({ onNavigate }) {
           <button
             type="button"
             onClick={next}
+            // A stable accessible name: the demo tour's Next control has to be
+            // addressable by role+name, because seeded demo content can contain
+            // the literal word "Next" and an ambiguous-text selector breaks.
+            aria-label="Next demo step"
             className="press flex-1 rounded-xl py-2.5 text-[0.8125rem] font-extrabold"
             style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >

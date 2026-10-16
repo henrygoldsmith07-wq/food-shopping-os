@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Check, Image, Mic, MicOff, ScanBarcode, Sparkles, Trash2, X } from 'lucide-react';
+import { Camera, Check, Image as ImageIcon, Mic, MicOff, ScanBarcode, Sparkles, Trash2, X } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { isBarcode, lookupBarcode, parseVoiceLog, recognisePlate, SCANNABLE } from '../lib/foodlog.js';
 import { captureSupport, detectBarcodeImage } from '../lib/smart-capture.js';
@@ -245,7 +245,9 @@ export function PhotoRecognise({ defaultMeal, onDone }) {
         style={{ height: 200, background: 'var(--card-2)', borderColor: 'var(--line)' }}
       >
         {preview
-          ? <img src={preview} alt="Your meal" className="h-full w-full object-cover" />
+          // A blob: object URL the user just captured: next/image cannot optimise it (and should not upload it anywhere).
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={preview} alt="Your meal" decoding="async" className="h-full w-full object-cover" />
           : <div className="text-center px-8">
               <Camera size={34} strokeWidth={1.4} style={{ color: 'var(--muted)' }} />
               <p className="mt-2 text-[0.78125rem] font-bold" style={{ color: 'var(--muted)' }}>Snap the plate before you eat it</p>
@@ -266,7 +268,7 @@ export function PhotoRecognise({ defaultMeal, onDone }) {
           className="press rounded-2xl py-3 text-[0.875rem] font-extrabold"
           style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
-          <span className="inline-flex items-center gap-1.5"><Image size={15} /> Choose photo</span>
+          <span className="inline-flex items-center gap-1.5"><ImageIcon size={15} /> Choose photo</span>
         </button>
         <button
           onClick={() => analyse(`sample-${Date.now() % 8}`, null)}

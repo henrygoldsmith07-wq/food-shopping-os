@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { PRIVACY_DISCLOSURE } from '../data/privacy.js';
 import { useOptionalApp } from '../lib/store.jsx';
-import { YOUTH_COPY, YOUTH_SIGNPOST } from '../lib/youth.js';
+import { YOUTH_COPY, YOUTH_SIGNPOST, isUnderEighteen } from '../lib/youth.js';
 import { forgetCloudHousehold, selectedCloudHouseholdId } from '../lib/cloud.js';
 import { Card } from './ui.jsx';
 import HealthVaultPanel from './HealthVaultPanel.jsx';
@@ -39,6 +39,15 @@ export default function PrivacyPanel({
   const [analyticsConsent, setAnalyticsConsentState] = useState(() => readAnalyticsConsent());
   const [pulseShared, setPulseShared] = useState(() => readForqPulseOptIn());
   const selectedId = selectedCloudHouseholdId();
+
+  /* A child profile never holds product-insights consent, whatever is stored:
+     a grant can arrive restored from a backup or set before a birthday. Show
+     the switch as off and drop the flag, so the panel cannot claim otherwise. */
+  useEffect(() => {
+    if (!isUnderEighteen(app)) return;
+    if (readAnalyticsConsent(app)) setAnalyticsConsent(false, app);
+    setAnalyticsConsentState(false);
+  }, [app]);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,8 +176,10 @@ export default function PrivacyPanel({
             aria-label="Share anonymous product insights"
             onClick={() => {
               const next = !analyticsConsent;
-              setAnalyticsConsent(next);
-              setAnalyticsConsentState(next);
+              // A child profile refuses the grant rather than storing it and
+              // ignoring it, so the switch must not claim the change took.
+              setAnalyticsConsent(next, app);
+              setAnalyticsConsentState(!isUnderEighteen(app) && next);
             }}
             className="press shrink-0 rounded-full border px-3 py-2 text-[0.75rem] font-extrabold"
             style={{

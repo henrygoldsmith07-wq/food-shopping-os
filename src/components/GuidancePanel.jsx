@@ -27,6 +27,8 @@ export default function GuidancePanel({
   // Ask runs fully on-device (lib/ai-assistant.js reads pantry, diary, plan
   // and shopping history — nothing leaves the browser), so it is always
   // available. The `assistant` optional tool gates server-backed AI relay only.
+  // It is on-device and always available, so it is not gated by enabledTools;
+  // hiding the Ask tab behind an opt-in meant a new user could never discover it existed.
   const TABS = [
     ['next', 'Next', Lightbulb],
     ['review', 'Review', BarChart3],
@@ -139,6 +141,8 @@ export default function GuidancePanel({
 
       {view === 'ask' && (
         <Suspense fallback={<Loading />}>
+          {/* Always the assistant: it is on-device and ungated, so there is no
+              "not enabled" state left to redirect to Add tools from. */}
           <AiAssistant />
         </Suspense>
       )}

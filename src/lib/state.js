@@ -67,6 +67,9 @@ export const EMPTY_STATE = {
   /**
    * Progressive disclosure: optional tool ids the user has added.
    * Empty = core loop only (plan → list → shop → pantry → cook).
+   *
+   * The assistant is not in here — it is not a secondary tool. See the note on
+   * DEFAULT_ENABLED_TOOLS in data/optionalTools.js.
    */
   enabledTools: [],
   starterRecipeIds: [],
@@ -122,6 +125,7 @@ export const EMPTY_STATE = {
   autopilotOutcomes: [], // whether recommended actions were completed
   adventureCompleted: {}, // claimed weekly kitchen adventure missions
   planSimulations: [], // saved multi-objective planning scenarios
+  weekTemplates: [], // named week plans: {id,name,createdAt,days[7 Mon-first]{breakfast,lunch,dinner recipe ids},mealCount}
   priceAlerts: [], // item price targets checked against recorded shops
   priceAlertConfig: { risePct: 15, bargainPct: 15, overrides: {} }, // receipt-only rise/bargain thresholds, 15% default, per-item tunable
   waste: [], // what you threw away, and what it cost

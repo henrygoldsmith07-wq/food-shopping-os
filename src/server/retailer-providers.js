@@ -7,7 +7,7 @@ import {
 
 const DEFAULT_OPEN_FOOD_FACTS_URL = 'https://world.openfoodfacts.org';
 const DEFAULT_OPEN_PRICES_URL = 'https://prices.openfoodfacts.org';
-const DEFAULT_USER_AGENT = 'Forq/1.0 (+https://github.com/henrygoldsmith07-wq/Claude-Code)';
+const DEFAULT_USER_AGENT = 'Forq/1.0 (+https://github.com/henrygoldsmith07-wq/food-shopping-os)';
 const REQUEST_TIMEOUT_MS = 8000;
 
 const numeric = (value) => {

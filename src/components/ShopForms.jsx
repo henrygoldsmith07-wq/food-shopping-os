@@ -33,7 +33,7 @@ export function AddItem({ onAdd }) {
     const rows = parsePastedList(pasted);
     if (!rows.length) return;
     onAdd(rows);
-    recordProductEvent('list_pasted', { count: rows.length });
+    recordProductEvent('list_pasted', { count: rows.length }, undefined, app);
     setPasted('');
     setPasteOpen(false);
   };
@@ -215,7 +215,7 @@ export function FinishShop({ items, store: initial, onDone }) {
       <button
         onClick={() => {
           app.recordShop({ store, total, toPantry, itemIds: items.map((item) => item.id) });
-          if (toPantry) recordProductEvent('pantry_reconciled', { count: items.filter((i) => i.checked).length });
+          if (toPantry) recordProductEvent('pantry_reconciled', { count: items.filter((i) => i.checked).length }, undefined, app);
           onDone();
         }}
         className="press w-full rounded-2xl py-3.5 text-[0.9375rem] font-extrabold"

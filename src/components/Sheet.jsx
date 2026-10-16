@@ -41,6 +41,29 @@ export default function Sheet({ open, onClose, children, full = false, title, la
       else document.getElementById('main')?.focus?.();
     };
   }, [open]);
+  // Escape must close the topmost sheet even when focus is not inside it.
+  //
+  // The panel's own onKeyDown is a React synthetic handler, so it only fires
+  // while focus sits within the panel. Focus routinely is not: a sheet that
+  // opened, handed focus to a control, and then had that control removed (a
+  // meal picked, a row deleted) leaves document.body focused, and Escape then
+  // does nothing at all — the overlay stays up, still swallowing pointer
+  // events, with no keyboard route out. A capture-phase document listener
+  // catches it wherever focus happens to be.
+  //
+  // Only the last open modal acts, so stacked sheets dismiss one at a time.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      const modals = [...document.querySelectorAll('[aria-modal="true"]:not([aria-hidden="true"])')];
+      if (modals.length && modals[modals.length - 1] !== panel.current) return;
+      event.stopPropagation();
+      onClose();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [open, onClose]);
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };

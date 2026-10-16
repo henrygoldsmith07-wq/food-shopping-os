@@ -152,7 +152,7 @@ export default function Onboarding() {
     recordProductEvent('onboarding_completed', {
       intent: entryGoal,
       count: picked.length,
-    });
+    }, undefined, state);
     haptic();
   };
 

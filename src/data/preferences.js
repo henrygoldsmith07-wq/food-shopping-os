@@ -131,4 +131,14 @@ export const WIDGETS = [
   { id: 'report', label: 'Progress and reports' },
 ];
 
-export const DEFAULT_WIDGETS = ['rings', 'setup'];
+/**
+ * The Home layout for an install that has never chosen one.
+ *
+ * `loop` is the product's own loop - plan, pantry, list, cook, waste - and it
+ * carries the only pantry entry point on Home. It is not an optional extra, so
+ * it belongs in the default alongside rings and setup: leaving it out meant a
+ * household on the default meal-planning mode never saw the food loop or the
+ * "Add what's in your cupboards" route at all, because state.widgets is null
+ * until the user edits their layout and this list is what stands in for it.
+ */
+export const DEFAULT_WIDGETS = ['rings', 'setup', 'loop'];

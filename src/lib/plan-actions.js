@@ -11,6 +11,7 @@
  */
 
 import { applyEntries, clearDates, LEFTOVER_CAT, leftoverEntry, moveMeal } from './mealplan.js';
+import { MAX_WEEK_TEMPLATES, snapshotWeekToTemplate, validateTemplateName } from './week-templates.js';
 import { householdPermission } from './household.js';
 import { uid } from './state.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
@@ -152,6 +153,59 @@ export const planActions = (set) => ({
     if (!added) return {};
     return withEvent(s, { plan }, createLedgerEvent('MealPlanned', { batch: added }, { origin: 'user' }));
   }),
+  /**
+   * Save the visible week as a named, replayable template. Templates are
+   * library management, not plan outcomes, so — like plan simulations —
+   * they carry no ledger event. Returns { ok, error } for the screen's
+   * status line; the template itself lands in state.weekTemplates.
+   */
+  saveWeekTemplate: ({ name, dates } = {}) => {
+    let result = null;
+    set((s) => {
+      const existing = s.weekTemplates || [];
+      if (existing.length >= MAX_WEEK_TEMPLATES) {
+        result = { ok: false, error: `Template shelf is full (${MAX_WEEK_TEMPLATES}) — delete one first.` };
+        return {};
+      }
+      const nameError = validateTemplateName(name, existing);
+      if (nameError) {
+        result = { ok: false, error: nameError };
+        return {};
+      }
+      const snap = snapshotWeekToTemplate(s.plan, dates, name);
+      if (snap.error) {
+        result = { ok: false, error: snap.error };
+        return {};
+      }
+      result = { ok: true, template: snap.template };
+      return { weekTemplates: [...existing, snap.template] };
+    });
+    return result || { ok: false, error: 'Could not save the template.' };
+  },
+  deleteWeekTemplate: (id) => set((s) => ({
+    weekTemplates: (s.weekTemplates || []).filter((t) => t?.id !== id),
+  })),
+  renameWeekTemplate: ({ id, name } = {}) => {
+    let result = null;
+    set((s) => {
+      const existing = s.weekTemplates || [];
+      const others = existing.filter((t) => t?.id !== id);
+      const nameError = validateTemplateName(name, others);
+      if (nameError) {
+        result = { ok: false, error: nameError };
+        return {};
+      }
+      if (!existing.some((t) => t?.id === id)) {
+        result = { ok: false, error: 'That template is gone already.' };
+        return {};
+      }
+      result = { ok: true };
+      return {
+        weekTemplates: existing.map((t) => (t?.id === id ? { ...t, name: String(name).trim() } : t)),
+      };
+    });
+    return result || { ok: false, error: 'Could not rename the template.' };
+  },
   toggleMealLock: (date, slot) => set((s) => {
     const recipeId = s.plan?.[date]?.[slot] || null;
     if (!recipeId) return {}; // nothing to lock

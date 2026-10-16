@@ -208,17 +208,27 @@ describe('the Home layout', () => {
   it('puts the default layout back', () => {
     onboard();
     const sheet = openPrefs('Home');
-    // Loop diagnostics are off by default — turn one on, then reset.
-    fireEvent.click(within(sheet).getByLabelText('Show Food loop and loop check'));
-    const row = within(sheet).getByLabelText('Move Food loop and loop check up').parentElement;
-    fireEvent.click(within(row).getByRole('switch'));
+    // The food loop is on by default — it is the product's own loop, not an
+    // optional extra — so turning one OFF and back on is what exercises the
+    // reset. Numbers start off, so turning that on gives the reset something
+    // to undo.
+    fireEvent.click(within(sheet).getByLabelText('Show Your numbers'));
+    expect(within(sheet).getByLabelText('Show Your numbers').getAttribute('aria-checked')).toBe('true');
     fireEvent.click(within(sheet).getByText(/Back to the default layout/));
     fireEvent.click(within(sheet).getByLabelText('Close'));
     goTab('Week');
-    expect(within(document.querySelector('main')).getAllByText(/This week/).length).toBeGreaterThan(0);
-    // The default layout is the quiet one: no loop diagnostics, no numbers.
+    // Week is the one screen that greets rather than titles itself: its <h1>
+    // lives in the header as "Good morning, <name>" (see TITLES.home in
+    // AppHeader.jsx), so the literal "This week" never appears in <main>.
+    // Assert the greeting the screen actually renders — a name we supplied at
+    // onboarding, so it cannot drift with the time of day.
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent).toMatch(/Good (morning|afternoon|evening), Sam/);
+    expect(document.querySelector('main')?.querySelector('h1')).toBeNull();
+    // The default layout is the quiet one: numbers and reports off, the loop on.
     const again = openPrefs('Home');
-    expect(within(again).getByLabelText('Show Food loop and loop check').getAttribute('aria-checked')).toBe('false');
+    expect(within(again).getByLabelText('Show Your numbers').getAttribute('aria-checked')).toBe('false');
+    expect(within(again).getByLabelText('Show Food loop and loop check').getAttribute('aria-checked')).toBe('true');
     fireEvent.click(within(again).getByLabelText('Close'));
   });
 });

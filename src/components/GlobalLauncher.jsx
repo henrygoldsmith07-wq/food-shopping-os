@@ -150,6 +150,7 @@ export function QuickAdd({ open, onClose, onRun, onAddShopping }) {
     ['pantry', 'Pantry item', 'Put something into your kitchen', Package],
     ['plan', 'Meal plan', 'Choose a meal or generate a plan', BookOpen],
     ['water', 'Glass of water', 'Add 250 ml now', Waves],
+    // The assistant is always available: on-device, not a secondary tool.
     ['assistant', 'Ask Forq', 'Open Guidance and ask a question', Sparkles],
     ['undo', 'Undo last action', 'Revert your latest saved change', Undo2],
   ];

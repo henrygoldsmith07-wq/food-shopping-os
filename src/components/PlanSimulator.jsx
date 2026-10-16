@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { SlidersHorizontal, Sparkles } from 'lucide-react';
+import { SlidersHorizontal, Sparkles, BookmarkPlus, Trash2 } from 'lucide-react';
 import { Card, Chip, Pill } from './ui.jsx';
 import { useApp } from '../lib/store.jsx';
 import { simulatePlan } from '../lib/plan-simulator.js';
@@ -33,6 +33,23 @@ export default function PlanSimulator() {
     today: app.day,
   }), [candidates, app.pantry, app.equipment, app.day, budget, app.spentThisWeek, maxTime, strictEquipment]);
   const best = simulation.best;
+  const saved = app.planSimulations || [];
+  const saveCurrent = () => {
+    if (!best) return;
+    app.savePlanSimulation({
+      label: `£${budget} · ${maxTime}m${strictEquipment ? ' · my kit' : ''}`,
+      score: best.score,
+      summary: simulation.summary,
+      meals: best.meals.map((meal) => meal.name || meal.title),
+      options: { weeklyBudget: budget, maxTimeMins: maxTime, strictEquipment },
+    });
+  };
+  const restore = (simulation) => {
+    const options = simulation?.options || {};
+    if (Number.isFinite(Number(options.weeklyBudget))) setBudget(Number(options.weeklyBudget));
+    if (Number.isFinite(Number(options.maxTimeMins))) setMaxTime(Number(options.maxTimeMins));
+    if (typeof options.strictEquipment === 'boolean') setStrictEquipment(options.strictEquipment);
+  };
 
   return (
     <Card className="space-y-3">
@@ -72,6 +89,37 @@ export default function PlanSimulator() {
           {showAll && <ul className="space-y-1 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>{simulation.tradeoffs.map((reason) => <li key={reason}>• {reason}</li>)}</ul>}
         </>
       ) : <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Add recipes to simulate a plan.</p>}
+      {best && (
+        <button
+          className="press w-full rounded-2xl border px-3 py-2.5 text-[0.75rem] font-extrabold"
+          style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
+          onClick={saveCurrent}
+        >
+          <span className="inline-flex items-center gap-1.5"><BookmarkPlus size={13} /> Save this scenario</span>
+        </button>
+      )}
+      {saved.length > 0 && (
+        <ul className="space-y-1.5">
+          {saved.slice().reverse().map((simulation) => (
+            <li key={simulation.id} className="flex items-center gap-2 rounded-2xl border px-3 py-2" style={{ borderColor: 'var(--line)' }}>
+              <button className="min-w-0 flex-1 text-left" onClick={() => restore(simulation)}>
+                <span className="block truncate text-[0.75rem] font-extrabold">{simulation.label || 'Saved scenario'}</span>
+                <span className="block truncate text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  {simulation.score == null ? '' : `${simulation.score}/100 · `}{simulation.meals?.length || 0} meals
+                </span>
+              </button>
+              <button
+                className="press shrink-0 text-[0.6875rem] font-extrabold"
+                style={{ color: 'var(--muted)' }}
+                aria-label={`Delete saved scenario ${simulation.label || ''}`}
+                onClick={() => app.deletePlanSimulation(simulation.id)}
+              >
+                <Trash2 size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

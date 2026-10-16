@@ -91,12 +91,17 @@ function HealthierSwaps({ food }) {
 
 export default function FoodDetail({ food, entry, defaultMeal, onSave, onDelete }) {
   const app = useApp();
-  const source = food || (entry && { ...entry, id: entry.foodId, servings: [] });
+  // A fresh object identity every render would re-run the serving-options memo
+  // below (and anything keyed on `source`) for no reason — stabilise it.
+  const source = useMemo(
+    () => food || (entry && { ...entry, id: entry.foodId, servings: [] }),
+    [food, entry],
+  );
   const isQuick = !source?.per100;
 
   const options = useMemo(
     () => (isQuick ? [] : servingOptions(source, entry?.grams)),
-    [source, entry, isQuick],
+    [source, entry?.grams, isQuick],
   );
 
   const startGrams = entry?.grams ?? options[0]?.grams ?? 100;

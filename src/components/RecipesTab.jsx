@@ -109,7 +109,9 @@ export default function RecipesTab({ openRecipe }) {
   const [collectionName, setCollectionName] = useState('');
   const [folderId, setFolderId] = useState(ALL_RECIPES);
 
-  const pantryNames = app.pantry.map((p) => p.name);
+  // A fresh array identity every render would re-run the search memo below on
+  // every keystroke-adjacent render — derive the names once per pantry change.
+  const pantryNames = useMemo(() => app.pantry.map((p) => p.name), [app.pantry]);
   const active = filters.diets.length + filters.include.length + filters.exclude.length
     + (filters.maxTime ? 1 : 0) + (filters.maxMissing !== null ? 1 : 0);
 
@@ -117,6 +119,9 @@ export default function RecipesTab({ openRecipe }) {
     || app.recipeCollections[0]
     || null;
 
+  // Deps are intentionally granular: the whole `app` object identity changes
+  // on every store update, so depending on it would defeat this memo.
+  /* eslint-disable react-hooks/exhaustive-deps */
   const pool = useMemo(() => {
     if (view === 'mine') return app.myRecipes;
     if (view === 'favourites') return allRecipes().filter((r) => app.favourites.includes(r.id));
@@ -147,8 +152,10 @@ export default function RecipesTab({ openRecipe }) {
       suitabilityCtx: app.suitabilityCtx,
       ...filters,
     }), { query, sort }).filter((recipe) => !tagFilter || recipe.tags.includes(tagFilter)),
-    [safePool, query, filters, app.pantry, app.suitabilityCtx, sort, tagFilter],
+    // `pantryNames` is the memoised derivation of `app.pantry` above.
+    [safePool, query, filters, pantryNames, app.suitabilityCtx, sort, tagFilter],
   );
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const [shown, setShown] = useState(PAGE);
   useEffect(() => setShown(PAGE), [query, filters, view, filter, folderId]);

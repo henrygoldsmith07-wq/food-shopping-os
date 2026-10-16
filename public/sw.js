@@ -23,7 +23,7 @@
  * shell or leak stale personal data into the new version.
  */
 
-const VERSION = 'v6';
+const VERSION = 'v7'; // bumped with the manifest metadata update so installs pick up the new shell
 const SHELL_CACHE = `forq-shell-${VERSION}`;
 const ASSET_CACHE = `forq-assets-${VERSION}`;
 const ACTIVE_CACHES = [SHELL_CACHE, ASSET_CACHE];

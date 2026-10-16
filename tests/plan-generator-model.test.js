@@ -65,4 +65,24 @@ describe('plan generator model — components orchestrate, domain decides', () =
       .toEqual([{ date: app.day, slot: 'dinner', recipeId: 'r1' }]);
     expect(entriesForGenerated(null, 'A week', ['2026-09-29'], app.day)).toEqual([]);
   });
+
+  it('maps an all-meals run to day-major triples without touching the dinners default', () => {
+    const slots = ['breakfast', 'lunch', 'dinner'];
+    const generated = [{ id: 'b' }, { id: 'l' }, { id: 'd' }, { id: 'b2' }, { id: 'l2' }, { id: 'd2' }];
+    expect(entriesForGenerated(generated, 'A week', ['2026-09-29', '2026-09-30'], app.day, slots))
+      .toEqual([
+        { date: '2026-09-29', slot: 'breakfast', recipeId: 'b' },
+        { date: '2026-09-29', slot: 'lunch', recipeId: 'l' },
+        { date: '2026-09-29', slot: 'dinner', recipeId: 'd' },
+        { date: '2026-09-30', slot: 'breakfast', recipeId: 'b2' },
+        { date: '2026-09-30', slot: 'lunch', recipeId: 'l2' },
+        { date: '2026-09-30', slot: 'dinner', recipeId: 'd2' },
+      ]);
+    // No slots arg: Autopilot's dinners-only mapping is unchanged.
+    expect(entriesForGenerated(generated, 'A week', ['2026-09-29', '2026-09-30'], app.day))
+      .toEqual([
+        { date: '2026-09-29', slot: 'dinner', recipeId: 'b' },
+        { date: '2026-09-30', slot: 'dinner', recipeId: 'l' },
+      ]);
+  });
 });

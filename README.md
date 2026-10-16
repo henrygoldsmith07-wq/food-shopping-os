@@ -2,7 +2,7 @@
 
 > Tell Forq what you are eating; it works out what to buy; it helps you waste less.
 >
-> **See the value in 30 seconds:** [Open the instant demo](/demo) (replace with your deployed URL, e.g. `https://your-forq-domain.example/demo`).
+> **See the value in 30 seconds:** [Open the instant demo](/demo) — live at <https://food-shopping-os.vercel.app/demo>.
 
 ## Why this is different
 
@@ -31,21 +31,13 @@ Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping
 
 ### Demo media
 
-The `/demo` route is the canonical visual walkthrough. Add a short screen recording or GIF at `public/demo/forq-demo.gif` when one is available, then embed it here:
-
-```md
-![Forq demo: from meal plan to pantry-aware shopping list](public/demo/forq-demo.gif)
-```
-
-The demo itself centres on the product loop: the meal decision, the pantry-aware list, and the closed loop after cooking.
-
+`/demo` is the canonical visual walkthrough: the meal decision, the pantry-aware list, and the closed loop after cooking. To add a screen recording, put it at `public/demo/forq-demo.gif` and embed it above this line.
 
 One app for the weekly food loop: plan meals, buy exactly what you need, waste less.
 Mobile-first PWA-style web app built with Next.js 16 + React 18 + Tailwind
-CSS 4, styled in the calm monochrome Le Studio design language (see
-`apps/le-studio-site`): ink-on-neutral surfaces, border-first cards,
-black-on-white CTAs, and monochrome stroke iconography (lucide-react)
-throughout — no emoji in the UI.
+CSS 4, styled in a calm monochrome design language: ink-on-neutral surfaces,
+border-first cards, black-on-white CTAs, and monochrome stroke iconography
+(lucide-react) throughout — no emoji in the UI.
 
 **The app starts empty.** There is no demo user, no pretend pantry, no invented
 spending history and no pre-earned achievements. A first run asks for your
@@ -794,6 +786,11 @@ flag; Forq's own data is never deleted or moved.
   the press acknowledgement and drops the travel
 
 ## Run
+
+Requires **Node 22–24** (pinned in `engines`). Node 26 is not supported: jsdom
+does not expose `localStorage` there, so every component test fails with
+`Cannot read properties of undefined (reading 'clear')` — an environment
+problem that looks like a catastrophic suite failure. CI runs Node 22.
 
 ```bash
 npm install

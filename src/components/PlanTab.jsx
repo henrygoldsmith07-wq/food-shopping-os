@@ -17,6 +17,7 @@ import { MonthGrid, WeekGrid } from './PlanCalendar.jsx';
 import RecipePicker from './RecipePicker.jsx';
 import PlanGenerator from './PlanGenerator.jsx';
 import PlanRepeatLastWeek from './PlanRepeatLastWeek.jsx';
+import WeekTemplates from './WeekTemplates.jsx';
 import PrimaryAction from './PrimaryAction.jsx';
 import CalendarAvailability from './CalendarAvailability.jsx';
 import MonthMealRow from './MonthMealRow.jsx';
@@ -41,8 +42,13 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const [calendarStatus, setCalendarStatus] = useState('');
   const [prepDone, setPrepDone] = useState([]);
   const [justPlanned, setJustPlanned] = useState(null); // a just-picked tonight dinner → shopping offer {id, rows}
+  // Runs when navigation asks for a focus date/item, not when the plan edits:
+  // depending on `app.plan` would yank the calendar offset and reopen the
+  // generator on every meal move.
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); }
     if (tonightItem) { setView('week'); setOffset(0); const planned = byId((app.plan[app.day] || {}).dinner)?.name || null; setPicking({ date: app.day, slot: 'dinner', query: tonightItem, guard: planned }); }   }, [focusDate, focusItem, tonightItem, app.day]);
+  /* eslint-enable react-hooks/exhaustive-deps */
   const anchorWeek = shiftWeek(app.day, offset);
   const anchorMonth = shiftMonth(app.day, offset);
   const week = useMemo(() => weekDates(anchorWeek), [anchorWeek]);
@@ -110,8 +116,23 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       <Section className="rise rise-1">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex gap-2">
-            <Chip active={view === 'week'} onClick={() => { setView('week'); setOffset(0); clearRangeStatus(); }}>Week</Chip>
-            <Chip active={view === 'month'} onClick={() => { setView('month'); setOffset(0); clearRangeStatus(); }}>Month</Chip>
+            {/* These switch the calendar's range, so they say what they switch.
+                Labelling them "Week"/"Month" alone collides with the nav's own
+                Week tab, and tells a screen-reader user nothing about scope. */}
+            <Chip
+              active={view === 'week'}
+              aria-label="Show week view"
+              onClick={() => { setView('week'); setOffset(0); clearRangeStatus(); }}
+            >
+              Week
+            </Chip>
+            <Chip
+              active={view === 'month'}
+              aria-label="Show month view"
+              onClick={() => { setView('month'); setOffset(0); clearRangeStatus(); }}
+            >
+              Month
+            </Chip>
           </div>
           {/* Arrows keep their tap target; the date label gives way rather than pushing the page sideways. */}
           <div className="flex min-w-0 items-center gap-1">
@@ -145,6 +166,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           <p className="mb-2 text-[0.78125rem] font-bold" style={{ color: 'var(--muted)' }}>{rangeLabel}</p>
         )}
         <PlanRepeatLastWeek dates={week} />
+        {view === 'week' && <WeekTemplates dates={week} />}
         {justPlanned && <JustPlannedOffer key={justPlanned.id} meal={byId(justPlanned.id)?.name} missing={justPlanned.rows.length} onAdd={() => app.addToList(justPlanned.rows)} onGo={() => goTab?.('shop')} onDismiss={() => setJustPlanned(null)} />}
         {moving && (
           <Card className="!p-3 mb-2.5 flex items-center justify-between gap-2" style={{ borderColor: 'var(--accent)' }}>

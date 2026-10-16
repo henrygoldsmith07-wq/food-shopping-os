@@ -168,7 +168,12 @@ export default function ProfileTab({ openGuidance }) {
         </div>
       </Section>
 <Section title="Health & training" className="rise rise-1" hidden={!app.moduleOn('health')}>
-        {(app.hasTool?.('health-vault') || app.hasTool?.('exercise') || app.hasTool?.('fasting') || app.hasTool?.('bloods') || app.hasTool?.('cycle')) ? (
+        {/* The Health card renders when either (a) one of the health tools is
+            switched on, or (b) the nutrition module is active. (b) matters: the
+            nutrition breakdown lives inside this card, so with every health tool
+            off the section rendered its heading and nothing else — a visible
+            section with no way in, and the nutrition breakdown unreachable. */}
+        {(app.hasTool?.('health-vault') || app.hasTool?.('exercise') || app.hasTool?.('fasting') || app.hasTool?.('bloods') || app.hasTool?.('cycle') || app.moduleOn('nutrition')) ? (
         <div className="grid grid-cols-2 gap-2.5">
           <Card onClick={() => setHealthOpen(true)}>
             <HeartPulse size={17} style={{ color: 'var(--muted)' }} />

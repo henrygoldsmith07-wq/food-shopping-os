@@ -203,17 +203,9 @@ describe('goal-led first entry', () => {
     fireEvent.click(screen.getByText('Start using Forq'));
     fireEvent.click(screen.getByText('Week')); // the dashboard carries the goal CTA
 
-    // The goal CTA lives in the loop panel — optional, so turn it on through
-    // Preferences first, then the CTA is right there on Home.
-    fireEvent.click(screen.getByRole('button', { name: /^You — profile/ }));
-    const section = screen.getByText('Guidance & you').closest('section');
-    fireEvent.click(within(section).getByText('Preferences'));
-    const prefs = dialogFor('Preferences');
-    const chip = within(prefs).queryByRole('button', { name: 'Home preferences' });
-    fireEvent.click(chip || within(prefs).getByText('Home'));
-    fireEvent.click(within(prefs).getByLabelText('Show Food loop and loop check'));
-    fireEvent.click(within(prefs).getByLabelText('Close'));
-
+    // The loop panel ships on — it is the product's own loop, not an optional
+    // extra — so the goal CTA is already on Home with no Preferences detour.
+    // (Reaching for the widget's toggle here would turn it OFF.)
     expect(screen.getAllByText('Add what’s in your cupboards').length).toBeGreaterThan(0);
   });
 });

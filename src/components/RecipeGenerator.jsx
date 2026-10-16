@@ -25,8 +25,10 @@ export default function RecipeGenerator({ openRecipe }) {
   const [thinking, setThinking] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const pantryNames = app.pantry.map((p) => p.name);
-  const inputs = useMemo(() => generatorInputs(pantryNames), [app.pantry]);
+  // A fresh array identity every render would re-run the memos below for no
+  // reason — derive the names once per pantry change.
+  const pantryNames = useMemo(() => app.pantry.map((p) => p.name), [app.pantry]);
+  const inputs = useMemo(() => generatorInputs(pantryNames), [pantryNames]);
   const usable = inputs.filter((a) => a.options.length);
 
   const recipe = useMemo(() => {
@@ -39,8 +41,7 @@ export default function RecipeGenerator({ openRecipe }) {
       month: seasonal ? monthOf(app.day) : null,
       seed,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, servings, maxTime, seasonal, app.planDiets, app.day]);
+  }, [seed, servings, maxTime, seasonal, app.planDiets, app.day, pantryNames]);
 
   const invent = () => {
     setThinking(true);

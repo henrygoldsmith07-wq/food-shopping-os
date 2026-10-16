@@ -7,6 +7,7 @@ import {
 import { formatAmount } from '../src/data/nutrients.js';
 import { FOODS } from '../src/data/foods.js';
 import { microsFor } from '../src/data/micronutrients.js';
+import { nutritionDisclaimer } from '../src/lib/nutrition-safety.js';
 
 const oats = FOODS.find((f) => f.id === 'porridge-oats');
 const banana = FOODS.find((f) => f.id === 'banana');
@@ -174,5 +175,41 @@ describe('timing and snacks', () => {
     expect(s.count).toBe(1);
     expect(s.kcal).toBe(105);
     expect(s.pctOfDay).toBe(Math.round((105 / 657) * 100));
+  });
+});
+
+/**
+ * The diary's calorie ring and macro meters read as measured facts, so the
+ * confidence behind them has to be stated rather than implied. nutritionDisclaimer
+ * is the one source of that copy, shared by every surface that shows totals.
+ */
+describe('nutritionDisclaimer', () => {
+  it('states the estimates caveat when there is no detail at all', () => {
+    expect(nutritionDisclaimer({ kcal: 1500 }))
+      .toBe('Nutrition figures are estimates from your logged foods.');
+  });
+
+  it('warns plainly at low confidence instead of quoting a precise number', () => {
+    const low = nutritionDisclaimer({ detail: { kcal: { confidence: 'low' } } });
+    expect(low).toMatch(/^Low data confidence/);
+    expect(low).toMatch(/not medical advice/i);
+  });
+
+  it('softens to approximate at medium confidence', () => {
+    expect(nutritionDisclaimer({ detail: { kcal: { confidence: 'medium' } } }))
+      .toBe('Some items are estimated — totals are approximate.');
+  });
+
+  it('is quiet at high confidence — nothing to caveat', () => {
+    expect(nutritionDisclaimer({ detail: { kcal: { confidence: 'high' } } }))
+      .toBe('Totals from measured catalogue entries.');
+  });
+
+  it('matches the confidence dayTotals itself reports for real entries', () => {
+    // Oats are measured catalogue data, so a day of them is high confidence —
+    // and the diary is expected to stay silent for it.
+    const totals = dayTotals([buildEntry(oats, 60, 'breakfast')]);
+    expect(totals.dataQuality.confidence).toBe('high');
+    expect(nutritionDisclaimer(totals)).toBe('Totals from measured catalogue entries.');
   });
 });

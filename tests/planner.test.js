@@ -210,3 +210,74 @@ describe('plans learn from confirmed skip reasons', () => {
     expect(note).toBeNull();
   });
 });
+
+describe('all-meals week and month runs', () => {
+  const ALL = ['breakfast', 'lunch', 'dinner'];
+
+  it('plans breakfast, lunch and dinner for every day, laid day-major', () => {
+    const { meals, note } = buildPlan({ scope: 'A week', budget: 4, slots: ALL }, 7);
+    expect(meals).toHaveLength(21);
+    meals.forEach((meal, i) => expect(meal.meal).toBe(ALL[i % 3]));
+    expect(note).toMatch(/breakfast, lunch, dinner for 7 days/);
+  });
+
+  it('keeps pools per slot: a lunch pool never donates a dinner', () => {
+    const lunches = RECIPES.filter((r) => r.meal === 'lunch').slice(0, 4);
+    const { meals } = buildPlan({
+      scope: 'A week', budget: 4, slots: ALL, days: 2,
+      recipes: [...RECIPES.filter((r) => r.meal !== 'lunch'), ...lunches],
+    }, 11);
+    const dinnerCells = meals.filter((_, i) => i % 3 === 2);
+    expect(dinnerCells.every((m) => m.meal === 'dinner')).toBe(true);
+    expect(dinnerCells.some((m) => lunches.some((l) => l.id === m.id))).toBe(false);
+  });
+
+  it('respects budget and time in every slot', () => {
+    const { meals } = buildPlan({ scope: 'A week', budget: 2, maxTime: 30, slots: ALL }, 5);
+    expect(meals).toHaveLength(21);
+    expect(meals.every((m) => m.costPerServing <= 2 && m.time <= 30)).toBe(true);
+  });
+
+  it('lays leftovers onto the earliest dinners first', () => {
+    const dinner = RECIPES.find((r) => r.meal === 'dinner');
+    const { meals, note } = buildPlan({
+      scope: 'A week', budget: 4, slots: ALL, days: 3,
+      leftovers: [{ recipeId: dinner.id, portions: 2 }],
+    }, 9);
+    expect(meals).toHaveLength(9);
+    expect(meals[2].id).toBe(dinner.id); // day one dinner
+    expect(meals[5].id).toBe(dinner.id); // day two dinner
+    expect(meals[8].id).not.toBe(dinner.id); // day three dinner varies
+    expect(note).toMatch(/Leftover-first/);
+  });
+
+  it('batches dinners while breakfasts and lunches still vary', () => {
+    const { meals, note } = buildPlan({ scope: 'A week', budget: 4, slots: ALL, batch: true }, 12);
+    expect(meals).toHaveLength(21);
+    const dinners = meals.filter((_, i) => i % 3 === 2).map((m) => m.id);
+    const breakfasts = meals.filter((_, i) => i % 3 === 0).map((m) => m.id);
+    expect(new Set(dinners).size).toBeLessThanOrEqual(3);
+    expect(new Set(breakfasts).size).toBeGreaterThan(1);
+    expect(note).toMatch(/Batch dinners/);
+  });
+
+  it('pins a focused ingredient into the first slot that cooks it, keeping slot integrity', () => {
+    const { meals, note } = buildPlan({
+      scope: 'A week', budget: 4, slots: ALL, days: 2, focus: ['chickpeas'],
+    }, 4);
+    // The pin lands somewhere real — and whichever cell it takes still
+    // holds that slot's own meal: a lunch item never lands in a dinner cell.
+    expect(meals.some((m) => /chickpea/i.test(m.name))).toBe(true);
+    meals.forEach((meal, i) => expect(meal.meal).toBe(ALL[i % 3]));
+    expect(note).toMatch(/pinned in/);
+  });
+
+  it('is deterministic per seed and leaves the dinners default untouched', () => {
+    const a = buildPlan({ scope: 'A week', budget: 4, slots: ALL }, 99).meals.map((m) => m.id);
+    const b = buildPlan({ scope: 'A week', budget: 4, slots: ALL }, 99).meals.map((m) => m.id);
+    expect(a).toEqual(b);
+    const dinners = buildPlan({ scope: 'A week', budget: 4 }, 99);
+    expect(dinners.meals).toHaveLength(7);
+    expect(dinners.meals.every((m) => m.meal === 'dinner')).toBe(true);
+  });
+});

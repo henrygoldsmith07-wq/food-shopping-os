@@ -172,14 +172,21 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   };
 
   if (!app.householdAccess.shopping) {
+    // A child using the app alone has no household member, so the name the
+    // household case prints would be undefined. Say why instead.
+    const who = app.activeMember?.name;
     return (
       /* The shared header already says "Shop" — a second <h1> here would be
          two page titles on one screen. */
       <div className="pb-6 pt-2">
         <Section>
-          <Empty Icon={ShoppingCart} title={`Shopping is off for ${app.activeMember?.name}`}>
-            An adult can change this profile’s household permissions from the avatar in the
-            top corner, under Household.
+          <Empty
+            Icon={ShoppingCart}
+            title={who ? `Shopping is off for ${who}` : 'Shopping is not part of the under-18 app'}
+          >
+            {who
+              ? 'An adult can change this profile’s household permissions from the avatar in the top corner, under Household.'
+              : 'Meals, recipes, the pantry and the plan all still work. An adult can turn shopping on for this profile from Household.'}
           </Empty>
         </Section>
       </div>
@@ -196,7 +203,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
           {[['list', 'List', ShoppingCart], ['history', 'Shops', Receipt], ['prices', 'Prices', TrendingUp], ...((app.hasTool?.('live-prices') ?? false) ? [['stores', 'Stores', Building2]] : []), ['budget', 'Budget', Banknote]].map(([k, label, Icon]) => (
             <Chip key={k} active={view === k} onClick={() => {
               setView(k);
-              if (k === 'prices') recordProductEvent('price_comparison_opened');
+              if (k === 'prices') recordProductEvent('price_comparison_opened', {}, undefined, app);
             }}>
               <span className="inline-flex items-center gap-1.5"><Icon size={13} /> {label}</span>
             </Chip>
@@ -466,7 +473,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
               label="Start shopping"
               hint={`${visibleList.length} item${visibleList.length === 1 ? '' : 's'}`}
               onClick={() => {
-                recordProductEvent('shopping_started', { count: visibleList.length, store: store || 'all' });
+                recordProductEvent('shopping_started', { count: visibleList.length, store: store || 'all' }, undefined, app);
                 shoppingSession.start(store);
               }}
             />

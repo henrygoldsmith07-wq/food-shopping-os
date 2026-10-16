@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Check, Image, Sparkles, Trash2 } from 'lucide-react';
+import { Camera, Check, Image as ImageIcon, Sparkles, Trash2 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { recogniseShelf } from '../lib/foodlog.js';
 import { CATEGORIES, LOCATIONS } from '../data/pantry.js';
@@ -74,7 +74,9 @@ export default function PantryCapture({ onDone }) {
         style={{ height: 200, background: 'var(--card-2)', borderColor: 'var(--line)' }}
       >
         {preview
-          ? <img src={preview} alt="Your shelf" className="h-full w-full object-cover" />
+          // A blob: object URL the user just captured: next/image cannot optimise it (and should not upload it anywhere).
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={preview} alt="Your shelf" decoding="async" className="h-full w-full object-cover" />
           : (
             <div className="text-center px-8">
               <Camera size={34} strokeWidth={1.4} style={{ color: 'var(--muted)' }} />
@@ -100,7 +102,7 @@ export default function PantryCapture({ onDone }) {
           className="press rounded-2xl py-3 text-[0.875rem] font-extrabold"
           style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
-          <span className="inline-flex items-center gap-1.5"><Image size={15} /> Choose photo</span>
+          <span className="inline-flex items-center gap-1.5"><ImageIcon size={15} /> Choose photo</span>
         </button>
         <button
           onClick={() => analyse(`shelf-${Date.now() % 8}`, null)}

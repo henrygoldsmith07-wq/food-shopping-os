@@ -43,6 +43,8 @@ const reachable = (app, key) => {
   // Ask Forq answers on-device from pantry, diary, plan and shopping history
   // (lib/ai-assistant.js) — nothing leaves the browser — so it stays in the
   // palette. The `assistant` optional tool gates server-backed AI relay only.
+  // Parked tools stay out of the palette until enabled in Add tools; the
+  // assistant is exempt: it is on-device and always available.
   if ((key === 'add-food' || key === 'barcode' || key === 'food') && app.hasTool) {
     // Food diary entry itself is core; barcode scan stays core. No gate.
   }

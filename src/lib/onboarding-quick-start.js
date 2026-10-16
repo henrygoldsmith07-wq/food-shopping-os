@@ -20,7 +20,12 @@ const nextDay = (date, offset) => {
 /** Turn the small set of onboarding answers into an immediately useful start. */
 export const firstSessionPlan = ({ day, recipes = [], pickedRecipeIds = [], household = 1, budget = 0 } = {}) => {
   const picked = pickedRecipeIds.map((id) => recipes.find((recipe) => recipe.id === id)).filter(Boolean);
-  const meals = picked.length ? picked : recipes.filter((recipe) => recipe.meal === 'dinner').slice(0, 3);
+  // Nothing picked means nothing planned. Onboarding tells the user "Choose
+  // nothing to start with an empty app" and the landing copy promises "Nothing
+  // is filled in for you" — quietly seeding three dinners and a full shopping
+  // list anyway broke both, and gave a brand-new household a week of meals and
+  // a basket it never asked for.
+  const meals = picked;
   const plan = Object.fromEntries(meals.map((recipe, index) => [nextDay(day, index), { dinner: recipe.id }]));
   const people = Math.max(1, Number(household) || 1);
   const shoppingByIngredient = new Map();

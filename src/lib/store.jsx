@@ -323,6 +323,10 @@ export function AppProvider({ children }) {
       unsubscribeRealtime?.();
       window.removeEventListener('forq-cloud-refresh', refreshCloud);
     };
+  // Mount-once by design: `adoptHouseholdCopy` is rebuilt every render, so
+  // listing it would re-initialise cloud sync (and its realtime subscription)
+  // on every store update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -356,14 +360,20 @@ export function AppProvider({ children }) {
       });
     }, 750);
     return () => clearTimeout(cloudTimer.current);
+  // Keyed on the state value only: refs and `adoptHouseholdCopy` are read at
+  // fire time inside the debounced push, and depending on the adopter (a new
+  // identity each render) would reset the debounce every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   /* Under 18 the product-insights answer is "no" and stays "no". Hiding the
      toggle isn't enough — a consent granted before a birthday, or restored
-     from a backup, is revoked here rather than quietly honoured. */
+     from a backup, is revoked here rather than quietly honoured. Reading the
+     whole profile rather than one field means a consent restored by a backup,
+     or granted before a birthday, is revoked even when nothing else changed. */
   useEffect(() => {
-    if (isUnderEighteen(state) && readAnalyticsConsent()) setAnalyticsConsent(false);
-  }, [state.body?.age]);
+    if (isUnderEighteen(state) && readAnalyticsConsent(state)) setAnalyticsConsent(false, state);
+  }, [state]);
 
   // Your recipes join the book's lookup, so a plan slot or a cook history entry
   // pointing at one of yours resolves like any other dish.
@@ -475,7 +485,7 @@ export function AppProvider({ children }) {
       platformAvailable: platformUnlockAvailable(),
     },
     ...api,
-  }), [effectiveState, state.healthVaultEnabled, derived, alerts, api, vaultUnlocked, enterDemoMode, exitDemoMode]);
+  }), [effectiveState, state.healthVaultEnabled, derived, alerts, api, vaultUnlocked, enterDemoMode, exitDemoMode, beginImportBatch, endImportBatch, demo]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
