@@ -14,7 +14,9 @@
  * Pure + offline. Never invents a recipe — empty catalogue → { pick: null }.
  */
 
-import { explainRecommendation, pantryCoverage, expiringIngredients } from './recommend.js';
+import {
+  explainRecommendation, expiringIngredients, ingredientStock, pantryCoverage,
+} from './recommend.js';
 import { evaluateFoodSuitability } from './food-suitability.js';
 import { tasteScore } from './taste.js';
 import { dayStamp, daysUntil, addDays, weekStart } from './kitchen-dates.js';
@@ -304,7 +306,9 @@ export const rankMealsForTonight = ({
   month = null,
   maxResults = 12,
 } = {}) => {
-  const pantryNames = pantry.map((p) => p.name);
+  // Leftovers arrive separately and score by recipe id, not as ingredients.
+  const stock = ingredientStock(pantry);
+  const pantryNames = stock.map((p) => p.name);
   const wasteNames = new Set((waste || []).filter((w) => w.reason === 'disliked').map((w) => String(w.name || '').toLowerCase()));
   const m = month || Number(String(today).slice(5, 7)) || new Date().getMonth() + 1;
   const model = householdModel || {};
@@ -372,10 +376,10 @@ export const rankMealsForTonight = ({
       };
     }
     const explanation = explainRecommendation(recipe, {
-      pantry, pantryNames, today, date, availability: {}, people, month: m, taste, budget: budgetPerServing,
+      pantry: stock, pantryNames, today, date, availability: {}, people, month: m, taste, budget: budgetPerServing,
     });
     const coverage = pantryCoverage(recipe, pantryNames);
-    const expiring = expiringIngredients(recipe, pantry, today, 3);
+    const expiring = expiringIngredients(recipe, stock, today, 3);
     const tasteRaw = taste ? tasteScore(recipe, taste) : 0;
     const taste01 = clamp01((tasteRaw + 3) / 12);
     const time = Number(recipe.time) || 0;

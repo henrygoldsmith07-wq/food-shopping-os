@@ -191,39 +191,41 @@ vi.mock('../src/components/LoopCheck.jsx', () => ({ default: () => <div /> }));
 vi.mock('../src/components/HomeNumbers.jsx', () => ({ default: () => <div /> }));
 vi.mock('../src/components/OutcomeDashboard.jsx', () => ({ default: () => <div /> }));
 
-describe('tonight card responses', () => {
-  beforeEach(() => {
-    Object.assign(mockApp, {
-      day: '2026-09-01',
-      plan: {},
-      pantry: [],
-      shoppingList: [],
-      shops: [],
-      cooked: [],
-      waste: [],
-      members: [],
-      diets: [],
-      prefs: { diets: [] },
-      safeRecipes: [],
-      tasteProfile: { rated: 0 },
-      portions: 2,
-      weeklyBudget: 60,
-      spentThisWeek: 0,
-      calendarBusy: [],
-      tonightDecision: { pick: pickA, ranked: [pickA, pickB], confidence: 'medium', reasons: pickA.reasons },
-      weekRecovery: null,
-      closedLoop: { steps: [], pct: 0, next: 'plan' },
-      useSoonIngredients: [],
-      remindersDue: [],
-      starterRecipeIds: [],
-      welcomeDismissed: true,
-      dismissWelcome: () => {},
-      applyWeekRecovery: vi.fn(),
-      undoLast: vi.fn(() => true),
-      respondToRecommendation: vi.fn(),
-    });
-    openRecipe.mockClear();
+const resetMockApp = () => {
+  Object.assign(mockApp, {
+    day: '2026-09-01',
+    plan: {},
+    pantry: [],
+    shoppingList: [],
+    shops: [],
+    cooked: [],
+    waste: [],
+    members: [],
+    diets: [],
+    prefs: { diets: [] },
+    safeRecipes: [],
+    tasteProfile: { rated: 0 },
+    portions: 2,
+    weeklyBudget: 60,
+    spentThisWeek: 0,
+    calendarBusy: [],
+    tonightDecision: { pick: pickA, ranked: [pickA, pickB], confidence: 'medium', reasons: pickA.reasons },
+    weekRecovery: null,
+    closedLoop: { steps: [], pct: 0, next: 'plan' },
+    useSoonIngredients: [],
+    remindersDue: [],
+    starterRecipeIds: [],
+    welcomeDismissed: true,
+    dismissWelcome: () => {},
+    applyWeekRecovery: vi.fn(),
+    undoLast: vi.fn(() => true),
+    respondToRecommendation: vi.fn(),
   });
+  openRecipe.mockClear();
+};
+
+describe('tonight card responses', () => {
+  beforeEach(resetMockApp);
 
   const props = { openRecipe, openPantry: () => {}, openGuidance: () => {}, goTab: () => {}, goLog: () => {} };
 
@@ -258,5 +260,47 @@ describe('tonight card responses', () => {
     }));
     // The next ranked suggestion takes the card's place.
     expect(screen.getByText('Tomato pasta')).toBeTruthy();
+  });
+});
+
+describe('the tonight card follows the plan', () => {
+  beforeEach(resetMockApp);
+  const props = { openRecipe, openPantry: () => {}, openGuidance: () => {}, goTab: () => {}, goLog: () => {} };
+  const planned = byId('chickpea-curry');
+  const card = () => screen.getByRole('region', { name: "Tonight's meal" });
+
+  it('leads with tonight\'s planned dinner, not the engine\'s pick', () => {
+    cleanup();
+    mockApp.plan = { '2026-09-01': { dinner: planned.id } };
+    mockApp.cooked = [];
+    render(<HomeTab {...props} />);
+    expect(card().textContent).toContain('Tonight — on your plan');
+    expect(card().textContent).toContain(planned.name);
+    expect(card().textContent).not.toContain('Chickpea curry');
+    fireEvent.click(screen.getByRole('button', { name: 'Start cooking' }));
+    expect(openRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({ id: planned.id }),
+      expect.objectContaining({ startCooking: true }),
+    );
+  });
+
+  it('Not tonight on the planned dish falls back to suggestions', () => {
+    cleanup();
+    mockApp.plan = { '2026-09-01': { dinner: planned.id } };
+    mockApp.cooked = [];
+    render(<HomeTab {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Not tonight' }));
+    expect(card().textContent).toContain('Tonight — from what you have');
+    expect(card().textContent).toContain('Chickpea curry');
+  });
+
+  it('once dinner is cooked, the card says so instead of offering another', () => {
+    cleanup();
+    mockApp.plan = { '2026-09-01': { dinner: planned.id } };
+    mockApp.cooked = [{ recipeId: planned.id, date: '2026-09-01' }];
+    render(<HomeTab {...props} />);
+    expect(card().textContent).toContain('Tonight — done');
+    expect(screen.queryByRole('button', { name: /Cook this tonight|Start cooking/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Not tonight' })).toBeNull();
   });
 });
