@@ -251,7 +251,7 @@ export default function KitchenInventory({ onDone }) {
             {rows.map((row, index) => (
               <div key={`${row.line}-${index}`} className="p-3 space-y-2">
                 <div className="flex items-center gap-3">
-                  <Glyph e={row.emoji} size={20} style={{ color: 'var(--muted)' }} />
+                  <Glyph e={row.emoji} name={row.name} size={20} style={{ color: 'var(--muted)' }} />
                   <input
                     value={row.name}
                     onChange={(event) => update(index, { name: event.target.value })}

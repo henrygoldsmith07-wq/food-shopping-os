@@ -66,7 +66,7 @@ const GapCard = ({ gap }) => (
             className="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[0.71875rem] font-bold"
             style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}
           >
-            <Glyph e={source.emoji} size={14} style={{ color: 'var(--muted)' }} />
+            <Glyph e={source.emoji} name={source.name} size={14} style={{ color: 'var(--muted)' }} />
             {source.name}
             <span style={{ color: 'var(--accent)' }}>+{source.pct}%</span>
           </span>

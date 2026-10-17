@@ -32,7 +32,7 @@ export default function PantryChecks({ app, confidenceChecks, conflicts }) {
             )}
             {confidenceChecks.slice(0, 8).map(({ item, confidence }) => (
               <div key={item.id} className="flex items-center gap-3">
-                <Glyph e={item.emoji} size={20} style={{ color: 'var(--muted)' }} />
+                <Glyph e={item.emoji} name={item.name} size={20} style={{ color: 'var(--muted)' }} />
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-[0.8125rem] truncate">{item.name}</p>
                   <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>{confidence.reason}</p>

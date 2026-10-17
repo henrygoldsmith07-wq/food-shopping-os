@@ -57,7 +57,7 @@ const EntryRow = ({ entry, onEdit }) => {
     : '';
   return (
     <button onClick={onEdit} className="press flex w-full items-center gap-3 p-3 text-left" style={{ borderColor: 'var(--line)' }}>
-      <Glyph e={entry.emoji} size={19} style={{ color: 'var(--muted)' }} />
+      <Glyph e={entry.emoji} name={entry.name} size={19} style={{ color: 'var(--muted)' }} />
       <span className="min-w-0 flex-1">
         <span className="block font-bold text-[0.875rem] truncate">{entry.name}</span>
         <span className="block text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>

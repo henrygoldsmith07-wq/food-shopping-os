@@ -92,7 +92,7 @@ export default function CopyMeal({ defaultMeal, initialMode = 'previous', onDone
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
                   {meal.map((e) => (
-                    <Pill key={e.id} tone="muted"><Glyph e={e.emoji} size={11} /> {e.name}</Pill>
+                    <Pill key={e.id} tone="muted"><Glyph e={e.emoji} name={e.name} size={11} /> {e.name}</Pill>
                   ))}
                 </div>
               </Card>
@@ -137,7 +137,7 @@ export default function CopyMeal({ defaultMeal, initialMode = 'previous', onDone
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
                   {t.entries.map((e) => (
-                    <Pill key={e.id} tone="muted"><Glyph e={e.emoji} size={11} /> {e.name}</Pill>
+                    <Pill key={e.id} tone="muted"><Glyph e={e.emoji} name={e.name} size={11} /> {e.name}</Pill>
                   ))}
                 </div>
               </Card>

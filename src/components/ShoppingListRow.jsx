@@ -68,7 +68,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
           {item.checked && <Check className="check-in" size={13} strokeWidth={3} />}
         </button>
         <button onClick={() => setMoving((v) => !v)} aria-label={`Move ${item.name} to another aisle`} className="press shrink-0">
-          <Glyph e={item.emoji} size={20} style={{ color: 'var(--muted)' }} />
+          <Glyph e={item.emoji} name={item.name} size={20} style={{ color: 'var(--muted)' }} />
         </button>
         <div className="min-w-0 flex-1">
           {/* Wrapped, not truncated. This row puts the name in a flexible

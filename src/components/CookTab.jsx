@@ -4,7 +4,7 @@ import { useApp } from '../lib/store.jsx';
 import { MEAL_SLOTS } from '../data/plan.js';
 import { RECIPES } from '../data/recipes.js';
 import { gbp } from '../lib/utils.js';
-import { Glyph } from './icons.jsx';
+import { RecipeGlyph } from './recipe-icons.jsx';
 import { Card } from './ui.jsx';
 
 /**
@@ -55,7 +55,7 @@ export default function CookTab({ openRecipe, goTab }) {
         <Card key={label} className="!p-0 overflow-hidden">
           <div className="flex items-center gap-3 p-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-[1.4rem]" style={{ background: 'var(--card-2)' }}>
-              <Glyph e={recipe.emoji || '🍽️'} size={24} />
+              <RecipeGlyph recipe={recipe} size={24} />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>{label}</p>

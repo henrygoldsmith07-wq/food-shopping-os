@@ -5,6 +5,7 @@ import {
   Mic, Milk, Nut, Package, Recycle, Salad, Sandwich, Scale, ShoppingCart, Snowflake,
   Soup, SprayCan, Sprout, Square, Trophy, Utensils, UtensilsCrossed, Watch, Wheat, Wine,
 } from 'lucide-react';
+import { foodIconFor } from './food-icons.jsx';
 
 /**
  * Data files keep their `emoji` field as a stable key; the UI renders it as a
@@ -29,8 +30,12 @@ const EMOJI_ICON = {
   '🏆': Trophy, '📸': Camera, '💚': Heart,
 };
 
-/** Render a data glyph (emoji key) as a lucide icon. */
-export const Glyph = ({ e, size = 18, strokeWidth = 1.8, className, style }) => {
-  const C = EMOJI_ICON[e] || Utensils;
+/**
+ * Render a data glyph (emoji key) as a monochrome icon. Pass `name` for a food
+ * item: the name picks a specific icon ("chopped tomatoes" is a tin), with the
+ * emoji as the fallback.
+ */
+export const Glyph = ({ e, name, size = 18, strokeWidth = 1.8, className, style }) => {
+  const C = (name || e ? foodIconFor(name, e) : null) || EMOJI_ICON[e] || Utensils;
   return <C size={size} strokeWidth={strokeWidth} className={className} style={style} aria-hidden="true" />;
 };

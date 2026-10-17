@@ -163,7 +163,7 @@ export default function BarcodeAdd({ onPick, action = 'Add' }) {
 
       {phase === 'found' && food && (
         <Card className="flex items-center gap-3 !p-3">
-          <Glyph e={food.emoji} size={22} style={{ color: 'var(--muted)' }} />
+          <Glyph e={food.emoji} name={food.name} size={22} style={{ color: 'var(--muted)' }} />
           <div className="min-w-0 flex-1">
             <p className="font-bold text-[0.875rem] truncate">{food.name}</p>
             <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>

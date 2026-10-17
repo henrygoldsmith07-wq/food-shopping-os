@@ -212,7 +212,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
               <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
                 {bucket.items.map(({ item, days }) => (
                   <div key={item.id} className="flex items-center gap-3 p-3">
-                    <Glyph e={item.emoji} size={20} style={{ color: 'var(--muted)' }} />
+                    <Glyph e={item.emoji} name={item.name} size={20} style={{ color: 'var(--muted)' }} />
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
                       <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
@@ -310,7 +310,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                   const st = expiryStatus(daysUntil(p.expiry, app.day));
                   return (
                     <Card key={p.id} className="w-[150px] shrink-0 !p-3">
-                      <Glyph e={p.emoji} size={22} style={{ color: 'var(--muted)' }} />
+                      <Glyph e={p.emoji} name={p.name} size={22} style={{ color: 'var(--muted)' }} />
                       <p className="mt-1 font-bold text-[0.8125rem] leading-tight">{p.name}</p>
                       <div className="mt-1.5"><Pill tone={st.tone}>{st.label}</Pill></div>
                     </Card>

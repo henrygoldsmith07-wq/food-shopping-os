@@ -4,6 +4,8 @@ import {
   UtensilsCrossed, Vegan,
 } from 'lucide-react';
 import { recipeIconFamily } from '../data/recipe-images.js';
+import { recipeIconKey } from '../data/food-icon-keys.js';
+import { FOOD_ICON } from './food-icons.jsx';
 
 const FAMILY_ICON = {
   breakfast: Coffee,
@@ -38,5 +40,11 @@ const FAMILY_ICON = {
 
 export const recipeGlyphFor = (recipe) => {
   const family = recipeIconFamily(recipe);
-  return { family, Icon: FAMILY_ICON[family] || Croissant };
+  return { family, Icon: FOOD_ICON[recipeIconKey(recipe, family)] || FAMILY_ICON[family] || Croissant };
+};
+
+/** A recipe's icon at a given size, for list rows. */
+export const RecipeGlyph = ({ recipe, size = 18, strokeWidth = 1.8, className, style }) => {
+  const { Icon } = recipeGlyphFor(recipe);
+  return <Icon size={size} strokeWidth={strokeWidth} className={className} style={style} aria-hidden="true" />;
 };
