@@ -190,11 +190,13 @@ describe('a focused pantry tap is pinned into the plan', () => {
   });
 
   it('pins a dish in when the same seed would otherwise skip the item', () => {
-    // Seed 2's unfocused week contains no spinach dish at all — the focused
-    // run must change the outcome, not just talk about favouring it.
-    const without = buildPlan({ ...base }, 2);
-    expect(usesSpinach(without.meals)).toBe(false);
-    const withFocus = buildPlan({ ...base, focus: ['Spinach'] }, 2);
+    // Find a seed whose unfocused week contains no spinach dish at all — the
+    // focused run must change the outcome, not just talk about favouring it.
+    // (Searched rather than hard-coded: which seed that is depends on the book.)
+    const seed = Array.from({ length: 50 }, (_, i) => i)
+      .find((candidate) => !usesSpinach(buildPlan({ ...base }, candidate).meals));
+    expect(seed).toBeDefined();
+    const withFocus = buildPlan({ ...base, focus: ['Spinach'] }, seed);
     expect(usesSpinach(withFocus.meals)).toBe(true);
     expect(withFocus.note).toMatch(/uses Spinach before it goes off\./);
   });
