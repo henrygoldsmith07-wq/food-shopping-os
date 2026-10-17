@@ -450,10 +450,8 @@ export const shoppingForPlan = (plan = {}, dates = [], {
     return {
       ...row,
       name: displayName,
-      // The list is what still needs buying, not the recipe's full requirement.
-      // Keep requiredQty separately so explanations/evaluation retain the
-      // original need behind the pantry deduction.
-      // …and in an amount a shop sells: "0.7 tsp" of paprika is bought as a jar.
+      // What still needs buying, in an amount a shop sells (0.7 tsp -> 1 jar);
+      // requiredQty keeps the original need behind the pantry deduction.
       qty: shoppableQty(availableQty && shortfallQty ? shortfallQty : (requiredQty || row.qty), displayName),
       requiredQty,
       pantryQty: availableQty,
