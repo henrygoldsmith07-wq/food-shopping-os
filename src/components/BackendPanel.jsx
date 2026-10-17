@@ -185,16 +185,22 @@ function BackendPanelRuntime() {
   const [backend, setBackend] = useState(null);
   useEffect(() => {
     fetch('/api/backend/status')
-      .then((response) => response.json())
+      .then((response) => {
+        if (!response.ok) throw new Error(`status ${response.status}`);
+        return response.json();
+      })
       .then(setBackend)
-      .catch(() => setBackend({ enabled: false, providers: {}, capabilities: {}, integrations: {} }));
+      // A server that errors is not a server without credentials; say which.
+      .catch(() => setBackend({ enabled: false, failed: true, providers: {}, capabilities: {}, integrations: {} }));
   }, []);
   if (!backend?.enabled) {
     return (
       <Section title="Account & sync">
         <Card>
           <p className="text-[0.75rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
-            {backend ? 'Backend credentials are not configured. Your on-device data still works normally.' : 'Checking backend…'}
+            {!backend ? 'Checking backend…'
+              : backend.failed ? 'The server could not be reached or returned an error. Your on-device data still works normally — try again shortly.'
+                : 'Backend credentials are not configured. Your on-device data still works normally.'}
           </p>
           <IntegrationStatus integrations={backend?.integrations} />
         </Card>
