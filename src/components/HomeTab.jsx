@@ -182,6 +182,15 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     .filter((row) => row.id !== 'repair-week')
     .filter((row) => !dismissedDecisions.includes(row.id))
     .slice(0, 3), [app.foodIntelligence, leading, dismissedDecisions]);
+  // Needs attention lists exceptions; one already named by the lead card or
+  // the decision stack above it is not repeated a third time.
+  const shownTitles = new Set([leading?.title, ...stackDecisions.map((row) => row.title)]
+    .filter(Boolean).map((title) => title.toLowerCase()));
+  const attention = useMemo(() => {
+    const exceptions = week.exceptions.filter((row) => !shownTitles.has(String(row.title).toLowerCase()));
+    return { ...week, exceptions, repeatsOnly: week.exceptions.length > 0 && exceptions.length === 0 };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, leading, stackDecisions]);
   const runDecisionNow = (row) => {
     runDecision(row, { goTab, openPantry, openWeekLoop: onOpenWeekLoop, openGuidance });
   };
@@ -365,7 +374,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       {/* 3 — Week status + needs attention, from the one Week Manager
           derivation. Exceptions only; quiet success when nothing is wrong. */}
       <WeekStatusCard manager={week} onOpenWeekLoop={onOpenWeekLoop} />
-      <NeedsAttentionCard manager={week} app={app} goTab={goTab} openPantry={openPantry} />
+      {!attention.repeatsOnly && <NeedsAttentionCard manager={attention} app={app} goTab={goTab} openPantry={openPantry} />}
 
       {/* 5 — Has anything changed from the original plan? The recovery
           preview only appears when the week drifted and Forq has repairs to
@@ -411,7 +420,8 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           live on the raw state and are not surfaced through derive, so they are
           read optionally — an unguarded .length here throws on an install whose
           state predates the field. */}
-      {(app.starterRecipeIds?.length ?? 0) > 0 && !app.welcomeDismissed && (
+      {(app.starterRecipeIds?.length ?? 0) > 0 && !app.welcomeDismissed
+        && !(app.shops?.length || app.cooked?.length) && (
         <div className="px-5 rise rise-1">
           <Card className="flex items-start gap-3 !p-4">
             <span
@@ -458,7 +468,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         >
           Explore more
           <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            confirm · autopilot · setup · report
+            Autopilot, setup and your weekly report
           </span>
         </summary>
         <div className="mt-6 space-y-6">
