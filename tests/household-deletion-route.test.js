@@ -104,13 +104,14 @@ describe('DELETE /api/households', () => {
         mocks.deleteHouseholdData.mock.invocationCallOrder[0],
       );
       // Deletion purges the household's own audit rows, so the tombstone
-      // recording the erasure itself is written after the final cleanup.
+      // recording the erasure itself is written after the final cleanup,
+      // with the household's active check waived (it is already gone).
       expect(insertOne).toHaveBeenCalledWith(expect.objectContaining({
         householdId: 'household-1',
         actorId: 'user-1',
         action: 'household.deleted',
         resource: 'household-1',
-      }));
+      }), { checkActive: false });
       expect(insertOne.mock.invocationCallOrder[0]).toBeGreaterThan(
         deleteOne.mock.invocationCallOrder[0],
       );

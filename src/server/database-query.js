@@ -168,6 +168,12 @@ export class RedisCursor {
     return this;
   }
 
+  /** Include only the fields the caller names, like Mongo's projection. */
+  project(spec) {
+    this.projection = spec;
+    return this;
+  }
+
   async toArray() {
     let documents = (await this.load()).filter((document) => matches(document, this.filter));
     if (this.sortSpec) {

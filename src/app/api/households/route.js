@@ -120,9 +120,11 @@ export async function DELETE(request) {
 
     // Deletion purges the household's own audit trail as part of the erasure;
     // this tombstone is written last so the act itself leaves a record behind.
+    // It is the one write allowed after the household is gone: blocking it
+    // would report the deletion as failed even though the data is destroyed.
     await writeAuditEvent({
       db, householdId: household._id, user, action: 'household.deleted',
-      resource: household._id.toString(), fields: Object.keys(removed),
+      resource: household._id.toString(), fields: Object.keys(removed), checkActive: false,
     });
 
     return NextResponse.json({

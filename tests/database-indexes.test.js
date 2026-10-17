@@ -175,3 +175,107 @@ describe('rate limiting', () => {
     expect(store.scans).toEqual([]);
   });
 });
+
+describe('stale index hygiene', () => {
+  it('frees a deleted document’s unique value at delete time, not on the next read', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({ _id: 'h1', name: 'One', ownerId: 'u1', createdAt: new Date(0) });
+    const shares = db.collection('coachShares');
+    await shares.insertOne({ _id: 's1', householdId: 'h1', tokenHash: 't1', createdAt: new Date(0) });
+    await shares.findOne({ tokenHash: 't1' }); // warms the one-time index check
+    store.scans.length = 0;
+
+    await shares.deleteOne({ _id: 's1' });
+    expect(await shares.findOne({ tokenHash: 't1' })).toBeNull();
+    expect(await shares.findOne({ tokenHash: 't1' })).toBeNull();
+    expect(await shares.findOne({ tokenHash: 'never-existed' })).toBeNull();
+    expect(scansOf('coachShares')).toBe(0);
+
+    await shares.insertOne({ _id: 's2', householdId: 'h1', tokenHash: 't1' });
+    expect((await shares.findOne({ tokenHash: 't1' }))._id).toBe('s2');
+  });
+
+  it('repairs a moved unique value once, then answers from the index', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({ _id: 'h1', name: 'One', ownerId: 'u1', createdAt: new Date(0) });
+    const shares = db.collection('coachShares');
+    await shares.insertOne({ _id: 's1', householdId: 'h1', tokenHash: 't1', createdAt: new Date(0) });
+    await shares.findOne({ tokenHash: 't0' }); // warms the one-time index check
+    store.scans.length = 0;
+
+    await shares.updateOne({ _id: 's1' }, { $set: { tokenHash: 't2' } });
+    expect(await shares.findOne({ tokenHash: 't1' })).toBeNull();
+    expect(await shares.findOne({ tokenHash: 't1' })).toBeNull();
+    expect((await shares.findOne({ tokenHash: 't2' }))._id).toBe('s1');
+    expect(scansOf('coachShares')).toBe(1); // one repair, not one per read
+
+    await shares.insertOne({ _id: 's2', householdId: 'h1', tokenHash: 't1' });
+    expect((await shares.findOne({ tokenHash: 't1' }))._id).toBe('s2');
+  });
+});
+
+describe('per-value indexes keep the household list fast', () => {
+  it('answers the household list’s three reads without scanning collections', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({ _id: 'h1', name: 'One', ownerId: 'u1', createdAt: new Date(0) });
+    await db.collection('households').insertOne({ _id: 'h2', name: 'Two', ownerId: 'u2', createdAt: new Date(0) });
+    await db.collection('households').insertOne({
+      _id: 'h3', name: 'Dying', ownerId: 'u1', deletingAt: new Date(1), createdAt: new Date(0),
+    });
+    await db.collection('memberships').insertOne({ _id: 'm1', householdId: 'h1', userId: 'u1', role: 'owner' });
+    await db.collection('memberships').findOne({ userId: 'u1' }); // warm-ups index the collections once
+    await db.collection('households').findOne({ ownerId: 'u9' });
+    store.scans.length = 0;
+
+    const mine = await db.collection('memberships').find({ userId: 'u1' }).toArray();
+    expect(mine.map((row) => row.householdId)).toEqual(['h1']);
+    expect(await db.collection('memberships').find({ userId: 'nobody' }).toArray()).toEqual([]);
+
+    const member = await db.collection('households').find({ _id: { $in: ['h1', 'h2'] } }).toArray();
+    expect(member.map((row) => row._id)).toEqual(['h1', 'h2']);
+
+    const dying = await db.collection('households')
+      .find({ ownerId: 'u1', deletingAt: { $exists: true } }).toArray();
+    expect(dying.map((row) => row._id)).toEqual(['h3']);
+
+    expect(scansOf('memberships')).toBe(0);
+    expect(scansOf('households')).toBe(0);
+  });
+});
+
+describe('the audit trail survives household deletion', () => {
+  it('records the deletion tombstone even though the household is gone', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({
+      _id: 'h1', name: 'One', ownerId: 'u1', createdAt: new Date(0), updatedAt: new Date(0),
+    });
+    await db.collection('households').deleteOne({ _id: 'h1' });
+    const audit = db.collection('auditEvents');
+    await expect(audit.insertOne({
+      householdId: 'h1', actorId: 'u1', action: 'sync.push', createdAt: new Date(5),
+    })).rejects.toMatchObject({ code: 'HOUSEHOLD_DELETING' });
+
+    await audit.insertOne({
+      householdId: 'h1', actorId: 'u1', action: 'household.deleted', createdAt: new Date(5),
+    }, { checkActive: false });
+    expect((await audit.find({ householdId: 'h1' }).toArray()).map((row) => row.action))
+      .toEqual(['household.deleted']);
+  });
+
+  it('projects a cursor’s fields like Mongo', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({ _id: 'h1', name: 'One', ownerId: 'u1', createdAt: new Date(0) });
+    const audit = db.collection('auditEvents');
+    const inserted = await audit.insertOne({
+      householdId: 'h1', action: 'sync.push', actorName: 'Sam', actorId: 'u1',
+      fields: ['state'], version: 3, deviceId: 'd1', createdAt: new Date(0),
+    });
+    const rows = await audit.find({ householdId: 'h1' })
+      .sort({ createdAt: -1 }).limit(10)
+      .project({ action: 1, actorName: 1, createdAt: 1 })
+      .toArray();
+    expect(rows).toEqual([{
+      _id: inserted.insertedId, action: 'sync.push', actorName: 'Sam', createdAt: rows[0].createdAt,
+    }]);
+  });
+});

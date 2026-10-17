@@ -1,66 +1,31 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Redis } from '@upstash/redis';
 import {
+  HOUSEHOLD_SCOPED_COLLECTIONS, INDEXED_SETS, UNINDEXED_COLLECTIONS, UNIQUE_FIELDS,
+  collectionKey, documentKey, householdSetKey, indexValue, prefix, uniqueKey, valueSetKey,
+} from './database-indexes.js';
+import {
   applyUpdate, baseDocument, comparable, deserialise, householdIdFrom, matches, project, RedisCursor,
   serialise, valueAt, valuesEqual,
 } from './database-query.js';
 
-const prefix = process.env.UPSTASH_REDIS_PREFIX || 'forq';
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 const redis = url && token ? new Redis({ url, token }) : null;
 
-const UNIQUE_FIELDS = {
-  households: [['personalOwnerId']],
-  memberships: [['householdId', 'userId']],
-  householdStates: [['householdId']],
-  invitations: [['tokenHash']],
-  notificationOutbox: [['dedupeKey']],
-  coachShares: [['tokenHash']],
-  analyticsDaily: [['householdId', 'day', 'event']],
-  analyticsEventReceipts: [['householdId', 'eventId']],
-  users: [['email']],
-  accounts: [['provider', 'providerAccountId']],
-  sessions: [['sessionToken']],
-  verificationTokens: [['identifier', 'token']],
-};
-const HOUSEHOLD_SCOPED_COLLECTIONS = new Set([
-  'householdStates', 'memberships', 'invitations', 'coachShares', 'uploads',
-  'notificationOutbox', 'auditEvents', 'aiUsage', 'realtimeEvents',
-  'analyticsDaily', 'analyticsEventReceipts',
-]);
-/* Written directly by the analytics Lua script, which does not maintain the
-   indexes below, so these are always read by scanning. */
-const UNINDEXED_COLLECTIONS = new Set(['analyticsDaily', 'analyticsEventReceipts']);
-
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const newId = () => randomBytes(12).toString('hex');
-const collectionKey = (name) => `${prefix}:collection:${name}`;
-const documentKey = (name, id) => `${prefix}:document:${name}:${id}`;
 const lockKey = (name) => `${prefix}:lock:${name}`;
 const analyticsReceiptExpiryKey = () => `${prefix}:analytics:receipt-expiry`;
 
 /*
- * Indexes. Every lookup used to SMEMBERS a whole collection and MGET every
- * document in it, so reading one household's state downloaded every
- * household's state. Three index shapes now answer the common filters:
- *   - by _id: the document key itself;
- *   - by a unique field set (UNIQUE_FIELDS): a key holding the owning _id;
- *   - by household: a set of _ids per household for scoped collections.
- * Index entries are written in the same MULTI as the document. A stale entry
- * (a document since deleted or changed) is harmless: every hit is checked
- * against the document, and a mismatched unique entry falls back to a scan
- * that repairs it. A collection is indexed lazily the first time it is read
- * after this shipped (`ensureIndexed`), so no deploy step is needed.
+ * Reading does not trust an index entry: a stale one (a document since
+ * deleted or changed) is checked against its document, and a mismatched
+ * unique entry is cleared — but only while it still points at the dead
+ * document, so a fresh claimant never loses its entry — then falls back to
+ * one repairing scan. Indexes are built lazily the first time a collection
+ * is read after this shipped (`ensureIndexed`), so no deploy step is needed.
  */
-const indexValue = (value) => String(comparable(value));
-const uniqueKey = (name, fields, document) => {
-  const digest = createHash('sha256')
-    .update(JSON.stringify(fields.map((field) => indexValue(valueAt(document, field)))))
-    .digest('hex');
-  return `${prefix}:unique:${name}:${fields.join(',')}:${digest}`;
-};
-const householdSetKey = (name, householdId) => `${prefix}:household-index:${name}:${householdId}`;
 const indexReadyKey = (name) => `${prefix}:index-ready:${name}`;
 const indexedCollections = new Set();
 
@@ -118,6 +83,11 @@ class RedisCollection {
     for (const fields of this.uniqueSets(document)) {
       multi.set(uniqueKey(this.name, fields, document), document._id, options);
     }
+    for (const field of INDEXED_SETS[this.name] || []) {
+      if (plainValue(valueAt(document, field))) {
+        multi.sadd(valueSetKey(this.name, field, indexValue(valueAt(document, field))), document._id);
+      }
+    }
     if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(document.householdId)) {
       multi.sadd(householdSetKey(this.name, indexValue(document.householdId)), document._id);
     }
@@ -159,30 +129,49 @@ class RedisCollection {
       const document = deserialise(await redis.get(documentKey(this.name, String(filter._id))));
       return document ? [document] : [];
     }
+    if (filter._id && typeof filter._id === 'object' && Array.isArray(filter._id.$in)) {
+      return this.loadIds(filter._id.$in.filter(plainValue).map(String));
+    }
     if (!(await this.ensureIndexed())) return this.loadAll();
     const covering = (UNIQUE_FIELDS[this.name] || [])
       .find((fields) => fields.every((field) => plainValue(filter[field])));
     if (covering) {
-      const id = await redis.get(uniqueKey(this.name, covering, filter));
+      const key = uniqueKey(this.name, covering, filter);
+      const id = await redis.get(key);
       if (!id) return [];
       const document = deserialise(await redis.get(documentKey(this.name, id)));
       if (document && covering.every((field) => valuesEqual(valueAt(document, field), filter[field]))) {
         return [document];
       }
+      // The entry outlived its document (a delete, a TTL, an older code
+      // path): clear it so the repair repeats no more than once — but only
+      // while it still points at what we read, in case a new document
+      // claimed the value a moment ago.
+      await redis.eval(
+        'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end return 0',
+        [key],
+        [id],
+      );
       return this.repairFromScan();
     }
+    const setField = (INDEXED_SETS[this.name] || []).find((field) => plainValue(filter[field]));
+    if (setField) return this.loadSet(valueSetKey(this.name, setField, indexValue(filter[setField])));
     if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(filter.householdId)) {
-      const setKey = householdSetKey(this.name, indexValue(filter.householdId));
-      const ids = await redis.smembers(setKey);
-      const documents = await this.loadIds(ids);
-      if (documents.length < ids.length) {
-        const live = new Set(documents.map((document) => document._id));
-        const gone = ids.filter((id) => !live.has(id));
-        if (gone.length) await redis.srem(setKey, ...gone);
-      }
-      return documents;
+      return this.loadSet(householdSetKey(this.name, indexValue(filter.householdId)));
     }
     return this.loadAll();
+  }
+
+  /** Read one index set, dropping entries whose document is gone. */
+  async loadSet(setKey) {
+    const ids = await redis.smembers(setKey);
+    const documents = await this.loadIds(ids);
+    if (documents.length < ids.length) {
+      const live = new Set(documents.map((document) => document._id));
+      const gone = ids.filter((id) => !live.has(id));
+      if (gone.length) await redis.srem(setKey, ...gone);
+    }
+    return documents;
   }
 
   /** A unique entry pointed at the wrong document: rebuild from a scan. */
@@ -246,11 +235,25 @@ class RedisCollection {
     for (const document of documents) {
       multi.del(documentKey(this.name, document._id));
       multi.srem(collectionKey(this.name), document._id);
+      for (const field of INDEXED_SETS[this.name] || []) {
+        if (plainValue(valueAt(document, field))) {
+          multi.srem(valueSetKey(this.name, field, indexValue(valueAt(document, field))), document._id);
+        }
+      }
+      // Clear the unique entries this document still holds — but only while
+      // they still point at it, in case a new document has just claimed the
+      // same value and would lose its entry to a blanket delete.
+      for (const fields of this.uniqueSets(document)) {
+        const key = uniqueKey(this.name, fields, document);
+        multi.eval(
+          'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end return 0',
+          [key],
+          [document._id],
+        );
+      }
       if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(document.householdId)) {
         multi.srem(householdSetKey(this.name, indexValue(document.householdId)), document._id);
       }
-      // Unique entries are left to the read-time check: deleting one here
-      // could race a new document that has just claimed the same value.
     }
     if (this.name === 'analyticsEventReceipts') {
       multi.zrem(analyticsReceiptExpiryKey(), ...documents.map((document) => document._id));
@@ -279,14 +282,14 @@ class RedisCollection {
     return document ? project(document, options.projection) : null;
   }
 
-  async insertOne(input) {
+  async insertOne(input, options = {}) {
     const householdId = HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) ? householdIdFrom(input) : null;
     return this.withWriteLock(async () => {
       const document = { ...structuredClone(input), _id: input._id?.toString() || newId() };
       await this.assertUnique(document);
       await this.save(document);
       return { acknowledged: true, insertedId: document._id };
-    }, householdId);
+    }, householdId, options.checkActive !== false);
   }
 
   async upsertMatching(filter, update, options) {
