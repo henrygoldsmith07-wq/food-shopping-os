@@ -244,7 +244,8 @@ export function AppProvider({ children }) {
         let meta = result.meta || null;
         let remoteState = result.state;
         if (result.state && result.meta) {
-          const localChanged = JSON.stringify(latest.current) !== JSON.stringify(initial.current.state);
+          // A device mid-setup holds only defaults: signing in there loads the household.
+          const localChanged = Boolean(latest.current.onboarded) && JSON.stringify(latest.current) !== JSON.stringify(initial.current.state);
           if (localChanged) {
             if (Number.isInteger(result.baseVersion)) {
               const localPush = await pushCloud(

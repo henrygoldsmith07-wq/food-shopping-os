@@ -7,7 +7,8 @@ import CredentialsProviderPackage from 'next-auth/providers/credentials';
 // yields undefined in production ("nF is not a function" on every session read).
 import { getServerSession } from 'next-auth/next';
 import { ForqAdapter } from './auth-adapter.js';
-import { databaseConfigured } from './database.js';
+import { databaseConfigured, getDatabase } from './database.js';
+import { normaliseEmail, passwordLoginEnabled, verifyPassword } from './passwords.js';
 
 const AppleProvider = AppleProviderPackage.default || AppleProviderPackage;
 const GoogleProvider = GoogleProviderPackage.default || GoogleProviderPackage;
@@ -42,6 +43,28 @@ if (process.env.AUTH_MICROSOFT_ID && process.env.AUTH_MICROSOFT_SECRET) {
     clientSecret: process.env.AUTH_MICROSOFT_SECRET,
     tenantId: process.env.AUTH_MICROSOFT_TENANT_ID || 'common',
     authorization: { params: { scope: 'openid email profile offline_access Calendars.ReadWrite' } },
+  }));
+}
+
+// Email and password, for accounts made through /api/account/register. A
+// wrong password and an unknown email fail the same way, and both count
+// against the address's attempt limit so a password cannot be guessed at speed.
+if (databaseConfigured && passwordLoginEnabled()) {
+  providers.push(CredentialsProvider({
+    id: 'password',
+    name: 'Email',
+    credentials: { email: { label: 'Email' }, password: { label: 'Password', type: 'password' } },
+    async authorize(credentials) {
+      const email = normaliseEmail(credentials?.email);
+      const password = String(credentials?.password || '');
+      if (!email || !password) return null;
+      const db = await getDatabase();
+      const window = Math.floor(Date.now() / 900000);
+      if (await db.incrementWindow(`signin:${email}:${window}`, 1800000) > 10) return null;
+      const user = await db.collection('users').findOne({ email });
+      if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) return null;
+      return { id: user._id, name: user.name || email, email };
+    },
   }));
 }
 
