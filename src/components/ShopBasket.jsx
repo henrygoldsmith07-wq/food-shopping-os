@@ -52,22 +52,21 @@ export default function ShopBasket({
                 </span>
               )}
             </p>
-            <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {shoppingMode ? 'Running total of ticked items at your recorded prices.'
-                : fromRecipes ? 'Rough estimate from this week’s recipes — a receipt replaces it with what you paid.'
+            {!shoppingMode && <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {fromRecipes ? 'Rough estimate from this week’s recipes — a receipt replaces it with what you paid.'
                   : 'Estimate from your receipts (“you paid this”) — not live prices.'}
-            </p>
+            </p>}
             {basket.saved > 0 && (
               <p className="text-[0.75rem] font-bold" style={{ color: 'var(--good)' }}>
                 {gbp(basket.total, { always: true })} less {gbp(basket.saved, { always: true })} of your offers
               </p>
             )}
-        {basket.unpriced > 0 && (
+        {basket.unpriced > 0 && !shoppingMode && (
           <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
             {basket.unpriced} item{basket.unpriced === 1 ? '' : 's'} with no price yet{fromRecipes ? '.' : ' — the total is only what you’ve typed in.'}
           </p>
         )}
-        {onOpenPantry && app.pantry.length > 0 && (
+        {onOpenPantry && app.pantry.length > 0 && !shoppingMode && (
           <button
             type="button"
             onClick={onOpenPantry}
