@@ -137,12 +137,12 @@ export default function ShopBasket({
           </p>
         )}
 
-        {shoppingMode && <ShoppingProgress total={visibleList.length} checked={ticked} />}
-
-        {/* Options and sync detail fold away so the list starts on the first screen. */}
+        {/* Progress, options and sync detail fold away so the list starts on
+            the first screen; the bottom bar already counts what is ticked. */}
         {shoppingMode && (
           <details className="mt-3 rounded-2xl border px-3 py-2" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-          <summary className="cursor-pointer list-none text-[0.75rem] font-extrabold" style={{ color: 'var(--muted)' }}>Shopping options</summary>
+          <summary className="cursor-pointer list-none text-[0.75rem] font-extrabold" style={{ color: 'var(--muted)' }}>Progress and shopping options</summary>
+          <ShoppingProgress total={visibleList.length} checked={ticked} />
           <p className="mt-2 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold" style={{ color: isOnline ? 'var(--good)' : 'var(--warn)' }}>
             {isOnline ? <Check size={12} /> : <CloudOff size={12} />}
             {offlineMode
