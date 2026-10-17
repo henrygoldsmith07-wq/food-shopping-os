@@ -142,12 +142,24 @@ const spawnRedis = async () => {
 
 // --- The REST surface ----------------------------------------------------
 
+/*
+ * The Upstash SDK asks for base64 results ("Upstash-Encoding: base64") and
+ * decodes every string it gets back. Answering with raw strings garbles any
+ * value that happens to be valid base64 — every hex document id — so the
+ * bridge encodes exactly as Upstash does when asked.
+ */
+const encodeResult = (value) => (typeof value === 'string'
+  ? Buffer.from(value, 'utf8').toString('base64')
+  : Array.isArray(value) ? value.map(encodeResult) : value);
+
 const server = createServer(async (request, response) => {
   try {
     if (request.headers.authorization !== `Bearer ${TOKEN}`) {
       response.writeHead(401, { 'content-type': 'application/json' });
       return response.end(JSON.stringify({ error: 'Invalid token.' }));
     }
+    const encode = String(request.headers['upstash-encoding'] || '').toLowerCase() === 'base64'
+      ? encodeResult : (value) => value;
     let raw = '';
     for await (const chunk of request) raw += chunk;
     const command = JSON.parse(raw);
@@ -161,7 +173,7 @@ const server = createServer(async (request, response) => {
       const replies = [];
       for (const entry of command) {
         try {
-          replies.push({ result: await redisRequest(entry) });
+          replies.push({ result: encode(await redisRequest(entry)) });
         } catch (error) {
           replies.push({ error: error.message });
         }
@@ -169,7 +181,7 @@ const server = createServer(async (request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' });
       return response.end(JSON.stringify(replies));
     }
-    const result = await redisRequest(command);
+    const result = encode(await redisRequest(command));
     response.writeHead(200, { 'content-type': 'application/json' });
     return response.end(JSON.stringify({ result }));
   } catch (error) {
