@@ -330,10 +330,26 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           </div>
         )}
       </Section>
-      <PlanningSignals app={app} />
-      <Section title="What-if planning" className="rise rise-2">
-        <PlanSimulator />
+      <Section className="rise rise-2">
+        <button
+          onClick={() => setShowGenerator((v) => !v)}
+          className="press w-full rounded-2xl border py-3 text-[0.875rem] font-extrabold"
+          style={showGenerator ? { borderColor: 'var(--line)' } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
+        >
+          <span className="inline-flex items-center gap-2">
+            {showGenerator ? <><X size={15} /> Close generator</> : <><Sparkles size={15} /> Generate a plan for me</>}
+          </span>
+        </button>
       </Section>
+      {showGenerator && (
+        <Section className="rise">
+          <PlanGenerator
+            weekDates={view === 'week' ? week : thisWeekDates} monthDates={month}
+            openRecipe={openRecipe} goTab={goTab}
+            onApplied={() => { setShowGenerator(false); setAddedToList(false); }} focusItems={focusItem ? [focusItem] : []}
+          />
+        </Section>
+      )}
       {app.leftovers.length > 0 && (
         <Section title="Leftovers" className="rise rise-2">
           <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
@@ -363,6 +379,18 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           )}
         </Section>
       )}
+      {/* Secondary planning depth folds away: the week, the generator and
+          what is in the fridge come first. */}
+      <details className="mx-5 rise rise-2">
+        <summary className="flex cursor-pointer list-none items-center justify-between rounded-2xl border px-4 py-3 text-[0.8125rem] font-extrabold" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
+          More planning tools
+          <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>signals · what-if · batch cooking</span>
+        </summary>
+        <div className="-mx-5 mt-4 space-y-6">
+      <PlanningSignals app={app} />
+      <Section title="What-if planning" className="rise rise-2">
+        <PlanSimulator />
+      </Section>
       {batches.length > 0 && (
         <Section title="Batch cooking" className="rise rise-2">
           <Card className="space-y-3">
@@ -381,26 +409,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           </Card>
         </Section>
       )}
-      <Section className="rise rise-2">
-        <button
-          onClick={() => setShowGenerator((v) => !v)}
-          className="press w-full rounded-2xl border py-3 text-[0.875rem] font-extrabold"
-          style={showGenerator ? { borderColor: 'var(--line)' } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
-        >
-          <span className="inline-flex items-center gap-2">
-            {showGenerator ? <><X size={15} /> Close generator</> : <><Sparkles size={15} /> Generate a plan for me</>}
-          </span>
-        </button>
-      </Section>
-      {showGenerator && (
-        <Section className="rise">
-          <PlanGenerator
-            weekDates={view === 'week' ? week : thisWeekDates} monthDates={month}
-            openRecipe={openRecipe} goTab={goTab}
-            onApplied={() => { setShowGenerator(false); setAddedToList(false); }} focusItems={focusItem ? [focusItem] : []}
-          />
-        </Section>
-      )}
+        </div>
+      </details>
       <Sheet open={!!picking} onClose={() => setPicking(null)} title="Plan a meal">
         {picking && (picking.guard
           ? <TonightSlotGuard existing={picking.guard} item={picking.query} onReplace={() => setPicking({ ...picking, guard: null })} onKeep={() => setPicking(null)} />

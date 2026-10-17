@@ -138,7 +138,12 @@ export default function ShopBasket({
           </p>
         )}
 
+        {shoppingMode && <ShoppingProgress total={visibleList.length} checked={ticked} />}
+
+        {/* Options and sync detail fold away so the list starts on the first screen. */}
         {shoppingMode && (
+          <details className="mt-3 rounded-2xl border px-3 py-2" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+          <summary className="cursor-pointer list-none text-[0.75rem] font-extrabold" style={{ color: 'var(--muted)' }}>Shopping options</summary>
           <p className="mt-2 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold" style={{ color: isOnline ? 'var(--good)' : 'var(--warn)' }}>
             {isOnline ? <Check size={12} /> : <CloudOff size={12} />}
             {offlineMode
@@ -146,12 +151,7 @@ export default function ShopBasket({
               : ['disabled', 'signed-out'].includes(app.cloudStatus?.kind || 'disabled') ? 'Saved on this device as you tick.'
                 : isOnline ? 'Online · changes save locally and sync when available.' : 'Offline · changes save locally; sync resumes when you reconnect.'}
           </p>
-        )}
-
-        {shoppingMode && <ShoppingProgress total={visibleList.length} checked={ticked} />}
-
-        {shoppingMode && (
-          <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+          <div className="mt-2">
             <div className="flex flex-wrap gap-2">
               <Chip active={largeTouch} onClick={() => app.setShoppingPreferences({ largeTouch: !largeTouch })}>
                 {largeTouch ? 'Large-touch UI on' : 'Large-touch UI'}
@@ -169,6 +169,7 @@ export default function ShopBasket({
                 : 'Private list · add household members to share it live.'}
             </p>
           </div>
+          </details>
         )}
         {!shoppingMode && app.shoppingInsights?.shared && (
           <p className="mt-3 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>

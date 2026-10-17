@@ -278,6 +278,9 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                   {adding ? <><X size={13} /> Close</> : <><Plus size={14} /> Add an item</>}
                 </span>
               </button>
+              {/* In a shop only adding stays: scanning, offers and imports are
+                  set-up work, and here they pushed the list off the first screen. */}
+              {!shoppingMode && <>
               <button
                 onClick={() => setSheet('scan')}
                 className="press rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
@@ -316,12 +319,13 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
               >
                 <span className="inline-flex items-center gap-1.5"><FileUp size={14} /> Import receipts</span>
               </button>
+              </>}
             </div>
             {adding && <AddItem onAdd={(items) => app.addToList((Array.isArray(items) ? items : [items]).map((item) => ({ ...item, store })))} />}
             {voiceStatus && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>{voiceStatus}</p>}
           </Section>
 
-          {app.shops.length > 0 && (
+          {app.shops.length > 0 && (!shoppingMode || repeatedLastShop) && (
             <Section className="rise rise-2">
               <button
                 onClick={repeatLastShop}
@@ -335,9 +339,9 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             </Section>
           )}
 
-          <RestockSection items={app.restock} store={store} />
+          {!shoppingMode && <RestockSection items={app.restock} store={store} />}
 
-          {staplesDue.length > 0 && (
+          {staplesDue.length > 0 && !shoppingMode && (
             <Section className="rise rise-2" title="Due — you buy these on a rhythm">
               <p className="text-[0.75rem] font-semibold mb-2.5" style={{ color: 'var(--muted)' }}>
                 Read off your own shop history — how often you actually restock, not a guess.
@@ -364,7 +368,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             </Section>
           )}
 
-          {app.favouriteShopping.length > 0 && (
+          {app.favouriteShopping.length > 0 && !shoppingMode && (
             <Section className="rise rise-2" title="Favourites">
               <div className="flex gap-2 overflow-x-auto no-scrollbar scroll-x-fade -mx-5 px-5">
                 {app.favouriteShopping.map((item) => (
@@ -378,13 +382,13 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             </Section>
           )}
 
-          <ShopPrices
+          {!shoppingMode && <ShopPrices
             app={app}
             visibleList={visibleList}
             observed={observed}
             offlineMode={offlineMode}
             isOnline={isOnline}
-          />
+          />}
 
           {visibleList.length === 0 ? (
             <Section className="rise rise-2">
