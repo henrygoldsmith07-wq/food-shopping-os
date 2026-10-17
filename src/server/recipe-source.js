@@ -71,6 +71,65 @@ export const isFetchableRecipeUrl = (value) => {
   return true;
 };
 
+/** Most redirects a link may take before it is given up on. */
+export const MAX_REDIRECTS = 5;
+
+/**
+ * Is a resolved address private, loopback, link-local or otherwise not the
+ * public internet? Checked on what a hostname actually resolves to, so a
+ * public-looking name pointing at 127.0.0.1 or the metadata service is
+ * refused like the literal address would be.
+ */
+export const isPrivateAddress = (address = '') => {
+  const ip = String(address).toLowerCase().replace(/^\[|\]$/g, '');
+  const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mapped) return isPrivateAddress(mapped[1]);
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224
+      || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)
+      || (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0);
+  }
+  if (ip.includes(':')) {
+    return ip === '::' || ip === '::1' || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip)
+      || ip.startsWith('::ffff:') || ip.startsWith('64:ff9b:') || ip.startsWith('ff');
+  }
+  return true;
+};
+
+const defaultLookup = async (hostname) => {
+  const { lookup } = await import('node:dns/promises');
+  return lookup(hostname, { all: true, verbatim: true });
+};
+
+/** Refuse a URL whose host is, or resolves to, anything but the public internet. */
+const assertPublicUrl = async (url, lookup) => {
+  if (!isFetchableRecipeUrl(url)) throw new Error('blocked-url');
+  const { hostname } = new URL(url);
+  const addresses = await lookup(hostname);
+  if (!addresses.length || addresses.some((entry) => isPrivateAddress(entry.address))) {
+    throw new Error('blocked-address');
+  }
+};
+
+/**
+ * Fetch a link the way the import may: every hop, including each redirect,
+ * must be an ordinary http(s) URL on a public address. Redirects are followed
+ * by hand so a public page cannot bounce the server onto its own network.
+ */
+export const fetchPublic = async (url, init = {}, { fetchImpl = fetch, lookup = defaultLookup } = {}) => {
+  let current = String(url);
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    await assertPublicUrl(current, lookup);
+    const response = await fetchImpl(current, { ...init, redirect: 'manual' });
+    const location = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
+    if (!location) return response;
+    current = new URL(location, current).href;
+  }
+  throw new Error('too-many-redirects');
+};
+
 /**
  * The public oEmbed endpoint for a link, or null where there isn't one we can
  * use. Instagram's needs an app token; without one configured this returns
@@ -163,20 +222,48 @@ export const sourceMaterial = ({ url = '', metadata = {}, oembed = null, pageTex
 export const MIN_MATERIAL_CHARS = 120;
 export const materialIsUsable = (material) => String(material || '').length >= MIN_MATERIAL_CHARS;
 
-const withTimeout = async (fetchImpl, url, init = {}, timeout = FETCH_TIMEOUT_MS) => {
+/**
+ * Fetch and read inside one deadline: the timer covers the body as well as
+ * the headers, so a server that answers at once and then drips its page
+ * cannot hold the request open.
+ */
+const withTimeout = async (fetchImpl, url, init = {}, { timeout = FETCH_TIMEOUT_MS, lookup, read } = {}) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    return await fetchImpl(url, { ...init, signal: controller.signal, redirect: 'follow' });
+    const response = await fetchPublic(url, { ...init, signal: controller.signal }, { fetchImpl, lookup });
+    return { response, body: response.ok ? await read(response) : null };
   } finally {
     clearTimeout(timer);
   }
 };
 
-/** Read at most `MAX_PAGE_BYTES` of a response body as text. */
-const readCapped = async (response, cap = MAX_PAGE_BYTES) => {
-  const body = await response.text();
-  return body.length > cap ? body.slice(0, cap) : body;
+/**
+ * Read at most `cap` bytes of a response body as text. The body is streamed
+ * and the read stops at the cap, so an endless or huge response costs the
+ * cap, not the whole download.
+ */
+export const readCapped = async (response, cap = MAX_PAGE_BYTES) => {
+  if (!response.body?.getReader) {
+    const text = await response.text();
+    return text.length > cap ? text.slice(0, cap) : text;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let text = '';
+  try {
+    while (received < cap) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value.byteLength > cap - received ? value.subarray(0, cap - received) : value;
+      received += chunk.byteLength;
+      text += decoder.decode(chunk, { stream: true });
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return text + decoder.decode();
 };
 
 /**
@@ -184,18 +271,18 @@ const readCapped = async (response, cap = MAX_PAGE_BYTES) => {
  * one, its oEmbed caption. Failures are reported, never thrown at the caller:
  * a caption that did not load is a missing caption, not a failed import.
  */
-export const fetchSource = async (url, { fetchImpl = fetch, env = process.env } = {}) => {
+export const fetchSource = async (url, { fetchImpl = fetch, env = process.env, lookup = defaultLookup } = {}) => {
   const errors = [];
   let html = '';
   try {
-    const response = await withTimeout(fetchImpl, url, {
+    const { response, body } = await withTimeout(fetchImpl, url, {
       headers: {
         // Some recipe sites serve a stub to unknown agents; say who we are.
         'user-agent': 'Mozilla/5.0 (compatible; ForqRecipeImport/1.0; +https://forq.app)',
         accept: 'text/html,application/xhtml+xml',
       },
-    });
-    if (response.ok) html = await readCapped(response);
+    }, { lookup, read: (res) => readCapped(res) });
+    if (response.ok) html = body;
     else errors.push(`page ${response.status}`);
   } catch (error) {
     errors.push(error?.name === 'AbortError' ? 'page timed out' : 'page could not be reached');
@@ -205,8 +292,10 @@ export const fetchSource = async (url, { fetchImpl = fetch, env = process.env } 
   const endpoint = oEmbedEndpoint(url, env);
   if (endpoint) {
     try {
-      const response = await withTimeout(fetchImpl, endpoint, { headers: { accept: 'application/json' } });
-      if (response.ok) oembed = readOEmbed(await response.json());
+      const { response, body } = await withTimeout(fetchImpl, endpoint, { headers: { accept: 'application/json' } }, {
+        lookup, read: async (res) => JSON.parse(await readCapped(res, 64 * 1024)),
+      });
+      if (response.ok) oembed = readOEmbed(body);
       else errors.push(`caption ${response.status}`);
     } catch {
       errors.push('caption could not be reached');
