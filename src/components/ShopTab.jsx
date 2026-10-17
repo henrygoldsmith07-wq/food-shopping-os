@@ -278,8 +278,9 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                   {adding ? <><X size={13} /> Close</> : <><Plus size={14} /> Add an item</>}
                 </span>
               </button>
-              {/* In a shop only adding stays: scanning, offers and imports are
-                  set-up work, and here they pushed the list off the first screen. */}
+              {/* In a shop only adding and reading the receipt stay: scanning,
+                  offers and imports are set-up work, and here they pushed the
+                  list off the first screen. */}
               {!shoppingMode && <>
               <button
                 onClick={() => setSheet('scan')}
@@ -302,7 +303,9 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
               >
                 <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><Mic size={14} /> Voice</span>
               </button>
-              {/* Receipt capture is an optional tool — manual shop entry always works. */}
+              </>}
+              {/* Receipt capture is an optional tool — manual shop entry always
+                  works. It stays in a shop: the till is where the receipt is. */}
               {app.hasTool('receipt') && (
               <button
                 onClick={() => setSheet('receipt')}
@@ -312,6 +315,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                 <span className="inline-flex flex-wrap items-center justify-center gap-1.5"><Receipt size={14} /> Read a receipt</span>
               </button>
               )}
+              {!shoppingMode && (
               <button
                 onClick={() => setSheet('csv')}
                 className="press rounded-2xl border py-2.5 text-[0.78125rem] font-extrabold"
@@ -319,7 +323,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
               >
                 <span className="inline-flex items-center gap-1.5"><FileUp size={14} /> Import receipts</span>
               </button>
-              </>}
+              )}
             </div>
             {adding && <AddItem onAdd={(items) => app.addToList((Array.isArray(items) ? items : [items]).map((item) => ({ ...item, store })))} />}
             {voiceStatus && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>{voiceStatus}</p>}
