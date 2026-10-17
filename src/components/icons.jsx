@@ -5,7 +5,7 @@ import {
   Mic, Milk, Nut, Package, Recycle, Salad, Sandwich, Scale, ShoppingCart, Snowflake,
   Soup, SprayCan, Sprout, Square, Trophy, Utensils, UtensilsCrossed, Watch, Wheat, Wine,
 } from 'lucide-react';
-import { foodIconFor } from './food-icons.jsx';
+import { useFoodIcons } from './food-icon-loader.js';
 
 /**
  * Data files keep their `emoji` field as a stable key; the UI renders it as a
@@ -36,6 +36,7 @@ const EMOJI_ICON = {
  * emoji as the fallback.
  */
 export const Glyph = ({ e, name, size = 18, strokeWidth = 1.8, className, style }) => {
-  const C = (name || e ? foodIconFor(name, e) : null) || EMOJI_ICON[e] || Utensils;
+  const food = useFoodIcons();
+  const C = (food && (name || e) ? food.foodIconFor(name, e) : null) || EMOJI_ICON[e] || Utensils;
   return <C size={size} strokeWidth={strokeWidth} className={className} style={style} aria-hidden="true" />;
 };

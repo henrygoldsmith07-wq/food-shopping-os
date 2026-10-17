@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { foodIconKey, recipeIconKey } from '../src/data/food-icon-keys.js';
 import { FOOD_ICON, foodIconFor } from '../src/components/food-icons.jsx';
 import { Glyph } from '../src/components/icons.jsx';
@@ -36,10 +36,10 @@ describe('food icons from item names', () => {
     expect(foodIconFor('zzz', undefined)).toBeNull();
   });
 
-  it('renders a named item with its own icon rather than the plate', () => {
+  it('renders a named item with its own icon once the set has loaded', async () => {
     const { container: tin } = render(<Glyph e="🍽️" name="chopped tomatoes" />);
     const { container: plate } = render(<Glyph e="🍽️" />);
-    expect(tin.innerHTML).not.toBe(plate.innerHTML);
+    await waitFor(() => expect(tin.innerHTML).not.toBe(plate.innerHTML));
   });
 });
 

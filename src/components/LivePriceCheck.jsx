@@ -97,7 +97,7 @@ export default function LivePriceCheck({
         : caught.status === 429
           ? 'That is a lot of price checks — try again in an hour.'
           : caught.status === 503
-            ? 'Live price checking is switched off on this deployment.'
+            ? (/not configured/i.test(caught.message || '') ? 'Live prices need the app’s backend (sign-in and storage) to be set up.' : 'Live price checking is switched off on this deployment.')
             : caught.message || 'Live price check failed.');
     } finally {
       abortRef.current = null;

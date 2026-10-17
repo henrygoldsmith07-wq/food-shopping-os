@@ -5,7 +5,9 @@ import {
   Shell, Shrimp, Snowflake, Soup, SprayCan, Sprout, Wine, Carrot,
 } from 'lucide-react';
 import * as Art from './food-icon-art.jsx';
-import { foodIconKey, EMOJI_FOOD_KEY } from '../data/food-icon-keys.js';
+import { foodIconKey, EMOJI_FOOD_KEY, recipeIconKey } from '../data/food-icon-keys.js';
+
+export { recipeIconKey };
 
 /** Food icon keys (see data/food-icon-keys.js) to icon components. */
 export const FOOD_ICON = {
