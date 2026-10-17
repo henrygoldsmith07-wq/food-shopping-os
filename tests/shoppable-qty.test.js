@@ -56,3 +56,19 @@ describe('recipe rows on the list', () => {
     expect(get().shoppingList[0].requiredQty).toBeUndefined();
   });
 });
+
+describe('every plan-derived list buys shoppable amounts', () => {
+  const recipe = {
+    id: 'stir-fry', name: 'Stir-fry', servings: 2,
+    ingredients: [{ name: 'Garlic', qty: '2 tbsp' }, { name: 'Ginger', qty: '60 ml' }, { name: 'Firm tofu', qty: '280 g' }],
+  };
+
+  it('the onboarding starter list', async () => {
+    const { firstSessionPlan } = await import('../src/lib/onboarding-quick-start.js');
+    const { shoppingList } = firstSessionPlan({ day: '2026-10-16', recipes: [recipe], pickedRecipeIds: ['stir-fry'], household: 2 });
+    const rows = Object.fromEntries(shoppingList.map((row) => [row.name, row]));
+    expect(rows.Garlic).toMatchObject({ qty: '1 bulb', requiredQty: '2 tbsp' });
+    expect(rows.Ginger).toMatchObject({ qty: '1 piece', requiredQty: '60 ml' });
+    expect(rows['Firm tofu']).toMatchObject({ qty: '280 g' });
+  });
+});
