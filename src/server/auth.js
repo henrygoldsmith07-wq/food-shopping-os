@@ -2,7 +2,10 @@ import AppleProviderPackage from 'next-auth/providers/apple';
 import GoogleProviderPackage from 'next-auth/providers/google';
 import AzureADProviderPackage from 'next-auth/providers/azure-ad';
 import CredentialsProviderPackage from 'next-auth/providers/credentials';
-import NextAuthPackage from 'next-auth';
+// The named export, from its own entry: next-auth's default export is only
+// the NextAuth handler once bundled, so destructuring getServerSession off it
+// yields undefined in production ("nF is not a function" on every session read).
+import { getServerSession } from 'next-auth/next';
 import { ForqAdapter } from './auth-adapter.js';
 import { databaseConfigured } from './database.js';
 
@@ -10,7 +13,6 @@ const AppleProvider = AppleProviderPackage.default || AppleProviderPackage;
 const GoogleProvider = GoogleProviderPackage.default || GoogleProviderPackage;
 const AzureADProvider = AzureADProviderPackage.default || AzureADProviderPackage;
 const CredentialsProvider = CredentialsProviderPackage.default || CredentialsProviderPackage;
-const { getServerSession } = NextAuthPackage;
 const providers = [];
 
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
@@ -77,4 +79,9 @@ export const authOptions = {
   secret: process.env.AUTH_SECRET,
 };
 
+/**
+ * The signed-in session. The jwt callback adds the user's id, which next-auth's
+ * own Session type does not know about.
+ * @returns {Promise<{ user?: { id?: string, name?: string | null, email?: string | null, image?: string | null } } | null>}
+ */
 export const getSession = () => getServerSession(authOptions);
