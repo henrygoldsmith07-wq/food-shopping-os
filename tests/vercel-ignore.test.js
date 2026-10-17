@@ -164,4 +164,12 @@ describe('vercel ignoreCommand', () => {
     expect(runIgnore(repo, ['--project', 'forq-site'])).toBe(0);
     expect(runIgnore(repo, ['--project', 'food-shopping-os'])).toBe(0);
   });
+
+  it('builds a redeploy of the same commit, so new environment variables take effect', () => {
+    // "Redeploy" in Vercel reuses the last deployment's commit; nothing in git
+    // changed, but the environment did. Skipping it made Redeploy a no-op.
+    const head = git(repo, 'rev-parse', 'HEAD');
+    expect(runIgnore(repo, ['--project', 'food-shopping-os'], { VERCEL_GIT_PREVIOUS_SHA: head })).toBe(1);
+    expect(runIgnore(repo, ['--project', 'forq-site'], { VERCEL_GIT_PREVIOUS_SHA: head })).toBe(1);
+  });
 });

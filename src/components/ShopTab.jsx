@@ -13,6 +13,8 @@ import {
 import { AISLE_ORDER as ALL_AISLES } from '../data/stores.js';
 import { clearObservedPriceCache } from '../lib/observed-prices.js';
 import { useObservedPrices } from '../lib/use-observed-prices.js';
+import { loadLivePriceCache } from '../lib/live-prices.js';
+import { estimateBasket } from '../lib/basket-estimate.js';
 import { haptic } from '../lib/haptics.js';
 import { gbp as gbpFmt } from '../lib/utils.js';
 import ReceiptScan from './ReceiptScan.jsx';
@@ -104,10 +106,13 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   const ticked = visibleList.filter((i) => i.checked).length;
   const checkedTotal = checkedTotalOf(visibleList);
   const known = store && app.storeRoutes[store];
-  // Community price observations: when to ask, what came back, and what to say
-  // when it didn't. That policy belongs to the hook, not to this screen — and
-  // it reads the *visible* list, so a check never prices items you can't see.
-  const observed = useObservedPrices({ items: visibleList, offlineMode, isOnline });
+  // Price checks (community, and live shops with that tool): the hook owns when to
+  // ask and what to say on failure; it reads the *visible* list only.
+  const observed = useObservedPrices({ items: visibleList, offlineMode, isOnline, live: app.hasTool?.('live-prices') ?? false });
+  // Prices for unpriced rows (live, community, then typical UK); the live cache is re-read when a check lands.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const priceEvidence = useMemo(() => ({ live: loadLivePriceCache(), observed: observed.byKey }), [observed.byKey, observed.liveAt, visibleList]);
+  const estimate = useMemo(() => estimateBasket(visibleList, priceEvidence), [visibleList, priceEvidence]);
   const staples = useMemo(
     () => recurringStaples(app.shops, app.pantry, list, { today: app.day }),
     [app.shops, app.pantry, list, app.day],
@@ -223,6 +228,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             isOnline={isOnline}
             setSheet={setSheet}
             onOpenPantry={onOpenPantry} cap={cap} reRanked={reRanked} onReRank={() => setReRanked((value) => !value)}
+            estimate={estimate}
           />
 
           {/* Which shop you're walking round: its aisles, in your order */}
@@ -427,6 +433,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                             dragging={dragging}
                             setDragging={setDragging}
                             observedPrice={observed.byKey?.[shoppingNameKey(item.name)] || null}
+                            priceEvidence={priceEvidence}
                             largeTouch={largeTouch}
                             pastCap={Boolean(outsideKeys?.has(item.id ? String(item.id) : item.name))} guardOver={Boolean(guardOverKeys?.has(item.id ? String(item.id) : item.name))} />
                         ))}

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { cx, clamp } from '../lib/utils.js';
 import { recipeGlyphFor } from './recipe-icons.jsx';
+import { useFoodIcons } from './food-icon-loader.js';
 
 /* ---------- Layout ---------- */
 
@@ -382,7 +383,7 @@ export const Toggle = ({ on, onChange, label }) => (
 
 /** Use the same Lucide glyph system as every other product surface. */
 export const FoodArt = ({ recipe, className, alt = '' }) => {
-  const { family, Icon } = recipeGlyphFor(recipe);
+  const { family, Icon } = recipeGlyphFor(recipe, useFoodIcons());
 
   return (
     <div

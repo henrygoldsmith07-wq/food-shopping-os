@@ -165,7 +165,7 @@ function MicrosView() {
         {result.picks.map((pick) => (
           <div key={pick.id} className="mb-2.5 rounded-2xl p-3" style={{ background: 'var(--card-2)' }}>
             <p className="text-[0.84375rem] font-extrabold inline-flex items-center gap-1.5">
-              <Glyph e={pick.emoji || '🍽️'} size={14} /> {pick.name}
+              <Glyph e={pick.emoji || '🍽️'} name={pick.name} size={14} /> {pick.name}
               <span className="font-semibold" style={{ color: 'var(--muted)' }}>· {pick.grams} g</span>
             </p>
             <p className="mt-0.5 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, requireUser } from '../../../../server/api.js';
 import { scrapeListRequestSchema, scrapeRequestSchema } from '../../../../server/schemas.js';
-import { scrapePrices, scrapeableRetailers, scraperEnabled } from '../../../../server/price-scraper.js';
+import { cheapestAcross, scrapePrices, scrapeableRetailers, scraperEnabled } from '../../../../server/price-scraper.js';
 import { monidBatchPrices, monidOnPath } from '../../../../server/monid-prices.js';
 import { isOpenRouterConfigured } from '../../../../server/openrouter.js';
 import { availableStrategies, firecrawlConfigured } from '../../../../server/crawler.js';
@@ -57,20 +57,25 @@ export async function POST(request) {
       let monidBatch = null;
       const nowIso = new Date().toISOString();
       if (monidOnPath() && checks.length) {
-        const gaps = [...new Set(checks.filter((check) => !(check.rows || []).some((row) => row.price > 0)).map((check) => check.query))];
+        // A check's answer is `best`; a check without one is a gap.
+        const gaps = [...new Set(checks.filter((check) => !(check.best?.price > 0)).map((check) => check.query))];
         if (gaps.length) {
           try {
             const batch = await monidBatchPrices(gaps);
             if (batch.ok) {
               monidBatch = { provider: batch.provider, endpoint: batch.endpoint, items: gaps.length };
               for (const check of checks) {
-                if ((check.rows || []).some((row) => row.price > 0)) continue;
+                if (check.best?.price > 0) continue;
                 const matched = batch.byQuery.get(check.query) || [];
                 if (matched.length) {
-                  check.rows = matched;
-                  check.status = 'ok';
-                  check.note = null;
-                  check.source = 'monid';
+                  // Joined as one more answered source, so `cheapest` and
+                  // `best` — what the app reads — carry the batch's rows.
+                  check.results = [...(check.results || []), {
+                    retailerId: 'monid', retailer: 'Monid', query: check.query, rows: matched, status: 'ok', source: 'monid',
+                  }];
+                  check.cheapest = cheapestAcross(check.results);
+                  check.best = check.cheapest[0] || null;
+                  check.monid = { status: 'ok', provider: batch.provider, rows: matched.length };
                 } else check.monid = { status: 'no-match', provider: batch.provider, rows: 0 };
               }
             } else monidBatch = { status: batch.status, items: gaps.length };

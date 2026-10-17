@@ -246,7 +246,7 @@ export default function PriceGraphs({ history }) {
           <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-5 px-5">
             {options.map((p) => (
               <Chip key={p.name} active={p.name === entry.name} onClick={() => setSelected(p.name)}>
-                <span className="inline-flex items-center gap-1.5"><Glyph e={p.emoji} size={12} /> {p.name}</span>
+                <span className="inline-flex items-center gap-1.5"><Glyph e={p.emoji} name={p.name} size={12} /> {p.name}</span>
               </Chip>
             ))}
           </div>
@@ -256,7 +256,7 @@ export default function PriceGraphs({ history }) {
               <Card>
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
-                    <p className="font-extrabold text-[0.9375rem] flex items-center gap-1.5"><Glyph e={entry.emoji} size={16} /> {entry.name}</p>
+                    <p className="font-extrabold text-[0.9375rem] flex items-center gap-1.5"><Glyph e={entry.emoji} name={entry.name} size={16} /> {entry.name}</p>
                     <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
                       {entry.times} receipt{entry.times === 1 ? '' : 's'} · latest {gbp(entry.latest, { always: true })}
                       {entry.change !== null && entry.times > 1 && (

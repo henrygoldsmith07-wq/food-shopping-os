@@ -121,7 +121,8 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
 
   for (const k of keys) {
     if (signal?.aborted) break;
-    const name = items.find((i) => shoppingNameKey(i.name) === k)?.name || k;
+    const row = items.find((i) => shoppingNameKey(i.name) === k);
+    const name = row?.name || k;
     const cached = cache[k];
     const fresh = cached && Date.now() - new Date(cached.checkedAt).getTime() < TTL_MS;
     if (fresh && Array.isArray(cached.prices) && cached.prices.length) {
@@ -130,11 +131,11 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
       fromCache += 1;
       continue;
     }
-    // fetch by product name (barcode path is used in BarcodeAdd, not list)
+    // A scanned row knows its exact product; anything else searches by name.
     try {
       // Sequential on purpose: the community price API is rate limited, and a
       // parallel burst across a whole list is what trips it.
-      const body = await fetchObservedPrice({ query: name.slice(0, 80) }, { signal });
+      const body = await fetchObservedPrice(row?.barcode ? { barcode: row.barcode } : { query: name.slice(0, 80) }, { signal });
       const prices = Array.isArray(body.prices) ? body.prices : [];
       cache[k] = { prices, sourceLabel: body.sourceLabel || 'Open Prices (community observed)', checkedAt: body.checkedAt || new Date().toISOString() };
       saveCache(cache);

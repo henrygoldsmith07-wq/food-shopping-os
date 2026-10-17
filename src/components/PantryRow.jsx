@@ -49,7 +49,7 @@ export default function PantryRow({ item: p, app, onRemove, onCorrect }) {
       onSwipeRight={() => app.togglePantryLow(p.id)}
     >
       <div className="flex items-center gap-3 p-3" style={{ borderColor: 'var(--line)' }}>
-        <Glyph e={p.emoji} size={22} style={{ color: 'var(--muted)' }} />
+        <Glyph e={p.emoji} name={p.name} size={22} style={{ color: 'var(--muted)' }} />
         <div className="min-w-0 flex-1">
           <p className="font-bold text-[0.875rem] truncate">{p.name}</p>
           {/* "Opened" is worth saying; "Unopened" is not. Every item starts

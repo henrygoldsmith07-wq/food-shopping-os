@@ -7,6 +7,20 @@ import { householdPortionsFor } from '../lib/portions.js';
 import ShoppingProgress from './ShoppingProgress.jsx';
 import { Card, Chip, Meter, Section } from './ui.jsx';
 
+/** Where an estimated total came from, in one line. */
+const estimateLine = (basket, estimate) => {
+  const { live, observed, typical } = estimate.sources;
+  const parts = [
+    live && `${live} live`,
+    observed && `${observed} community`,
+    typical && `${typical} typical UK`,
+  ].filter(Boolean).join(', ');
+  const borrowed = `about ${gbp(estimate.estimated, { always: true })} for ${estimate.estimatedCount} item${estimate.estimatedCount === 1 ? '' : 's'} at ${parts} price${estimate.estimatedCount === 1 ? '' : 's'}`;
+  return basket.projected > 0
+    ? `${gbp(basket.projected, { always: true })} from your prices + ${borrowed}.`
+    : `Estimated: ${borrowed}. Type a price or read a receipt to replace it.`;
+};
+
 /**
  * What this shop is going to cost, and what that does to the budget.
  *
@@ -17,7 +31,7 @@ import { Card, Chip, Meter, Section } from './ui.jsx';
  */
 export default function ShopBasket({
   app, basket, ticked, visibleList, shoppingMode, shoppingSession, isOnline, setSheet, onOpenPantry,
-  cap = null, reRanked = false, onReRank = null,
+  cap = null, reRanked = false, onReRank = null, estimate = null,
 }) {
   // What has actually been ticked off, which is the running total once a shop
   // is under way; derived here because it is only ever read here.
@@ -27,10 +41,16 @@ export default function ShopBasket({
   // With no recorded prices the receipt estimate is £0, which reads as "free"
   // beside the Plan tab's cost. Quote the plan's own recipe estimate instead,
   // labelled as such, until a receipt gives real prices.
-  const planEstimate = basket.projected > 0 ? 0
+  // Rows without a price borrow one (live, community, or typical for the
+  // pack) so the total is the whole shop, not just the part you've typed in.
+  const estimated = estimate?.estimatedCount > 0 ? estimate : null;
+  const planEstimate = basket.projected > 0 || estimated ? 0
     : planStats(app.plan, weekDates(app.day), { people: householdPortionsFor(app).portions }).cost;
   const fromRecipes = basket.unpriced > 0 && planEstimate > 0;
-  const projected = fromRecipes ? planEstimate : basket.projected;
+  const projected = estimated ? Math.round((basket.projected + estimated.estimated) * 100) / 100
+    : fromRecipes ? planEstimate : basket.projected;
+  const about = fromRecipes || Boolean(estimated);
+  const unpricedLeft = estimated ? estimated.unknownCount : basket.unpriced;
 
   return (
     <Section className="rise rise-1">
@@ -44,16 +64,17 @@ export default function ShopBasket({
               {/* Keyed on the value, so a changed total animates in
                   instead of silently swapping under your eyes. */}
               <span key={shoppingMode ? checkedTotal : projected} className="count-up inline-block">
-                {!shoppingMode && fromRecipes && 'about '}{gbp(shoppingMode ? checkedTotal : projected, { always: true })}
+                {!shoppingMode && about && 'about '}{gbp(shoppingMode ? checkedTotal : projected, { always: true })}
               </span>
               {shoppingMode && (
                 <span className="text-[0.8125rem] font-semibold ml-1.5" style={{ color: 'var(--muted)' }}>
-                  of {fromRecipes && 'about '}{gbp(projected, { always: true })}
+                  of {about && 'about '}{gbp(projected, { always: true })}
                 </span>
               )}
             </p>
             {!shoppingMode && <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {fromRecipes ? 'Rough estimate from this week’s recipes — a receipt replaces it with what you paid.'
+              {estimated ? estimateLine(basket, estimated)
+                : fromRecipes ? 'Rough estimate from this week’s recipes — a receipt replaces it with what you paid.'
                   : 'Estimate from your receipts (“you paid this”) — not live prices.'}
             </p>}
             {basket.saved > 0 && (
@@ -61,9 +82,9 @@ export default function ShopBasket({
                 {gbp(basket.total, { always: true })} less {gbp(basket.saved, { always: true })} of your offers
               </p>
             )}
-        {basket.unpriced > 0 && !shoppingMode && (
+        {unpricedLeft > 0 && !shoppingMode && (
           <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            {basket.unpriced} item{basket.unpriced === 1 ? '' : 's'} with no price yet{fromRecipes ? '.' : ' — the total is only what you’ve typed in.'}
+            {unpricedLeft} item{unpricedLeft === 1 ? '' : 's'} with no price yet{about ? '.' : ' — the total is only what you’ve typed in.'}
           </p>
         )}
         {onOpenPantry && app.pantry.length > 0 && !shoppingMode && (

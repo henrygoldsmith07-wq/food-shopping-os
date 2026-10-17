@@ -203,7 +203,11 @@ describe('budget and offers', () => {
   it('counts an unpriced item as unknown rather than free', () => {
     onboard();
     openShop();
+    // A known food borrows its typical price, labelled as such…
     addItem('Sourdough');
+    expect(screen.getByText(/about £1\.60 · typical, loaf/)).toBeDefined();
+    // …and one nobody can price stays unknown, not £0.
+    addItem('Zorbleberry cordial');
     expect(screen.getByText(/1 item with no price yet/)).toBeDefined();
   });
 
