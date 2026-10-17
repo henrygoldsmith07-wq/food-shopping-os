@@ -335,7 +335,7 @@ export default function RecipesTab({ openRecipe }) {
                       <div className="p-3">
                         <p className="font-bold text-[0.84375rem] leading-tight line-clamp-2">{r.name}</p>
                         <p className="mt-1 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                          {r.time <= 60 ? `${r.time} min` : `${Math.round(r.time / 60)} h`} · {r.kcal} kcal · {r.protein}g protein
+                          {r.time <= 60 ? `${r.time} min` : `${Math.round(r.time / 60)} h`} · {r.nutritionStatus === 'estimated-from-ingredients' ? '≈' : ''}{r.kcal} kcal · {r.protein}g protein
                         </p>
                         <p className="mt-1 text-[0.75rem] font-extrabold" style={{ color: 'var(--accent)' }}>
                           {gbp(r.costPerServing, { always: true })}/serving

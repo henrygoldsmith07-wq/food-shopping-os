@@ -256,6 +256,11 @@ export const nutritionConfidence = (recipe) => {
   const matched = recipe.ingredients && recipe.ingredients.length
     ? Math.round((recipe.ingredients.filter((i) => partByName(i.name)).length / recipe.ingredients.length) * 100)
     : 0;
+  if (recipe.nutritionStatus === 'estimated-from-ingredients') {
+    // The ingredients themselves were inferred from the dish's name, so a
+    // "100% matched" figure would overstate what is known.
+    return { kind: 'estimated', label: 'Rough estimate — worked out from typical ingredients for a dish of this name, not a tested recipe.' };
+  }
   if (recipe.signature || recipe.per100 || recipe.nutritionSource === 'label') {
     return { kind: 'label', label: 'From the recipe book / label — a stated figure, not an estimate.' };
   }

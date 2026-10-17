@@ -316,12 +316,42 @@ const GENERATED_RECIPES = generateRecipes();
 // recipe maths and existing planning constraints never treat missing costs or
 // nutrition as real zeroes.
 
-/** Add dishes to the book, first registration wins, order preserved. */
+/** Recipes kept out of the book but still resolvable by id (see byId). */
+const WITHDRAWN = [];
+const nameKey = (name) => String(name || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
+const seenRecipeNames = new Set();
+const STAPLES = /^(garlic|onion|olive oil|oil|ginger|red chilli|chilli|fresh herbs|herbs|lemon|vegetable stock|stock)$/i;
+
+/**
+ * The ingredient that tells two same-named dishes apart: the generator names
+ * a dish after its sauce, protein and base, so "…Chicken breast with White
+ * rice" came out nine times with only the vegetable differing.
+ */
+const distinguishingIngredient = (recipe) => (recipe.ingredients || [])
+  .map((i) => (typeof i === 'string' ? i : i?.name || ''))
+  .find((name) => name && !STAPLES.test(name) && !nameKey(recipe.name).includes(nameKey(name)));
+
+/**
+ * Add dishes to the book, first registration wins, order preserved. A second
+ * dish under a name already in the book is renamed after what sets it apart,
+ * or withdrawn when nothing does (the same dish spelt twice).
+ */
 const appendRecipes = (rows) => {
   const added = [];
-  for (const recipe of rows) {
-    if (seenRecipeIds.has(recipe.id)) continue;
-    seenRecipeIds.add(recipe.id);
+  for (const row of rows) {
+    if (seenRecipeIds.has(row.id)) continue;
+    seenRecipeIds.add(row.id);
+    let recipe = row;
+    if (seenRecipeNames.has(nameKey(recipe.name))) {
+      const extra = distinguishingIngredient(recipe);
+      const renamed = extra ? `${recipe.name} and ${extra.toLowerCase()}` : null;
+      if (!renamed || seenRecipeNames.has(nameKey(renamed))) {
+        WITHDRAWN.push(recipe);
+        continue;
+      }
+      recipe = { ...recipe, name: renamed, ...(recipe.title ? { title: renamed } : {}) };
+    }
+    seenRecipeNames.add(nameKey(recipe.name));
     RECIPES.push(recipe);
     added.push(recipe);
   }
@@ -333,6 +363,18 @@ const appendRecipes = (rows) => {
  * `recipes-full.js` appends the lazily loaded shelves.
  */
 export const registerRecipes = (rows) => appendRecipes(Array.isArray(rows) ? rows : [rows]);
+
+/**
+ * Shells whose name told the estimator nothing: their ingredients and
+ * nutrition would be a guess, so they stay out of browse, search and
+ * planning. They still resolve by id, so a plan or favourite saved before
+ * they were withdrawn keeps opening.
+ */
+export const registerWithdrawnRecipes = (rows) => {
+  for (const recipe of rows) {
+    if (!seenRecipeIds.has(recipe.id)) WITHDRAWN.push(recipe);
+  }
+};
 
 /** The book. Live: the lazily loaded shelves are appended to this array. */
 const seenRecipeIds = new Set();
@@ -361,7 +403,8 @@ export const myRecipes = () => mine;
  */
 export const allRecipes = () => (mine.length ? [...RECIPES, ...mine] : [...RECIPES]);
 
-export const byId = (id) => RECIPES.find((r) => r.id === id) || mine.find((r) => r.id === id);
+export const byId = (id) => RECIPES.find((r) => r.id === id) || mine.find((r) => r.id === id)
+  || WITHDRAWN.find((r) => r.id === id);
 
 /** Recipes for one slot of the day. */
 export const forMeal = (meal) => (meal ? allRecipes().filter((r) => r.meal === meal) : allRecipes());

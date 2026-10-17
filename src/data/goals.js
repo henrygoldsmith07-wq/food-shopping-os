@@ -67,6 +67,19 @@ export const bodyGoal = (id) => BODY_GOALS.find((g) => g.id === id) || BODY_GOAL
  * rule foods and recipes out. `targetPatch` nudges the micronutrient targets
  * where the pattern genuinely implies a different intake.
  */
+/*
+ * Meat and fish named in a recipe's title or ingredients. A recipe's diet tag
+ * is the primary rule, but a tag can be wrong (a name-only estimate, an
+ * import, a hand edit), so a vegetarian or vegan dish must ALSO name no meat
+ * or fish. "Vegan sausages", "Quorn mince" and "oyster mushrooms" are plant
+ * foods and are read past.
+ */
+const MEAT = String.raw`chicken|beef|pork|lamb|mutton|veal|venison|duck|goose|turkey|bacon|ham|gammon|pancetta|prosciutto|guanciale|chorizo|salami|pepperoni|sausages?|bangers?|mince|meatballs?|meatloaf|steaks?|ribs?|gelatine?`;
+const FISH = String.raw`fish|salmon|tuna|cod|haddock|mackerel|sardines?|anchov\w*|trout|prawns?|shrimps?|crab|lobster|squid|calamari|mussels?|clams?|scallops?|oysters?|seafood`;
+const MEAT_OR_FISH_WORDS = new RegExp(String.raw`\b(${MEAT}|${FISH})\b`, 'i');
+const MEAT_WORDS = new RegExp(String.raw`\b(${MEAT})\b`, 'i');
+export const PLANT_QUALIFIED = /\b(vegan|vegetarian|veggie|plant[- ]based|meat[- ]free|quorn|mock|faux)\s+[a-z]+(\s+[a-z]+)?|\boyster mushrooms?\b|\b(cauliflower|celeriac|aubergine|mushroom|cabbage) steaks?\b/gi;
+
 export const DIET_PATTERNS = [
   {
     id: 'keto',
@@ -111,6 +124,7 @@ export const DIET_PATTERNS = [
     blurb: 'No animal products at all.',
     excludes: /chicken|beef|pork|lamb|bacon|sausage|steak|mince|ham|turkey|fish|salmon|tuna|prawn|anchov|egg|milk|cheese|cheddar|parmesan|halloumi|feta|yogurt|yoghurt|butter|cream|honey|gelatin|whey/i,
     recipeTag: (r) => r.tags.includes('vegan'),
+    recipeExcludes: MEAT_OR_FISH_WORDS,
   },
   {
     id: 'vegetarian',
@@ -119,6 +133,7 @@ export const DIET_PATTERNS = [
     blurb: 'No meat or fish; dairy and eggs are fine.',
     excludes: /chicken|beef|pork|lamb|bacon|sausage|steak|mince|ham|turkey|fish|salmon|tuna|prawn|anchov|gelatin/i,
     recipeTag: (r) => r.tags.includes('vegan') || r.tags.includes('vegetarian'),
+    recipeExcludes: MEAT_OR_FISH_WORDS,
   },
   {
     id: 'pescatarian',
@@ -128,6 +143,7 @@ export const DIET_PATTERNS = [
     excludes: /chicken|beef|pork|lamb|bacon|sausage|steak|mince|ham|turkey|gelatin/i,
     recipeTag: (r) => r.tags.includes('vegan') || r.tags.includes('vegetarian')
       || r.ingredients.some((i) => /fish|salmon|tuna|prawn/i.test(i.name)),
+    recipeExcludes: MEAT_WORDS,
   },
   {
     id: 'gluten-free',
