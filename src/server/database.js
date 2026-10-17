@@ -1,5 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Redis } from '@upstash/redis';
+import {
+  applyUpdate, baseDocument, comparable, deserialise, householdIdFrom, matches, project, RedisCursor,
+  serialise, valueAt, valuesEqual,
+} from './database-query.js';
 
 const prefix = process.env.UPSTASH_REDIS_PREFIX || 'forq';
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
@@ -25,6 +29,9 @@ const HOUSEHOLD_SCOPED_COLLECTIONS = new Set([
   'notificationOutbox', 'auditEvents', 'aiUsage', 'realtimeEvents',
   'analyticsDaily', 'analyticsEventReceipts',
 ]);
+/* Written directly by the analytics Lua script, which does not maintain the
+   indexes below, so these are always read by scanning. */
+const UNINDEXED_COLLECTIONS = new Set(['analyticsDaily', 'analyticsEventReceipts']);
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const newId = () => randomBytes(12).toString('hex');
@@ -32,149 +39,34 @@ const collectionKey = (name) => `${prefix}:collection:${name}`;
 const documentKey = (name, id) => `${prefix}:document:${name}:${id}`;
 const lockKey = (name) => `${prefix}:lock:${name}`;
 const analyticsReceiptExpiryKey = () => `${prefix}:analytics:receipt-expiry`;
-const householdIdFrom = (...values) => {
-  for (const value of values) {
-    if (!value || typeof value !== 'object') continue;
-    const id = value.householdId || value.$set?.householdId || value.$setOnInsert?.householdId;
-    if (id !== undefined && id !== null) return id.toString();
-  }
-  return null;
+
+/*
+ * Indexes. Every lookup used to SMEMBERS a whole collection and MGET every
+ * document in it, so reading one household's state downloaded every
+ * household's state. Three index shapes now answer the common filters:
+ *   - by _id: the document key itself;
+ *   - by a unique field set (UNIQUE_FIELDS): a key holding the owning _id;
+ *   - by household: a set of _ids per household for scoped collections.
+ * Index entries are written in the same MULTI as the document. A stale entry
+ * (a document since deleted or changed) is harmless: every hit is checked
+ * against the document, and a mismatched unique entry falls back to a scan
+ * that repairs it. A collection is indexed lazily the first time it is read
+ * after this shipped (`ensureIndexed`), so no deploy step is needed.
+ */
+const indexValue = (value) => String(comparable(value));
+const uniqueKey = (name, fields, document) => {
+  const digest = createHash('sha256')
+    .update(JSON.stringify(fields.map((field) => indexValue(valueAt(document, field)))))
+    .digest('hex');
+  return `${prefix}:unique:${name}:${fields.join(',')}:${digest}`;
 };
+const householdSetKey = (name, householdId) => `${prefix}:household-index:${name}:${householdId}`;
+const indexReadyKey = (name) => `${prefix}:index-ready:${name}`;
+const indexedCollections = new Set();
 
-const encode = (value) => {
-  if (value instanceof Date) return { $forqDate: value.toISOString() };
-  if (Array.isArray(value)) return value.map(encode);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]));
-  }
-  return value;
-};
-
-const decode = (value) => {
-  if (Array.isArray(value)) return value.map(decode);
-  if (value && typeof value === 'object') {
-    if (Object.keys(value).length === 1 && typeof value.$forqDate === 'string') {
-      return new Date(value.$forqDate);
-    }
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decode(item)]));
-  }
-  return value;
-};
-
-const serialise = (document) => JSON.stringify(encode(document));
-const deserialise = (value) => {
-  if (value === null || value === undefined) return null;
-  return decode(typeof value === 'string' ? JSON.parse(value) : value);
-};
-
-const comparable = (value) => {
-  if (value instanceof Date) return value.getTime();
-  if (value && typeof value === 'object' && typeof value.toString === 'function') return value.toString();
-  return value;
-};
-const valueAt = (document, path) =>
-  path.split('.').reduce((value, part) => (value === null || value === undefined ? undefined : value[part]), document);
-
-const setAt = (document, path, value) => {
-  const parts = path.split('.');
-  let target = document;
-  for (const part of parts.slice(0, -1)) {
-    if (!target[part] || typeof target[part] !== 'object') target[part] = {};
-    target = target[part];
-  }
-  target[parts.at(-1)] = value;
-};
-
-const unsetAt = (document, path) => {
-  const parts = path.split('.');
-  const target = parts.slice(0, -1).reduce((value, part) => value?.[part], document);
-  if (target && typeof target === 'object') delete target[parts.at(-1)];
-};
-
-const valuesEqual = (left, right) => {
-  if (Array.isArray(left) && !Array.isArray(right)) return left.some((item) => valuesEqual(item, right));
-  return comparable(left) === comparable(right);
-};
-
-const expressionValue = (document, expression) => {
-  if (typeof expression === 'string' && expression.startsWith('$')) return valueAt(document, expression.slice(1));
-  if (!expression || typeof expression !== 'object' || Array.isArray(expression)) return expression;
-  if ('$ifNull' in expression) {
-    const [candidate, fallback] = expression.$ifNull;
-    return expressionValue(document, candidate) ?? expressionValue(document, fallback);
-  }
-  if ('$add' in expression) {
-    return expression.$add.reduce((sum, item) => sum + Number(expressionValue(document, item) || 0), 0);
-  }
-  return expression;
-};
-
-const matchesCondition = (actual, condition) => {
-  if (!condition || typeof condition !== 'object' || condition instanceof Date || Array.isArray(condition)) {
-    return valuesEqual(actual, condition);
-  }
-  return Object.entries(condition).every(([operator, expected]) => {
-    if (operator === '$in') return expected.some((item) => valuesEqual(actual, item));
-    if (operator === '$exists') return (actual !== undefined) === expected;
-    if (operator === '$ne') return !valuesEqual(actual, expected);
-    if (operator === '$gt') return comparable(actual) > comparable(expected);
-    if (operator === '$gte') return comparable(actual) >= comparable(expected);
-    if (operator === '$lt') return comparable(actual) < comparable(expected);
-    if (operator === '$lte') return comparable(actual) <= comparable(expected);
-    return false;
-  });
-};
-
-const matches = (document, filter = {}) => Object.entries(filter).every(([field, condition]) => {
-  if (field === '$expr') {
-    if ('$lte' in condition) {
-      const [left, right] = condition.$lte;
-      return comparable(expressionValue(document, left)) <= comparable(expressionValue(document, right));
-    }
-    return false;
-  }
-  if (field === '$or') return condition.some((item) => matches(document, item));
-  if (field === '$and') return condition.every((item) => matches(document, item));
-  return matchesCondition(valueAt(document, field), condition);
-});
-
-const project = (document, projection) => {
-  if (!projection) return document;
-  const included = Object.entries(projection).filter(([, enabled]) => enabled).map(([field]) => field);
-  if (!included.length) {
-    const copy = structuredClone(document);
-    for (const [field, enabled] of Object.entries(projection)) {
-      if (!enabled) delete copy[field];
-    }
-    return copy;
-  }
-  const result = {};
-  if (projection._id !== 0 && document._id !== undefined) result._id = document._id;
-  for (const field of included.filter((item) => item !== '_id')) {
-    const value = valueAt(document, field);
-    if (value !== undefined) setAt(result, field, value);
-  }
-  return result;
-};
-
-const baseDocument = (filter) => Object.fromEntries(
-  Object.entries(filter).filter(([field, value]) =>
-    !field.startsWith('$')
-    && (!value || typeof value !== 'object' || value instanceof Date || Array.isArray(value))),
-);
-
-const applyUpdate = (document, update, inserting = false) => {
-  const next = structuredClone(document);
-  if (inserting) {
-    for (const [field, value] of Object.entries(update.$setOnInsert || {})) setAt(next, field, value);
-  }
-  for (const [field, value] of Object.entries(update.$set || {})) setAt(next, field, value);
-  for (const field of Object.keys(update.$unset || {})) unsetAt(next, field);
-  for (const [field, amount] of Object.entries(update.$inc || {})) {
-    setAt(next, field, Number(valueAt(next, field) || 0) + Number(amount));
-  }
-  return next;
-};
+/** A filter value that can be looked up by equality (not an operator object). */
+const plainValue = (value) => value !== undefined && value !== null
+  && (typeof value !== 'object' || value instanceof Date);
 
 const assertHouseholdActive = async (householdId) => {
   const household = deserialise(await redis.get(documentKey('households', householdId)));
@@ -184,47 +76,16 @@ const assertHouseholdActive = async (householdId) => {
   throw error;
 };
 
-class RedisCursor {
-  constructor(load, filter, options = {}) {
-    this.load = load;
-    this.filter = filter;
-    this.projection = options.projection;
-    this.sortSpec = null;
-    this.maximum = null;
-  }
-
-  sort(spec) {
-    this.sortSpec = spec;
-    return this;
-  }
-
-  limit(value) {
-    this.maximum = value;
-    return this;
-  }
-
-  async toArray() {
-    let documents = (await this.load()).filter((document) => matches(document, this.filter));
-    if (this.sortSpec) {
-      const fields = Object.entries(this.sortSpec);
-      documents.sort((left, right) => {
-        for (const [field, direction] of fields) {
-          const a = comparable(valueAt(left, field));
-          const b = comparable(valueAt(right, field));
-          if (a < b) return -1 * direction;
-          if (a > b) return direction;
-        }
-        return 0;
-      });
-    }
-    if (this.maximum !== null) documents = documents.slice(0, this.maximum);
-    return documents.map((document) => project(document, this.projection));
-  }
-}
+const duplicateKeyError = () => {
+  const error = new Error('Duplicate key.');
+  error.code = 11000;
+  return error;
+};
 
 class RedisCollection {
   constructor(name) {
     this.name = name;
+    this.indexed = !UNINDEXED_COLLECTIONS.has(name);
   }
 
   async loadAll() {
@@ -237,6 +98,100 @@ class RedisCollection {
       if (this.name === 'analyticsEventReceipts') await redis.zrem(analyticsReceiptExpiryKey(), ...expiredIds);
     }
     return values.map(deserialise).filter(Boolean);
+  }
+
+  async loadIds(ids) {
+    if (!ids.length) return [];
+    const values = await redis.mget(...ids.map((id) => documentKey(this.name, id)));
+    return values.map(deserialise).filter(Boolean);
+  }
+
+  /** The unique field sets this document has values for. */
+  uniqueSets(document) {
+    return (UNIQUE_FIELDS[this.name] || [])
+      .filter((fields) => fields.every((field) => plainValue(valueAt(document, field))));
+  }
+
+  /** Queue a document's index entries on a MULTI. */
+  queueIndexes(multi, document, options) {
+    if (!this.indexed) return;
+    for (const fields of this.uniqueSets(document)) {
+      multi.set(uniqueKey(this.name, fields, document), document._id, options);
+    }
+    if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(document.householdId)) {
+      multi.sadd(householdSetKey(this.name, indexValue(document.householdId)), document._id);
+    }
+  }
+
+  /**
+   * Make sure every stored document is indexed. Runs a single scan the first
+   * time a collection is read after indexes shipped, then trusts the marker.
+   */
+  async ensureIndexed() {
+    if (!this.indexed) return false;
+    if (indexedCollections.has(this.name)) return true;
+    if (await redis.get(indexReadyKey(this.name))) {
+      indexedCollections.add(this.name);
+      return true;
+    }
+    const documents = await this.loadAll();
+    for (let start = 0; start < documents.length; start += 100) {
+      const multi = redis.multi();
+      for (const document of documents.slice(start, start + 100)) this.queueIndexes(multi, document, this.expiryOptions(document));
+      await multi.exec();
+    }
+    await redis.set(indexReadyKey(this.name), '1');
+    indexedCollections.add(this.name);
+    return true;
+  }
+
+  expiryOptions(document) {
+    const expiresAt = comparable(document.expiresAt);
+    return Number.isFinite(expiresAt) && expiresAt > Date.now() ? { pxat: expiresAt } : undefined;
+  }
+
+  /**
+   * The documents a filter can match, read through an index when one covers
+   * it. Callers still apply `matches`, so a superset is always safe.
+   */
+  async candidates(filter = {}) {
+    if (plainValue(filter._id)) {
+      const document = deserialise(await redis.get(documentKey(this.name, String(filter._id))));
+      return document ? [document] : [];
+    }
+    if (!(await this.ensureIndexed())) return this.loadAll();
+    const covering = (UNIQUE_FIELDS[this.name] || [])
+      .find((fields) => fields.every((field) => plainValue(filter[field])));
+    if (covering) {
+      const id = await redis.get(uniqueKey(this.name, covering, filter));
+      if (!id) return [];
+      const document = deserialise(await redis.get(documentKey(this.name, id)));
+      if (document && covering.every((field) => valuesEqual(valueAt(document, field), filter[field]))) {
+        return [document];
+      }
+      return this.repairFromScan();
+    }
+    if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(filter.householdId)) {
+      const setKey = householdSetKey(this.name, indexValue(filter.householdId));
+      const ids = await redis.smembers(setKey);
+      const documents = await this.loadIds(ids);
+      if (documents.length < ids.length) {
+        const live = new Set(documents.map((document) => document._id));
+        const gone = ids.filter((id) => !live.has(id));
+        if (gone.length) await redis.srem(setKey, ...gone);
+      }
+      return documents;
+    }
+    return this.loadAll();
+  }
+
+  /** A unique entry pointed at the wrong document: rebuild from a scan. */
+  async repairFromScan() {
+    const documents = await this.loadAll();
+    const multi = redis.multi();
+    for (const document of documents) this.queueIndexes(multi, document, this.expiryOptions(document));
+    await multi.exec();
+    return documents;
   }
 
   async withLock(task, scope = this.name) {
@@ -277,64 +232,84 @@ class RedisCollection {
   }
 
   async save(document) {
-    const expiresAt = comparable(document.expiresAt);
-    const options = Number.isFinite(expiresAt) && expiresAt > Date.now() ? { pxat: expiresAt } : undefined;
-    await redis.set(documentKey(this.name, document._id), serialise(document), options);
-    await redis.sadd(collectionKey(this.name), document._id);
+    const options = this.expiryOptions(document);
+    const multi = redis.multi();
+    multi.set(documentKey(this.name, document._id), serialise(document), options);
+    multi.sadd(collectionKey(this.name), document._id);
+    this.queueIndexes(multi, document, options);
+    await multi.exec();
   }
 
-  assertUnique(document, documents, excludedId = null) {
-    if (documents.some((candidate) => candidate._id === document._id && candidate._id !== excludedId)) {
-      const error = new Error('Duplicate key.');
-      error.code = 11000;
-      throw error;
-    }
-    for (const fields of UNIQUE_FIELDS[this.name] || []) {
-      const values = fields.map((field) => valueAt(document, field));
-      if (values.some((value) => value === undefined || value === null)) continue;
-      const duplicate = documents.some((candidate) =>
-        candidate._id !== excludedId
-        && fields.every((field, index) => valuesEqual(valueAt(candidate, field), values[index])));
-      if (duplicate) {
-        const error = new Error('Duplicate key.');
-        error.code = 11000;
-        throw error;
+  async remove(documents) {
+    if (!documents.length) return;
+    const multi = redis.multi();
+    for (const document of documents) {
+      multi.del(documentKey(this.name, document._id));
+      multi.srem(collectionKey(this.name), document._id);
+      if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(document.householdId)) {
+        multi.srem(householdSetKey(this.name, indexValue(document.householdId)), document._id);
       }
+      // Unique entries are left to the read-time check: deleting one here
+      // could race a new document that has just claimed the same value.
+    }
+    if (this.name === 'analyticsEventReceipts') {
+      multi.zrem(analyticsReceiptExpiryKey(), ...documents.map((document) => document._id));
+    }
+    await multi.exec();
+  }
+
+  /** Throw the Mongo duplicate-key error if another document holds a unique value. */
+  async assertUnique(document, excludedId = null) {
+    const others = (candidate) => candidate && candidate._id !== excludedId;
+    const existing = deserialise(await redis.get(documentKey(this.name, document._id)));
+    if (existing && document._id !== excludedId) throw duplicateKeyError();
+    for (const fields of this.uniqueSets(document)) {
+      const filter = Object.fromEntries(fields.map((field) => [field, valueAt(document, field)]));
+      const holders = (await this.candidates(filter)).filter((candidate) => matches(candidate, filter));
+      if (holders.some((holder) => others(holder) && holder._id !== document._id)) throw duplicateKeyError();
     }
   }
 
   find(filter = {}, options = {}) {
-    return new RedisCursor(() => this.loadAll(), filter, options);
+    return new RedisCursor(() => this.candidates(filter), filter, options);
   }
 
   async findOne(filter = {}, options = {}) {
-    const document = (await this.loadAll()).find((item) => matches(item, filter));
+    const document = (await this.candidates(filter)).find((item) => matches(item, filter));
     return document ? project(document, options.projection) : null;
   }
 
   async insertOne(input) {
     const householdId = HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) ? householdIdFrom(input) : null;
     return this.withWriteLock(async () => {
-      const documents = await this.loadAll();
       const document = { ...structuredClone(input), _id: input._id?.toString() || newId() };
-      this.assertUnique(document, documents);
+      await this.assertUnique(document);
       await this.save(document);
       return { acknowledged: true, insertedId: document._id };
     }, householdId);
   }
 
-  async updateOne(filter, update, options = {}) {
-    const householdId = HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name)
-      ? await this.resolveHouseholdId(filter, update)
+  async upsertMatching(filter, update, options) {
+    const current = (await this.candidates(filter)).find((item) => matches(item, filter));
+    if (!current && !options.upsert) return { current: null, document: null };
+    const seed = baseDocument(filter);
+    const document = applyUpdate(current || { ...seed, _id: seed._id || newId() }, update, !current);
+    await this.assertUnique(document, current?._id);
+    await this.save(document);
+    return { current, document };
+  }
+
+  writeScope(filter, update = null) {
+    return HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name)
+      ? this.resolveHouseholdId(filter, update)
       : this.name === 'households' ? filter._id?.toString() : null;
+  }
+
+  async updateOne(filter, update, options = {}) {
+    const householdId = await this.writeScope(filter, update);
     return this.withWriteLock(async () => {
-      const documents = await this.loadAll();
-      const current = documents.find((item) => matches(item, filter));
-      if (!current && !options.upsert) return { acknowledged: true, matchedCount: 0, modifiedCount: 0 };
-      const seed = baseDocument(filter);
-      const document = applyUpdate(current || { ...seed, _id: seed._id || newId() }, update, !current);
-      this.assertUnique(document, documents, current?._id);
-      await this.save(document);
+      const { current, document } = await this.upsertMatching(filter, update, options);
+      if (!document) return { acknowledged: true, matchedCount: 0, modifiedCount: 0 };
       return {
         acknowledged: true,
         matchedCount: current ? 1 : 0,
@@ -346,31 +321,20 @@ class RedisCollection {
   }
 
   async findOneAndUpdate(filter, update, options = {}) {
-    const householdId = HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name)
-      ? await this.resolveHouseholdId(filter, update)
-      : this.name === 'households' ? filter._id?.toString() : null;
+    const householdId = await this.writeScope(filter, update);
     return this.withWriteLock(async () => {
-      const documents = await this.loadAll();
-      const current = documents.find((item) => matches(item, filter));
-      if (!current && !options.upsert) return null;
-      const seed = baseDocument(filter);
-      const document = applyUpdate(current || { ...seed, _id: seed._id || newId() }, update, !current);
-      this.assertUnique(document, documents, current?._id);
-      await this.save(document);
+      const { current, document } = await this.upsertMatching(filter, update, options);
+      if (!document) return null;
       return options.returnDocument === 'before' ? current : document;
     }, householdId, this.name !== 'households');
   }
 
   async deleteOne(filter) {
-    const householdId = HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name)
-      ? await this.resolveHouseholdId(filter)
-      : this.name === 'households' ? filter._id?.toString() : null;
+    const householdId = await this.writeScope(filter);
     return this.withWriteLock(async () => {
-      const document = (await this.loadAll()).find((item) => matches(item, filter));
+      const document = (await this.candidates(filter)).find((item) => matches(item, filter));
       if (!document) return { acknowledged: true, deletedCount: 0 };
-      await redis.del(documentKey(this.name, document._id));
-      await redis.srem(collectionKey(this.name), document._id);
-      if (this.name === 'analyticsEventReceipts') await redis.zrem(analyticsReceiptExpiryKey(), document._id);
+      await this.remove([document]);
       return { acknowledged: true, deletedCount: 1 };
     }, householdId, false);
   }
@@ -380,13 +344,8 @@ class RedisCollection {
       ? householdIdFrom(filter)
       : null;
     return this.withWriteLock(async () => {
-      const documents = (await this.loadAll()).filter((item) => matches(item, filter));
-      if (!documents.length) return { acknowledged: true, deletedCount: 0 };
-      await redis.del(...documents.map((document) => documentKey(this.name, document._id)));
-      await redis.srem(collectionKey(this.name), ...documents.map((document) => document._id));
-      if (this.name === 'analyticsEventReceipts') {
-        await redis.zrem(analyticsReceiptExpiryKey(), ...documents.map((document) => document._id));
-      }
+      const documents = (await this.candidates(filter)).filter((item) => matches(item, filter));
+      await this.remove(documents);
       return { acknowledged: true, deletedCount: documents.length };
     }, householdId, false);
   }
@@ -414,9 +373,22 @@ class RedisCollection {
   }
 }
 
+/**
+ * A fixed-window counter: one atomic INCR, with the expiry set on the first
+ * hit. Rate limiting used to upsert a document in a 'rateLimits' collection,
+ * which took a single global lock and scanned every live counter on every
+ * request.
+ */
+const incrementWindow = async (key, ttlMs) => Number(await redis.eval(
+  'local n = redis.call("incr", KEYS[1]) if n == 1 then redis.call("pexpire", KEYS[1], ARGV[1]) end return n',
+  [`${prefix}:counter:${key}`],
+  [String(ttlMs)],
+));
+
 const database = {
   databaseName: 'upstash-redis',
   collection: (name) => new RedisCollection(name),
+  incrementWindow,
   recordAnalyticsEvent: async ({ householdId, eventId, event, day, now }) => {
     householdId = householdId.toString();
     const receiptId = createHash('sha256')

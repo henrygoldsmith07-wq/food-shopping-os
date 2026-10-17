@@ -47,8 +47,10 @@ then writes a `household.deleted` tombstone audit event last.
 
 ## 5. Rate-limit keys (expire automatically, documented)
 
-- `rateLimits` collection (`src/server/api.js`): `_id` is
-  `<key>:<window>`, with `expiresAt = window + 2×windowMs`.
+- Redis counters `<prefix>:counter:<key>:<window>` (`rateLimit` in
+  `src/server/api.js`), each expiring `2×windowMs` after its first hit.
+  (Older deployments also have `rateLimits` collection documents with
+  `expiresAt = window + 2×windowMs`; they expire on their own.)
 - Household deletion does not need to delete them: they contain only
   counters (`ai:<user>`, `coach-shares:*:<user>`, `households:delete`,
   `analytics:<user>`), no household content, and expire within hours.

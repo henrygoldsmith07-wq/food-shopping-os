@@ -94,3 +94,18 @@ describe('home: plan → shop → eat', () => {
     expect(screen.queryByText('Plan the week →')).toBeNull();
   });
 });
+
+describe('home does not say the same thing twice', () => {
+  const props = { openRecipe: () => {}, openPantry: () => {}, openGuidance: () => {}, goTab: () => {}, goLog: () => {} };
+
+  it('names the list once: the lead card owns it, Needs attention does not repeat it', () => {
+    render(<HomeTab {...props} />);
+    expect(screen.getAllByText(/1 item still to buy/)).toHaveLength(1);
+  });
+
+  it('says what Explore more holds instead of internal names', () => {
+    render(<HomeTab {...props} />);
+    expect(screen.getByText('Autopilot, setup and your weekly report')).toBeTruthy();
+    expect(screen.queryByText(/confirm · autopilot/)).toBeNull();
+  });
+});

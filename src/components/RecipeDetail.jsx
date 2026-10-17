@@ -166,7 +166,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
         <Card className="rise">
           <div className="flex items-start justify-between gap-2">
             <h1 className="text-[1.25rem] font-extrabold leading-tight">{recipe.name}</h1>
-            <Pill tone="accent">{recipe.kcal} kcal</Pill>
+            <Pill tone="accent">{nutrition.kind === 'estimated' ? '≈' : ''}{recipe.kcal} kcal</Pill>
           </div>
           <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
             {recipe.cuisine} · serves {recipe.servings} · {gbp(recipe.costPerServing, { always: true })}/serving

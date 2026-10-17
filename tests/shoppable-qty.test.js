@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest';
+import { shoppableQty } from '../src/lib/shoppable-qty.js';
+import { shoppingListMutations } from '../src/lib/shopping-list-mutations.js';
+import { EMPTY_STATE } from '../src/lib/state.js';
+
+describe('shoppableQty: what to pick up, not what the recipe uses', () => {
+  it.each([
+    ['0.7', 'Peppers', '1'],
+    ['0.7 squares', 'Dark chocolate', '1 bar'],
+    ['0.7 tsp', 'Smoked paprika', '1 jar'],
+    ['5 ml', 'Oregano', '1 jar'],
+    ['90 ml', 'Soy sauce', '1 bottle'],
+    ['2 tbsp', 'Garlic', '1 bulb'],
+    ['60 ml', 'Ginger', '1 piece'],
+    ['2 tbsp', 'Lemon juice', '1 lemon'],
+    ['1.5 heads', 'Broccoli', '2 heads'],
+    ['0.6 heads', 'Broccoli', '1 head'],
+  ])('%s %s -> %s', (qty, name, expected) => {
+    expect(shoppableQty(qty, name)).toBe(expected);
+  });
+
+  it.each([
+    ['400 ml', 'Coconut milk'],
+    ['600 g', 'Chickpeas'],
+    ['8', 'Chicken thighs'],
+    ['1 tin', 'Chopped tomatoes'],
+    ['a handful', 'Rocket'],
+    ['', 'Salt'],
+  ])('leaves buyable amounts alone: %s %s', (qty, name) => {
+    expect(shoppableQty(qty, name)).toBe(qty);
+  });
+});
+
+describe('recipe rows on the list', () => {
+  const store = (overrides = {}) => {
+    let state = { ...EMPTY_STATE, day: '2026-10-16', ...overrides };
+    const set = (patch) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; };
+    return { actions: shoppingListMutations(set, { latest: () => state }), get: () => state };
+  };
+
+  it('buys a shoppable amount and keeps the recipe figure as the need', () => {
+    const { actions, get } = store();
+    actions.addToList([
+      { name: 'Smoked paprika', qty: '0.7 tsp', fromRecipe: 'Chilli', forRecipes: ['Chilli'] },
+      { name: 'Peppers', qty: '0.7', requiredQty: '0.7', fromRecipe: 'Chilli' },
+    ]);
+    const rows = Object.fromEntries(get().shoppingList.map((row) => [row.name, row]));
+    expect(rows['Smoked paprika']).toMatchObject({ qty: '1 jar', requiredQty: '0.7 tsp' });
+    expect(rows.Peppers).toMatchObject({ qty: '1', requiredQty: '0.7' });
+  });
+
+  it('never rewrites what a person typed', () => {
+    const { actions, get } = store();
+    actions.addToList([{ name: 'Paprika', qty: '0.5 tsp' }]);
+    expect(get().shoppingList[0].qty).toBe('0.5 tsp');
+    expect(get().shoppingList[0].requiredQty).toBeUndefined();
+  });
+});
+
+describe('every plan-derived list buys shoppable amounts', () => {
+  const recipe = {
+    id: 'stir-fry', name: 'Stir-fry', servings: 2,
+    ingredients: [{ name: 'Garlic', qty: '2 tbsp' }, { name: 'Ginger', qty: '60 ml' }, { name: 'Firm tofu', qty: '280 g' }],
+  };
+
+  it('the onboarding starter list', async () => {
+    const { firstSessionPlan } = await import('../src/lib/onboarding-quick-start.js');
+    const { shoppingList } = firstSessionPlan({ day: '2026-10-16', recipes: [recipe], pickedRecipeIds: ['stir-fry'], household: 2 });
+    const rows = Object.fromEntries(shoppingList.map((row) => [row.name, row]));
+    expect(rows.Garlic).toMatchObject({ qty: '1 bulb', requiredQty: '2 tbsp' });
+    expect(rows.Ginger).toMatchObject({ qty: '1 piece', requiredQty: '60 ml' });
+    expect(rows['Firm tofu']).toMatchObject({ qty: '280 g' });
+  });
+});

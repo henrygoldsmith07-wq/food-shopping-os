@@ -3,18 +3,21 @@ import {
   Check, ChevronRight, Info, Leaf, Package, ShoppingCart, Snowflake, Sparkles, Zap,
 } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
-import { buildPlan, EQUIPMENT_TAGS, pantryHits, scopeMeals, windowBudget } from '../lib/planner.js';
+import { buildPlan, EQUIPMENT_TAGS, pantryHits, windowBudget } from '../lib/planner.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { shoppingForGeneratedEntries, planCostFor } from '../lib/mealplan.js';
 import { useApp } from '../lib/store.jsx';
-import { slotsForScope } from '../lib/plan-generator-model.js';
+import {
+  entriesForGenerated, generatedSlotLabel, slotDatesForGenerated, slotsForScope,
+} from '../lib/plan-generator-model.js';
 import { PLANNER_OCCASIONS, WEEK_DAYS } from '../data/plan.js';
 import { monthOf, peakNow } from '../data/seasons.js';
 import { expiringSoon } from '../lib/kitchen.js';
 import { wasteAwareList } from '../lib/loop-learning.js';
 import { explainRecommendation } from '../lib/recommend.js';
-import { Card, Chip, Pill, Stepper, FoodArt } from './ui.jsx';
+import { Card, Chip, Stepper, FoodArt } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
+import WastePlanCard from './WastePlanCard.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 const SCOPES = ['1 meal', 'A day', 'A week', 'A month'];
 
@@ -48,7 +51,6 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const [addedToList, setAddedToList] = useState(false);
   const month = monthOf(app.day); const dates = scope === 'A month' ? monthDates : weekDates;
   const slotList = ['A week', 'A month'].includes(scope) ? slotsForScope({ mealScope }, scope) : null;
-  const allMeals = Array.isArray(slotList) && slotList.length > 1;
   const busyDates = new Set((app.calendarBusy || []).map((item) => item.date));
   const busyInScope = [...busyDates].filter((date) => dates.includes(date)).length;
   const planDates = dates.filter((date) => !busyDates.has(date));
@@ -148,19 +150,10 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   };
 
   /** Turn the generated run into dated slots. */
-  const entries = useMemo(() => {
-    if (!generated) return [];
-    if (scope === 'A day') {
-      return scopeMeals('A day').map((slot, i) => ({ date: app.day, slot, recipeId: generated[i]?.id }));
-    }
-    if (scope === '1 meal') return [{ date: app.day, slot: 'dinner', recipeId: generated[0]?.id }];
-    // An all-meals run is day-major triples: each date takes breakfast,
-    // lunch and dinner in order.
-    if (allMeals) {
-      return planDates.flatMap((date, i) => slotList.map((slot, k) => ({ date, slot, recipeId: generated[i * slotList.length + k]?.id })));
-    }
-    return planDates.map((date, i) => ({ date, slot: 'dinner', recipeId: generated[i]?.id }));
-  }, [generated, scope, planDates, app.day, allMeals, slotList]);
+  const entries = useMemo(
+    () => entriesForGenerated(generated, scope, planDates, app.day, slotList),
+    [generated, scope, planDates, app.day, slotList],
+  );
 
   const apply = () => {
     app.applyPlanEntries(entries.filter((e) => e.recipeId));
@@ -191,34 +184,17 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
   const kcal = generated ? Math.round(generated.reduce((s, r) => s + r.kcal, 0) / generated.length) : 0;
   const distinct = generated ? new Set(generated.map((r) => r.id)).size : 0;
   const wastePlan = plan?.wastePlan || null;
-  const wasteMetric = (value) => value === null || value === undefined ? '—' : `${Math.round(value)}%`;
   const planNotes = [plan?.note, generated && busyInScope > 0 ? `Leaving ${busyInScope} calendar-busy evening${busyInScope === 1 ? '' : 's'} empty.` : null].filter(Boolean);
   const busyMap = useMemo(() => {
     const m = {};
     for (const b of app.calendarBusy || []) m[b.date] = { busy: true, date: b.date, dayName: new Date(`${b.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' }) };
     return m;
   }, [app.calendarBusy]);
-  const slotDates = useMemo(() => {
-    if (!generated) return [];
-    if (scope === 'A day') return Array(generated.length).fill(app.day);
-    if (scope === '1 meal') return [app.day];
-    if (allMeals) return planDates.flatMap((date) => slotList.map(() => date));
-    return planDates;
-  }, [generated, scope, planDates, app.day, allMeals, slotList]);
-
-  const labelFor = (i) => {
-    if (scope === 'A day') return ['Breakfast', 'Lunch', 'Dinner'][i];
-    if (scope === '1 meal') return 'Suggested';
-    if (allMeals) {
-      const dayIdx = Math.floor(i / slotList.length);
-      const slot = slotList[i % slotList.length];
-      const slotLabel = slot[0].toUpperCase() + slot.slice(1);
-      const date = planDates[dayIdx];
-      return date ? `${WEEK_DAYS[dayIdx % 7]} ${Number(date.slice(8, 10))} · ${slotLabel}` : slotLabel;
-    }
-    const date = planDates[i];
-    return date ? `${WEEK_DAYS[i % 7]} ${Number(date.slice(8, 10))}` : '';
-  };
+  const slotDates = useMemo(
+    () => slotDatesForGenerated(generated, scope, planDates, app.day, slotList),
+    [generated, scope, planDates, app.day, slotList],
+  );
+  const labelFor = (i) => generatedSlotLabel(i, scope, planDates, WEEK_DAYS, slotList);
 
   return (
     <>
@@ -427,47 +403,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
               </p>
             </div>
           </Card>
-          {wastePlan && (
-            <Card className="!p-3 space-y-3" style={{ background: 'var(--card-2)' }}>
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Waste-minimising plan</p>
-                  <p className="mt-0.5 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {wastePlan.expectedUnusedCount === 0
-                      ? 'No expected unused ingredients from the known quantities.'
-                      : `${wastePlan.expectedUnusedCount} ingredient${wastePlan.expectedUnusedCount === 1 ? '' : 's'} may be left over.`}
-                  </p>
-                </div>
-                <Pill tone={wastePlan.score >= 80 ? 'good' : wastePlan.score >= 60 ? 'accent' : 'muted'}>{wastePlan.score}/100</Pill>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-[0.9375rem] font-extrabold">{wasteMetric(wastePlan.pantryUtilisation)}</p>
-                  <p className="text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Pantry</p>
-                </div>
-                <div>
-                  <p className="text-[0.9375rem] font-extrabold">{wasteMetric(wastePlan.perishableUtilisation)}</p>
-                  <p className="text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Perishables</p>
-                </div>
-                <div>
-                  <p className="text-[0.9375rem] font-extrabold">{wasteMetric(wastePlan.packUtilisation)}</p>
-                  <p className="text-[0.625rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Packs</p>
-                </div>
-              </div>
-              {wastePlan.purchaseRows?.length > 0 && (
-                <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  Buy: {wastePlan.purchaseRows.slice(0, 3).map((row) => row.packs
-                    ? `${row.packs} ${row.packUnit || 'pack'} of ${row.name}`
-                    : `${row.qty} ${row.name}`).join(' · ')}.
-                </p>
-              )}
-              {wastePlan.recommendations?.length > 0 && (
-                <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {wastePlan.recommendations.slice(0, 2).join(' ')}
-                </p>
-              )}
-            </Card>
-          )}
+          {wastePlan && <WastePlanCard wastePlan={wastePlan} />}
           <div className="space-y-2.5">
             {generated.map((r, i) => {
               const date = slotDates[i] || app.day;

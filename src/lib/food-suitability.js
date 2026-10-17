@@ -18,7 +18,7 @@
 import {
   allergenBy, intoleranceBy, religiousBy, skillBy, timeBudgetBy, MATCH_CAVEAT,
 } from '../data/preferences.js';
-import { dietPattern } from '../data/goals.js';
+import { dietPattern, PLANT_QUALIFIED } from '../data/goals.js';
 import { dayStamp, daysUntil } from './kitchen.js';
 
 /** @typedef {'allergy'|'intolerance'|'religious'|'diet'|'household'|'preference'|'skill'|'time'|'expiry'|'other'} SuitabilityKind */
@@ -64,6 +64,12 @@ const textOf = (item) => {
     : '';
   return `${name} ${brand} ${tags} ${ingredients}`.trim();
 };
+
+/** A recipe's name and ingredients, with plant stand-ins ("vegan sausages") read past. */
+const recipeFoodText = (item) => [item.name || '', ...item.ingredients
+  .map((i) => (typeof i === 'string' ? i : i?.name || ''))]
+  .join(' | ')
+  .replace(PLANT_QUALIFIED, ' ');
 
 /** True when the item looks like a full recipe (has ingredients list). */
 const isRecipe = (item) => Array.isArray(item?.ingredients);
@@ -118,7 +124,9 @@ const dietConflictsFor = (item, diets) => {
     .map(dietPattern)
     .filter((p) => {
       if (!p) return false;
-      if (isRecipe(item) && p.recipeTag) return !p.recipeTag(item);
+      if (isRecipe(item) && p.recipeTag) {
+        return !p.recipeTag(item) || Boolean(p.recipeExcludes?.test(recipeFoodText(item)));
+      }
       return p.excludes ? p.excludes.test(text) : false;
     })
     .map((p) => ({ id: p.id, label: p.label, prefer: p.prefer, discourage: p.discourage }));

@@ -50,7 +50,7 @@ export default function HomeFoodLoop({ app, foodLoop, expiring, low, goTab, open
                 <p className="text-[0.65625rem] font-semibold [overflow-wrap:anywhere]" style={{ color: 'var(--muted)' }}>
                   {step.id === 'plan' ? `${foodLoop.plannedMeals} meal${foodLoop.plannedMeals === 1 ? '' : 's'}`
                     : step.id === 'shop' ? `${foodLoop.shops} shop${foodLoop.shops === 1 ? '' : 's'}`
-                      : `${foodLoop.cookedMeals} cooked`}
+                      : foodLoop.plannedMeals ? `${Math.min(foodLoop.cookedMeals, foodLoop.plannedMeals)} of ${foodLoop.plannedMeals} cooked` : `${foodLoop.cookedMeals} cooked`}
                 </p>
               </div>
             ))}

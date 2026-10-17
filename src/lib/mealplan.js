@@ -19,6 +19,7 @@ import { itemsFromRecipes } from '../data/stores.js';
 import { addDays, dayStamp, pantryAvailability, pantryTruthForNeed, weekStart } from './kitchen.js';
 import { canonicalName, displayNameFor } from './aliases.js';
 import { scaleQty } from './portions.js';
+import { shoppableQty } from './shoppable-qty.js';
 import { mergeQtys, qtySuffices } from './pantry.js';
 import { explainPantryShortfall, shortfallQuantity } from './pantry-intelligence.js';
 
@@ -449,10 +450,9 @@ export const shoppingForPlan = (plan = {}, dates = [], {
     return {
       ...row,
       name: displayName,
-      // The list is what still needs buying, not the recipe's full requirement.
-      // Keep requiredQty separately so explanations/evaluation retain the
-      // original need behind the pantry deduction.
-      qty: availableQty && shortfallQty ? shortfallQty : (requiredQty || row.qty),
+      // What still needs buying, in an amount a shop sells (0.7 tsp -> 1 jar);
+      // requiredQty keeps the original need behind the pantry deduction.
+      qty: shoppableQty(availableQty && shortfallQty ? shortfallQty : (requiredQty || row.qty), displayName),
       requiredQty,
       pantryQty: availableQty,
       shortfallQty,

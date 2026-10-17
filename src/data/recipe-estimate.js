@@ -52,6 +52,14 @@ const TART = local('Shortcrust tart', 120, [390, 5, 45, 20, 1.5], 0.5, ['dessert
 const MOUSSE = local('Chocolate mousse', 90, [250, 4, 22, 16, 0.5], 0.5, ['dessert', 'dairy']);
 const CORONATION_SAUCE = local('Coronation sauce', 60, [290, 8, 4, 26, 0], 0.8, ['sauce', 'dairy']);
 const VEGAN_SAUSAGES = local('Vegan sausages', 120, [172, 16, 7, 9, 3], 0.9, ['plant']);
+const HAM = local('Ham', 80, [107, 18, 1, 3.5, 0], 0.9, ['meat']);
+const CURED_PORK = local('Pancetta', 60, [330, 15, 0, 30, 0], 1.0, ['meat']);
+const SALAMI = local('Pepperoni', 50, [494, 23, 1, 44, 0], 0.8, ['meat']);
+const MUSSELS = local('Mussels', 200, [86, 12, 4, 2.2, 0], 1.5, ['fish', 'seafood']);
+const ANCHOVIES = local('Anchovies', 20, [210, 29, 0, 10, 0], 0.5, ['fish']);
+const FISH_SAUCE = local('Fish sauce', 15, [35, 5, 4, 0, 0], 0.1, ['sauce', 'fish']);
+const BEEF_STOCK = local('Beef stock', 250, [7, 1, 0.5, 0.2, 0], 0.2, ['sauce', 'meat']);
+const CHICKEN_STOCK = local('Chicken stock', 250, [7, 1, 0.5, 0.2, 0], 0.2, ['sauce', 'meat']);
 
 const wordsOf = (name) => name.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
 
@@ -69,6 +77,12 @@ const PROTEIN_MAP = [
   ['steak', STEAK], ['beef', PROTEINS.beef], ['burger', BURGER], ['meatball', MEATBALLS],
   ['lamb', PROTEINS.lamb], ['sausage', SAUSAGES], ['bacon', BACON], ['pork', PROTEINS.pork],
   ['duck', DUCK], ['wing', CHICKEN_WINGS],
+  ['ham', HAM], ['gammon', HAM], ['pancetta', CURED_PORK], ['guanciale', CURED_PORK],
+  ['prosciutto', CURED_PORK], ['chorizo', SALAMI], ['salami', SALAMI], ['pepperoni', SALAMI],
+  ['banger', SAUSAGES], ['rib', PROTEINS.pork], ['mince', PROTEINS.beef], ['meat', PROTEINS.beef], ['venison', PROTEINS.beef],
+  ['fish', PROTEINS.cod], ['seafood', PROTEINS.prawns], ['trout', PROTEINS.salmon],
+  ['mussel', MUSSELS], ['clam', MUSSELS], ['scallop', PROTEINS.prawns], ['shrimp', PROTEINS.prawns],
+  ['anchovy', ANCHOVIES], ['anchovie', ANCHOVIES],
   ['salmon', PROTEINS.salmon], ['cod', PROTEINS.cod], ['haddock', HADDOCK],
   ['tuna', PROTEINS.tuna], ['prawn', PROTEINS.prawns], ['mackerel', MACKEREL],
   ['sardine', SARDINES], ['squid', PROTEINS.prawns], ['crab', PROTEINS.prawns], ['lobster', PROTEINS.prawns],
@@ -78,6 +92,42 @@ const PROTEIN_MAP = [
   ['bean', PROTEINS.blackbeans], ['chickpea', PROTEINS.chickpeas], ['lentil', PROTEINS.lentils],
   ['bhaji', PROTEINS.chickpeas], ['pakora', PROTEINS.chickpeas],
 ];
+
+/**
+ * Dishes whose name means meat or fish without saying so. A name-only shell
+ * would otherwise get a plant fallback and a vegetarian tag, so "Spaghetti
+ * bolognese" or "Bangers and mash" reached vegetarians. Matched on the whole
+ * name; a plant word in the name ("Lentil bolognese", "Vegetable lasagne")
+ * means the cook has already swapped the meat out.
+ */
+const IMPLIED_PROTEIN = [
+  [/toad in the hole|scotch egg|hot ?dog|corn dog|sausage roll/, SAUSAGES],
+  [/full english|\bblt\b|benedict/, BACON],
+  [/carbonara|amatriciana/, CURED_PORK],
+  [/bolognese|\bragu\b|lasagne|cannelloni|cottage pie|pastitsio|chilli con carne|sloppy joe|bulgogi|bibimbap|japchae|\bpho\b|cornish pasty|\bpasty\b/, PROTEINS.beef],
+  [/cheeseburger|hamburger|bbq burger|meatloaf/, BURGER],
+  [/cheesesteak/, STEAK],
+  [/shepherd|hotpot|moussaka|kofta|kofte|kebab|shawarma|gyros|souvlaki|keftedes|kibbeh|rogan josh|doner/, PROTEINS.lamb],
+  [/wonton|gyoza|dumpling|\bbao\b|char siu|tonkotsu|ramen|hot and sour|okonomiyaki|calzone|split pea/, PROTEINS.pork],
+  [/\bclub\b|\bcobb\b|yakitori|mulligatawny|egg drop|jambalaya/, PROTEINS.chicken],
+  [/sushi|sashimi|\bpoke\b|nicoise|royale/, PROTEINS.salmon],
+  [/paella|gumbo|tom yum|laksa|special fried rice|singapore noodles|chowder|calamari|moules/, PROTEINS.prawns],
+  [/kedgeree/, HADDOCK],
+  [/puttanesca|caesar/, ANCHOVIES],
+  [/pad thai|pad see ew|papaya salad|miso soup|kimchi|tteokbokki|thai (green|red) curry|panang|massaman|oyster sauce/, FISH_SAUCE],
+  [/french onion|\bgravy\b|diane sauce/, BEEF_STOCK],
+];
+
+/** A name that says the meat is already out, or never was in. */
+const PLANT_SWAP = /\b(vegan|vegetarian|veggie|plant[- ]based|meat[- ]free|quorn|lentil|bean|tofu|tempeh|seitan|jackfruit|mushroom|vegetable|halloumi|paneer|chickpea|falafel)s?\b/;
+
+const impliedProtein = (name) => {
+  const lower = name.toLowerCase();
+  if (PLANT_SWAP.test(lower)) return null;
+  return IMPLIED_PROTEIN.find(([pattern]) => pattern.test(lower))?.[1] || null;
+};
+
+const isAnimal = (part) => Boolean(part?.tags?.some((t) => ['meat', 'poultry', 'fish', 'seafood'].includes(t)));
 
 const BASE_MAP = [
   ['rice', BASES.rice], ['biryani', BASES.rice], ['pilau', BASES.rice], ['sushi', BASES.rice],
@@ -93,7 +143,7 @@ const BASE_MAP = [
   ['toast', BREAKFAST_BASES.toast], ['bagel', BREAKFAST_BASES.bagel], ['crumpet', BREAKFAST_BASES.crumpets],
   ['oats', BREAKFAST_BASES.oats], ['porridge', BREAKFAST_BASES.oats], ['granola', BREAKFAST_BASES.granola],
   ['muesli', BREAKFAST_BASES.granola], ['pancake', BREAKFAST_BASES.pancakes], ['crepe', BREAKFAST_BASES.pancakes],
-  ['bun', BUN], ['bap', BUN], ['pastry', PASTRY], ['pie', PASTRY], ['pasty', PASTRY],
+  ['mash', BASES.potato], ['bun', BUN], ['bap', BUN], ['pastry', PASTRY], ['pie', PASTRY], ['pasty', PASTRY],
 ];
 
 const VEG_MAP = [
@@ -118,15 +168,15 @@ const SAUCE_MAP = [
   ['carbonara', local('Carbonara sauce', 80, [220, 9, 6, 18, 0], 0.9, ['sauce', 'dairy'])],
   ['alfredo', local('Alfredo sauce', 80, [210, 8, 5, 18, 0], 0.9, ['sauce', 'dairy'])],
   ['cacio', local('Pecorino sauce', 60, [280, 13, 3, 24, 0], 1.2, ['sauce', 'dairy'])],
-  ['bolognese', local('Bolognese ragu', 130, [98, 8, 6, 5, 1.2], 0.5, ['sauce'])],
-  ['ragu', local('Bolognese ragu', 130, [98, 8, 6, 5, 1.2], 0.5, ['sauce'])],
+  ['bolognese', local('Ragu sauce', 130, [98, 8, 6, 5, 1.2], 0.5, ['sauce'])],
+  ['ragu', local('Ragu sauce', 130, [98, 8, 6, 5, 1.2], 0.5, ['sauce'])],
   ['tomato', SAUCES.tomato], ['marinara', SAUCES.tomato], ['arrabbiata', SAUCES.tomato],
   ['napolitana', SAUCES.tomato], ['puttanesca', SAUCES.tomato], ['amatriciana', SAUCES.tomato],
   ['honey', TOPPINGS.honey], ['bbq', local('BBQ sauce', 50, [170, 0.6, 39, 0.8, 0.3], 0.5, ['sauce'])],
   ['buffalo', local('Buffalo sauce', 40, [210, 1.5, 3, 21, 0], 0.7, ['sauce'])],
   ['sweet', local('Sweet & sour sauce', 70, [130, 1, 30, 1, 0.5], 0.5, ['sauce'])],
   ['coronation', CORONATION_SAUCE], ['hummus', local('Hummus', 70, [232, 8, 18, 15, 6], 0.6, ['sauce'])],
-  ['pad', local('Pad Thai sauce', 60, [190, 4, 32, 5, 1], 0.7, ['sauce'])],
+  ['pad', local('Pad Thai sauce', 60, [190, 4, 32, 5, 1], 0.7, ['sauce', 'fish'])],
   ['ramen', local('Ramen broth', 300, [35, 2, 4, 1, 0.3], 0.2, ['sauce'])],
   ['miso', local('Miso broth', 300, [25, 2, 3, 0.7, 0.4], 0.2, ['sauce'])],
   ['soup', local('Soup base', 300, [38, 1.6, 6, 1, 1.2], 0.2, ['sauce'])],
@@ -147,8 +197,18 @@ const DESSERT_MAP = [
   ['milkshake', ICE_CREAM], ['waffle', local('Waffle', 110, [291, 7, 33, 14, 1.6], 0.4, ['dessert'])],
 ];
 
-const isDessert = (words) => DESSERT_MAP.some(([word]) => words.includes(word))
-  || words.some((w) => ['pudding', 'sundae', 'mess', 'jelly', 'brittle'].includes(w));
+const SAVOURY_PIE = ['cottage', 'shepherd', 'vegetable', 'lentil', 'mushroom', 'cheese', 'potato', 'game', 'kidney'];
+const isDessert = (words, name = '') => {
+  if (/mince pies?/.test(name.toLowerCase())) return true;
+  const sweet = DESSERT_MAP.some(([word]) => words.includes(word))
+    || words.some((w) => ['pudding', 'sundae', 'mess', 'jelly', 'brittle'].includes(w));
+  if (!sweet) return false;
+  /* "Chicken pie", "Fish pie" and "Cottage pie" are dinners: a savoury
+     protein or filling outranks the word "pie". */
+  const savoury = isAnimal(firstMatch(words, PROTEIN_MAP)) || impliedProtein(name)
+    || words.some((w) => SAVOURY_PIE.includes(w) || SAVOURY_PIE.includes(singular(w)));
+  return !savoury;
+};
 
 /* ---------- Assembly ---------- */
 
@@ -169,20 +229,29 @@ const assemble = (name) => {
   const roasted = words.some((w) => ['roast', 'baked', 'traybake', 'oven', 'grilled', 'air'].includes(w));
   const word = (list) => words.some((w) => list.includes(w));
 
-  if (isDessert(words)) {
-    return { parts: CORE_DESSERT(words), steps: dessertSteps(words) };
+  if (isDessert(words, name)) {
+    const matched = Boolean(firstMatch(words, DESSERT_MAP));
+    return { parts: CORE_DESSERT(words), steps: dessertSteps(words), confident: matched };
   }
 
   let protein = firstMatch(words, PROTEIN_MAP);
+  /* A plant protein named beside a generic burger is the burger. */
+  if (protein === BURGER) {
+    const plant = firstMatch(words, PROTEIN_MAP.filter(([, part]) => !isAnimal(part) && part !== BURGER));
+    if (plant || PLANT_SWAP.test(name.toLowerCase())) protein = plant || VEGAN_SAUSAGES;
+  }
+  /* The meat a dish's name implies sits beside any egg or cheese it names. */
+  const implied = isAnimal(protein) ? null : impliedProtein(name);
   /* 'Vegan sausages' names a plant product, not a meat one. */
-  const wantsPlant = words.includes('vegan');
+  const wantsPlant = /\b(vegan|vegetarian|veggie|plant[- ]based|meat[- ]free|quorn)\b/.test(name.toLowerCase());
   if (wantsPlant && protein && protein.tags.some((t) => ['meat', 'poultry', 'fish', 'seafood'].includes(t))) {
-    protein = words.includes('sausage') ? VEGAN_SAUSAGES : PROTEINS.tofu;
+    protein = words.some((w) => singular(w) === 'sausage') ? VEGAN_SAUSAGES : PROTEINS.tofu;
   }
   const base = firstMatch(words, BASE_MAP);
   const veg = firstMatch(words, VEG_MAP);
   const sauce = firstMatch(words, SAUCE_MAP);
   const parts = [
+    ...(implied ? [implied] : []),
     ...(protein ? [protein] : []),
     ...(base ? [base] : []),
     ...(veg ? [veg] : []),
@@ -194,12 +263,16 @@ const assemble = (name) => {
     ...(word(['garlic', 'kung', 'chilli', 'linguine', 'prawn']) ? [EXTRAS.garlic] : []),
     ...(word(['burger', 'wrap', 'taco', 'burrito', 'sandwich', 'bagel', 'toast', 'bun']) && !base ? [BASES.sourdough] : []),
   ];
+  /* Nothing in the name told us what is in the dish: the fallback plate
+     below is a guess, so the shell is marked unconfident and kept out of
+     browse and planning rather than shown as a real recipe. */
+  const confident = Boolean(protein || implied || base || veg || sauce);
   /* Fallbacks stay plant-based so an unmatched dish is never given meat it
      never named — diet tags are read off the ingredients, after all. */
   if (parts.length < 2) parts.push(base || BREAKFAST_BASES.toast);
   if (parts.length < 3) parts.push(veg || VEG.broccoli);
   if (parts.length < 3) parts.push(BASES.rice);
-  return { parts, steps: dishSteps(words, { fried, roasted }) };
+  return { parts, steps: dishSteps(words, { fried, roasted }), confident };
 };
 
 function dessertSteps(words) {
@@ -258,7 +331,7 @@ const dietTagsOf = (parts) => {
  * same parts so a keyword-guessed tag can never contradict the ingredients.
  */
 export const estimateRecipe = (name) => {
-  const { parts: raw, steps } = assemble(name);
+  const { parts: raw, steps, confident } = assemble(name);
   const parts = trim([...raw]);
   const n = compose(parts, 4);
   return {
@@ -266,5 +339,6 @@ export const estimateRecipe = (name) => {
     ...scores(parts, n),
     dietTags: dietTagsOf(parts),
     steps,
+    estimateConfidence: confident ? 'estimate' : 'unknown',
   };
 };

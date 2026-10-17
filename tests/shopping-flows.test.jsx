@@ -95,6 +95,18 @@ describe('a list that learns', () => {
     expect(screen.getByText('at Tesco')).toBeDefined();
   });
 
+  it('keeps shopping mode to the list: set-up tools wait until the shop is over', () => {
+    onboard();
+    openShop();
+    addItem('Milk', '1.30');
+    expect(screen.getByText('Scan')).toBeDefined();
+    fireEvent.click(screen.getByText('Start shopping'));
+    expect(screen.queryByText('Scan')).toBeNull();
+    expect(screen.queryByText('Import receipts')).toBeNull();
+    expect(screen.queryByText(/^Offers/)).toBeNull();
+    expect(screen.getByLabelText('Tick Milk')).toBeDefined();
+  });
+
   it('resumes an active shop after the tab reloads', () => {
     onboard();
     openShop();

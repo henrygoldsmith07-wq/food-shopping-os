@@ -112,6 +112,33 @@ describe('shopping list', () => {
     expect(guessAisle('Mystery thing')).toBe('Other');
   });
 
+  it('files the specific name before the generic word inside it', () => {
+    expect(guessAisle('Coconut milk')).toBe('World foods');
+    expect(guessAisle('Egg noodles')).toBe('World foods');
+    expect(guessAisle('Green beans')).toBe('Fruit & veg');
+    expect(guessAisle('Mixed beans')).toBe('Tins & dry');
+    expect(guessAisle('Black pepper')).toBe('Tins & dry');
+    expect(guessAisle('Chopped tomatoes')).toBe('Tins & dry');
+    expect(guessAisle('Kitchen foil')).toBe('Household');
+    expect(guessAisle('Ground beef')).toBe('Meat & fish');
+  });
+
+  it('files recipe ingredients by aisle, including rows saved under the old catch-all', () => {
+    const rows = itemsFromRecipes([{
+      name: 'Curry',
+      ingredients: [{ name: 'Chickpeas', qty: '400 g' }, { name: 'Spinach', qty: '100 g' }],
+    }]);
+    expect(rows.map((row) => row.aisle)).toEqual(['Tins & dry', 'Fruit & veg']);
+    const grouped = groupForStore([
+      { id: 'a', name: 'Onion', aisle: 'From recipes' },
+      { id: 'b', name: 'Rice', aisle: 'Other' },
+      { id: 'c', name: 'Mystery thing', aisle: 'Other' },
+    ]);
+    expect(grouped.map(([aisle, list]) => [aisle, list.map((row) => row.id)])).toEqual([
+      ['Fruit & veg', ['a']], ['Tins & dry', ['b']], ['Other', ['c']],
+    ]);
+  });
+
   it('totals a list and the part you have ticked', () => {
     const list = [
       { id: '1', name: 'Milk', price: 1.45, checked: true, aisle: 'Dairy & eggs' },

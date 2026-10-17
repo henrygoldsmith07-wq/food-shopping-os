@@ -256,7 +256,7 @@ export default function LearnTab({ goTab, openGuidance }) {
             <div className="flex items-start gap-2">
               <Clock3 size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
               <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                Your recorded cooks average {cooking.averageMins} minutes across {cooking.samples} meal{cooking.samples === 1 ? '' : 's'}.
+                Your recorded cooks average {cooking.averageMins} minute{cooking.averageMins === 1 ? '' : 's'} across {cooking.samples} meal{cooking.samples === 1 ? '' : 's'}.
               </p>
             </div>
           )}

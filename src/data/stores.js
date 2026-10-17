@@ -20,16 +20,23 @@ export const COMMON_STORES = [
   'Ocado', 'Amazon Fresh', 'Co-op', 'M&S', 'Local shop', 'Market', 'Online',
 ];
 
-/** Rough aisle for a name, so adding an item doesn't demand a category. */
+/**
+ * Rough aisle for a name, so adding an item doesn't demand a category.
+ * First match wins, so the specific rows sit above the generic ones:
+ * "coconut milk" is a world-foods tin before "milk" is dairy, "green beans"
+ * are veg before "beans" are a tin, "black pepper" is a spice before
+ * "pepper" is veg.
+ */
 const AISLE_HINTS = [
-  [/lettuce|spinach|kale|tomato|onion|potato|carrot|pepper|apple|banana|berry|berries|fruit|veg|salad|lemon|lime|garlic|ginger|mushroom|broccoli|avocado/i, 'Fruit & veg'],
-  [/bread|loaf|roll|bagel|croissant|bun|wrap|tortilla|pastry|cake/i, 'Bakery'],
-  [/chicken|beef|pork|lamb|mince|bacon|sausage|steak|fish|salmon|tuna|prawn|turkey|ham/i, 'Meat & fish'],
-  [/milk|cheese|yogurt|yoghurt|butter|cream|egg|halloumi|feta/i, 'Dairy & eggs'],
-  [/soy|curry paste|noodle|miso|tahini|sriracha|coconut milk|spice|masala/i, 'World foods'],
-  [/tin|tinned|beans|chickpea|lentil|rice|pasta|flour|sugar|oats|cereal|stock/i, 'Tins & dry'],
-  [/frozen|ice cream|peas|chips/i, 'Frozen'],
-  [/washing|cleaner|bin bag|foil|roll|detergent|soap|sponge/i, 'Household'],
+  [/soy|miso|tahini|sriracha|gochujang|hoisin|teriyaki|black bean sauce|fish sauce|curry paste|korma|tikka|masala|coconut milk|noodle|tofu|sushi|rice paper/i, 'World foods'],
+  [/chopped tomato|tinned|passata|tomato pur[eé]e|peanut butter|sauce|ketchup|mayo|paste|stock|powder|flakes|dried|ground (ginger|cumin|coriander|cinnamon|nutmeg|turmeric|almonds)|paprika|cumin|oregano|turmeric|cinnamon|garam|black pepper|peppercorn|mixed herbs|bay lea/i, 'Tins & dry'],
+  [/frozen|ice cream|\bpeas\b|\bchips\b/i, 'Frozen'],
+  [/lettuce|spinach|kale|tomato|onion|potato|carrot|pepper|apple|banana|berry|berries|fruit|veg|salad|lemon|lime|orange|garlic|ginger|mushroom|broccoli|avocado|leek|courgette|aubergine|cabbage|cauliflower|celery|cucumber|coriander|parsley|basil|mint|chilli|squash|green beans|runner beans|broad beans|beansprout|asparagus|rocket|pak choi|herb|grape|pear|mango/i, 'Fruit & veg'],
+  [/chicken|beef|pork|lamb|mince|bacon|sausage|steak|fish|salmon|tuna|prawn|turkey|ham|cod|haddock|mackerel|chorizo/i, 'Meat & fish'],
+  [/milk|cheese|yogurt|yoghurt|butter|cream|egg|halloumi|feta|paneer|mozzarella|parmesan|cr[eè]me fra[iî]che/i, 'Dairy & eggs'],
+  [/bread|loaf|roll|bagel|croissant|bun|wrap|tortilla|pastry|cake|pitta|naan|flatbread|sourdough/i, 'Bakery'],
+  [/washing|cleaner|bin bag|foil|detergent|soap|sponge/i, 'Household'],
+  [/\btins?\b|beans|chickpea|lentil|rice|pasta|spaghetti|flour|sugar|oats|cereal|oil|vinegar|honey|jam|seeds|nuts|chocolate|bulgur|couscous|quinoa/i, 'Tins & dry'],
 ];
 
 /** Best-guess aisle for a free-text item name. */
@@ -72,7 +79,7 @@ export const itemsFromRecipes = (recipes, pantryNames = [], { learnedAliases = {
         id: `x-${canonical.replace(/[^a-z0-9]+/g, '-')}-${Math.random().toString(36).slice(2, 6)}`,
         name: displayNameFor(ing.name, learnedAliases) || ing.name,
         emoji: r.emoji,
-        aisle: RECIPE_AISLE,
+        aisle: guessAisle(displayNameFor(ing.name, learnedAliases) || ing.name),
         qty: ing.qty,
         price: 0,
         checked: false,

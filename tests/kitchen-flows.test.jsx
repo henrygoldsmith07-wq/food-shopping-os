@@ -242,7 +242,9 @@ describe('meal plan', () => {
     fireEvent.click(screen.getByText(/Send this week's ingredients to the list/));
 
     fireEvent.click(screen.getByText('List'));
-    expect(screen.getByText('From recipes')).toBeDefined();
+    // Recipe ingredients are filed by aisle, not lumped under the recipe.
+    expect(screen.getAllByText('Tins & dry').length).toBeGreaterThan(0);
+    expect(screen.queryByText('From recipes')).toBeNull();
     // The row shows the group's everyday name, not the recipe's tin spelling.
     expect(screen.getByText('Chickpeas')).toBeDefined();
   });

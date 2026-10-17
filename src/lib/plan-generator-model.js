@@ -141,6 +141,45 @@ export function entriesForGenerated(generated, scope, planDates, today, slots = 
 }
 
 /**
+ * The date each generated dish lands on, index for index with `generated`.
+ * @param {Array<any>|null} generated
+ * @param {string} scope
+ * @param {Array<string>} planDates
+ * @param {string} today
+ * @param {Array<string>|null} [slots]
+ */
+export function slotDatesForGenerated(generated, scope, planDates, today, slots = null) {
+  if (!generated) return [];
+  if (scope === 'A day') return Array(generated.length).fill(today);
+  if (scope === '1 meal') return [today];
+  if (Array.isArray(slots) && slots.length > 1) return planDates.flatMap((date) => slots.map(() => date));
+  return planDates;
+}
+
+/**
+ * The row label for generated dish `i`: the meal for a day, the date for a
+ * dinners run, and date plus meal for an all-meals run.
+ * @param {number} i
+ * @param {string} scope
+ * @param {Array<string>} planDates
+ * @param {Array<string>} weekDays
+ * @param {Array<string>|null} [slots]
+ */
+export function generatedSlotLabel(i, scope, planDates, weekDays, slots = null) {
+  if (scope === 'A day') return ['Breakfast', 'Lunch', 'Dinner'][i];
+  if (scope === '1 meal') return 'Suggested';
+  if (Array.isArray(slots) && slots.length > 1) {
+    const dayIdx = Math.floor(i / slots.length);
+    const slot = slots[i % slots.length];
+    const slotLabel = slot[0].toUpperCase() + slot.slice(1);
+    const date = planDates[dayIdx];
+    return date ? `${weekDays[dayIdx % 7]} ${Number(date.slice(8, 10))} · ${slotLabel}` : slotLabel;
+  }
+  const date = planDates[i];
+  return date ? `${weekDays[i % 7]} ${Number(date.slice(8, 10))}` : '';
+}
+
+/**
  * The generator's list hand-off: same authoritative path as every other
  * Plan → List derivation (scaled entries → waste learning).
  * @param {Array<any>} entries

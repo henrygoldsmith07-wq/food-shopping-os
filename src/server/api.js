@@ -49,13 +49,9 @@ export async function requireUser() {
 export async function rateLimit(key, limit = 120, windowMs = 60000) {
   const db = await getDatabase();
   const window = new Date(Math.floor(Date.now() / windowMs) * windowMs);
-  const id = `${key}:${window.toISOString()}`;
-  const result = await db.collection('rateLimits').findOneAndUpdate(
-    { _id: id },
-    { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date(window.getTime() + windowMs * 2) } },
-    { upsert: true, returnDocument: 'after', includeResultMetadata: false },
-  );
-  if (result.count > limit) throw new ApiError(429, 'Too many requests.');
+  // One atomic counter per key and window, expiring a window after it closes.
+  const count = await db.incrementWindow(`${key}:${window.toISOString()}`, windowMs * 2);
+  if (count > limit) throw new ApiError(429, 'Too many requests.');
 }
 
 export function objectId(value, label = 'identifier') {

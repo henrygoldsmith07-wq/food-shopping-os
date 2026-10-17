@@ -15,7 +15,8 @@
  */
 
 import { aisleFor, mergeItems, rememberAisle, shoppingNameKey } from './shopping.js';
-import { guessAisle } from '../data/stores.js';
+import { guessAisle, RECIPE_AISLE } from '../data/stores.js';
+import { shoppableQty } from './shoppable-qty.js';
 import { householdPermission } from './household.js';
 import { uid } from './state.js';
 import { emojiFor } from './food-lookup.js';
@@ -27,6 +28,12 @@ import { PREDICTION_PROVENANCE, quantityOverrideEvent, refreshBasketFreeze } fro
 import { applyOverrideLearning, overrideLearningProfile } from './override-learning.js';
 
 /** Row-level shopping-list actions, composed into the store api by store-api.js. */
+const recipeRowQty = (item) => {
+  if (!(item.fromRecipe || item.forRecipes?.length || item.requiredQty) || !item.qty) return {};
+  const qty = shoppableQty(item.qty, item.name);
+  return qty === item.qty ? {} : { qty, requiredQty: item.requiredQty || item.qty };
+};
+
 export const shoppingListMutations = (set, { latest } = {}) => ({
 addToList: (items, { provenance = null } = {}) =>
   set((s) => {
@@ -57,9 +64,12 @@ addToList: (items, { provenance = null } = {}) =>
           priority: i.priority === 'high' ? 'high' : 'normal',
           emoji: i.emoji || emojiFor(i.name),
           ...i,
+          // Recipe-derived rows buy a shoppable amount ("1 jar", a whole
+          // pepper); the recipe's own figure stays on the row as its need.
+          ...recipeRowQty(i),
           purchaseWarning: check.recentlyPurchased || null,
           aisle: aisleFor(i.name, s.aisleMemory) === guessAisle(i.name)
-            ? (i.aisle || guessAisle(i.name))
+            ? (i.aisle && i.aisle !== 'Other' && i.aisle !== RECIPE_AISLE ? i.aisle : guessAisle(i.name))
             : aisleFor(i.name, s.aisleMemory),
         };
       });

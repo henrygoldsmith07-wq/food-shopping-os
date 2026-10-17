@@ -122,7 +122,7 @@ export default function PlanningSignals({ app }) {
           <div className="border-t pt-3 flex items-start gap-2" style={{ borderColor: 'var(--line)' }}>
             <Clock3 size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
             <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              Cooking-time learning: your logged meals average {app.cookingTimeLearning.averageMins} minutes across {app.cookingTimeLearning.samples} cook{app.cookingTimeLearning.samples === 1 ? '' : 's'}.
+              Cooking-time learning: your logged meals average {app.cookingTimeLearning.averageMins} minute{app.cookingTimeLearning.averageMins === 1 ? '' : 's'} across {app.cookingTimeLearning.samples} cook{app.cookingTimeLearning.samples === 1 ? '' : 's'}.
             </p>
           </div>
         )}

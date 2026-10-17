@@ -1,6 +1,9 @@
 import { Check, CloudOff, Package, Receipt, TriangleAlert, X } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { checkedTotalOf } from '../data/stores.js';
+import { weekDates } from '../lib/kitchen.js';
+import { planStats } from '../lib/mealplan.js';
+import { householdPortionsFor } from '../lib/portions.js';
 import ShoppingProgress from './ShoppingProgress.jsx';
 import { Card, Chip, Meter, Section } from './ui.jsx';
 
@@ -21,6 +24,13 @@ export default function ShopBasket({
   const checkedTotal = checkedTotalOf(visibleList);
   const offlineMode = Boolean(app.shoppingPreferences?.offlineMode);
   const largeTouch = Boolean(app.shoppingPreferences?.largeTouch);
+  // With no recorded prices the receipt estimate is £0, which reads as "free"
+  // beside the Plan tab's cost. Quote the plan's own recipe estimate instead,
+  // labelled as such, until a receipt gives real prices.
+  const planEstimate = basket.projected > 0 ? 0
+    : planStats(app.plan, weekDates(app.day), { people: householdPortionsFor(app).portions }).cost;
+  const fromRecipes = basket.unpriced > 0 && planEstimate > 0;
+  const projected = fromRecipes ? planEstimate : basket.projected;
 
   return (
     <Section className="rise rise-1">
@@ -33,29 +43,30 @@ export default function ShopBasket({
             <p className="text-[1.5rem] font-extrabold">
               {/* Keyed on the value, so a changed total animates in
                   instead of silently swapping under your eyes. */}
-              <span key={shoppingMode ? checkedTotal : basket.projected} className="count-up inline-block">
-                {gbp(shoppingMode ? checkedTotal : basket.projected, { always: true })}
+              <span key={shoppingMode ? checkedTotal : projected} className="count-up inline-block">
+                {!shoppingMode && fromRecipes && 'about '}{gbp(shoppingMode ? checkedTotal : projected, { always: true })}
               </span>
               {shoppingMode && (
                 <span className="text-[0.8125rem] font-semibold ml-1.5" style={{ color: 'var(--muted)' }}>
-                  of {gbp(basket.projected, { always: true })}
+                  of {fromRecipes && 'about '}{gbp(projected, { always: true })}
                 </span>
               )}
             </p>
-            <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {shoppingMode ? 'Running total of ticked items at your recorded prices.' : 'Estimate from your receipts (“you paid this”) — not live prices.'}
-            </p>
+            {!shoppingMode && <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {fromRecipes ? 'Rough estimate from this week’s recipes — a receipt replaces it with what you paid.'
+                  : 'Estimate from your receipts (“you paid this”) — not live prices.'}
+            </p>}
             {basket.saved > 0 && (
               <p className="text-[0.75rem] font-bold" style={{ color: 'var(--good)' }}>
                 {gbp(basket.total, { always: true })} less {gbp(basket.saved, { always: true })} of your offers
               </p>
             )}
-        {basket.unpriced > 0 && (
+        {basket.unpriced > 0 && !shoppingMode && (
           <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            {basket.unpriced} item{basket.unpriced === 1 ? '' : 's'} with no price yet — the total is only what you’ve typed in.
+            {basket.unpriced} item{basket.unpriced === 1 ? '' : 's'} with no price yet{fromRecipes ? '.' : ' — the total is only what you’ve typed in.'}
           </p>
         )}
-        {onOpenPantry && app.pantry.length > 0 && (
+        {onOpenPantry && app.pantry.length > 0 && !shoppingMode && (
           <button
             type="button"
             onClick={onOpenPantry}
@@ -126,19 +137,20 @@ export default function ShopBasket({
           </p>
         )}
 
+        {/* Progress, options and sync detail fold away so the list starts on
+            the first screen; the bottom bar already counts what is ticked. */}
         {shoppingMode && (
+          <details className="mt-3 rounded-2xl border px-3 py-2" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+          <summary className="cursor-pointer list-none text-[0.75rem] font-extrabold" style={{ color: 'var(--muted)' }}>Progress and shopping options</summary>
+          <ShoppingProgress total={visibleList.length} checked={ticked} />
           <p className="mt-2 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold" style={{ color: isOnline ? 'var(--good)' : 'var(--warn)' }}>
             {isOnline ? <Check size={12} /> : <CloudOff size={12} />}
             {offlineMode
               ? 'Offline shopping mode · the list and aisle route stay available locally.'
-              : isOnline ? 'Online · changes save locally and sync when available.' : 'Offline · changes save locally; sync resumes when you reconnect.'}
+              : ['disabled', 'signed-out'].includes(app.cloudStatus?.kind || 'disabled') ? 'Saved on this device as you tick.'
+                : isOnline ? 'Online · changes save locally and sync when available.' : 'Offline · changes save locally; sync resumes when you reconnect.'}
           </p>
-        )}
-
-        {shoppingMode && <ShoppingProgress total={visibleList.length} checked={ticked} />}
-
-        {shoppingMode && (
-          <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+          <div className="mt-2">
             <div className="flex flex-wrap gap-2">
               <Chip active={largeTouch} onClick={() => app.setShoppingPreferences({ largeTouch: !largeTouch })}>
                 {largeTouch ? 'Large-touch UI on' : 'Large-touch UI'}
@@ -156,6 +168,7 @@ export default function ShopBasket({
                 : 'Private list · add household members to share it live.'}
             </p>
           </div>
+          </details>
         )}
         {!shoppingMode && app.shoppingInsights?.shared && (
           <p className="mt-3 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>

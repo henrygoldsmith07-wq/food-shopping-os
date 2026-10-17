@@ -7,7 +7,7 @@ import { useApp } from '../lib/store.jsx';
 import { cx, gbp } from '../lib/utils.js';
 import { allRecipes, DISCOVER_FILTERS, filterRecipes } from '../data/recipes.js';
 import { DIET_PATTERNS } from '../data/goals.js';
-import { missingFrom, parseShareCode, searchRecipes } from '../lib/recipe-tools.js';
+import { missingFrom, searchRecipes } from '../lib/recipe-tools.js';
 import { searchAndSortRecipes } from '../lib/recipe-search.js';
 import { ALL_RECIPES, recipesInFolder } from '../lib/recipe-folders.js';
 import { Section, Card, Chip, Pill, FoodArt, Sheet } from './ui.jsx';
@@ -15,86 +15,11 @@ import PrimaryAction from './PrimaryAction.jsx';
 import RecipeGenerator from './RecipeGenerator.jsx';
 import RecipeImport from './RecipeImport.jsx';
 import TasteGame from './TasteGame.jsx';
-
+import SharedImport from './SharedImport.jsx';
 import RecipeFilterSheet from './RecipeFilterSheet.jsx';
 import RecipeFolders from './RecipeFolders.jsx';
 
 const PAGE = 24;
-
-/** Paste in a recipe someone sent you. */
-function SharedImport({ onDone }) {
-  const app = useApp();
-  const [code, setCode] = useState('');
-  const [error, setError] = useState(null);
-  const [preview, setPreview] = useState(null);
-
-  const read = () => {
-    const { recipe, error: err } = parseShareCode(code);
-    setError(err);
-    setPreview(recipe);
-  };
-
-  return (
-    <div className="px-5 pb-10 space-y-3">
-      <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-        Forq has no feed of strangers’ dinners. A recipe travels as a code someone sends you —
-        paste it here and it becomes yours, credited to whoever shared it.
-      </p>
-      <textarea
-        value={code}
-        onChange={(e) => { setCode(e.target.value); setError(null); setPreview(null); }}
-        rows={4}
-        placeholder="FORQ1:…"
-        aria-label="Recipe code"
-        className="w-full rounded-2xl border p-3 text-[0.75rem] font-mono outline-none"
-        style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
-      />
-      <button
-        onClick={read}
-        disabled={!code.trim()}
-        className="press w-full rounded-2xl border py-3 text-[0.875rem] font-extrabold disabled:opacity-50"
-        style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
-      >
-        Read the code
-      </button>
-      {error && <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
-      {preview && (
-        <Card className="space-y-2">
-          <p className="font-extrabold text-[0.9375rem]">{preview.name}</p>
-          <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            {preview.sharedBy ? `From ${preview.sharedBy} · ` : ''}{preview.ingredients.length} ingredients · {preview.steps.length} steps · {preview.time} min
-          </p>
-          {(() => {
-            const fit = app.suitabilityFor?.(preview);
-            if (!fit) return null;
-            if (!fit.allowed) {
-              return (
-                <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--danger)' }}>
-                  Blocked by your rules: {fit.blockers.map((b) => b.label).join(', ')}.
-                </p>
-              );
-            }
-            if (fit.warnings.length) {
-              return (
-                <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--warn)' }}>
-                  Note: {fit.warnings.map((w) => w.label).join(', ')}.
-                </p>
-              );
-            }
-            return null;
-          })()}
-          <button
-            onClick={() => { app.saveRecipe(preview); onDone(); }}
-            className="press w-full rounded-2xl py-3 text-[0.875rem] font-extrabold"
-            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-          >
-            Add to my recipes
-          </button>
-        </Card>
-      )}
-    </div>
-  );
-}
 
 export default function RecipesTab({ openRecipe }) {
   const app = useApp();
@@ -109,8 +34,7 @@ export default function RecipesTab({ openRecipe }) {
   const [collectionName, setCollectionName] = useState('');
   const [folderId, setFolderId] = useState(ALL_RECIPES);
 
-  // A fresh array identity every render would re-run the search memo below on
-  // every keystroke-adjacent render — derive the names once per pantry change.
+  // Stable identity per pantry change, so the search memo below doesn't re-run.
   const pantryNames = useMemo(() => app.pantry.map((p) => p.name), [app.pantry]);
   const active = filters.diets.length + filters.include.length + filters.exclude.length
     + (filters.maxTime ? 1 : 0) + (filters.maxMissing !== null ? 1 : 0);
@@ -119,8 +43,7 @@ export default function RecipesTab({ openRecipe }) {
     || app.recipeCollections[0]
     || null;
 
-  // Deps are intentionally granular: the whole `app` object identity changes
-  // on every store update, so depending on it would defeat this memo.
+  // Granular deps on purpose: `app` changes identity on every store update.
   /* eslint-disable react-hooks/exhaustive-deps */
   const pool = useMemo(() => {
     if (view === 'mine') return app.myRecipes;
@@ -152,7 +75,6 @@ export default function RecipesTab({ openRecipe }) {
       suitabilityCtx: app.suitabilityCtx,
       ...filters,
     }), { query, sort }).filter((recipe) => !tagFilter || recipe.tags.includes(tagFilter)),
-    // `pantryNames` is the memoised derivation of `app.pantry` above.
     [safePool, query, filters, pantryNames, app.suitabilityCtx, sort, tagFilter],
   );
   /* eslint-enable react-hooks/exhaustive-deps */
@@ -413,7 +335,7 @@ export default function RecipesTab({ openRecipe }) {
                       <div className="p-3">
                         <p className="font-bold text-[0.84375rem] leading-tight line-clamp-2">{r.name}</p>
                         <p className="mt-1 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                          {r.time <= 60 ? `${r.time} min` : `${Math.round(r.time / 60)} h`} · {r.kcal} kcal · {r.protein}g protein
+                          {r.time <= 60 ? `${r.time} min` : `${Math.round(r.time / 60)} h`} · {r.nutritionStatus === 'estimated-from-ingredients' ? '≈' : ''}{r.kcal} kcal · {r.protein}g protein
                         </p>
                         <p className="mt-1 text-[0.75rem] font-extrabold" style={{ color: 'var(--accent)' }}>
                           {gbp(r.costPerServing, { always: true })}/serving

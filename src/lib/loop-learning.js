@@ -297,7 +297,7 @@ export const loopHealth = (state, today = state?.day) => {
       id: 'unmarked-meals',
       severity: 'info',
       title: 'Past meals weren’t marked as cooked or skipped',
-      detail: `${pending.length} planned meal${pending.length === 1 ? '' : 's'} from earlier this week has no outcome yet — this is what teaches next week's plan.`,
+      detail: `${pending.length} planned meal${pending.length === 1 ? '' : 's'} from earlier this week ${pending.length === 1 ? 'has' : 'have'} no outcome yet — this is what teaches next week's plan.`,
       fix: null,
       goTab: 'plan',
     });

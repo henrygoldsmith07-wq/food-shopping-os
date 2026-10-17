@@ -7,7 +7,8 @@ import { MEAL_SLOTS } from '../data/plan.js';
 import {
   expiringSoon, planForDay, runningLow,
 } from '../lib/kitchen.js';
-import { bestForSlot } from '../lib/recommend.js';
+import { bestForSlot, explainRecommendation } from '../lib/recommend.js';
+import { tonightPlanState } from '../lib/tonight-plan.js';
 import { weeklyFoodLoop } from '../lib/food-loop.js';
 import { nextAction } from '../lib/next-action.js';
 import { weekManager } from '../lib/week-manager.js';
@@ -104,13 +105,28 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     });
   }, [tonight, app.pantry, app.safeRecipes, app.day, app.portions, app.weeklyBudget, app.tasteProfile, availability]);
 
-  const tonightRecipe = tonight?.recipe || pantryHero?.recipe || null;
-  const tonightExplanation = tonight?.explanation || pantryHero?.explanation || null;
-  const tonightReasons = tonight?.reasons || null;
+  // The plan outranks the engine: a planned dinner leads the card, a cooked
+  // one closes it, and only an unplanned evening (or "Not tonight" on the
+  // planned dish) falls through to the suggestion from what you have.
+  const [skipPlanned, setSkipPlanned] = useState(false);
+  const planState = useMemo(
+    () => tonightPlanState({ plan: app.plan, cooked: app.cooked, day: app.day, byId }),
+    [app.plan, app.cooked, app.day],
+  );
+  const planLed = planState.mode === 'cooked' || (planState.mode === 'planned' && !skipPlanned);
+  const plannedExplanation = useMemo(() => (planLed && planState.mode === 'planned'
+    ? explainRecommendation(planState.recipe, {
+      pantry: app.pantry, today: app.day, date: app.day, availability,
+      people: Math.max(1, Math.round(app.portions || 1)), taste: app.tasteProfile,
+    })
+    : null), [planLed, planState, app.pantry, app.day, availability, app.portions, app.tasteProfile]);
+  const tonightRecipe = planLed ? planState.recipe : tonight?.recipe || pantryHero?.recipe || null;
+  const tonightExplanation = planLed ? plannedExplanation : tonight?.explanation || pantryHero?.explanation || null;
+  const tonightReasons = planLed ? null : tonight?.reasons || null;
   // The runner-up, from the same ranking as the pick — "Best tonight: X.
   // Alternative: Y" is the use-what-I-have surface, not a second decision.
   const tonightAlternative = useMemo(() => {
-    if (!tonightRecipe || !app.safeRecipes.length) return null;
+    if (!tonightRecipe || planState.mode === 'cooked' || !app.safeRecipes.length) return null;
     const dinners = app.safeRecipes.filter((r) => r.meal === 'dinner' && r.id !== tonightRecipe.id);
     if (!dinners.length) return null;
     const month = Number(String(app.day).slice(5, 7)) || new Date().getMonth() + 1;
@@ -120,8 +136,8 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       budget: app.weeklyBudget ? Math.min(4, Math.max(1, app.weeklyBudget / 7)) : 2.5,
       month, taste: app.tasteProfile,
     });
-  }, [tonightRecipe, app.safeRecipes, app.pantry, app.day, app.portions, app.weeklyBudget, app.tasteProfile, availability]);
-  const tonightConfidence = tonight?.confidence || app.tonightDecision?.confidence || null;
+  }, [tonightRecipe, planState.mode, app.safeRecipes, app.pantry, app.day, app.portions, app.weeklyBudget, app.tasteProfile, availability]);
+  const tonightConfidence = planLed ? null : tonight?.confidence || app.tonightDecision?.confidence || null;
 
   const recovery = app.weekRecovery;
   const foodLoop = weeklyFoodLoop(app);
@@ -166,6 +182,15 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
     .filter((row) => row.id !== 'repair-week')
     .filter((row) => !dismissedDecisions.includes(row.id))
     .slice(0, 3), [app.foodIntelligence, leading, dismissedDecisions]);
+  // Needs attention lists exceptions; one already named by the lead card or
+  // the decision stack above it is not repeated a third time.
+  const shownTitles = new Set([leading?.title, ...stackDecisions.map((row) => row.title)]
+    .filter(Boolean).map((title) => title.toLowerCase()));
+  const attention = useMemo(() => {
+    const exceptions = week.exceptions.filter((row) => !shownTitles.has(String(row.title).toLowerCase()));
+    return { ...week, exceptions, repeatsOnly: week.exceptions.length > 0 && exceptions.length === 0 };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, leading, stackDecisions]);
   const runDecisionNow = (row) => {
     runDecision(row, { goTab, openPantry, openWeekLoop: onOpenWeekLoop, openGuidance });
   };
@@ -194,7 +219,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
             onAccept={() => goTab('list')}
           />
         </div>
-      ) : (
+      ) : (leading || !stackDecisions.length) && (
+        // With no lead, the quiet card would claim nothing needs you while
+        // the decision stack below lists something that does.
         <NextActionCard action={leading} onRun={() => leading?.run?.()} />
       )}
 
@@ -203,9 +230,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         <Card className="!p-0 overflow-hidden">
           <div className="px-4 pt-3 pb-1 flex items-baseline justify-between">
             <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-              Tonight — from what you have
+              {!planLed ? 'Tonight — from what you have' : planState.mode === 'cooked' ? 'Tonight — done' : 'Tonight — on your plan'}
             </p>
-            {tonightExplanation && (
+            {tonightExplanation && planState.mode !== 'cooked' && (
               <span className="text-[0.6875rem] font-bold" style={{ color: 'var(--accent)' }}>
                 {tonightExplanation.coverage.pct}% in your kitchen
               </span>
@@ -218,7 +245,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                 onClick={() => openRecipe(tonightRecipe)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecipe(tonightRecipe); } }}
                 className="press flex items-center gap-3 px-4 pb-3 pt-1 cursor-pointer"
-                aria-label={`Cook ${tonightRecipe.name} tonight`}
+                aria-label={planState.mode === 'cooked' && planLed ? `Open ${tonightRecipe.name}` : `Cook ${tonightRecipe.name} tonight`}
               >
                 <FoodArt recipe={tonightRecipe} className="h-14 w-14 rounded-xl shrink-0" px={26} />
                 <div className="min-w-0 flex-1">
@@ -230,6 +257,11 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                 <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
               </div>
               <div className="px-4 pb-4">
+                {planLed && planState.mode === 'cooked' && (
+                  <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                    Dinner is cooked and logged. Anything saved for later is in the pantry under Leftovers.
+                  </p>
+                )}
                 {tonightExplanation && <RecommendationExplanation explanation={tonightExplanation} compact />}
                 {tonightAlternative?.recipe && (
                   <button
@@ -262,19 +294,19 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                     {tonightConfidence === 'low' ? 'Low confidence — based on limited evidence.' : 'Medium confidence.'}
                   </p>
                 )}
-                {tonight && (
+                {(planLed ? planState.mode === 'planned' : tonight) && (
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      onClick={() => acceptTonight(tonight)}
+                      onClick={() => acceptTonight(planLed ? { recipe: planState.recipe, confidence: 'high' } : tonight)}
                       className="press flex-1 rounded-xl px-3 py-2.5 text-[0.8125rem] font-extrabold"
                       style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                     >
-                      Cook this tonight
+                      {planLed ? 'Start cooking' : 'Cook this tonight'}
                     </button>
                     <button
                       type="button"
-                      onClick={() => dismissTonight(tonight)}
+                      onClick={() => (planLed ? setSkipPlanned(true) : dismissTonight(tonight))}
                       className="press rounded-xl border px-3 py-2.5 text-[0.8125rem] font-extrabold"
                       style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
                     >
@@ -342,7 +374,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       {/* 3 — Week status + needs attention, from the one Week Manager
           derivation. Exceptions only; quiet success when nothing is wrong. */}
       <WeekStatusCard manager={week} onOpenWeekLoop={onOpenWeekLoop} />
-      <NeedsAttentionCard manager={week} app={app} goTab={goTab} openPantry={openPantry} />
+      {!attention.repeatsOnly && <NeedsAttentionCard manager={attention} app={app} goTab={goTab} openPantry={openPantry} />}
 
       {/* 5 — Has anything changed from the original plan? The recovery
           preview only appears when the week drifted and Forq has repairs to
@@ -388,7 +420,8 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           live on the raw state and are not surfaced through derive, so they are
           read optionally — an unguarded .length here throws on an install whose
           state predates the field. */}
-      {(app.starterRecipeIds?.length ?? 0) > 0 && !app.welcomeDismissed && (
+      {(app.starterRecipeIds?.length ?? 0) > 0 && !app.welcomeDismissed
+        && !(app.shops?.length || app.cooked?.length) && (
         <div className="px-5 rise rise-1">
           <Card className="flex items-start gap-3 !p-4">
             <span
@@ -435,7 +468,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
         >
           Explore more
           <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            confirm · autopilot · setup · report
+            Autopilot, setup and your weekly report
           </span>
         </summary>
         <div className="mt-6 space-y-6">

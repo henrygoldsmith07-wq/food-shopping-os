@@ -12,7 +12,7 @@ import {
   prevWeekLoopStage,
   weekLoopSnapshot,
 } from '../lib/week-loop.js';
-import { gbp } from '../lib/utils.js';
+import { gbp, shortDate } from '../lib/utils.js';
 import { Card, Chip, FoodArt, Pill, Stepper, Toggle } from './ui.jsx';
 import WeekLoopPlan from './WeekLoopPlan.jsx';
 
@@ -394,7 +394,7 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
                         <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
                         <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
                           {item.portions || 1} portion{(item.portions || 1) === 1 ? '' : 's'}
-                          {item.expiry ? ` · best by ${item.expiry}` : ''}
+                          {item.expiry ? ` · best by ${shortDate(item.expiry)}` : ''}
                         </p>
                         <p className="mt-0.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
                           Source: saved leftover{item.addedAt ? ` · saved ${item.addedAt}` : ''} · next list skips covered meals.

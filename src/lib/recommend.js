@@ -13,6 +13,7 @@
 import { daysUntil, dayStamp, pantryConfidence } from './kitchen.js';
 import { tasteScore } from './taste.js';
 import { seasonScore } from '../data/seasons.js';
+import { LEFTOVER_CAT } from './mealplan.js';
 
 const normalize = (name) => String(name || '').trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
 
@@ -24,6 +25,13 @@ const ingredientMatchesPantry = (ingredientName, pantryNames) => {
     return stocked === wanted || (Math.min(stocked.length, wanted.length) >= 4 && (stocked.includes(wanted) || wanted.includes(stocked)));
   });
 };
+
+/**
+ * The pantry as ingredients. A saved portion of a cooked dish is a meal, not
+ * an ingredient: "Chickpeas korma (leftovers)" must never count as chickpeas
+ * for another recipe. Leftovers are scored on their own, by recipe id.
+ */
+export const ingredientStock = (pantry = []) => pantry.filter((item) => item?.cat !== LEFTOVER_CAT);
 
 export const pantryCoverage = (recipe, pantryNames = []) => {
   if (!pantryNames.length || !recipe.ingredients?.length) return { have: 0, total: recipe.ingredients.length, pct: 0, missing: recipe.ingredients };
@@ -111,14 +119,15 @@ export const scheduleFit = (recipe, date, availability) => {
  */
 export const explainRecommendation = (recipe, ctx = {}) => {
   const {
-    pantry = [],
-    pantryNames = pantry.map((p) => p.name),
+    pantry: stock = [],
     today = dayStamp(),
     date = today,
     availability = {},
     people = 2,
     month = Number(String(today).slice(5, 7)) || new Date().getMonth() + 1,
   } = ctx;
+  const pantry = ingredientStock(stock);
+  const pantryNames = ctx.pantryNames || pantry.map((p) => p.name);
 
   const coverage = pantryCoverage(recipe, pantryNames);
   const expiring = expiringIngredients(recipe, pantry, today, 3);

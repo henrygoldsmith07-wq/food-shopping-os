@@ -198,7 +198,9 @@ test('exposes collaboration and calendar planning controls', async ({ page }) =>
   const family = page.getByRole('dialog', { name: 'Family' });
   await family.getByText('Sharing', { exact: true }).click();
   await expect(family.getByText('Coach or trainer access')).toBeVisible();
-  await expect(family.getByText(/read-only, revocable link/i)).toBeVisible();
+  // Without FORQ_COACH_SHARES_ENABLED (this preview build) the panel says the
+  // server lacks it instead of showing a form that would 403 (docs/SCOPE.md).
+  await expect(family.getByText(/read-only, revocable link|Coach links are not enabled on this server/i)).toBeVisible();
 
   await family.getByText('Activity', { exact: true }).click();
   await expect(family.getByText('Server audit trail')).toBeVisible();

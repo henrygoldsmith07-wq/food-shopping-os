@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  fetchSource, isFetchableRecipeUrl, materialIsUsable, oEmbedEndpoint, readOEmbed,
-  readPageMetadata, sourceMaterial, sourcePlatform,
+  fetchPublic, fetchSource, isFetchableRecipeUrl, isPrivateAddress, materialIsUsable, MAX_REDIRECTS,
+  oEmbedEndpoint, readCapped, readOEmbed, readPageMetadata, sourceMaterial, sourcePlatform,
 } from '../src/server/recipe-source.js';
 import {
   draftToRecipeText, extractJsonObject, parseRecipeDraft, MAX_INGREDIENTS, RECIPE_SYSTEM,
@@ -16,6 +16,9 @@ const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), {
 const htmlRes = (body, status = 200) => new Response(body, {
   status, headers: { 'content-type': 'text/html' },
 });
+const redirectRes = (location, status = 302) => new Response(null, { status, headers: { location } });
+/* Every host resolves to a public address unless a test says otherwise. */
+const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 
 describe('which links we are willing to fetch', () => {
   it('recognises the video platforms and treats everything else as the web', () => {
@@ -103,7 +106,7 @@ describe('fetching a source', () => {
     const fetchImpl = vi.fn(async (url) => (String(url).includes('oembed')
       ? jsonRes({ title: 'caption text', author_name: 'chef' })
       : htmlRes('<html><head><title>t</title></head></html>')));
-    const out = await fetchSource('https://www.tiktok.com/@a/video/1', { fetchImpl, env: {} });
+    const out = await fetchSource('https://www.tiktok.com/@a/video/1', { fetchImpl, env: {}, lookup: publicLookup });
     expect(out.html).toContain('<title>t</title>');
     expect(out.oembed.caption).toBe('caption text');
     expect(out.errors).toEqual([]);
@@ -111,10 +114,64 @@ describe('fetching a source', () => {
 
   it('reports a failure rather than throwing it at the caller', async () => {
     const fetchImpl = vi.fn(async () => htmlRes('nope', 404));
-    const out = await fetchSource('https://www.tiktok.com/@a/video/1', { fetchImpl, env: {} });
+    const out = await fetchSource('https://www.tiktok.com/@a/video/1', { fetchImpl, env: {}, lookup: publicLookup });
     expect(out.html).toBe('');
     expect(out.errors).toContain('page 404');
     expect(out.errors).toContain('caption 404');
+  });
+});
+
+describe('the import fetch stays on the public internet', () => {
+  it('classifies private, loopback, link-local and metadata addresses', () => {
+    for (const ip of ['127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.0.10', '169.254.169.254', '100.64.0.1',
+      '0.0.0.0', '::1', '::', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1']) {
+      expect(isPrivateAddress(ip), ip).toBe(true);
+    }
+    for (const ip of ['93.184.216.34', '8.8.8.8', '2606:4700:4700::1111']) {
+      expect(isPrivateAddress(ip), ip).toBe(false);
+    }
+  });
+
+  it('refuses a public name that resolves to a private address', async () => {
+    const fetchImpl = vi.fn();
+    const lookup = async () => [{ address: '127.0.0.1', family: 4 }];
+    await expect(fetchPublic('https://sneaky.example.com/', {}, { fetchImpl, lookup })).rejects.toThrow('blocked-address');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('re-checks every redirect hop and refuses one that lands on the metadata service', async () => {
+    const fetchImpl = vi.fn(async () => redirectRes('http://169.254.169.254/latest/meta-data/'));
+    await expect(fetchPublic('https://recipes.example.com/x', {}, { fetchImpl, lookup: publicLookup }))
+      .rejects.toThrow('blocked-url');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][1].redirect).toBe('manual');
+  });
+
+  it('follows ordinary redirects between public pages, up to a limit', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(redirectRes('/recipes/final'))
+      .mockResolvedValueOnce(htmlRes('<title>final</title>'));
+    const response = await fetchPublic('https://recipes.example.com/r', {}, { fetchImpl, lookup: publicLookup });
+    expect(await response.text()).toContain('final');
+    expect(fetchImpl.mock.calls[1][0]).toBe('https://recipes.example.com/recipes/final');
+
+    const loop = vi.fn(async () => redirectRes('https://recipes.example.com/again'));
+    await expect(fetchPublic('https://recipes.example.com/r', {}, { fetchImpl: loop, lookup: publicLookup }))
+      .rejects.toThrow('too-many-redirects');
+    expect(loop).toHaveBeenCalledTimes(MAX_REDIRECTS + 1);
+  });
+
+  it('reads a page body only up to the cap, without downloading the rest', async () => {
+    let pulled = 0;
+    const endless = new ReadableStream({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1024)));
+      },
+    });
+    const text = await readCapped(new Response(endless), 4096);
+    expect(text.length).toBe(4096);
+    expect(pulled).toBeLessThan(10);
   });
 });
 

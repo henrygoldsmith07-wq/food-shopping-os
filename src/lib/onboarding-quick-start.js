@@ -1,5 +1,6 @@
 import { mergeQtys } from './pantry.js';
 import { scaleQty } from './portions.js';
+import { shoppableQty } from './shoppable-qty.js';
 
 export const QUICK_START_DEFAULTS = {
   household: 1,
@@ -68,7 +69,10 @@ export const firstSessionPlan = ({ day, recipes = [], pickedRecipeIds = [], hous
       });
     }
   }
-  const shoppingList = [...shoppingByIngredient.values()];
+  // Buy what a shop sells ("1 jar", a whole pepper); the recipe figure stays
+  // as the row's need.
+  const shoppingList = [...shoppingByIngredient.values()]
+    .map((row) => ({ ...row, qty: shoppableQty(row.qty, row.name) }));
   return {
     plan,
     shoppingList,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, ClipboardList, Info, Move, ShoppingCart, Snowflake, Sparkles, X } from 'lucide-react';
-import { gbp } from '../lib/utils.js';
+import { gbp, shortDate } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS } from '../data/plan.js';
@@ -330,57 +330,6 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           </div>
         )}
       </Section>
-      <PlanningSignals app={app} />
-      <Section title="What-if planning" className="rise rise-2">
-        <PlanSimulator />
-      </Section>
-      {app.leftovers.length > 0 && (
-        <Section title="Leftovers" className="rise rise-2">
-          <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
-            {app.leftovers.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 p-3">
-                <Snowflake size={16} style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
-                  <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {item.portions} portion{item.portions === 1 ? '' : 's'} · best by {item.expiry}
-                  </p>
-                </div>
-                <button
-                  onClick={() => app.useLeftover(item.id)}
-                  className="press rounded-full border px-3 py-1.5 text-[0.75rem] font-extrabold"
-                  style={{ borderColor: 'var(--line)' }}
-                >
-                  Ate one
-                </button>
-              </div>
-            ))}
-          </Card>
-          {covered.length > 0 && (
-            <p className="mt-2 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {covered.length} planned meal{covered.length === 1 ? '' : 's'} already covered — the shopping list skips {covered.length === 1 ? 'it' : 'them'}.
-            </p>
-          )}
-        </Section>
-      )}
-      {batches.length > 0 && (
-        <Section title="Batch cooking" className="rise rise-2">
-          <Card className="space-y-3">
-            {batches.map(({ recipe, cookOn, covers, portions, batches: n, saves }) => (
-              <div key={recipe.id} className="flex items-start gap-3">
-                <FoodArt recipe={recipe} className="h-11 w-11 shrink-0 rounded-xl" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-[0.875rem]">{recipe.name}</p>
-                  <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    Cook {n > 1 ? `${n} batches ` : ''}on {dayLabel(cookOn)} — {portions} portions, covering {covers.length} more meal{covers.length === 1 ? '' : 's'}.
-                  </p>
-                </div>
-                <Pill tone="good">saves ~{saves} min</Pill>
-              </div>
-            ))}
-          </Card>
-        </Section>
-      )}
       <Section className="rise rise-2">
         <button
           onClick={() => setShowGenerator((v) => !v)}
@@ -401,6 +350,67 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           />
         </Section>
       )}
+      {app.leftovers.length > 0 && (
+        <Section title="Leftovers" className="rise rise-2">
+          <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
+            {app.leftovers.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 p-3">
+                <Snowflake size={16} style={{ color: 'var(--muted)' }} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-[0.875rem] truncate">{item.name}</p>
+                  <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                    {item.portions} portion{item.portions === 1 ? '' : 's'} · best by {shortDate(item.expiry)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => app.useLeftover(item.id)}
+                  className="press rounded-full border px-3 py-1.5 text-[0.75rem] font-extrabold"
+                  style={{ borderColor: 'var(--line)' }}
+                >
+                  Ate one
+                </button>
+              </div>
+            ))}
+          </Card>
+          {covered.length > 0 && (
+            <p className="mt-2 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {covered.length} planned meal{covered.length === 1 ? '' : 's'} already covered — the shopping list skips {covered.length === 1 ? 'it' : 'them'}.
+            </p>
+          )}
+        </Section>
+      )}
+      {/* Secondary planning depth folds away: the week, the generator and
+          what is in the fridge come first. */}
+      <details className="mx-5 rise rise-2">
+        <summary className="flex cursor-pointer list-none items-center justify-between rounded-2xl border px-4 py-3 text-[0.8125rem] font-extrabold" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
+          More planning tools
+          <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>signals · what-if · batch cooking</span>
+        </summary>
+        <div className="-mx-5 mt-4 space-y-6">
+      <PlanningSignals app={app} />
+      <Section title="What-if planning" className="rise rise-2">
+        <PlanSimulator />
+      </Section>
+      {batches.length > 0 && (
+        <Section title="Batch cooking" className="rise rise-2">
+          <Card className="space-y-3">
+            {batches.map(({ recipe, cookOn, covers, portions, batches: n, saves }) => (
+              <div key={recipe.id} className="flex items-start gap-3">
+                <FoodArt recipe={recipe} className="h-11 w-11 shrink-0 rounded-xl" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-[0.875rem]">{recipe.name}</p>
+                  <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                    Cook {n > 1 ? `${n} batches ` : ''}on {dayLabel(cookOn)} — {portions} portions, covering {covers.length} more meal{covers.length === 1 ? '' : 's'}.
+                  </p>
+                </div>
+                <Pill tone="good">saves ~{saves} min</Pill>
+              </div>
+            ))}
+          </Card>
+        </Section>
+      )}
+        </div>
+      </details>
       <Sheet open={!!picking} onClose={() => setPicking(null)} title="Plan a meal">
         {picking && (picking.guard
           ? <TonightSlotGuard existing={picking.guard} item={picking.query} onReplace={() => setPicking({ ...picking, guard: null })} onKeep={() => setPicking(null)} />

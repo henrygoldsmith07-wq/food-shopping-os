@@ -195,7 +195,12 @@ describe('the register of what it will not pretend to do', () => {
 describe('reading a receipt', () => {
   // A new install has no optional tools on, which is the state these flows
   // are about: the Shop tab offers no receipt reader until one is switched on.
-  beforeEach(() => localStorage.clear());
+  // The shopping session lives in sessionStorage; clear it too, so a shop left
+  // running by one test does not open the next in shopping mode.
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
   afterEach(cleanup);
 
   // Receipt capture is an optional tool and new users start with none enabled,

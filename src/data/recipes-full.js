@@ -9,7 +9,7 @@
  * registration wins, so ids stay unique.
  */
 
-import { registerRecipes } from './recipes.js';
+import { registerRecipes, registerWithdrawnRecipes } from './recipes.js';
 
 import { RECIPES_DOUBLE } from './recipes-double.js';
 import { MASTER_RECIPE_EXPANSION } from './master-recipe-expansion.js';
@@ -25,5 +25,8 @@ const SHELVES = [
   MORE_RECIPES_THREE,
 ];
 
+const known = (recipe) => recipe.estimateConfidence !== 'unknown';
+
 /** The dishes this module adds to the book. Loading is a side effect of import. */
-export const FULL_RECIPES = SHELVES.flatMap((shelf) => registerRecipes(shelf));
+export const FULL_RECIPES = SHELVES.flatMap((shelf) => registerRecipes(shelf.filter(known)));
+registerWithdrawnRecipes(SHELVES.flatMap((shelf) => shelf.filter((recipe) => !known(recipe))));

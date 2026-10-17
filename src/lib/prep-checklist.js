@@ -3,6 +3,7 @@
  * Pure: no I/O.
  */
 import { planDishes, planEntries } from './mealplan.js';
+import { shortDate } from './utils.js';
 
 /**
  * Build actionable prep steps for a date range.
@@ -45,7 +46,7 @@ export function prepChecklist(plan = {}, dates = [], { shop = true } = {}) {
       id: `cook-${recipe.id}-${date}-${slot}`,
       kind: 'cook',
       label: `Cook ${recipe.name}`,
-      detail: `${date} · ${slot} · ${recipe.time} min`,
+      detail: `${shortDate(date)} · ${slot} · ${recipe.time} min`,
     });
   });
 

@@ -133,11 +133,11 @@ export default function ProfileTab({ openGuidance }) {
               <p className="font-extrabold text-[0.9375rem] truncate">
                 {app.members.length
                   ? `${app.members.length} ${app.members.length === 1 ? 'person' : 'people'} · ${app.portions} portions a meal`
-                  : 'Just you'}
+                  : app.portions > 1 ? `Cooking for ${app.portions}` : 'Just you'}
               </p>
               <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
                 {app.planDiets.length
-                  ? `Plans avoid ${app.planDiets.join(', ')}`
+                  ? `Plans follow ${app.planDiets.join(', ')}`
                   : 'Profiles, permissions, shared lists and chores'}
               </p>
             </div>
