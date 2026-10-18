@@ -50,9 +50,10 @@ const containerFor = (name) =>
  */
 export function shoppableQty(qty, name = '') {
   const text = String(qty || '').trim();
-  const match = text.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+  const match = text.match(/^(\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:[.,]\d+)?)\s*(.*)$/);
   if (!match) return text;
-  const amount = Number(match[1].replace(',', '.'));
+  // "1,500" is fifteen hundred; "1,5" is a European one and a half.
+  const amount = Number(/^\d{1,3}(,\d{3})+$/.test(match[1]) ? match[1].replace(/,/g, '') : match[1].replace(',', '.'));
   const unit = match[2].trim();
   if (!Number.isFinite(amount) || amount <= 0) return text;
 

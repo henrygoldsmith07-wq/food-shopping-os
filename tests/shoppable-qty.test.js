@@ -72,3 +72,10 @@ describe('every plan-derived list buys shoppable amounts', () => {
     expect(rows['Firm tofu']).toMatchObject({ qty: '280 g' });
   });
 });
+
+import { shoppableQty as shoppableQtyThousands } from '../src/lib/shoppable-qty.js';
+import { it as itT, expect as expectT } from 'vitest';
+itT('reads a thousands comma as thousands, not decimals', () => {
+  expectT(shoppableQtyThousands('1,500 ml', 'stock')).toBe('1,500 ml');
+  expectT(shoppableQtyThousands('1,5 kg', 'flour')).toBe('1,5 kg');
+});
