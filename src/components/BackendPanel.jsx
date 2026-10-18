@@ -5,6 +5,7 @@ import {
 import {
   CheckCircle2, CircleAlert, Cloud, CloudOff, LogIn, LogOut,
 } from 'lucide-react';
+import { SignInOptions } from './AccountSignIn.jsx';
 import { useApp } from '../lib/store.jsx';
 import { selectCloudHousehold, selectedCloudHouseholdId } from '../lib/cloud.js';
 import { Card, Meter, Section } from './ui.jsx';
@@ -136,6 +137,7 @@ function BackendPanelContent({ backend }) {
                 <span className="inline-flex items-center gap-2"><LogIn size={15} /> Sign in for this preview</span>
               </button>
             )}
+            {backend.providers?.password && <SignInOptions providers={{ password: true }} />}
           </div>
         )}
 
