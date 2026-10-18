@@ -53,7 +53,7 @@ export const actionEmail = ({ heading, body, action, url, footer }) => ({
 <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:24px">
 <p style="font-weight:800;letter-spacing:.12em;font-size:12px;margin:0 0 12px">FORQ</p>
 <h1 style="font-size:20px;margin:0 0 12px">${escape(heading)}</h1>
-<p style="font-size:15px;line-height:1.5;margin:0 0 20px">${escape(body)}</p>
+<p style="font-size:15px;line-height:1.5;margin:0 0 20px;white-space:pre-line">${escape(body)}</p>
 <p style="margin:0 0 20px"><a href="${escape(url)}" style="display:inline-block;background:#131313;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:12px">${escape(action)}</a></p>
 <p style="font-size:12px;color:#666;margin:0">${escape(footer)}</p>
 </div></body></html>`,

@@ -64,7 +64,7 @@ const householdSetKey = (name, householdId) => `${prefix}:household-index:${name
 /* Non-unique lookups worth an index of their own: a set of _ids per value.
    (householdId on household-scoped collections keeps its original key.) */
 const GROUP_FIELDS = {
-  memberships: ['userId'],
+  memberships: ['userId', 'reminderDigest'],
   accounts: ['userId'],
   households: ['ownerId'],
 };
