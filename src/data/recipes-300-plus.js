@@ -1,11 +1,11 @@
 import { compose, } from './recipe-gen.js';
 import { PROTEINS, BASES, VEG, SAUCES, BREAKFAST_BASES, FRUITS, TOPPINGS, EXTRAS } from './recipe-parts.js';
+import { breakfastCombo, dinnerCombo } from './recipe-combos.js';
 
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-const title = (text) => text.replace(/\b\w/g, (c) => c.toUpperCase());
 const veganSafe = (parts) => parts.filter(Boolean).every((part) => !part.tags.some((tag) => ['dairy', 'egg', 'meat', 'fish', 'seafood'].includes(tag)));
 const entries = [];
-const add = (id, name, emoji, meal, cuisine, tags, parts, time = 25, servings = 2) => {
+const add = (id, name, emoji, meal, cuisine, tags, parts, time = 25, servings = 2, steps = null) => {
   const nutrition = compose(parts, servings);
   entries.push({
     id: `generated-${id}`, name, emoji, meal, cuisine,
@@ -14,7 +14,7 @@ const add = (id, name, emoji, meal, cuisine, tags, parts, time = 25, servings = 
     healthScore: Math.max(45, Math.min(98, 70 + (nutrition.fibre * 2) + (nutrition.protein > 25 ? 12 : 0))),
     proteinScore: Math.max(20, Math.min(99, Math.round(nutrition.protein * 2.5))),
     envScore: tags.includes('vegan') ? 94 : tags.includes('vegetarian') ? 82 : 65,
-    steps: [
+    steps: steps || [
       { text: `Prepare the ${name.toLowerCase()} ingredients.` },
       { text: 'Cook until tender, fragrant and cooked through.', timerMins: time },
       { text: 'Season to taste, portion and serve.' },
@@ -44,7 +44,9 @@ for (let i = 0; i < 192; i += 1) {
   if (i % 4 === 0) tagSet.push('meal-prep', 'reheatable');
   if (i % 7 === 0) tagSet.push('freezer');
   if (i % 5 === 0) tagSet.push('high-protein');
-  add(`${proteinKey}-${baseKey}-${vegKey}-${sauceKey}-${i}`, `${title(sauce.name)} ${protein.name} with ${base.name}`, emojis[i % emojis.length], 'dinner', cuisine, tagSet, [protein, base, veg, sauce, EXTRAS.garlic].filter(Boolean), 18 + (i % 4) * 8, 2);
+  const combo = dinnerCombo({ protein, base, veg, sauce });
+  if (!combo) continue;
+  add(`${proteinKey}-${baseKey}-${vegKey}-${sauceKey}-${i}`, combo.name, emojis[i % emojis.length], 'dinner', combo.cuisine, tagSet, [protein, base, veg, sauce, EXTRAS.garlic].filter(Boolean), combo.time, 2, combo.steps);
 }
 
 for (let i = 0; i < 120; i += 1) {
@@ -59,7 +61,9 @@ for (let i = 0; i < 120; i += 1) {
   const tags = ['breakfast', 'quick', 'meal-prep'];
   if (topping.tags.includes('dairy')) tags.push('high-protein');
   if (veganSafe([base, fruit, topping, EXTRAS.cinnamon]) && !topping.tags.includes('honey')) tags.push('vegan', 'vegetarian');
-  add(id, `${title(base.name)} with ${fruit.name} and ${topping.name}`, ['🥣', '🥞', '🍓', '🍌'][i % 4], 'breakfast', i % 2 ? 'British' : 'American', tags, [base, fruit, topping, EXTRAS.cinnamon].filter(Boolean), 5 + (i % 3) * 5, 1);
+  const combo = breakfastCombo({ base, fruit, topping });
+  if (!combo) continue;
+  add(id, combo.name, ['🥣', '🥞', '🍓', '🍌'][i % 4], 'breakfast', i % 2 ? 'British' : 'American', tags, [base, fruit, topping, EXTRAS.cinnamon].filter(Boolean), combo.time, 1, combo.steps);
 }
 
 export const RECIPES_300_PLUS = entries.filter((recipe, index, all) => all.findIndex((other) => other.id === recipe.id) === index);

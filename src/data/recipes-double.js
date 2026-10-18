@@ -1,11 +1,12 @@
 import { compose } from './recipe-gen.js';
 import { PROTEINS, BASES, VEG, SAUCES, BREAKFAST_BASES, FRUITS, TOPPINGS, EXTRAS } from './recipe-parts.js';
+import { breakfastCombo, dinnerCombo } from './recipe-combos.js';
 
 const entries = [];
 const safe = (parts) => parts.filter(Boolean);
 const slug = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 const vegan = (parts) => safe(parts).every((part) => !part.tags.some((tag) => ['dairy', 'egg', 'meat', 'fish', 'seafood', 'honey'].includes(tag)));
-const add = (id, name, emoji, meal, cuisine, tags, parts, time, servings) => {
+const add = (id, name, emoji, meal, cuisine, tags, parts, time, servings, steps = null) => {
   const nutrition = compose(safe(parts), servings);
   entries.push({
     id: `generated-double-${id}`, name, emoji, meal, cuisine, tags: [...new Set(tags)],
@@ -13,7 +14,7 @@ const add = (id, name, emoji, meal, cuisine, tags, parts, time, servings) => {
     healthScore: Math.max(45, Math.min(98, Math.round(68 + nutrition.fibre * 2 + (nutrition.protein >= 25 ? 12 : 0)))),
     proteinScore: Math.max(20, Math.min(99, Math.round(nutrition.protein * 2.4))),
     envScore: tags.includes('vegan') ? 94 : tags.includes('vegetarian') ? 82 : 63,
-    steps: [{ text: `Prepare the ${name.toLowerCase()} ingredients.` }, { text: 'Cook until tender and fragrant.', timerMins: time }, { text: 'Season, portion and serve.' }],
+    steps: steps || [{ text: `Prepare the ${name.toLowerCase()} ingredients.` }, { text: 'Cook until tender and fragrant.', timerMins: time }, { text: 'Season, portion and serve.' }],
   });
 };
 const proteins = Object.values(PROTEINS);
@@ -37,7 +38,9 @@ for (let i = 0; i < 720; i += 1) {
   if (i % 5 === 0) tags.push('high-protein');
   if (i % 4 === 0) tags.push('one-pot');
   if (i % 6 === 0) tags.push('family');
-  add(`${i}-${slug(protein.name)}-${slug(base.name)}-${slug(vegetable.name)}-${slug(sauce.name)}`, `${sauce.name} ${protein.name} with ${base.name} and ${vegetable.name}`, emojis[i % emojis.length], 'dinner', cuisines[i % cuisines.length], tags, parts, 18 + (i % 6) * 6, 2);
+  const combo = dinnerCombo({ protein, base, veg: vegetable, sauce }, { withVeg: true });
+  if (!combo) continue;
+  add(`${i}-${slug(protein.name)}-${slug(base.name)}-${slug(vegetable.name)}-${slug(sauce.name)}`, combo.name, emojis[i % emojis.length], 'dinner', combo.cuisine, tags, parts, combo.time, 2, combo.steps);
 }
 
 const breakfastBases = Object.values(BREAKFAST_BASES);
@@ -52,7 +55,9 @@ for (let i = 0; i < 360; i += 1) {
   if (vegan(parts)) tags.push('vegan', 'vegetarian');
   else if (topping.tags.includes('dairy') || topping.tags.includes('supplement')) tags.push('high-protein');
   if (i % 4 === 0) tags.push('kid-friendly');
-  add(`${i}-${slug(base.name)}-${slug(fruit.name)}-${slug(topping.name)}`, `${base.name} with ${fruit.name} and ${topping.name}`, ['🥣', '🥞', '🍓', '🍌', '🍳', '🥯'][i % 6], 'breakfast', cuisines[i % cuisines.length], tags, parts, 5 + (i % 4) * 5, 1);
+  const combo = breakfastCombo({ base, fruit, topping });
+  if (!combo) continue;
+  add(`${i}-${slug(base.name)}-${slug(fruit.name)}-${slug(topping.name)}`, combo.name, ['🥣', '🥞', '🍓', '🍌', '🍳', '🥯'][i % 6], 'breakfast', i % 2 ? 'British' : 'American', tags, parts, combo.time, 1, combo.steps);
 }
 
 export const RECIPES_DOUBLE = entries.filter((recipe, index, all) => all.findIndex((other) => other.id === recipe.id) === index);
