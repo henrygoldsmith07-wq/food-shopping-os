@@ -89,7 +89,7 @@ export function SignInOptions({ providers = {}, callbackUrl = '/' }) {
         </div>
       )}
       {providers.password && mode && (
-        <form onSubmit={submit} className="grid gap-2 rounded-2xl border p-3" style={{ borderColor: 'var(--line)' }}>
+        <form onSubmit={submit} aria-describedby={error ? 'account-signin-error' : undefined} className="grid gap-2 rounded-2xl border p-3" style={{ borderColor: 'var(--line)' }}>
           <p className="text-[0.8125rem] font-extrabold">{mode === 'create' ? 'Create an account' : 'Sign in with email'}</p>
           <label className="block text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
             Email
@@ -119,7 +119,8 @@ export function SignInOptions({ providers = {}, callbackUrl = '/' }) {
           </button>
         </form>
       )}
-      {error && <p role="alert" className="text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
+      {/* Tied to the form rather than a live region: the app keeps a fixed set of announcers. */}
+      {error && <p id="account-signin-error" className="text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
     </div>
   );
 }

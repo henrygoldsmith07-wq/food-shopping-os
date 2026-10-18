@@ -191,7 +191,9 @@ describe('the weekly planner', () => {
 
   it('imports busy dinner times before generating a plan', async () => {
     const day = todayStamp();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    // A fresh Response per call: a body can be read once, and onboarding also
+    // fetches (the backend status) before the calendar import does.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       events: [{
         id: 'out',
         title: 'Out',
