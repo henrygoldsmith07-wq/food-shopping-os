@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody } from '../../../../server/api.js';
 import { databaseConfigured, getDatabase } from '../../../../server/database.js';
+import { appOrigin, emailConfigured } from '../../../../server/email.js';
+import { sendVerificationEmail } from '../../../../server/account-email.js';
 import {
   hashPassword, MIN_PASSWORD, normaliseEmail, passwordLoginEnabled, validEmail, validPassword,
 } from '../../../../server/passwords.js';
@@ -37,6 +39,17 @@ export async function POST(request) {
     } catch (error) {
       if (error?.code === 11000) throw new ApiError(409, 'An account with this email already exists — sign in instead.');
       throw error;
+    }
+    // With email set up, the address has to be confirmed before the password
+    // signs in; the account exists either way, so a failed send can be retried.
+    if (emailConfigured()) {
+      try {
+        await sendVerificationEmail(email, appOrigin(request));
+      } catch (error) {
+        console.error('Forq verification email failed', error.message);
+        return NextResponse.json({ ok: true, verify: true, sent: false }, { status: 201 });
+      }
+      return NextResponse.json({ ok: true, verify: true, sent: true }, { status: 201 });
     }
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {

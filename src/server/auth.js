@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth/next';
 import { ForqAdapter } from './auth-adapter.js';
 import { databaseConfigured, getDatabase } from './database.js';
 import { normaliseEmail, passwordLoginEnabled, verifyPassword } from './passwords.js';
+import { emailConfigured } from './email.js';
 
 const AppleProvider = AppleProviderPackage.default || AppleProviderPackage;
 const GoogleProvider = GoogleProviderPackage.default || GoogleProviderPackage;
@@ -69,6 +70,9 @@ if (databaseConfigured && passwordLoginEnabled()) {
       // A parked account (see releaseUnverifiedEmail) still signs in with its password.
       const user = await users.findOne({ email }) || await users.findOne({ email: parkedEmail(email) });
       if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) return null;
+      // Where email is set up, an address must be confirmed before its password
+      // signs in. Auth.js hands this message back to the form as the error.
+      if (emailConfigured() && !user.emailVerified) throw new Error('unverified');
       return { id: user._id, name: user.name || email, email };
     },
   }));
@@ -86,13 +90,24 @@ const parkedEmail = (email) => `parked:${email}`;
  * someone who registered it first, and that person never gains access to the
  * owner's Google account (nothing is linked).
  */
-const releaseUnverifiedEmail = async (email) => {
+const releaseUnverifiedEmail = async (email, account) => {
   const address = normaliseEmail(email);
   if (!address || !databaseConfigured) return;
-  const users = (await getDatabase()).collection('users');
+  const db = await getDatabase();
+  const users = db.collection('users');
   const holder = await users.findOne({ email: address });
-  if (!holder?.passwordHash || holder.emailVerified) return;
-  await users.updateOne({ _id: holder._id }, { $set: { email: parkedEmail(address), parkedAt: new Date() } });
+  if (!holder?.passwordHash) return;
+  if (!holder.emailVerified) {
+    await users.updateOne({ _id: holder._id }, { $set: { email: parkedEmail(address), parkedAt: new Date() } });
+    return;
+  }
+  // Both sides have now proved the address (the confirmation link, and
+  // Google), so the Google sign-in joins the same account instead of being
+  // refused as an unlinked one.
+  const accounts = db.collection('accounts');
+  if (account?.providerAccountId && !(await accounts.findOne({ provider: account.provider, providerAccountId: account.providerAccountId }))) {
+    await accounts.insertOne({ ...account, userId: holder._id });
+  }
 };
 
 // A preview-only sign-in for deployments without OAuth credentials. It is
@@ -118,7 +133,7 @@ export const authOptions = {
   callbacks: {
     async signIn({ account, profile }) {
       if (account?.provider === 'google' && profile?.email_verified && profile.email) {
-        await releaseUnverifiedEmail(profile.email);
+        await releaseUnverifiedEmail(profile.email, account);
       }
       return true;
     },

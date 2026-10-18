@@ -8,12 +8,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const users = vi.hoisted(() => new Map());
+const accounts = vi.hoisted(() => []);
 
 vi.mock('../src/server/database.js', () => ({
   databaseConfigured: true,
   getDatabase: async () => ({
     incrementWindow: async () => 1,
-    collection: () => ({
+    collection: (name) => (name === 'accounts' ? {
+      findOne: async ({ provider, providerAccountId }) => accounts.find((a) => a.provider === provider && a.providerAccountId === providerAccountId) || null,
+      insertOne: async (doc) => { accounts.push(doc); },
+    } : {
       findOne: async ({ email, _id }) => [...users.values()].find((u) => (email ? u.email === email : u._id === _id)) || null,
       updateOne: async ({ _id }, { $set }) => { Object.assign(users.get(_id), $set); },
     }),
@@ -23,13 +27,13 @@ vi.mock('../src/server/database.js', () => ({
 const { authOptions } = await import('../src/server/auth.js');
 const { hashPassword } = await import('../src/server/passwords.js');
 const signIn = (email, emailVerified = true) => authOptions.callbacks.signIn({
-  account: { provider: 'google' },
+  account: { provider: 'google', providerAccountId: `g-${email}`, type: 'oauth' },
   profile: { email, email_verified: emailVerified },
 });
 const passwordProvider = () => authOptions.providers.find((p) => (p.options?.id || p.id) === 'password');
 
 describe('a verified Google sign-in claims its address', () => {
-  beforeEach(() => users.clear());
+  beforeEach(() => { users.clear(); accounts.length = 0; });
 
   it('parks an unverified password account that holds the address', async () => {
     users.set('u1', { _id: 'u1', email: 'owner@gmail.com', passwordHash: await hashPassword('squatter pass') });
@@ -45,6 +49,13 @@ describe('a verified Google sign-in claims its address', () => {
     users.set('u3', { _id: 'u3', email: 'x@example.com', passwordHash: 'scrypt$aa$bb' });
     await signIn('x@example.com', false);
     expect(users.get('u3').email).toBe('x@example.com');
+  });
+
+  it('joins Google to a password account whose address was confirmed', async () => {
+    users.set('u5', { _id: 'u5', email: 'v@gmail.com', passwordHash: 'scrypt$aa$bb', emailVerified: new Date() });
+    await signIn('v@gmail.com');
+    expect(users.get('u5').email).toBe('v@gmail.com');
+    expect(accounts).toEqual([expect.objectContaining({ provider: 'google', providerAccountId: 'g-v@gmail.com', userId: 'u5' })]);
   });
 
   it('still lets the parked account sign in with its password', async () => {
