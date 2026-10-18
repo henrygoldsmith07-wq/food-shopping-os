@@ -61,12 +61,35 @@ if (databaseConfigured && passwordLoginEnabled()) {
       const db = await getDatabase();
       const window = Math.floor(Date.now() / 900000);
       if (await db.incrementWindow(`signin:${email}:${window}`, 1800000) > 10) return null;
-      const user = await db.collection('users').findOne({ email });
+      const users = db.collection('users');
+      // A parked account (see releaseUnverifiedEmail) still signs in with its password.
+      const user = await users.findOne({ email }) || await users.findOne({ email: parkedEmail(email) });
       if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) return null;
       return { id: user._id, name: user.name || email, email };
     },
   }));
 }
+
+/** Where an unverified password account's address goes once its real owner proves it. */
+const parkedEmail = (email) => `parked:${email}`;
+
+/**
+ * Google has proved this address belongs to the person signing in. An email
+ * and password account on the same address never proved anything — anyone
+ * can type any address at sign-up — so it gives the address up: it keeps its
+ * password and its data under a parked address, and the Google sign-in gets
+ * an account of its own. The address's owner can never be locked out by
+ * someone who registered it first, and that person never gains access to the
+ * owner's Google account (nothing is linked).
+ */
+const releaseUnverifiedEmail = async (email) => {
+  const address = normaliseEmail(email);
+  if (!address || !databaseConfigured) return;
+  const users = (await getDatabase()).collection('users');
+  const holder = await users.findOne({ email: address });
+  if (!holder?.passwordHash || holder.emailVerified) return;
+  await users.updateOne({ _id: holder._id }, { $set: { email: parkedEmail(address), parkedAt: new Date() } });
+};
 
 // A preview-only sign-in for deployments without OAuth credentials. It is
 // opt-in per environment (AUTH_DEV_LOGIN) and must never be set in production:
@@ -89,6 +112,12 @@ export const authOptions = {
   providers,
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   callbacks: {
+    async signIn({ account, profile }) {
+      if (account?.provider === 'google' && profile?.email_verified && profile.email) {
+        await releaseUnverifiedEmail(profile.email);
+      }
+      return true;
+    },
     jwt({ token, user }) {
       if (user?.id) token.userId = user.id;
       return token;

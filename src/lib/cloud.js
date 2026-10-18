@@ -175,6 +175,25 @@ export const listConflictStatus = (applied, mergedMessage) => (applied.conflicts
   }
   : { kind: 'ready', message: mergedMessage });
 
+/**
+ * What a finished push means for the sync loop. A 409 that carried the
+ * household copy is folded in by `adopt`, which moves this device onto that
+ * version — so syncing carries on, fights or not (they wait for a pick; edits
+ * keep flowing). Only a bare conflict or an error stops it until the next
+ * pull. Stopping on every 409 left later edits on the device for good.
+ *
+ * @param {{ kind: string, remoteState?: any, remoteVersion?: number }} status
+ * @param {(remoteState: any, remoteVersion: number) => ({ conflicts: number } | null)} adopt
+ */
+export const settlePush = (status, adopt) => {
+  if (status.kind !== 'conflict' || !status.remoteState) return { status, keepSyncing: status.kind === 'ready' };
+  const applied = adopt(status.remoteState, status.remoteVersion);
+  return {
+    status: applied ? listConflictStatus(applied, 'Household changes merged with yours.') : { kind: 'ready', message: 'All changes synced.' },
+    keepSyncing: true,
+  };
+};
+
 /** Wire the pure fold into a live store: latest/meta/push guards are refs. */
 export const makeCloudStateAdopter = ({ latest, cloudMeta, skipCloudPush, setState }) => (remoteState, remoteVersion) => {
   const applied = adoptRemoteSharedState(latest.current, remoteState, readBase());

@@ -9,6 +9,9 @@ import { classifyBatch } from '../../../../server/classifier-adapter.js';
 import { deterministicProductCategory } from '../../../../server/classify-deterministic.js';
 import { aisleForProductLabel } from '../../../../server/classify-taxonomies.js';
 
+// A downscaled photo arrives as a data URL; the schema caps the image at 4 MB.
+const PHOTO_BODY_BYTES = 4_200_000;
+
 /**
  * "What's in my kitchen", read by a model.
  *
@@ -31,7 +34,7 @@ export async function POST(request) {
     if (!isOpenRouterConfigured()) {
       throw new ApiError(503, 'Reading a kitchen photo needs an AI provider configured. Type or paste the list instead.');
     }
-    const input = kitchenInventorySchema.parse(await readJsonBody(request));
+    const input = kitchenInventorySchema.parse(await readJsonBody(request, PHOTO_BODY_BYTES));
 
     let result;
     try {

@@ -175,3 +175,16 @@ describe('rate limiting', () => {
     expect(store.scans).toEqual([]);
   });
 });
+
+describe('cursor projection', () => {
+  it('supports the driver-style .project() the audit route uses', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({ _id: 'h1', name: 'One' });
+    const events = db.collection('auditEvents');
+    await events.insertOne({ householdId: 'h1', action: 'sync', secret: 'x', createdAt: new Date(1) });
+    const rows = await events.find({ householdId: 'h1' }).sort({ createdAt: -1 }).limit(100).project({ action: 1 }).toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].action).toBe('sync');
+    expect(rows[0].secret).toBeUndefined();
+  });
+});

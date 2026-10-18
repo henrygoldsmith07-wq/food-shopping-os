@@ -168,6 +168,12 @@ export class RedisCursor {
     return this;
   }
 
+  /** Mongo's cursor.project(), which routes written against the driver call. */
+  project(spec) {
+    this.projection = spec;
+    return this;
+  }
+
   async toArray() {
     let documents = (await this.load()).filter((document) => matches(document, this.filter));
     if (this.sortSpec) {
