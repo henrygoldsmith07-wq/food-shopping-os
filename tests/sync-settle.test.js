@@ -36,3 +36,16 @@ describe('what a finished push means for the sync loop', () => {
     expect(adopt).not.toHaveBeenCalled();
   });
 });
+
+describe('switching household', () => {
+  it('forgets the previous household’s merge base', async () => {
+    const { selectCloudHousehold } = await import('../src/lib/cloud.js');
+    localStorage.setItem('forq-cloud-meta-v1', JSON.stringify({ householdId: 'old', version: 4 }));
+    localStorage.setItem('forq-cloud-base-v2', JSON.stringify({ version: 4, state: {} }));
+    selectCloudHousehold('old');
+    expect(localStorage.getItem('forq-cloud-base-v2')).not.toBeNull();
+    selectCloudHousehold('new');
+    expect(localStorage.getItem('forq-cloud-base-v2')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('forq-cloud-meta-v1'))).toMatchObject({ householdId: 'new', version: 0 });
+  });
+});

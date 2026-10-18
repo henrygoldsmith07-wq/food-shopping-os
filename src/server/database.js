@@ -61,7 +61,22 @@ const uniqueKey = (name, fields, document) => {
   return `${prefix}:unique:${name}:${fields.join(',')}:${digest}`;
 };
 const householdSetKey = (name, householdId) => `${prefix}:household-index:${name}:${householdId}`;
-const indexReadyKey = (name) => `${prefix}:index-ready:${name}`;
+/* Non-unique lookups worth an index of their own: a set of _ids per value.
+   (householdId on household-scoped collections keeps its original key.) */
+const GROUP_FIELDS = {
+  memberships: ['userId'],
+  accounts: ['userId'],
+  households: ['ownerId'],
+};
+const groupFieldsOf = (name) => [
+  ...(HOUSEHOLD_SCOPED_COLLECTIONS.has(name) ? ['householdId'] : []),
+  ...(GROUP_FIELDS[name] || []),
+];
+const groupSetKey = (name, field, value) => (field === 'householdId'
+  ? householdSetKey(name, value)
+  : `${prefix}:group-index:${name}:${field}:${value}`);
+// v2: group indexes joined the household ones, so every collection is re-indexed once.
+const indexReadyKey = (name) => `${prefix}:index-ready:v2:${name}`;
 const indexedCollections = new Set();
 
 /** A filter value that can be looked up by equality (not an operator object). */
@@ -118,8 +133,8 @@ class RedisCollection {
     for (const fields of this.uniqueSets(document)) {
       multi.set(uniqueKey(this.name, fields, document), document._id, options);
     }
-    if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(document.householdId)) {
-      multi.sadd(householdSetKey(this.name, indexValue(document.householdId)), document._id);
+    for (const field of groupFieldsOf(this.name)) {
+      if (plainValue(document[field])) multi.sadd(groupSetKey(this.name, field, indexValue(document[field])), document._id);
     }
   }
 
@@ -159,6 +174,7 @@ class RedisCollection {
       const document = deserialise(await redis.get(documentKey(this.name, String(filter._id))));
       return document ? [document] : [];
     }
+    if (Array.isArray(filter._id?.$in)) return this.loadIds(filter._id.$in.map(String));
     if (!(await this.ensureIndexed())) return this.loadAll();
     const covering = (UNIQUE_FIELDS[this.name] || [])
       .find((fields) => fields.every((field) => plainValue(filter[field])));
@@ -171,8 +187,9 @@ class RedisCollection {
       }
       return this.repairFromScan();
     }
-    if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(filter.householdId)) {
-      const setKey = householdSetKey(this.name, indexValue(filter.householdId));
+    const grouped = groupFieldsOf(this.name).find((field) => plainValue(filter[field]));
+    if (grouped) {
+      const setKey = groupSetKey(this.name, grouped, indexValue(filter[grouped]));
       const ids = await redis.smembers(setKey);
       const documents = await this.loadIds(ids);
       if (documents.length < ids.length) {
@@ -246,8 +263,8 @@ class RedisCollection {
     for (const document of documents) {
       multi.del(documentKey(this.name, document._id));
       multi.srem(collectionKey(this.name), document._id);
-      if (HOUSEHOLD_SCOPED_COLLECTIONS.has(this.name) && plainValue(document.householdId)) {
-        multi.srem(householdSetKey(this.name, indexValue(document.householdId)), document._id);
+      for (const field of groupFieldsOf(this.name)) {
+        if (plainValue(document[field])) multi.srem(groupSetKey(this.name, field, indexValue(document[field])), document._id);
       }
       // Unique entries are left to the read-time check: deleting one here
       // could race a new document that has just claimed the same value.

@@ -4,8 +4,16 @@ import { getDatabase } from './database.js';
 
 export async function ensurePersonalHousehold(user) {
   const db = await getDatabase();
+  // Almost every call finds both already there. Reading first keeps the
+  // common path lock-free: the upserts below take a collection-wide write
+  // lock, and taking it on every request made concurrent users contend.
+  const existing = await db.collection('households').findOne({ personalOwnerId: user.id });
+  if (existing && (existing.deletingAt
+    || await db.collection('memberships').findOne({ householdId: existing._id, userId: user.id }))) {
+    return existing;
+  }
   const now = new Date();
-  const household = await db.collection('households').findOneAndUpdate(
+  const household = existing || await db.collection('households').findOneAndUpdate(
     { personalOwnerId: user.id },
     {
       $setOnInsert: {

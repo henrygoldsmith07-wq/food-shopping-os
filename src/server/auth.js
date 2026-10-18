@@ -54,12 +54,16 @@ if (databaseConfigured && passwordLoginEnabled()) {
     id: 'password',
     name: 'Email',
     credentials: { email: { label: 'Email' }, password: { label: 'Password', type: 'password' } },
-    async authorize(credentials) {
+    async authorize(credentials, req) {
       const email = normaliseEmail(credentials?.email);
       const password = String(credentials?.password || '');
       if (!email || !password) return null;
       const db = await getDatabase();
       const window = Math.floor(Date.now() / 900000);
+      // Per address (guessing one password) and per client (one password tried across many addresses).
+      const forwarded = req?.headers?.['x-forwarded-for'] || req?.headers?.get?.('x-forwarded-for') || '';
+      const client = String(forwarded).split(',')[0].trim() || 'unknown';
+      if (await db.incrementWindow(`signin-client:${client}:${window}`, 1800000) > 50) return null;
       if (await db.incrementWindow(`signin:${email}:${window}`, 1800000) > 10) return null;
       const users = db.collection('users');
       // A parked account (see releaseUnverifiedEmail) still signs in with its password.

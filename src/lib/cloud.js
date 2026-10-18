@@ -267,9 +267,23 @@ export function hasQueuedCloud() {
   return Boolean(readQueue());
 }
 
+/**
+ * Point this device at another household. The saved base is what this device
+ * last agreed with the *previous* household, so it goes too: merging against
+ * it would treat that household's rows as this one's history.
+ */
 export function selectCloudHousehold(householdId) {
+  if (String(readMeta().householdId || '') !== String(householdId || '')) forgetBaseState();
   saveMeta({ ...readMeta(), householdId, version: 0 });
 }
+
+const forgetBaseState = () => {
+  try {
+    localStorage.removeItem(BASE_FP_KEY);
+  } catch {
+    // Nothing stored is the same outcome as a cleared base.
+  }
+};
 
 export async function pullCloud(meta) {
   try {
@@ -441,7 +455,7 @@ export const acceptHouseholdInvitation = async (token) => {
     headers: selectedHeaders(),
     body: JSON.stringify({ token }),
   });
-  if (result?.householdId) saveMeta({ ...readMeta(), householdId: result.householdId, version: 0 });
+  if (result?.householdId) selectCloudHousehold(result.householdId);
   return result;
 };
 
