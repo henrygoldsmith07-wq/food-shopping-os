@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addQuantities, compareUnitPrices, convert, formatQuantity, parseQuantity,
-  scaleQuantity, subtractQuantities, sufficientFor, unitPriceOf,
+  pluralUnit, scaleQuantity, singularUnit, subtractQuantities, sufficientFor, unitPriceOf,
 } from '../src/lib/measure.js';
 import { packageSize } from '../src/data/package-sizes.js';
 import { RECIPES } from '../src/data/recipes.js';
@@ -128,6 +128,24 @@ describe('writing a quantity back', () => {
     expect(formatQuantity(parseQuantity('½ lemon'))).toBe('½ lemon');
     expect(formatQuantity(parseQuantity('3 lemons'))).toBe('3 lemons');
     expect(formatQuantity(null)).toBe('');
+  });
+
+  it('writes count plurals the way a person would', () => {
+    expect(formatQuantity(parseQuantity('2 bunches'))).toBe('2 bunches');
+    expect(formatQuantity(parseQuantity('3 boxes'))).toBe('3 boxes');
+    expect(formatQuantity(parseQuantity('2 loaves'))).toBe('2 loaves');
+    expect(formatQuantity(parseQuantity('2 pinches'))).toBe('2 pinches');
+    expect(formatQuantity(parseQuantity('4 tomatoes'))).toBe('4 tomatoes');
+    expect(formatQuantity(parseQuantity('3 potatoes'))).toBe('3 potatoes');
+    expect(formatQuantity(parseQuantity('3 cloves'))).toBe('3 cloves');
+    expect(formatQuantity(parseQuantity('1 bunch'))).toBe('1 bunch');
+    expect(formatQuantity(addQuantities('1 bunch', '1 bunch'))).toBe('2 bunches');
+  });
+
+  it('reads back every plural it writes', () => {
+    for (const unit of ['bunch', 'box', 'loaf', 'pinch', 'dash', 'tomato', 'potato', 'clove', 'head', 'tin']) {
+      expect(singularUnit(pluralUnit(unit))).toBe(unit);
+    }
   });
 });
 
