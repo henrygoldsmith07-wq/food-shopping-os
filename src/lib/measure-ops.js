@@ -11,7 +11,7 @@
  */
 
 import {
-  DENSITIES, DIMENSIONS, parseQuantity, round2, UNICODE_FRACTIONS,
+  DENSITIES, DIMENSIONS, parseQuantity, pluralUnit, round2, UNICODE_FRACTIONS,
 } from './measure-parse.js';
 
 /* ---------- Working with parsed quantities ---------- */
@@ -122,14 +122,14 @@ export const formatQuantity = (parsed) => {
     const small = dim === 'mass' ? 'g' : 'ml';
     if (amount >= 1000) {
       const scaled = round2(amount / 1000);
-      return `${Number.isInteger(scaled) ? scaled : scaled} ${big}`;
+      return `${scaled} ${big}`;
     }
     return `${round2(amount)} ${small}`;
   }
   const glyph = Object.entries(UNICODE_FRACTIONS).find(([, v]) => Math.abs(v - amount) < 0.001);
   const number = glyph ? glyph[0] : String(round2(amount));
   if (!unit || unit === 'unit') return number;
-  const plural = amount === 1 || glyph ? unit : `${unit}${unit.endsWith('s') ? '' : 's'}`;
+  const plural = amount === 1 || glyph ? unit : pluralUnit(unit);
   return `${number} ${plural}`;
 };
 

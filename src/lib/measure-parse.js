@@ -79,6 +79,28 @@ const IRREGULAR_SINGULAR = {
   pinches: 'pinch', sandwiches: 'sandwich', halves: 'half', knives: 'knife',
 };
 
+/** The other way: a singular count noun to the plural a person writes. */
+const IRREGULAR_PLURAL = Object.fromEntries(
+  Object.entries(IRREGULAR_SINGULAR).map(([plural, singular]) => [singular, plural]),
+);
+
+/**
+ * "bunch" → "bunches", "loaf" → "loaves", "tin" → "tins". Used when a
+ * quantity is written back as text, so a merged pantry row reads "2 bunches"
+ * rather than "2 bunchs". `singularUnit` reads every form this returns.
+ */
+export const pluralUnit = (unit) => {
+  const u = String(unit || '');
+  if (!u) return '';
+  const lower = u.toLowerCase();
+  if (IRREGULAR_PLURAL[lower]) return IRREGULAR_PLURAL[lower];
+  if (IRREGULAR_SINGULAR[lower]) return u; // already plural
+  if (lower.endsWith('s')) return u; // "glass"-like or already plural: leave it
+  if (/(ch|sh|x|z)$/.test(lower)) return `${u}es`;
+  if (/[^aeiou]y$/.test(lower)) return `${u.slice(0, -1)}ies`;
+  return `${u}s`;
+};
+
 export const singularUnit = (unit) => {
   const u = String(unit || '').toLowerCase();
   if (!u) return '';
