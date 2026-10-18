@@ -51,10 +51,10 @@ export const actionEmail = ({ heading, body, action, url, footer }) => ({
   text: `${heading}\n\n${body}\n\n${action}: ${url}\n\n${footer}`,
   html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;color:#131313;background:#f4f4f4;padding:24px">
 <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:24px">
-<p style="font-weight:800;letter-spacing:.12em;font-size:12px;margin:0 0 12px">FORQ</p>
-<h1 style="font-size:20px;margin:0 0 12px">${escape(heading)}</h1>
-<p style="font-size:15px;line-height:1.5;margin:0 0 20px;white-space:pre-line">${escape(body)}</p>
+<p style="font-weight:800;letter-spacing:.12em;font-size:.75rem;margin:0 0 12px">FORQ</p>
+<h1 style="font-size:1.25rem;margin:0 0 12px">${escape(heading)}</h1>
+<p style="font-size:.9375rem;line-height:1.5;margin:0 0 20px;white-space:pre-line">${escape(body)}</p>
 <p style="margin:0 0 20px"><a href="${escape(url)}" style="display:inline-block;background:#131313;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:12px">${escape(action)}</a></p>
-<p style="font-size:12px;color:#666;margin:0">${escape(footer)}</p>
+<p style="font-size:.75rem;color:#666;margin:0">${escape(footer)}</p>
 </div></body></html>`,
 });
