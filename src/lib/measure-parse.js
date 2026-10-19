@@ -134,7 +134,7 @@ export const UNICODE_FRACTIONS = {
 };
 
 /** Words that admit the number is not measured. Stripped, but remembered. */
-const HEDGES = /\b(?:about|approx|approximately|roughly|around|circa|some|a\s+few|generous|heaped|heaping|scant|rounded|large|small|big|good)\b/g;
+const HEDGES = /\b(?:about|approx|approximately|roughly|around|circa|some|a\s+few|generous|heaped|heaping|scant|rounded|large|medium|small|big|good)\b/g;
 
 const NUMBER_WORDS = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
@@ -155,7 +155,8 @@ const normalise = (value) => {
     .replace(/^half\s+/, '0.5 ')
     // "two onions" / "one onion": a leading number word, but not "one 400g tin" (already read as one tin).
     .replace(/^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?=[a-z])/, (_, w) => `${NUMBER_WORDS[w]} `)
-    .replace(/\bquarter\s+(?:of\s+)?(?:a|an)\s+/g, '0.25 ');
+    .replace(/\bquarter\s+(?:of\s+)?(?:a|an)\s+/g, '0.25 ')
+    .replace(/^(?:a\s+)?couple\s+of\s+/, '2 ');
   // Unicode fractions → decimals, keeping "1½" and "1 ½" both meaning 1.5.
   for (const [glyph, value_] of Object.entries(UNICODE_FRACTIONS)) {
     text = text.replace(new RegExp(`(\\d)\\s*${glyph}`, 'g'), (_, whole) => `${Number(whole) + value_}`);

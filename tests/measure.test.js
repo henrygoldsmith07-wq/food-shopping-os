@@ -49,6 +49,9 @@ describe('reading a quantity', () => {
     expect(parseQuantity('Three cloves')).toMatchObject({ amount: 3, dim: 'count' });
     expect(parseQuantity('one onion')).toMatchObject({ amount: 1, dim: 'count' });
     expect(parseQuantity('one 400g tin')).toMatchObject({ amount: 400, dim: 'mass' });
+    // Size words and "a couple of" no longer make a quantity unreadable.
+    expect(parseQuantity('3 medium eggs')).toMatchObject({ amount: 3, dim: 'count' });
+    expect(parseQuantity('a couple of carrots')).toMatchObject({ amount: 2, dim: 'count' });
     // Size-first spelling must not silently drop the count.
     expect(parseQuantity('400g x 2')).toMatchObject({ amount: 800, dim: 'mass' });
     expect(parseQuantity('250 ml x 4 cartons')).toMatchObject({ amount: 1000, dim: 'volume' });
