@@ -209,3 +209,11 @@ describe('coverage against the app’s own recipe book', () => {
     }
   });
 });
+
+describe('negative amounts', () => {
+  it('are unreadable rather than silently positive', () => {
+    expect(parseQuantity('-2 g')).toBeNull();
+    expect(parseQuantity('− 3 tbsp')).toBeNull();
+    expect(parseQuantity('2-3 tbsp').range).toEqual({ min: 2, max: 3 });
+  });
+});

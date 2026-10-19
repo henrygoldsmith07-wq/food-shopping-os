@@ -207,6 +207,8 @@ const measurement = (amount, unit, extra = {}) => {
  */
 export const parseQuantity = (value, { ingredient = '' } = {}) => {
   const raw = String(value ?? '').trim();
+  // "-2 g" is not two grams: a negative amount is unreadable, never silently positive.
+  if (/^[-−–]\s*\d/.test(raw)) return null;
   let text = normalise(raw);
   if (!text) return null;
 
