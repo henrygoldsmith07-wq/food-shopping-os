@@ -217,3 +217,13 @@ describe('negative amounts', () => {
     expect(parseQuantity('2-3 tbsp').range).toEqual({ min: 2, max: 3 });
   });
 });
+
+describe('unreadable numeric forms', () => {
+  it('rejects scientific notation instead of reading a fragment', () => {
+    expect(parseQuantity('1e3 g')).toBeNull();
+    expect(parseQuantity('2E2 ml')).toBeNull();
+  });
+  it('still reads ordinary amounts', () => {
+    expect(parseQuantity('1 egg').amount).toBe(1);
+  });
+});
