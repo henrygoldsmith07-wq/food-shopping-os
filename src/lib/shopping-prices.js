@@ -34,8 +34,9 @@ export const cheapestFor = (name, history = []) => {
 };
 
 /** What you last paid for something at one particular shop. */
+const storeKey = (store) => String(store || '').trim().toLowerCase();
 const priceAt = (entry, store) => {
-  const points = entry.points.filter((p) => p.store === store);
+  const points = entry.points.filter((p) => storeKey(p.store) === storeKey(store));
   return points.length ? points[points.length - 1].price : null;
 };
 
@@ -46,7 +47,10 @@ const priceAt = (entry, store) => {
  */
 export const compareStores = (items = [], shops = []) => {
   const history = priceHistoryFromSpending(shops);
-  const stores = [...new Set(shops.map((s) => s.store))];
+  // "Tesco" and "tesco " are one shop; keep the first spelling for display.
+  const seen = new Map();
+  for (const s of shops) if (s.store && !seen.has(storeKey(s.store))) seen.set(storeKey(s.store), s.store);
+  const stores = [...seen.values()];
   return stores
     .map((store) => {
       let total = 0;
