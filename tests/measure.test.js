@@ -44,6 +44,9 @@ describe('reading a quantity', () => {
     expect(parseQuantity('3 x 200g')).toMatchObject({ amount: 600, dim: 'mass' });
     expect(parseQuantity('6 × 125 g')).toMatchObject({ amount: 750, dim: 'mass' });
     expect(parseQuantity('2 tins (400g)')).toMatchObject({ amount: 800, dim: 'mass' });
+    // Size-first spelling must not silently drop the count.
+    expect(parseQuantity('400g x 2')).toMatchObject({ amount: 800, dim: 'mass' });
+    expect(parseQuantity('250 ml x 4 cartons')).toMatchObject({ amount: 1000, dim: 'volume' });
   });
 
   it('marks a hedge or a range as approximate instead of pretending', () => {

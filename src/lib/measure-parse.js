@@ -263,6 +263,17 @@ export const parseQuantity = (value, { ingredient = '' } = {}) => {
     if (parsed) return finish(parsed);
   }
 
+  // "400 g x 2" — the same multipack written size-first; the count must not be dropped.
+  const packAfter = text.match(new RegExp(`^(${NUM})\\s*(${unitAlt})\\s*x\\s*(${NUM})(?:\\s+[a-z]+)?$`));
+  if (packAfter) {
+    const size = Number(packAfter[1]);
+    const count = Number(packAfter[3]);
+    const parsed = measurement(count * size, packAfter[2], {
+      pack: { count, size, unit: packAfter[2] },
+    });
+    if (parsed) return finish(parsed);
+  }
+
   // "2 x tins" — a multipack without a stated size falls back to the package table.
   const packCount = text.match(new RegExp(`^(${NUM})\\s*x\\s*([a-z]+)$`));
   if (packCount) {
