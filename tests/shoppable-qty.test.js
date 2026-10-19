@@ -94,3 +94,11 @@ describe('fractional amounts', () => {
     expect(shoppableQty('1/2 kg', 'rice')).toBe('1/2 kg');
   });
 });
+
+describe('ranges', () => {
+  it('buys for the top of a range', () => {
+    expect(shoppableQty('2-3 tbsp', 'olive oil')).toBe('1 bottle');
+    expect(shoppableQty('2 to 3 cloves', 'garlic')).toBe('1 bulb');
+    expect(shoppableQty('1-2 tins', 'beans')).toBe('2 tins');
+  });
+});

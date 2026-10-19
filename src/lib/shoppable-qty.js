@@ -63,7 +63,9 @@ function fractionToDecimal(text) {
  */
 export function shoppableQty(qty, name = '') {
   const raw = String(qty || '').trim();
-  const text = fractionToDecimal(raw);
+  // "2-3 tbsp" / "2 to 3 cloves": buy for the top of the range.
+  const range = raw.match(/^\d+(?:\.\d+)?\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)(?=\s|$)(.*)$/i);
+  const text = fractionToDecimal(range ? `${range[1]}${range[2]}` : raw);
   const match = text.match(/^(\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:[.,]\d+)?)\s*(.*)$/);
   if (!match) return raw;
   // "1,500" is fifteen hundred; "1,5" is a European one and a half.
@@ -79,12 +81,12 @@ export function shoppableQty(qty, name = '') {
     }
     return `1 ${containerFor(name)}`;
   }
-  if (MEASURES.test(unit)) return raw;
+  if (MEASURES.test(unit)) return range ? text : raw;
 
   const packaged = COUNT_PACKAGES[unit.toLowerCase()];
   if (packaged) return `1 ${packaged}`;
   // A bare count, or a count word ("heads", "fillets"): round up to whole.
-  if (Number.isInteger(amount)) return raw;
+  if (Number.isInteger(amount)) return range ? text : raw;
   const whole = Math.ceil(amount);
   if (!unit) return String(whole);
   return `${whole} ${whole === 1 ? SINGULAR[unit.toLowerCase()] || unit : unit}`;
