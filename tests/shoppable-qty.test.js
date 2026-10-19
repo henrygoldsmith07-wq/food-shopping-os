@@ -126,3 +126,17 @@ describe('written-out quarters and thirds', () => {
     expect(shoppableQty('half a lemon', 'lemon')).toBe('1 lemon');
   });
 });
+
+import { shoppableQty as shoppableQtyContainers } from '../src/lib/shoppable-qty.js';
+describe('shoppableQty containers for small amounts', () => {
+  it('buys butter as a pack and cream/milk as a carton, not a jar', () => {
+    expect(shoppableQtyContainers('3 tbsp', 'butter')).toBe('1 pack');
+    expect(shoppableQtyContainers('100 ml', 'double cream')).toBe('1 carton');
+    expect(shoppableQtyContainers('2 tbsp', 'milk')).toBe('1 carton');
+  });
+  it('keeps jars for spices and bottles for oil', () => {
+    expect(shoppableQtyContainers('2 tsp', 'dried oregano')).toBe('1 jar');
+    expect(shoppableQtyContainers('2 tbsp', 'peanut butter')).toBe('1 jar');
+    expect(shoppableQtyContainers('2 tbsp', 'olive oil')).toBe('1 bottle');
+  });
+});
