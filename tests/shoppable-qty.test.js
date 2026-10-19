@@ -129,6 +129,11 @@ describe('written-out quarters and thirds', () => {
 
 import { shoppableQty as shoppableQtyContainers } from '../src/lib/shoppable-qty.js';
 describe('shoppableQty containers for small amounts', () => {
+  it('buys coconut milk as a can, not a carton', () => {
+    expect(shoppableQtyContainers('100 ml', 'coconut milk')).toBe('1 can');
+    expect(shoppableQtyContainers('2 tbsp', 'oat milk')).toBe('1 carton');
+  });
+
   it('buys butter as a pack and cream/milk as a carton, not a jar', () => {
     expect(shoppableQtyContainers('3 tbsp', 'butter')).toBe('1 pack');
     expect(shoppableQtyContainers('100 ml', 'double cream')).toBe('1 carton');

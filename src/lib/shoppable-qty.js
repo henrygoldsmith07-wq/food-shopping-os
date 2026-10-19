@@ -43,6 +43,7 @@ const SINGULAR = {
 
 const containerFor = (name) =>
   (/butter|margarine|lard/i.test(name) && !/(peanut|nut|almond|cashew|cocoa|shea) butter/i.test(name)) ? 'pack'
+  : /coconut (milk|cream)/i.test(name) ? 'can'
   : /cream|milk|yogh?urt|crème|creme/i.test(name) ? 'carton'
   : (/oil|vinegar|sauce|syrup|juice|extract|essence|wine/i.test(name) ? 'bottle' : 'jar');
 
