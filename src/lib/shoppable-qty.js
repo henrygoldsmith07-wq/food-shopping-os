@@ -42,7 +42,9 @@ const SINGULAR = {
 };
 
 const containerFor = (name) =>
-  (/oil|vinegar|sauce|syrup|juice|extract|essence|wine/i.test(name) ? 'bottle' : 'jar');
+  (/butter|margarine|lard/i.test(name) && !/(peanut|nut|almond|cashew|cocoa|shea) butter/i.test(name)) ? 'pack'
+  : /cream|milk|yogh?urt|crème|creme/i.test(name) ? 'carton'
+  : (/oil|vinegar|sauce|syrup|juice|extract|essence|wine/i.test(name) ? 'bottle' : 'jar');
 
 const VULGAR = { '½': 0.5, '⅓': 1 / 3, '⅔': 2 / 3, '¼': 0.25, '¾': 0.75, '⅛': 0.125 };
 
