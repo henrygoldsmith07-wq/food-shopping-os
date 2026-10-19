@@ -15,6 +15,9 @@ describe('shoppableQty: what to pick up, not what the recipe uses', () => {
     ['2 tbsp', 'Lemon juice', '1 lemon'],
     ['1.5 heads', 'Broccoli', '2 heads'],
     ['0.6 heads', 'Broccoli', '1 head'],
+    ['0.5 cups', 'Rice', '1 cup'],
+    ['0.5 bottles', 'Milk', '1 bottle'],
+    ['1.5 cups', 'Rice', '2 cups'],
   ])('%s %s -> %s', (qty, name, expected) => {
     expect(shoppableQty(qty, name)).toBe(expected);
   });
