@@ -44,19 +44,32 @@ const SINGULAR = {
 const containerFor = (name) =>
   (/oil|vinegar|sauce|syrup|juice|extract|essence|wine/i.test(name) ? 'bottle' : 'jar');
 
+const VULGAR = { '½': 0.5, '⅓': 1 / 3, '⅔': 2 / 3, '¼': 0.25, '¾': 0.75, '⅛': 0.125 };
+
+/** "1/2 tsp", "1 1/2 cups" and "½ tsp" read as decimals, so they are not skipped as unparseable. */
+function fractionToDecimal(text) {
+  const m = text.match(/^(?:(\d+)\s*)?(?:(\d+)\/(\d+)|([½⅓⅔¼¾⅛]))(?=\s|$)/);
+  if (!m) return text;
+  const whole = Number(m[1] || 0);
+  const frac = m[4] ? VULGAR[m[4]] : Number(m[2]) / Number(m[3]);
+  if (!Number.isFinite(frac)) return text;
+  return `${Number((whole + frac).toFixed(3))}${text.slice(m[0].length)}`;
+}
+
 /**
  * @param {string} qty  the amount the recipe needs, e.g. "0.7 tsp"
  * @param {string} name the ingredient
  * @returns {string} the amount to buy; `qty` unchanged when it is already buyable
  */
 export function shoppableQty(qty, name = '') {
-  const text = String(qty || '').trim();
+  const raw = String(qty || '').trim();
+  const text = fractionToDecimal(raw);
   const match = text.match(/^(\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:[.,]\d+)?)\s*(.*)$/);
-  if (!match) return text;
+  if (!match) return raw;
   // "1,500" is fifteen hundred; "1,5" is a European one and a half.
   const amount = Number(/^\d{1,3}(,\d{3})+$/.test(match[1]) ? match[1].replace(/,/g, '') : match[1].replace(',', '.'));
   const unit = match[2].trim();
-  if (!Number.isFinite(amount) || amount <= 0) return text;
+  if (!Number.isFinite(amount) || amount <= 0) return raw;
 
   const small = SPOONS.test(unit) || (/^(ml|millilitres?)$/i.test(unit) && amount < SMALL_ML);
   if (small) {
@@ -66,12 +79,12 @@ export function shoppableQty(qty, name = '') {
     }
     return `1 ${containerFor(name)}`;
   }
-  if (MEASURES.test(unit)) return text;
+  if (MEASURES.test(unit)) return raw;
 
   const packaged = COUNT_PACKAGES[unit.toLowerCase()];
   if (packaged) return `1 ${packaged}`;
   // A bare count, or a count word ("heads", "fillets"): round up to whole.
-  if (Number.isInteger(amount)) return text;
+  if (Number.isInteger(amount)) return raw;
   const whole = Math.ceil(amount);
   if (!unit) return String(whole);
   return `${whole} ${whole === 1 ? SINGULAR[unit.toLowerCase()] || unit : unit}`;
