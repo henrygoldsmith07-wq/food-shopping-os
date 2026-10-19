@@ -15,9 +15,9 @@ describe('shoppableQty: what to pick up, not what the recipe uses', () => {
     ['2 tbsp', 'Lemon juice', '1 lemon'],
     ['1.5 heads', 'Broccoli', '2 heads'],
     ['0.6 heads', 'Broccoli', '1 head'],
-    ['0.5 cups', 'Rice', '1 cup'],
+    ['0.5 cups', 'Rice', '0.5 cups'],
     ['0.5 bottles', 'Milk', '1 bottle'],
-    ['1.5 cups', 'Rice', '2 cups'],
+    ['1.5 cups', 'Rice', '1.5 cups'],
   ])('%s %s -> %s', (qty, name, expected) => {
     expect(shoppableQty(qty, name)).toBe(expected);
   });
@@ -100,5 +100,12 @@ describe('ranges', () => {
     expect(shoppableQty('2-3 tbsp', 'olive oil')).toBe('1 bottle');
     expect(shoppableQty('2 to 3 cloves', 'garlic')).toBe('1 bulb');
     expect(shoppableQty('1-2 tins', 'beans')).toBe('2 tins');
+  });
+});
+
+describe('cups are a measure, not a count', () => {
+  it('does not round part-cups up to whole cups', () => {
+    expect(shoppableQty('1.5 cups', 'rice')).toBe('1.5 cups');
+    expect(shoppableQty('0.5 cup', 'flour')).toBe('0.5 cup');
   });
 });

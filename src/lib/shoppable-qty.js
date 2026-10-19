@@ -11,7 +11,7 @@
 import { guessAisle } from '../data/stores.js';
 
 const SPOONS = /^(tsps?|teaspoons?|tbsps?|tablespoons?|pinch(es)?|dash(es)?)$/i;
-const MEASURES = /^(g|grams?|kg|ml|millilitres?|l|litres?|oz|lb)$/i;
+const MEASURES = /^(g|grams?|kg|ml|millilitres?|l|litres?|oz|lb|cups?)$/i;
 /** Small volumes are a container's worth of a condiment, not a purchase. */
 const SMALL_ML = 150;
 
