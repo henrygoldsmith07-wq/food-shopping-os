@@ -42,7 +42,7 @@ export const spendByMonth = (shops = [], months = 6, today = dayStamp()) => {
     const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     const spend = shops
-      .filter((s) => s.date.slice(0, 7) === key)
+      .filter((s) => String(s.date || '').slice(0, 7) === key)
       .reduce((sum, s) => sum + (Number(s.total) || 0), 0);
     out.push({ key, label: d.toLocaleDateString('en-GB', { month: 'short' }), spend: Math.round(spend * 100) / 100 });
   }
