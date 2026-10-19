@@ -38,6 +38,7 @@ const SINGULAR = {
   heads: 'head', fillets: 'fillet', thighs: 'thigh', breasts: 'breast', slices: 'slice',
   sticks: 'stick', stalks: 'stalk', sheets: 'sheet', pieces: 'piece', tins: 'tin', cans: 'can',
   packs: 'pack', bags: 'bag', bunches: 'bunch', balls: 'ball', nests: 'nest',
+  cups: 'cup', jars: 'jar', bottles: 'bottle', loaves: 'loaf', cartons: 'carton', boxes: 'box', punnets: 'punnet',
 };
 
 const containerFor = (name) =>
