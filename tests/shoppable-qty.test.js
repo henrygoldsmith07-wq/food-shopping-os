@@ -82,3 +82,15 @@ itT('reads a thousands comma as thousands, not decimals', () => {
   expectT(shoppableQtyThousands('1,500 ml', 'stock')).toBe('1,500 ml');
   expectT(shoppableQtyThousands('1,5 kg', 'flour')).toBe('1,5 kg');
 });
+
+describe('fractional amounts', () => {
+  it('treats 1/2 tsp and ½ tsp as small spoon amounts', () => {
+    expect(shoppableQty('1/2 tsp', 'salt')).toBe('1 jar');
+    expect(shoppableQty('½ tsp', 'salt')).toBe('1 jar');
+    expect(shoppableQty('1 1/2 tbsp', 'olive oil')).toBe('1 bottle');
+  });
+  it('rounds fractional counts up and leaves weights alone', () => {
+    expect(shoppableQty('1/2 tin', 'beans')).toBe('1 tin');
+    expect(shoppableQty('1/2 kg', 'rice')).toBe('1/2 kg');
+  });
+});
