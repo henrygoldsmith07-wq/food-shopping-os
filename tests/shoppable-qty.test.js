@@ -109,3 +109,11 @@ describe('cups are a measure, not a count', () => {
     expect(shoppableQty('0.5 cup', 'flour')).toBe('0.5 cup');
   });
 });
+
+describe('written-out halves', () => {
+  it('buys a whole one for "half a lemon"', async () => {
+    const { shoppableQty } = await import('../src/lib/shoppable-qty.js');
+    expect(shoppableQty('half a lemon', 'lemon')).toBe('1 lemon');
+    expect(shoppableQty('half an onion', 'onion')).toBe('1 onion');
+  });
+});
