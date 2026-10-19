@@ -67,8 +67,10 @@ if (databaseConfigured && passwordLoginEnabled()) {
       if (await db.incrementWindow(`signin-client:${client}:${window}`, 1800000) > 50) return null;
       if (await db.incrementWindow(`signin:${email}:${window}`, 1800000) > 10) return null;
       const users = db.collection('users');
-      // A parked account (see releaseUnverifiedEmail) still signs in with its password.
-      const user = await users.findOne({ email }) || await users.findOne({ email: parkedEmail(email) });
+      // A parked account (see releaseUnverifiedEmail) still signs in with its
+      // password, though the address now belongs to a Google account without one.
+      const user = [await users.findOne({ email }), await users.findOne({ email: parkedEmail(email) })]
+        .find((candidate) => candidate?.passwordHash);
       if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) return null;
       // Where email is set up, an address must be confirmed before its password
       // signs in. Auth.js hands this message back to the form as the error.
@@ -126,6 +128,30 @@ if (process.env.AUTH_DEV_LOGIN === 'true') {
   }));
 }
 
+const SESSION_CHECK_MS = 5 * 60000;
+
+/**
+ * Sessions are signed cookies that live 30 days, so nothing on the server
+ * ends one by itself. Every few minutes this looks the account up again and
+ * ends the session if the account is gone or its password was reset after
+ * the session signed in. Next-auth v4 cannot clear the cookie from here, so
+ * the token is marked revoked and the session callback drops the user.
+ * A database hiccup leaves the session alone and checks again next time.
+ */
+const checkSessionStillValid = async (token) => {
+  const userId = token.userId || token.sub;
+  if (token.revoked || !databaseConfigured || !userId || String(userId).startsWith('dev-')) return token;
+  if (Date.now() - (token.checkedAt || 0) < SESSION_CHECK_MS) return token;
+  try {
+    const account = await (await getDatabase()).collection('users').findOne({ _id: userId });
+    const changed = account?.passwordChangedAt ? new Date(account.passwordChangedAt).getTime() : 0;
+    if (!account || changed > (token.authTime || 0)) return { ...token, revoked: true };
+    return { ...token, checkedAt: Date.now() };
+  } catch {
+    return token;
+  }
+};
+
 export const authOptions = {
   adapter: databaseConfigured ? ForqAdapter() : undefined,
   providers,
@@ -137,11 +163,18 @@ export const authOptions = {
       }
       return true;
     },
-    jwt({ token, user }) {
-      if (user?.id) token.userId = user.id;
-      return token;
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.userId = user.id;
+        token.authTime = Date.now();
+        token.checkedAt = Date.now();
+        return token;
+      }
+      return checkSessionStillValid(token);
     },
     session({ session, token }) {
+      // A revoked session reads as signed out everywhere (requireUser, the status route, useSession).
+      if (token.revoked) return { expires: session.expires };
       if (session.user) session.user.id = token.userId || token.sub;
       return session;
     },

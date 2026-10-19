@@ -67,9 +67,12 @@ describe('email verification', () => {
     expect(landed.headers.get('location')).toBe(`${ORIGIN}/?verified=1`);
     expect(await authorize('sam@example.com', 'a good password')).toMatchObject({ email: 'sam@example.com' });
 
-    // A link works once.
+    // A mail scanner may have opened the link first: the person's own click still says confirmed.
     const again = await verify(new Request(url.href.replace(/^https:\/\/[^/]+/, ORIGIN), { headers: { host: 'forq.example' } }));
-    expect(again.headers.get('location')).toBe(`${ORIGIN}/?verified=0`);
+    expect(again.headers.get('location')).toBe(`${ORIGIN}/?verified=1`);
+    const forged = new URL(url.href.replace(/^https:\/\/[^/]+/, ORIGIN));
+    forged.searchParams.set('token', 'y'.repeat(43));
+    expect((await verify(new Request(forged.href, { headers: { host: 'forq.example' } }))).headers.get('location')).toBe(`${ORIGIN}/?verified=0`);
   });
 
   it('resends only for an unverified password account, and answers the same either way', async () => {
@@ -113,9 +116,41 @@ describe('password reset', () => {
     expect(reused.status).toBe(400);
   });
 
+  it('ends every session that signed in before the reset', async () => {
+    await register(req('/api/account/register', 'POST', { email: 'max@example.com', password: 'old password!' }));
+    const user = state.collections.get('users').find((row) => row.email === 'max@example.com');
+    const { jwt, session } = authOptions.callbacks;
+    const before = await jwt({ token: {}, user: { id: user._id } });
+    // Signed in, then a reset an hour later; the next check (minutes on) ends the old session.
+    before.authTime -= 3600000;
+    before.checkedAt -= 3600000;
+    await requestReset(req('/api/account/password-reset', 'POST', { email: 'max@example.com' }));
+    const token = linkIn(state.sent.at(-1)).searchParams.get('token');
+    await completeReset(req('/api/account/password-reset', 'PUT', { email: 'max@example.com', token, password: 'brand new pass' }));
+
+    const checked = await jwt({ token: before });
+    expect(checked.revoked).toBe(true);
+    expect(session({ session: { user: { name: 'Max' }, expires: 'soon' }, token: checked })).toEqual({ expires: 'soon' });
+    // A session from after the reset carries on.
+    const fresh = await jwt({ token: {}, user: { id: user._id } });
+    fresh.checkedAt -= 3600000;
+    expect((await jwt({ token: fresh })).revoked).toBeUndefined();
+  });
+
   it('refuses a made-up token', async () => {
     await register(req('/api/account/register', 'POST', { email: 'jo@example.com', password: 'a good password' }));
     const res = await completeReset(req('/api/account/password-reset', 'PUT', { email: 'jo@example.com', token: 'x'.repeat(43), password: 'brand new pass' }));
     expect(res.status).toBe(400);
+  });
+});
+
+describe('parked accounts', () => {
+  it('still sign in with their password after Google takes the address', async () => {
+    delete process.env.RESEND_API_KEY;
+    await register(req('/api/account/register', 'POST', { email: 'pat@example.com', password: 'a good password' }));
+    const users = state.collections.get('users');
+    users.find((row) => row.email === 'pat@example.com').email = 'parked:pat@example.com';
+    users.push({ _id: 'google-user', email: 'pat@example.com', emailVerified: new Date() });
+    expect(await authorize('pat@example.com', 'a good password')).toMatchObject({ email: 'pat@example.com' });
   });
 });

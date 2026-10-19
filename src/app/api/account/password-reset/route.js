@@ -39,7 +39,9 @@ export async function POST(request) {
 
 /**
  * Set a new password with the link's token. Reading the email proves the
- * address, so the account counts as verified from here on.
+ * address, so the account counts as verified from here on. Every session
+ * signed in before now ends (see the jwt callback in auth.js): a reset is
+ * what someone does when they think another person has their password.
  */
 export async function PUT(request) {
   try {
@@ -56,7 +58,11 @@ export async function PUT(request) {
     const user = await users.findOne({ email });
     if (!user) throw new ApiError(400, 'That reset link has expired or was already used. Ask for a new one.');
     await users.updateOne({ _id: user._id }, {
-      $set: { passwordHash: await hashPassword(body.password), emailVerified: user.emailVerified || new Date() },
+      $set: {
+        passwordHash: await hashPassword(body.password),
+        emailVerified: user.emailVerified || new Date(),
+        passwordChangedAt: new Date(),
+      },
     });
     return NextResponse.json({ ok: true });
   } catch (error) {

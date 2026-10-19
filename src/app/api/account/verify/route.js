@@ -22,7 +22,11 @@ export async function GET(request) {
     const params = new URL(request.url).searchParams;
     const email = normaliseEmail(params.get('email'));
     const ok = validEmail(email) && await consumeAccountToken('verify', email, params.get('token'));
-    if (ok) await (await getDatabase()).collection('users').updateOne({ email }, { $set: { emailVerified: new Date() } });
+    if (ok) {
+      const users = (await getDatabase()).collection('users');
+      const user = await users.findOne({ email });
+      if (user && !user.emailVerified) await users.updateOne({ _id: user._id }, { $set: { emailVerified: new Date() } });
+    }
     return NextResponse.redirect(`${origin}/?verified=${ok ? 1 : 0}`, 303);
   } catch (error) {
     if (error instanceof ApiError && error.status === 429) return NextResponse.redirect(`${origin}/?verified=0`, 303);
