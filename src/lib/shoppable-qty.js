@@ -66,7 +66,7 @@ export function shoppableQty(qty, name = '') {
   // "2-3 tbsp" / "2 to 3 cloves": buy for the top of the range.
   const range = raw.match(/^\d+(?:\.\d+)?\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)(?=\s|$)(.*)$/i);
   // "half a lemon" / "half an onion" is 0.5 of one, which you buy whole.
-  const half = raw.match(/^half\s+(?:an?\s+)?([a-z].*)$/i);
+  const half = raw.match(/^(?:half|(?:a\s+)?(?:quarter|third))\s+(?:of\s+)?(?:an?\s+|the\s+)?([a-z].*)$/i);
   const text = fractionToDecimal(range ? `${range[1]}${range[2]}` : half ? `0.5 ${half[1]}` : raw);
   const match = text.match(/^(\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:[.,]\d+)?)\s*(.*)$/);
   if (!match) return raw;

@@ -117,3 +117,12 @@ describe('written-out halves', () => {
     expect(shoppableQty('half an onion', 'onion')).toBe('1 onion');
   });
 });
+
+describe('written-out quarters and thirds', () => {
+  it('buys a whole one', async () => {
+    const { shoppableQty } = await import('../src/lib/shoppable-qty.js');
+    expect(shoppableQty('quarter of a cabbage', 'cabbage')).toBe('1 cabbage');
+    expect(shoppableQty('a third of an onion', 'onion')).toBe('1 onion');
+    expect(shoppableQty('half a lemon', 'lemon')).toBe('1 lemon');
+  });
+});
