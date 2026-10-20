@@ -31,6 +31,11 @@ export const envSchema = z.object({
   /* Realtime */
   ABLY_API_KEY: z.string().min(1).optional(),
 
+  /* Email (Resend): account verification, password reset, reminder digests */
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(3).optional(),
+  APP_URL: z.string().url().optional(),
+
   /* Database — current names and the legacy UPSTASH_* aliases */
   KV_REST_API_URL: z.string().url().optional(),
   KV_REST_API_TOKEN: z.string().min(1).optional(),

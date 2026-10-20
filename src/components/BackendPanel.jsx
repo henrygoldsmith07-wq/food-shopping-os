@@ -137,7 +137,7 @@ function BackendPanelContent({ backend }) {
                 <span className="inline-flex items-center gap-2"><LogIn size={15} /> Sign in for this preview</span>
               </button>
             )}
-            {backend.providers?.password && <SignInOptions providers={{ password: true }} />}
+            {backend.providers?.password && <SignInOptions providers={{ password: true, emailVerification: backend.providers.emailVerification }} />}
           </div>
         )}
 

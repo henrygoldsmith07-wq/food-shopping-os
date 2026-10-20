@@ -12,6 +12,7 @@
  */
 
 import { detectImageText, captureSupport } from './smart-capture.js';
+import { shrinkImage } from './photos.js';
 
 export const IMPORT_ROUTE = '/api/recipes/import';
 
@@ -80,8 +81,17 @@ export const importFromPhoto = async (file, {
   return post({ image }, fetchImpl);
 };
 
-/** A chosen file as a data URL, for the vision path. */
-export const fileToDataUrl = (file) => new Promise((resolve) => {
+/**
+ * Long edge for photos sent to the vision model: enough to read a recipe card
+ * or a shelf label, and a fraction of a phone photo's size — the raw file was
+ * routinely over the server's request limit.
+ */
+export const VISION_EDGE = 1600;
+
+/** A chosen file as a (downscaled) data URL, for the vision path. */
+export const fileToDataUrl = async (file) => (await shrinkImage(file, VISION_EDGE)) || rawDataUrl(file);
+
+const rawDataUrl = (file) => new Promise((resolve) => {
   if (!file || typeof FileReader === 'undefined') {
     resolve(null);
     return;

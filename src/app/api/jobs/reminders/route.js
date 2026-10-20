@@ -2,6 +2,15 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { handleApiError } from '../../../../server/api.js';
 import { getDatabase } from '../../../../server/database.js';
+import { appOrigin, emailConfigured, sendEmail } from '../../../../server/email.js';
+import { buildReminderDigest } from '../../../../server/reminder-digest.js';
+
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
+/** A run sends at most this many, so one call can never run past its time limit. */
+const MAX_PER_RUN = 300;
+const OUTBOX_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
 const validSecret = (request) => {
   const expected = process.env.CRON_SECRET || '';
@@ -10,79 +19,53 @@ const validSecret = (request) => {
   return timingSafeEqual(Buffer.from(expected), Buffer.from(actual));
 };
 
-const localParts = (date, timeZone) => {
-  let formatter;
-  try {
-    formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    });
-  } catch {
-    return localParts(date, 'UTC');
-  }
-  return Object.fromEntries(
-    formatter.formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]),
-  );
-};
-
-const dueTimes = (reminder, parts) => {
-  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);
-  if (Array.isArray(reminder.days) && reminder.days.length && !reminder.days.includes(weekday)) return [];
-  const nowMinutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return (reminder.times || []).filter((time) => {
-    const [hour, minute] = String(time).split(':').map(Number);
-    const dueMinutes = hour * 60 + minute;
-    return nowMinutes >= dueMinutes && nowMinutes < dueMinutes + 15;
-  });
-};
-
+/**
+ * The daily job (vercel.json, 08:00 UTC): one morning email per person who
+ * turned it on, about their household's day. Each send is recorded in the
+ * outbox under a per-person-per-day key first, so a retried or doubled run
+ * never emails anyone twice.
+ */
 export async function GET(request) {
   try {
     if (!validSecret(request)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 401 });
+    if (!emailConfigured()) return NextResponse.json({ sent: 0, skipped: 'email-not-configured' });
     const db = await getDatabase();
     const now = new Date();
-    const states = await db.collection('householdStates').find(
-      { 'state.reminders.0': { $exists: true } },
-      { projection: { householdId: 1, 'state.reminders': 1, 'state.syncTimeZone': 1 } },
-    ).limit(500).toArray();
-    const jobs = states.flatMap((document) => {
-      const parts = localParts(now, document.state.syncTimeZone || 'UTC');
-      const day = `${parts.year}-${parts.month}-${parts.day}`;
-      return (document.state.reminders || [])
-      .filter((reminder) => reminder.on)
-      .flatMap((reminder) => dueTimes(reminder, parts).map((time) => ({
-        householdId: document.householdId,
-        dedupeKey: `${document.householdId}:${reminder.id}:${day}:${time}`,
-        kind: reminder.kind || 'reminder',
-        label: String(reminder.label || '').slice(0, 160),
-        sourceId: reminder.id,
-        sourceTime: time,
-        status: 'pending',
-        scheduledAt: now,
-        createdAt: now,
-      })));
-    });
-    let queued = 0;
-    if (jobs.length) {
-      const result = await db.collection('notificationOutbox').bulkWrite(
-        jobs.map((job) => ({
-          updateOne: {
-            filter: { dedupeKey: job.dedupeKey },
-            update: { $setOnInsert: job },
-            upsert: true,
-          },
-        })),
-        { ordered: false },
-      );
-      queued = result.upsertedCount;
+    const origin = appOrigin(request);
+    const members = (await db.collection('memberships').find({ reminderDigest: true }).toArray()).slice(0, MAX_PER_RUN);
+    const outbox = db.collection('notificationOutbox');
+    const counts = { sent: 0, nothingToSay: 0, alreadySent: 0, failed: 0 };
+    for (const member of members) {
+      if (!member.email) continue;
+      const stored = await db.collection('householdStates').findOne({ householdId: member.householdId });
+      const digest = buildReminderDigest(stored?.state, { now, origin });
+      if (!digest) {
+        counts.nothingToSay += 1;
+        continue;
+      }
+      const dedupeKey = `${member.householdId}:${member.userId}:digest:${digest.day}`;
+      try {
+        await outbox.insertOne({
+          householdId: member.householdId, userId: member.userId, dedupeKey, kind: 'digest',
+          status: 'sending', createdAt: now, expiresAt: new Date(now.getTime() + OUTBOX_RETENTION_MS),
+        });
+      } catch (error) {
+        if (error?.code === 11000) {
+          counts.alreadySent += 1;
+          continue;
+        }
+        throw error;
+      }
+      try {
+        await sendEmail({ to: member.email, subject: digest.subject, text: digest.text, html: digest.html });
+        await outbox.updateOne({ dedupeKey }, { $set: { status: 'sent', sentAt: new Date() } });
+        counts.sent += 1;
+      } catch (error) {
+        await outbox.updateOne({ dedupeKey }, { $set: { status: 'failed', error: String(error.message).slice(0, 200) } });
+        counts.failed += 1;
+      }
     }
-    return NextResponse.json({ queued });
+    return NextResponse.json(counts);
   } catch (error) {
     return handleApiError(error);
   }

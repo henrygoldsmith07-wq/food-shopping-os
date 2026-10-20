@@ -4,6 +4,7 @@ import { databaseConfigured } from '../../../../server/database.js';
 import { envStatus } from '../../../../server/env.js';
 import { openDataStatus } from '../../../../server/retailer-providers.js';
 import { passwordLoginEnabled } from '../../../../server/passwords.js';
+import { emailConfigured } from '../../../../server/email.js';
 
 const integrationStatus = () => {
   const { auth, ai, uploads, realtime } = envStatus();
@@ -71,6 +72,7 @@ export async function GET() {
       microsoft: auth.microsoft.ready,
       dev: process.env.AUTH_DEV_LOGIN === 'true',
       password: passwordLoginEnabled(),
+      emailVerification: emailConfigured(),
     },
     capabilities: {
       ai: ai.ready,

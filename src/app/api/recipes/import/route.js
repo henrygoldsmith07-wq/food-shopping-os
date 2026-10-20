@@ -15,6 +15,9 @@ import {
 import { noteLlmCallsAvoided } from '../../../../server/classifier-adapter.js';
 import { recipeTextFromMarkup } from '../../../../shared/recipe-markup.js';
 
+// A downscaled photo arrives as a data URL; the schema caps the image at 4 MB.
+const PHOTO_BODY_BYTES = 4_200_000;
+
 /**
  * Recipe import: a link, a photo, or text already read off one.
  *
@@ -214,7 +217,7 @@ export async function POST(request) {
     // Each import is one page fetch and at most one model call, so the guard is
     // tighter than the general AI limit.
     await rateLimit(`recipe-import:${user.id}`, 60, 3600000);
-    const input = recipeImportSchema.parse(await readJsonBody(request));
+    const input = recipeImportSchema.parse(await readJsonBody(request, PHOTO_BODY_BYTES));
 
     if (input.url) return await fromUrl(input.url, request.signal);
     if (input.text) return await fromText(input.text, 'photo', request.signal);

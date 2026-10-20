@@ -68,7 +68,10 @@ export async function PATCH(request) {
       expiresAt: { $gt: new Date() },
     });
     if (!invite || invite.email !== user.email?.toLowerCase()) throw new ApiError(404, 'Invitation not found.');
-    await db.collection('memberships').updateOne(
+    // Already a member (an owner opening an invite to their own household, or
+    // a second invite): accepting must never downgrade the role you hold.
+    const current = await db.collection('memberships').findOne({ householdId: invite.householdId, userId: user.id });
+    if (!current) await db.collection('memberships').updateOne(
       { householdId: invite.householdId, userId: user.id },
       {
         $set: {

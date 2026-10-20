@@ -10,6 +10,7 @@ import { askPermission, downloadFile, notifySupport, showNotification } from '..
 import { Card, Chip, Pill, Toggle } from './ui.jsx';
 import { Glyph } from './icons.jsx';
 import ReminderForm from './ReminderForm.jsx';
+import ReminderEmailCard from './ReminderEmailCard.jsx';
 
 /* ---------- What the browser will actually do ---------- */
 
@@ -322,6 +323,7 @@ export default function RemindersPanel() {
         <span className="inline-flex items-center gap-1.5"><Plus size={15} /> New reminder</span>
       </button>
 
+      <ReminderEmailCard />
       <NotificationPresetsCard />
       <SuggestionsCard />
       <PermissionCard />

@@ -114,11 +114,41 @@ const assertPublicUrl = async (url, lookup) => {
 };
 
 /**
- * Fetch a link the way the import may: every hop, including each redirect,
- * must be an ordinary http(s) URL on a public address. Redirects are followed
- * by hand so a public page cannot bounce the server onto its own network.
+ * The connect-time half of the address check. `assertPublicUrl` resolves a
+ * host before the fetch, but the fetch used to resolve it again on its own —
+ * so a host with a short TTL could answer a public address for the check and
+ * 127.0.0.1 or 169.254.169.254 for the connection (DNS rebinding). Here the
+ * socket's own lookup refuses a private address, so the address that is
+ * checked is the address that is connected to.
  */
-export const fetchPublic = async (url, init = {}, { fetchImpl = fetch, lookup = defaultLookup } = {}) => {
+export const guardedLookup = (resolve) => (hostname, options, callback) => {
+  resolve(hostname, { ...options, all: true }, (error, addresses) => {
+    if (error) return callback(error);
+    const list = Array.isArray(addresses) ? addresses : [{ address: addresses, family: options?.family || 4 }];
+    if (!list.length || list.some((entry) => isPrivateAddress(entry.address))) {
+      return callback(Object.assign(new Error('blocked-address'), { code: 'EBLOCKED' }));
+    }
+    return options?.all ? callback(null, list) : callback(null, list[0].address, list[0].family);
+  });
+};
+
+let publicDispatcher = null;
+const publicFetch = async (url, init) => {
+  const { Agent, fetch: undiciFetch } = await import('undici');
+  if (!publicDispatcher) {
+    const { lookup } = await import('node:dns');
+    publicDispatcher = new Agent({ connect: { lookup: guardedLookup(lookup) } });
+  }
+  return undiciFetch(url, { ...init, dispatcher: publicDispatcher });
+};
+
+/**
+ * Fetch a link the way the import may: every hop, including each redirect,
+ * must be an ordinary http(s) URL on a public address — checked before the
+ * request and again by the socket itself. Redirects are followed by hand so a
+ * public page cannot bounce the server onto its own network.
+ */
+export const fetchPublic = async (url, init = {}, { fetchImpl = publicFetch, lookup = defaultLookup } = {}) => {
   let current = String(url);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     await assertPublicUrl(current, lookup);
@@ -271,7 +301,7 @@ export const readCapped = async (response, cap = MAX_PAGE_BYTES) => {
  * one, its oEmbed caption. Failures are reported, never thrown at the caller:
  * a caption that did not load is a missing caption, not a failed import.
  */
-export const fetchSource = async (url, { fetchImpl = fetch, env = process.env, lookup = defaultLookup } = {}) => {
+export const fetchSource = async (url, { fetchImpl = publicFetch, env = process.env, lookup = defaultLookup } = {}) => {
   const errors = [];
   let html = '';
   try {
