@@ -340,15 +340,17 @@ export const restockSuggestions = (shops = [], pantry = [], list = [], limit = 6
     for (const item of shop.items || []) {
       const k = key(item.name);
       if (have.has(k)) continue;
-      const found = counts.get(k) || { name: item.name, emoji: item.emoji, times: 0, last: shop.date };
+      const found = counts.get(k) || { name: item.name, emoji: item.emoji, times: 0, last: '' };
       found.times += 1;
-      found.last = shop.date > found.last ? shop.date : found.last;
+      // An undated shop still counts as a purchase but cannot say when.
+      const when = typeof shop.date === 'string' ? shop.date : '';
+      found.last = when > found.last ? when : found.last;
       counts.set(k, found);
     }
   }
   return [...counts.values()]
     .filter((c) => c.times >= 2)
-    .sort((a, b) => b.times - a.times || b.last.localeCompare(a.last))
+    .sort((a, b) => b.times - a.times || String(b.last).localeCompare(String(a.last)))
     .slice(0, limit);
 };
 
@@ -362,7 +364,7 @@ export const restockSuggestions = (shops = [], pantry = [], list = [], limit = 6
  */
 export const recurringStaples = (shops = [], pantry = [], list = [], { today = '' } = {}) => {
   const purchases = new Map(); // key -> [{date}]
-  for (const shop of [...shops].sort((a, b) => a.date.localeCompare(b.date))) {
+  for (const shop of [...shops].filter((s) => typeof s?.date === 'string' && s.date).sort((a, b) => a.date.localeCompare(b.date))) {
     for (const item of shop.items || []) {
       const k = key(item.name);
       if (!k) continue;
