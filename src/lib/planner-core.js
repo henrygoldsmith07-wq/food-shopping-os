@@ -60,7 +60,7 @@ export const varietyMeals = (pool, count, seed) => {
     (pick.ingredients || []).forEach((i) => usedIng.add(String(i.name || i).toLowerCase()));
     out.push(pick);
   }
-  while (out.length < count) out.push(pool[out.length % pool.length]);
+  while (pool.length && out.length < count) out.push(pool[out.length % pool.length]);
   return out;
 };
 
@@ -115,9 +115,10 @@ export const hardFilter = (recipes, {
 /** How many of a dish's ingredients you already have. */
 export const pantryHits = (recipe, pantryNames = []) => {
   if (!pantryNames.length) return 0;
-  const have = pantryNames.map((n) => n.toLowerCase()).filter(Boolean);
-  return recipe.ingredients.filter((i) => {
-    const name = i.name.toLowerCase();
+  const have = pantryNames.map((n) => String(n || '').toLowerCase()).filter(Boolean);
+  return (recipe?.ingredients || []).filter((i) => {
+    const name = String(i?.name || '').toLowerCase();
+    if (!name) return false;
     return have.some((h) => h.includes(name) || name.includes(h));
   }).length;
 };
