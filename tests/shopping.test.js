@@ -418,3 +418,24 @@ describe('rowsOverHeadroom — where the money runs out in list order', () => {
     expect(rowsOverHeadroom([], { headroom: 10 }).size).toBe(0);
   });
 });
+
+describe('restock and staples with undated shops', () => {
+  const shops = [
+    { items: [{ name: 'milk' }] },
+    { date: '2026-10-01', items: [{ name: 'milk' }] },
+    { date: '2026-10-05', items: [{ name: 'milk' }] },
+  ];
+  it('restockSuggestions never reports an undefined last date', async () => {
+    const { restockSuggestions } = await import('../src/lib/shopping.js');
+    const out = restockSuggestions(shops, [], []);
+    expect(out[0].times).toBe(3);
+    expect(out[0].last).toBe('2026-10-05');
+  });
+  it('recurringStaples ignores undated shops instead of producing NaN', async () => {
+    const { recurringStaples } = await import('../src/lib/shopping.js');
+    const more = [...shops, { date: '2026-10-09', items: [{ name: 'milk' }] }];
+    const out = recurringStaples(more, [], [], { today: '2026-10-20' });
+    expect(out[0].times).toBe(3);
+    expect(Number.isFinite(out[0].cadence)).toBe(true);
+  });
+});
