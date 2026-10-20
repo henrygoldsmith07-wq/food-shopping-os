@@ -40,8 +40,12 @@ export const pantryFromShareCode = (code) => {
     const rows = JSON.parse(decodeUtf8(text.slice('FORQ-PANTRY-1.'.length)));
     if (!Array.isArray(rows) || rows.length > 500 || rows.some((item) => !item || typeof item.name !== 'string')) throw new Error();
     return rows.filter((item) => item.name.trim()).map((item) => ({
-      ...item,
       name: item.name.trim().slice(0, 120),
+      emoji: String(item.emoji || '').slice(0, 8),
+      location: String(item.location || 'Pantry').slice(0, 40),
+      cat: String(item.cat || 'Other').slice(0, 40),
+      store: String(item.store || '').slice(0, 60),
+      amountConfidence: String(item.amountConfidence || '').slice(0, 20),
       qty: String(item.qty || '').slice(0, 60),
       confidence: String(item.confidence || 'definite').slice(0,20),
       cost: Math.max(0, Number(item.cost) || 0),
