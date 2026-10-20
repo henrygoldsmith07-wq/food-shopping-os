@@ -1,87 +1,45 @@
-import { describe, expect, it } from 'vitest';
-import { captureMissedMeals, missedMealSlots } from '../src/lib/plan-outcome.js';
-import { applyBootLifecycle, hydrate } from '../src/lib/store-persistence.js';
+import { describe, it, expect } from 'vitest';
+import { missedMealSlots, captureMissedMeals } from '../src/lib/missed-meals.js';
 
-const stamp = (offset) => {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return date.toISOString().slice(0, 10);
+const plan = {
+  '2026-10-18': { dinner: 'r1', lunch: 'r2' },
+  '2026-10-19': { dinner: 'r3' },
+  '2026-10-20': { dinner: 'r4' },
 };
 
-describe('missedMealSlots', () => {
-  it('finds past planned slots with no outcome event at all', () => {
-    const plan = { [stamp(-2)]: { dinner: 'r1', lunch: 'r2' }, [stamp(1)]: { dinner: 'r3' } };
-    const missed = missedMealSlots(plan, {
-      before: stamp(0),
-      events: [{ date: stamp(-2), slot: 'dinner', status: 'cooked' }],
-    });
-    expect(missed).toEqual([{ date: stamp(-2), slot: 'lunch', recipeId: 'r2' }]);
+describe('missed meals', () => {
+  it('returns nothing without a before date or on junk plans', () => {
+    expect(missedMealSlots(plan)).toEqual([]);
+    expect(missedMealSlots({ a: null, b: 'x' }, { before: '2026-10-20' })).toEqual([]);
   });
-
-  it('ignores future slots and returns nothing without a cutoff', () => {
-    expect(missedMealSlots({ [stamp(1)]: { dinner: 'r3' } }, { before: stamp(0) })).toEqual([]);
-    expect(missedMealSlots({ [stamp(-1)]: { dinner: 'r3' } })).toEqual([]);
-  });
-});
-
-describe('captureMissedMeals', () => {
-  const base = (over = {}) => ({
-    day: stamp(0),
-    plan: { [stamp(-1)]: { dinner: 'r1' } },
-    mealPlanEvents: [],
-    ...over,
-  });
-
-  it('records a skipped-missed event for each silent past slot', () => {
-    const next = captureMissedMeals(base());
-    expect(next.mealPlanEvents).toEqual([
-      expect.objectContaining({
-        date: stamp(-1), slot: 'dinner', plannedRecipeId: 'r1',
-        status: 'skipped', reason: 'missed', missed: true,
-      }),
+  it('lists only past, unresolved, non-empty slots', () => {
+    const events = [{ date: '2026-10-18', slot: 'dinner', status: 'cooked' }];
+    const out = missedMealSlots({ ...plan, '2026-10-19': { dinner: '' , lunch: 'r5' } }, { before: '2026-10-20', events });
+    expect(out).toEqual([
+      { date: '2026-10-18', slot: 'lunch', recipeId: 'r2' },
+      { date: '2026-10-19', slot: 'lunch', recipeId: 'r5' },
     ]);
   });
-
-  it('is idempotent — already-marked slots are never marked twice', () => {
-    const once = captureMissedMeals(base());
-    expect(captureMissedMeals(once)).toBe(once);
+  it('does not count today as missed', () => {
+    expect(missedMealSlots(plan, { before: '2026-10-20' }).map((m) => m.date)).not.toContain('2026-10-20');
   });
-
-  it('leaves state untouched when nothing silently passed', () => {
-    const resolved = base({
-      mealPlanEvents: [{ date: stamp(-1), slot: 'dinner', status: 'cooked' }],
-    });
-    expect(captureMissedMeals(resolved)).toBe(resolved);
+  it('captureMissedMeals returns the same state when nothing is missed', () => {
+    const s = { plan, day: '2026-10-18', mealPlanEvents: [] };
+    expect(captureMissedMeals(s)).toBe(s);
   });
-});
-
-describe('boot lifecycle captures silent misses only when a day actually passed', () => {
-  it('marks unresolved past slots after a real rollover', () => {
-    // The household last opened the app yesterday; dinner that day was never
-    // cooked, skipped or swapped — so it is now a never-cooked meal.
-    const stored = {
-      onboarded: true,
-      day: stamp(-1),
-      plan: { [stamp(-1)]: { dinner: 'r1' } },
-      mealPlanEvents: [],
-    };
-    // Pure hydration never invents the miss…
-    expect(hydrate(JSON.parse(JSON.stringify(stored))).mealPlanEvents).toEqual([]);
-    // …the once-per-boot lifecycle does.
-    const next = applyBootLifecycle(stored);
-    expect(next.mealPlanEvents).toHaveLength(1);
-    expect(next.mealPlanEvents[0]).toMatchObject({
-      date: stamp(-1), slot: 'dinner', plannedRecipeId: 'r1', status: 'skipped', reason: 'missed',
-    });
+  it('stamps inferred skips deterministically and idempotently', () => {
+    const s = { plan, day: '2026-10-20' };
+    const a = captureMissedMeals(s);
+    expect(a.mealPlanEvents).toHaveLength(3);
+    expect(a.mealPlanEvents[0]).toMatchObject({ id: 'mpe_2026-10-18_dinner_r1', status: 'skipped', source: 'inferred', missed: true, at: '2026-10-20' });
+    const b = captureMissedMeals(a);
+    expect(b.mealPlanEvents).toHaveLength(3);
+    expect(captureMissedMeals(s)).toEqual(a);
   });
-
-  it('leaves resolved slots and same-day loads alone', () => {
-    const sameDay = applyBootLifecycle({
-      onboarded: true,
-      day: stamp(0),
-      plan: { [stamp(0)]: { dinner: 'r1' } },
-      mealPlanEvents: [],
-    });
-    expect(sameDay.mealPlanEvents).toEqual([]);
+  it('keeps at most the latest 500 events', () => {
+    const many = Array.from({ length: 499 }, (_, i) => ({ id: `e${i}`, date: 'x', slot: 'y' }));
+    const out = captureMissedMeals({ plan, day: '2026-10-20', mealPlanEvents: many });
+    expect(out.mealPlanEvents).toHaveLength(500);
+    expect(out.mealPlanEvents.at(-1).id).toMatch(/^mpe_/);
   });
 });
