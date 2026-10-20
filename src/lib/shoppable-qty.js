@@ -86,6 +86,11 @@ export function shoppableQty(qty, name = '') {
     }
     return `1 ${containerFor(name)}`;
   }
+  // Cups are a recipe measure, not a pack: round a part-cup up to whole cups.
+  if (/^cups?$/i.test(unit) && !Number.isInteger(amount)) {
+    const cups = Math.ceil(amount);
+    return `${cups} ${cups === 1 ? 'cup' : 'cups'}`;
+  }
   if (MEASURES.test(unit)) return range ? text : raw;
 
   const packaged = COUNT_PACKAGES[unit.toLowerCase()];

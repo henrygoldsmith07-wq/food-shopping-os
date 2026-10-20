@@ -145,3 +145,12 @@ describe('shoppableQty containers for small amounts', () => {
     expect(shoppableQtyContainers('2 tbsp', 'olive oil')).toBe('1 bottle');
   });
 });
+
+describe('shoppableQty part-cups', () => {
+  it('rounds part-cups up to whole cups', async () => {
+    const { shoppableQty } = await import('../src/lib/shoppable-qty.js');
+    expect(shoppableQty('0.5 cups', 'milk')).toBe('1 cup');
+    expect(shoppableQty('1 1/2 cups', 'flour')).toBe('2 cups');
+    expect(shoppableQty('2 cups', 'rice')).toBe('2 cups');
+  });
+});
