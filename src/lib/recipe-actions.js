@@ -21,7 +21,10 @@ export const recipeActions = (set) => ({
   saveRecipe: (recipe) =>
     set((s) => {
       if (!householdPermission(s, 'recipes')) return {};
-      const id = s.myRecipes.some((r) => r.id === recipe.id) ? `${recipe.id}-${s.myRecipes.length + 1}` : recipe.id;
+      // Keep ids unique even after removals: `${id}-${n}` could otherwise match
+      // an existing copy and the two recipes would share one id.
+      let id = recipe.id;
+      for (let n = s.myRecipes.length + 1; s.myRecipes.some((r) => r.id === id); n += 1) id = `${recipe.id}-${n}`;
       return { myRecipes: [...s.myRecipes, { ...recipe, id, savedAt: s.day }] };
     }),
   removeRecipe: (id) =>
