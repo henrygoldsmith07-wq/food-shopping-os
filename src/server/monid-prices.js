@@ -21,7 +21,8 @@ import {
   CLI_TIMEOUT_MS, cliErrorBody, ignorePersistedState, isAuthFailure, monidOnPath,
   parseMonidJson, readMonidState, runMonid, setIgnorePersistedState, writeMonidState,
 } from './monid-cli.js';
-import { isMatch } from './search-terms.js';
+import { bestAnswer, isMatch } from './search-terms.js';
+import { parseMoney } from './scrape-parse.js';
 
 export {
   cliErrorBody, monidOnPath, parseMonidJson, runMonid,
@@ -30,9 +31,13 @@ export {
 /** Cap rows like every other source, so a chatty endpoint cannot flood a list. */
 const MAX_ROWS_PER_ENDPOINT = 8;
 
-/** A shelf price that is not plausible is not a price. Strings like '£1.25' are stripped to their digits first. */
+/**
+ * A shelf price that is not plausible is not a price. Strings like '£1.25'
+ * are read for their first amount — stripping every non-digit turned
+ * "£1.50 (£3.00/kg)" into nothing and "2 for £3" into £23.
+ */
 const clampPrice = (value) => {
-  const price = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.]/g, ''));
+  const price = typeof value === 'number' ? value : parseMoney(value);
   return Number.isFinite(price) && price > 0 && price <= 1000 ? Math.round(price * 100) / 100 : null;
 };
 
@@ -289,7 +294,7 @@ export const fillGapsFromBatch = (checks = [], batch) => {
       check.source = 'monid';
       check.monid = { status: 'ok', provider: batch.provider, rows: matched.length };
       check.cheapest = [...matched].sort((a, b) => a.price - b.price);
-      check.best = check.cheapest[0] || null;
+      check.best = bestAnswer(check.cheapest, check.query);
     } else {
       check.monid = { status: 'no-match', provider: batch.provider, rows: 0 };
     }
@@ -355,7 +360,10 @@ export const monidPrices = async (query, {
     return { ...base, provider, endpoint, status: runOut.status, note: `Monid run failed: ${cliErrorBody(runOut)}`.slice(0, 260) };
   }
   const payload = parseMonidJson(runOut.stdout);
-  const rows = rowsFromMonidReply(payload, { retailer, query: wanted });
+  // Judged like every other source: an endpoint's nearest hits for "milk"
+  // include chocolate, and the batch path already drops them.
+  const rows = rowsFromMonidReply(payload, { retailer, query: wanted })
+    .filter((row) => isMatch(row.name, wanted));
   return {
     ...base,
     provider,

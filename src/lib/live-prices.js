@@ -190,6 +190,18 @@ export const entryFromResult = (name, result) => ({
   checkedAt: result.checkedAt || new Date().toISOString(),
 });
 
+/** Shop outcomes that say "not this time" rather than "no price here". */
+const TRANSIENT = new Set(['aborted', 'rate-limited', 'unreachable', 'network-blocked', 'timeout', 'error']);
+
+/**
+ * Worth keeping for the 3h window? A price is; so is a clean "no shop had
+ * it". An empty answer because the budget ran out or a shop rate-limited us
+ * is not — caching it would show "no price" for three hours for a check that
+ * never really happened.
+ */
+export const cacheableEntry = (entry) => Boolean(entry?.best)
+  || !(entry?.unanswered || []).some((shop) => TRANSIENT.has(shop.status));
+
 /** How many items go up in one request. The route caps this at 12. */
 export const BATCH_SIZE = 4;
 
@@ -260,7 +272,7 @@ export const checkLivePricesForList = async (items = [], {
           const key = shoppingNameKey(name);
           if (!key) continue;
           const entry = entryFromResult(name, result);
-          cache[key] = entry;
+          if (cacheableEntry(entry)) cache[key] = entry;
           byKey[key] = { ...entry, cached: false };
           fetched += 1;
         }
