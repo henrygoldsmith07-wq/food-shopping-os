@@ -37,7 +37,13 @@ export const buildMultiDayPlan = ({
     if (!mealPool.length || (availableOnly && !strictPool.length)) relaxed = true;
     const narrowed = mealPool.length ? narrow(mealPool, dayCount) : forSlot;
     if (!mealPool.length) relaxed = true;
-    return narrowed.length ? narrowed : forSlot;
+    if (narrowed.length) return narrowed;
+    if (forSlot.length) return forSlot;
+    // No dish at all for this slot: borrow from the whole book so the day-major
+    // layout keeps every cell in its slot (a skipped cell would shift every
+    // later meal into the wrong slot and date).
+    relaxed = true;
+    return recipes;
   });
   const dinnerIdx = slotList.indexOf('dinner');
   const dinnerPool = dinnerIdx >= 0 ? slotPools[dinnerIdx] : [];
