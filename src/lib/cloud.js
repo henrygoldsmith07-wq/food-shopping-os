@@ -7,7 +7,8 @@ const BASE_FP_KEY = 'forq-cloud-base-v2';
 
 const readMeta = () => {
   try {
-    return JSON.parse(localStorage.getItem(META_KEY) || '{}');
+    const parsed = JSON.parse(localStorage.getItem(META_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
