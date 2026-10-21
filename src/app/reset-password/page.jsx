@@ -77,7 +77,7 @@ export default function ResetPasswordPage() {
           <button type="submit" disabled={busy} className="press rounded-2xl px-4 py-3 text-[0.875rem] font-extrabold disabled:opacity-60" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
             {busy ? 'One moment…' : 'Change password'}
           </button>
-          {error && <p id="reset-error" className="text-[0.8125rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
+          {error && <p id="reset-error" role="alert" className="text-[0.8125rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
         </form>
       )}
     </main>
