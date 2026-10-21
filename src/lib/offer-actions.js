@@ -13,7 +13,7 @@
 
 import { canonicalName, learnAlias } from './aliases.js';
 import { normalisePriceAlertConfig } from './price-alerts.js';
-import { normaliseCoupon } from './coupons.js';
+import { normaliseCoupon, COUPON_KINDS, LOYALTY_PROGRAMMES } from './coupons.js';
 import { consolidatePantry as consolidate } from './pantry-intelligence.js';
 import { routeFromTicks } from './shopping.js';
 import { householdPermission } from './household.js';
