@@ -176,7 +176,7 @@ export function SignInOptions({ providers = {}, callbackUrl = '/' }) {
       )}
       {notice && <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--good)' }}>{notice}</p>}
       {/* Tied to the form rather than a live region: the app keeps a fixed set of announcers. */}
-      {error && <p id="account-signin-error" className="text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
+      {error && <p id="account-signin-error" role="alert" className="text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
     </div>
   );
 }
