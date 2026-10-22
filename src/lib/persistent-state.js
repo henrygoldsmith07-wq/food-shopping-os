@@ -211,7 +211,8 @@ export const clearPersistedState = async () => {
 
 export const readPointer = () => {
   try {
-    return JSON.parse(localStorage.getItem(POINTER_KEY) || 'null');
+    const parsed = JSON.parse(localStorage.getItem(POINTER_KEY) || 'null');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null; // an unreadable pointer is metadata, not data
   }
