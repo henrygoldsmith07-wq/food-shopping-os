@@ -1,3 +1,4 @@
+import { accountErrorMessage } from '../lib/account-error.js';
 import { useState } from 'react';
 import { Copy, Mail, UserPlus } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
@@ -51,7 +52,7 @@ export default function HouseholdInvites() {
       setIssued(result);
       setEmail('');
     } catch (error) {
-      setMessage(error.message);
+      setMessage(accountErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -65,7 +66,7 @@ export default function HouseholdInvites() {
       setMessage('Joined the household — syncing now points at it.');
       setToken('');
     } catch (error) {
-      setMessage(error.message);
+      setMessage(accountErrorMessage(error));
     } finally {
       setBusy(false);
     }
