@@ -65,4 +65,12 @@ describe('vault actions', () => {
     localStorage.setItem(HEALTH_VAULT_KEY, '{not json');
     await expect(a.unlockHealthVault('anything')).rejects.toThrow(/unreadable/);
   });
+
+  it('unlock with a non-object stored record (array, number, string) is unreadable, not a crash', async () => {
+    const { a } = setup();
+    for (const raw of ['[]', '5', '"x"']) {
+      localStorage.setItem(HEALTH_VAULT_KEY, raw);
+      await expect(a.unlockHealthVault('anything')).rejects.toThrow(/unreadable/);
+    }
+  });
 });
