@@ -255,6 +255,11 @@ const barcodesForQuery = async (query, { signal } = {}) => {
   endpoint.searchParams.set('json', '1');
   endpoint.searchParams.set('page_size', String(BARCODES_PER_QUERY));
   endpoint.searchParams.set('fields', 'code');
+  // UK products only: the top global matches are mostly sold elsewhere and
+  // have no GBP observations, so an unfiltered search usually prices nothing.
+  endpoint.searchParams.set('tagtype_0', 'countries');
+  endpoint.searchParams.set('tag_contains_0', 'contains');
+  endpoint.searchParams.set('tag_0', 'united-kingdom');
   const payload = await getJson(endpoint, { headers: openDataHeaders(), signal }, 'Open Food Facts is temporarily unavailable.', { allowNotFound: true, timeoutMs: RETAILER_TIMEOUTS.openFoodFacts });
   const products = Array.isArray(payload?.products) ? payload.products : [];
   return [...new Set(products.map((product) => barcode(product?.code)).filter(Boolean))];

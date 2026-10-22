@@ -15,6 +15,9 @@ describe('shoppableQty: what to pick up, not what the recipe uses', () => {
     ['2 tbsp', 'Lemon juice', '1 lemon'],
     ['1.5 heads', 'Broccoli', '2 heads'],
     ['0.6 heads', 'Broccoli', '1 head'],
+    ['0.5 cups', 'Rice', '0.5 cups'],
+    ['0.5 bottles', 'Milk', '1 bottle'],
+    ['1.5 cups', 'Rice', '1.5 cups'],
   ])('%s %s -> %s', (qty, name, expected) => {
     expect(shoppableQty(qty, name)).toBe(expected);
   });
@@ -70,5 +73,75 @@ describe('every plan-derived list buys shoppable amounts', () => {
     expect(rows.Garlic).toMatchObject({ qty: '1 bulb', requiredQty: '2 tbsp' });
     expect(rows.Ginger).toMatchObject({ qty: '1 piece', requiredQty: '60 ml' });
     expect(rows['Firm tofu']).toMatchObject({ qty: '280 g' });
+  });
+});
+
+import { shoppableQty as shoppableQtyThousands } from '../src/lib/shoppable-qty.js';
+import { it as itT, expect as expectT } from 'vitest';
+itT('reads a thousands comma as thousands, not decimals', () => {
+  expectT(shoppableQtyThousands('1,500 ml', 'stock')).toBe('1,500 ml');
+  expectT(shoppableQtyThousands('1,5 kg', 'flour')).toBe('1,5 kg');
+});
+
+describe('fractional amounts', () => {
+  it('treats 1/2 tsp and ½ tsp as small spoon amounts', () => {
+    expect(shoppableQty('1/2 tsp', 'salt')).toBe('1 jar');
+    expect(shoppableQty('½ tsp', 'salt')).toBe('1 jar');
+    expect(shoppableQty('1 1/2 tbsp', 'olive oil')).toBe('1 bottle');
+  });
+  it('rounds fractional counts up and leaves weights alone', () => {
+    expect(shoppableQty('1/2 tin', 'beans')).toBe('1 tin');
+    expect(shoppableQty('1/2 kg', 'rice')).toBe('1/2 kg');
+  });
+});
+
+describe('ranges', () => {
+  it('buys for the top of a range', () => {
+    expect(shoppableQty('2-3 tbsp', 'olive oil')).toBe('1 bottle');
+    expect(shoppableQty('2 to 3 cloves', 'garlic')).toBe('1 bulb');
+    expect(shoppableQty('1-2 tins', 'beans')).toBe('2 tins');
+  });
+});
+
+describe('cups are a measure, not a count', () => {
+  it('does not round part-cups up to whole cups', () => {
+    expect(shoppableQty('1.5 cups', 'rice')).toBe('1.5 cups');
+    expect(shoppableQty('0.5 cup', 'flour')).toBe('0.5 cup');
+  });
+});
+
+describe('written-out halves', () => {
+  it('buys a whole one for "half a lemon"', async () => {
+    const { shoppableQty } = await import('../src/lib/shoppable-qty.js');
+    expect(shoppableQty('half a lemon', 'lemon')).toBe('1 lemon');
+    expect(shoppableQty('half an onion', 'onion')).toBe('1 onion');
+  });
+});
+
+describe('written-out quarters and thirds', () => {
+  it('buys a whole one', async () => {
+    const { shoppableQty } = await import('../src/lib/shoppable-qty.js');
+    expect(shoppableQty('quarter of a cabbage', 'cabbage')).toBe('1 cabbage');
+    expect(shoppableQty('a third of an onion', 'onion')).toBe('1 onion');
+    expect(shoppableQty('half a lemon', 'lemon')).toBe('1 lemon');
+  });
+});
+
+import { shoppableQty as shoppableQtyContainers } from '../src/lib/shoppable-qty.js';
+describe('shoppableQty containers for small amounts', () => {
+  it('buys coconut milk as a can, not a carton', () => {
+    expect(shoppableQtyContainers('100 ml', 'coconut milk')).toBe('1 can');
+    expect(shoppableQtyContainers('2 tbsp', 'oat milk')).toBe('1 carton');
+  });
+
+  it('buys butter as a pack and cream/milk as a carton, not a jar', () => {
+    expect(shoppableQtyContainers('3 tbsp', 'butter')).toBe('1 pack');
+    expect(shoppableQtyContainers('100 ml', 'double cream')).toBe('1 carton');
+    expect(shoppableQtyContainers('2 tbsp', 'milk')).toBe('1 carton');
+  });
+  it('keeps jars for spices and bottles for oil', () => {
+    expect(shoppableQtyContainers('2 tsp', 'dried oregano')).toBe('1 jar');
+    expect(shoppableQtyContainers('2 tbsp', 'peanut butter')).toBe('1 jar');
+    expect(shoppableQtyContainers('2 tbsp', 'olive oil')).toBe('1 bottle');
   });
 });

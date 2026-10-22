@@ -40,9 +40,11 @@ export const HOUSEHOLD_SCOPED_COLLECTIONS = new Set([
 export const UNINDEXED_COLLECTIONS = new Set(['analyticsDaily', 'analyticsEventReceipts']);
 
 /* Bare equality lookups hot enough to deserve their own set: memberships by
-   user, households by owner. */
+   user (+ reminder digest for the morning email job), accounts by user,
+   households by owner. Merged from origin/main group indexes. */
 export const INDEXED_SETS = {
-  memberships: ['userId'],
+  memberships: ['userId', 'reminderDigest'],
+  accounts: ['userId'],
   households: ['ownerId'],
 };
 

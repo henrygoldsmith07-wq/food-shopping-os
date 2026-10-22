@@ -279,3 +279,40 @@ describe('the audit trail survives household deletion', () => {
     }]);
   });
 });
+
+describe('cursor projection', () => {
+  it('supports the driver-style .project() the audit route uses', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({ _id: 'h1', name: 'One' });
+    const events = db.collection('auditEvents');
+    await events.insertOne({ householdId: 'h1', action: 'sync', secret: 'x', createdAt: new Date(1) });
+    const rows = await events.find({ householdId: 'h1' }).sort({ createdAt: -1 }).limit(100).project({ action: 1 }).toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].action).toBe('sync');
+    expect(rows[0].secret).toBeUndefined();
+  });
+});
+
+describe('group indexes', () => {
+  it('finds a user’s memberships, accounts and owned households without reading whole collections', async () => {
+    const db = await load();
+    await db.collection('households').insertOne({ _id: 'h1', name: 'One', ownerId: 'u1' });
+    await db.collection('households').insertOne({ _id: 'h2', name: 'Two', ownerId: 'u2' });
+    await db.collection('memberships').insertOne({ householdId: 'h1', userId: 'u1', role: 'owner' });
+    await db.collection('memberships').insertOne({ householdId: 'h2', userId: 'u1', role: 'adult' });
+    await db.collection('memberships').insertOne({ householdId: 'h2', userId: 'u2', role: 'owner' });
+    await db.collection('accounts').insertOne({ provider: 'google', providerAccountId: 'g1', userId: 'u1' });
+    // First reads mark each collection indexed (a one-time scan each).
+    for (const name of ['memberships', 'accounts', 'households']) await db.collection(name).find({ userId: 'none', ownerId: 'none' }).toArray();
+    store.scans.length = 0;
+
+    const mine = await db.collection('memberships').find({ userId: 'u1' }).toArray();
+    expect(mine.map((m) => m.householdId).sort()).toEqual(['h1', 'h2']);
+    const homes = await db.collection('households').find({ _id: { $in: ['h1', 'h2'] } }).toArray();
+    expect(homes).toHaveLength(2);
+    expect((await db.collection('households').find({ ownerId: 'u2' }).toArray()).map((h) => h._id)).toEqual(['h2']);
+    expect(await db.collection('accounts').findOne({ userId: 'u1', provider: 'google' })).toMatchObject({ providerAccountId: 'g1' });
+    expect(store.scans).toEqual([]);
+
+  });
+});

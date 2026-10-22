@@ -29,7 +29,7 @@ import {
   absoluteUrl, condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
   productsFromMicrodata, productsFromText,
 } from './scrape-parse.js';
-import { isMatch, matchScore, searchQueries } from './search-terms.js';
+import { bestAnswer, isMatch, matchScore, searchQueries } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
 import { monidPrices, monidOnPath } from './monid-prices.js';
 import { marketFallback } from './monid-market.js';
@@ -470,7 +470,7 @@ export const scrapePrices = async (query, {
     query: trimmed,
     results: answered,
     cheapest,
-    best: cheapest[0] || null,
+    best: bestAnswer(cheapest, trimmed),
     checkedAt,
     shopsChecked: settled.length,
     shopsAnswered: settled.filter((result) => result.status === 'ok').length,

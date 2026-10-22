@@ -24,7 +24,15 @@ export const vaultActions = ({
   },
   unlockHealthVault: async (passphrase) => {
     if (localStorage.getItem(HEALTH_CREDENTIAL_KEY)) await verifyPlatformUnlock();
-    const record = JSON.parse(localStorage.getItem(HEALTH_VAULT_KEY) || 'null');
+    let record = null;
+    try {
+      record = JSON.parse(localStorage.getItem(HEALTH_VAULT_KEY) || 'null');
+    } catch {
+      throw new Error('The encrypted health record on this device is unreadable. Restore from a backup to recover it.');
+    }
+    if (record !== null && (typeof record !== 'object' || Array.isArray(record))) {
+      throw new Error('The encrypted health record on this device is unreadable. Restore from a backup to recover it.');
+    }
     if (!record) throw new Error('No encrypted health record was found on this device.');
     const vault = await decryptHealth(record, passphrase);
     vaultKey.current = vault.key;

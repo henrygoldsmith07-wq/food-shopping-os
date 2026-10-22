@@ -335,12 +335,31 @@ describe('personal household recovery', () => {
     const findOneAndUpdate = vi.fn().mockResolvedValue({ _id: 'household-id', deletingAt });
     const database = await import('../src/server/database.js');
     const databaseSpy = vi.spyOn(database, 'getDatabase').mockResolvedValue({
-      collection: (name) => (name === 'households' ? { findOneAndUpdate } : { updateOne }),
+      collection: (name) => (name === 'households' ? { findOne: async () => null, findOneAndUpdate } : { updateOne }),
     });
 
     try {
       const result = await ensurePersonalHousehold({ id: 'user-1', name: 'Sam', email: 'sam@example.com' });
       expect(result.deletingAt).toEqual(deletingAt);
+      expect(updateOne).not.toHaveBeenCalled();
+    } finally {
+      databaseSpy.mockRestore();
+    }
+  });
+
+  it('writes nothing (and takes no lock) when the household and membership already exist', async () => {
+    const household = { _id: 'household-id', personalOwnerId: 'user-1' };
+    const findOneAndUpdate = vi.fn();
+    const updateOne = vi.fn();
+    const database = await import('../src/server/database.js');
+    const databaseSpy = vi.spyOn(database, 'getDatabase').mockResolvedValue({
+      collection: (name) => (name === 'households'
+        ? { findOne: async () => household, findOneAndUpdate }
+        : { findOne: async () => ({ householdId: 'household-id', userId: 'user-1', role: 'owner' }), updateOne }),
+    });
+    try {
+      expect(await ensurePersonalHousehold({ id: 'user-1', name: 'Sam' })).toBe(household);
+      expect(findOneAndUpdate).not.toHaveBeenCalled();
       expect(updateOne).not.toHaveBeenCalled();
     } finally {
       databaseSpy.mockRestore();

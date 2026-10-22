@@ -26,7 +26,8 @@ const analyticsReceiptExpiryKey = () => `${prefix}:analytics:receipt-expiry`;
  * one repairing scan. Indexes are built lazily the first time a collection
  * is read after this shipped (`ensureIndexed`), so no deploy step is needed.
  */
-const indexReadyKey = (name) => `${prefix}:index-ready:${name}`;
+// v2: group/value indexes joined the household ones, so every collection is re-indexed once.
+const indexReadyKey = (name) => `${prefix}:index-ready:v2:${name}`;
 const indexedCollections = new Set();
 
 /** A filter value that can be looked up by equality (not an operator object). */

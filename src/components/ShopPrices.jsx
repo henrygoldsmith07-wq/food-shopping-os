@@ -56,17 +56,17 @@ export default function ShopPrices({ app, visibleList, observed, offlineMode, is
           <div className="min-w-0">
             <p className="font-bold text-[0.875rem]">Real prices</p>
             <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              Your receipts are primary. Community observations are dated context — never a live quote.
+              Your receipts are primary. Rows without a price show a typical UK price until a check or a receipt replaces it{app.hasTool?.('live-prices') ? ' — a check asks the shops, then the community' : ''}.
             </p>
           </div>
           <button type="button" onClick={check} disabled={busy || offlineMode || !isOnline} className="press w-full shrink-0 rounded-2xl px-3.5 py-2.5 text-[0.78125rem] font-extrabold disabled:opacity-50 sm:w-auto sm:py-2" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
-            {offlineMode ? 'Offline mode' : busy ? 'Checking…' : byKey ? 'Check again' : 'Check community prices'}
+            {offlineMode ? 'Offline mode' : busy ? 'Checking…' : byKey ? 'Check again' : app.hasTool?.('live-prices') ? 'Check shop prices' : 'Check community prices'}
           </button>
         </div>
         {error && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
         {meta && !error && (
           <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            {Object.keys(byKey || {}).length} item{Object.keys(byKey || {}).length === 1 ? '' : 's'} with an observation{meta.fromCache ? ` · ${meta.fromCache} from 24h cache` : ''} · community observed, not live.
+            {meta.live !== undefined && `${meta.live} with a live shop price · `}{Object.keys(byKey || {}).length} item{Object.keys(byKey || {}).length === 1 ? '' : 's'} with an observation{meta.fromCache ? ` · ${meta.fromCache} from 24h cache` : ''} · community observed, not live.
           </p>
         )}
         {byKey && (

@@ -52,7 +52,10 @@ export const householdActions = (set, uid) => ({
   toggleMemberDiet: (id, diet) =>
     set((state) => ({
       members: state.members.map((member) => (member.id === id
-        ? { ...member, diets: member.diets.includes(diet) ? member.diets.filter((item) => item !== diet) : [...member.diets, diet] }
+        ? (() => {
+          const diets = Array.isArray(member.diets) ? member.diets : [];
+          return { ...member, diets: diets.includes(diet) ? diets.filter((item) => item !== diet) : [...diets, diet] };
+        })()
         : member)),
     })),
   toggleMemberAllergy: (id, value) => set((state) => ({ members: state.members.map((member) => (
@@ -112,14 +115,14 @@ export const householdActions = (set, uid) => ({
       };
     }),
   removeChore: (id) => set((state) => ({ chores: state.chores.filter((chore) => chore.id !== id) })),
-  importHousehold: (snapshot) =>
+  importHousehold: (snapshot = {}) =>
     set((state) => ({
       householdName: snapshot.householdName || state.householdName,
-      members: snapshot.members,
-      pantry: snapshot.pantry,
-      shoppingList: snapshot.shoppingList,
-      myRecipes: snapshot.myRecipes,
-      chores: snapshot.chores,
+      members: Array.isArray(snapshot.members) ? snapshot.members : state.members,
+      pantry: Array.isArray(snapshot.pantry) ? snapshot.pantry : state.pantry,
+      shoppingList: Array.isArray(snapshot.shoppingList) ? snapshot.shoppingList : state.shoppingList,
+      myRecipes: Array.isArray(snapshot.myRecipes) ? snapshot.myRecipes : state.myRecipes,
+      chores: Array.isArray(snapshot.chores) ? snapshot.chores : state.chores,
       activeMemberId: null,
       ...event(state, uid, 'Household snapshot imported.', 'sync'),
     })),

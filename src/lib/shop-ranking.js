@@ -11,12 +11,24 @@ import {
   classifyProductMatch, comparableForRanking, majorityReference, matchDifferenceLabel,
 } from './product-matching.js';
 
-/** Cheapest row per shop, so one shop cannot fill the whole table. */
+/**
+ * Which of two rows better answers the item: the closer match, then one that
+ * can actually be bought, and only then the cheaper ticket.
+ *
+ * Price alone is the wrong first key. The cheapest row on a "semi skimmed
+ * milk" page is often the skimmed bottle beside it, or a line that is out of
+ * stock — a real price, for something the person cannot or did not want.
+ */
+export const answerOrder = (a, b) => (b.relevance ?? 0) - (a.relevance ?? 0)
+  || Number(a.inStock === false) - Number(b.inStock === false)
+  || a.price - b.price;
+
+/** The best answer per shop, so one shop cannot fill the whole table. */
 export const bestPerRetailer = (result) => {
   const byRetailer = new Map();
   for (const row of result?.cheapest || []) {
     const existing = byRetailer.get(row.retailerId);
-    if (!existing || row.price < existing.price) byRetailer.set(row.retailerId, row);
+    if (!existing || answerOrder(row, existing) < 0) byRetailer.set(row.retailerId, row);
   }
   return [...byRetailer.values()].sort((a, b) => a.price - b.price);
 };

@@ -76,7 +76,7 @@ export const FoodRow = ({ food, onPick, right }) => {
   return (
     <div className="flex items-center gap-3 p-3" style={{ borderColor: 'var(--line)' }}>
       <button onClick={() => onPick(food)} className="press flex flex-1 items-center gap-3 min-w-0 text-left">
-        <Glyph e={food.emoji} size={20} style={{ color: 'var(--muted)' }} />
+        <Glyph e={food.emoji} name={food.name} size={20} style={{ color: 'var(--muted)' }} />
         <span className="min-w-0 flex-1">
           <span className="block font-bold text-[0.875rem] truncate">{food.name}</span>
           <span className="block text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>

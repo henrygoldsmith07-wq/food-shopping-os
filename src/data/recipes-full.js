@@ -25,7 +25,14 @@ const SHELVES = [
   MORE_RECIPES_THREE,
 ];
 
-const known = (recipe) => recipe.estimateConfidence !== 'unknown';
+/**
+ * Shelf rows whose ingredients were filled in by the estimator rather than
+ * written for the dish ('estimate': a cheese omelette with no eggs, porridge
+ * with onion and broccoli, a placeholder 40-minute time) or are unknown
+ * altogether are withdrawn: kept resolvable for meals already planned, never
+ * offered.
+ */
+const known = (recipe) => !['unknown', 'estimate'].includes(recipe.estimateConfidence);
 
 /** The dishes this module adds to the book. Loading is a side effect of import. */
 export const FULL_RECIPES = SHELVES.flatMap((shelf) => registerRecipes(shelf.filter(known)));

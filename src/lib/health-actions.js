@@ -136,9 +136,14 @@ export const healthActions = (set) => ({
   importWorkouts: (list) =>
     set((s) => {
       const seen = new Set(s.workouts.map((w) => `${w.date}|${w.type}|${w.minutes}`));
-      const fresh = list
-        .filter((w) => !seen.has(`${w.date}|${w.type}|${w.minutes}`))
-        .map((w) => ({ id: uid('w'), ...w }));
+      const fresh = [];
+      (Array.isArray(list) ? list : []).forEach((w) => {
+        if (!w || typeof w !== 'object') return;
+        const k = `${w.date}|${w.type}|${w.minutes}`;
+        if (seen.has(k)) return;
+        seen.add(k); // the same session twice inside one paste is still one session
+        fresh.push({ id: uid('w'), ...w });
+      });
       return fresh.length ? { workouts: [...s.workouts, ...fresh] } : {};
     }),
   setCountExerciseKcal: (on) => set({ countExerciseKcal: Boolean(on) }),

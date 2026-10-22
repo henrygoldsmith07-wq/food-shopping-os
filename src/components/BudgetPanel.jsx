@@ -7,6 +7,7 @@ import { spendByMonth, weekDates } from '../lib/kitchen.js';
 import { planStats } from '../lib/mealplan.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { gbp } from '../lib/utils.js';
+import { Glyph } from './icons.jsx';
 import { Bars, Card, Meter, Pill, Section } from './ui.jsx';
 
 const PCT_CHOICES = [5, 10, 15, 20, 25, 30, 50];
@@ -191,7 +192,7 @@ export default function BudgetPanel() {
                   <div className="mt-2 space-y-2">
                     {anomalies.rises.map((r) => (
                       <div key={r.name} className="rounded-2xl border px-3 py-2.5 flex items-center gap-2.5" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
-                        <span className="text-[1.125rem] leading-none">{r.emoji || '🛒'}</span>
+                        <Glyph e={r.emoji || '🛒'} name={r.name} size={18} style={{ color: 'var(--muted)' }} />
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-[0.8125rem] truncate">{r.name} <span className="font-semibold" style={{ color: 'var(--danger)' }}>+{r.pct}%</span></p>
                           <p className="text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>

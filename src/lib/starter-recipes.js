@@ -161,10 +161,12 @@ const reasonsFor = (recipe, { patterns, prefs, fromMembers }) => {
 /** Ranking among dishes that are already suitable. Preference, never safety. */
 const baseScore = (recipe, patterns) => {
   const prefers = patterns.map(dietPattern).filter((p) => p?.prefer);
-  // Confidence leads deliberately, and nothing here outweighs it — including
-  // being one of the hand-written signature dishes. A dish whose ingredients
-  // the app can read is a dish it can filter honestly, which is the point.
+  // Confidence leads deliberately: a dish whose ingredients the app can read
+  // is a dish it can filter honestly. Among readable dishes, a hand-written
+  // one is preferred to a combination from the generated shelves — setup is
+  // the first impression, and it used to open on the combinations.
   return ingredientConfidence(recipe) * 5
+    + (String(recipe.id).startsWith('generated') ? 0 : 1.5)
     + prefers.filter((p) => p.prefer(recipe)).length
     + (recipe.healthScore || 0) / 100;
 };

@@ -116,7 +116,7 @@ export function BarcodeScanner({ defaultMeal, onPick, onCreateCustom }) {
       {phase === 'found' && food && (
         <Card className="rise">
           <div className="flex items-center gap-3">
-            <Glyph e={food.emoji} size={22} style={{ color: 'var(--muted)' }} />
+            <Glyph e={food.emoji} name={food.name} size={22} style={{ color: 'var(--muted)' }} />
             <div className="min-w-0 flex-1">
               <p className="font-extrabold text-[0.9375rem] truncate">{food.name}</p>
               <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
@@ -170,7 +170,7 @@ const ItemRow = ({ item, onGrams, onRemove }) => {
   const macros = scale(item.food.per100, item.grams);
   return (
     <div className="flex items-center gap-3 p-3" style={{ borderColor: 'var(--line)' }}>
-      <Glyph e={item.food.emoji} size={20} style={{ color: 'var(--muted)' }} />
+      <Glyph e={item.food.emoji} name={item.food.name} size={20} style={{ color: 'var(--muted)' }} />
       <div className="min-w-0 flex-1">
         <p className="font-bold text-[0.875rem] truncate">{item.food.name}</p>
         <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>

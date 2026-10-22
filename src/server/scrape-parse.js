@@ -271,30 +271,37 @@ export const productsFromJsonLd = (html = '') => {
 export const productsFromMicrodata = (html = '') => {
   const source = String(html);
   const rows = [];
-  const matches = [
+  const tagged = (regex, wrapper) => [...source.matchAll(regex)].map((match) => Object.assign(match, { wrapper }));
+  const all = [
     // itemprop="price" content="1.45"
-    ...source.matchAll(/<[^>]*itemprop=["']price["'][^>]*?(?:content|value)=["']([^"']+)["'][^>]*>/gi),
+    ...tagged(/<[^>]*itemprop=["']price["'][^>]*?(?:content|value)=["']([^"']+)["'][^>]*>/gi, false),
     // <span itemprop="price">£1.45</span>
-    ...source.matchAll(/<[^>]*itemprop=["']price["'][^>]*>([^<]{1,40})</gi),
+    ...tagged(/<[^>]*itemprop=["']price["'][^>]*>([^<]{1,40})</gi, false),
     // data-price="1.45" / data-product-price="145"
-    ...source.matchAll(/<[^>]*\bdata-(?:product-)?price=["']([^"']{1,20})["'][^>]*>/gi),
+    ...tagged(/<[^>]*\bdata-(?:product-)?price=["']([^"']{1,20})["'][^>]*>/gi, true),
   ].sort((a, b) => a.index - b.index);
-  const seen = new Set();
-  for (const match of matches) {
-    if (seen.has(match.index)) continue;
-    seen.add(match.index);
+  const matches = all.filter((match, index) => !index || match.index !== all[index - 1].index);
+  const NAME_PROP = /itemprop=["']name["'][^>]*>([^<]{2,200})</gi;
+  const HEADING = /<(?:h2|h3|h4|a)\b[^>]*>([^<]{4,200})</gi;
+  const first = (text, regex) => [...text.matchAll(regex)][0]?.[1];
+  const last = (text, regex) => [...text.matchAll(regex)].pop()?.[1];
+  matches.forEach((match, index) => {
     const price = parseMoney(match[1]);
-    if (price === null) continue;
-    const before = source.slice(Math.max(0, match.index - 1200), match.index);
-    // A card that carries the price on its wrapper has the name inside it, so
-    // looking only backwards misses every shop that markets up that way.
-    const after = source.slice(match.index, match.index + 1200);
-    const name = [...before.matchAll(/itemprop=["']name["'][^>]*>([^<]{2,200})</gi)].pop()?.[1]
-      || [...before.matchAll(/<(?:h2|h3|a)\b[^>]*>([^<]{4,200})</gi)].pop()?.[1]
-      || after.match(/itemprop=["']name["'][^>]*>([^<]{2,200})</i)?.[1]
-      || '';
+    if (price === null) return;
+    // Bounded by the neighbouring prices, so a card with no name of its own
+    // cannot borrow the one before or after it.
+    const start = Math.max(0, match.index - 1200, matches[index - 1]?.index ?? 0);
+    const end = Math.min(match.index + 1200, matches[index + 1]?.index ?? source.length);
+    const before = source.slice(start, match.index);
+    const after = source.slice(match.index, end);
+    // A `data-price` sits on the card's wrapper with the name inside it; an
+    // itemprop price sits inside the card, after its name. Each reads its own
+    // card first and only then the other side.
+    const behind = () => last(before, NAME_PROP) || last(before, HEADING);
+    const inside = () => first(after, NAME_PROP) || first(after, HEADING);
+    const name = (match.wrapper ? inside() || behind() : behind() || inside()) || '';
     const cleanName = decodeEntities(name).replace(/\s+/g, ' ').trim();
-    if (!cleanName) continue;
+    if (!cleanName) return;
     rows.push({
       name: cleanName.slice(0, 200),
       price,
@@ -310,8 +317,33 @@ export const productsFromMicrodata = (html = '') => {
       method: 'microdata',
       confidence: 'medium',
     });
-  }
+  });
   return rows;
+};
+
+// Also matches a currency code, because plenty of pages render the symbol in
+// a separate element and the flattened text reads "GBP 1.45".
+const PRICE_TOKEN = /[£$€]\s?\d+(?:\.\d{1,2})?|\bGBP\s?\d+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?\s?GBP\b|\b\d{1,3}p\b/gi;
+/** "£0.34/100g", "£3.00 per kg": a unit price, not what the pack costs. */
+const UNIT_SUFFIX = /^\s*(?:\/|per\b)\s*(?:\d+(?:\.\d+)?\s*)?(?:kg|g|l|litre|litres|ltr|ml|cl|each|ea|item|sheet|wash|pint|pt)\b/i;
+/** "Was £2.00", "Save 50p", "3 for £5": a real number, but not today's price for one. */
+const NOT_SHELF = /\b(?:was|save|saving|rrp|for|off)\s*$/i;
+const PRICE_LABEL = /\b(?:was|now|save|saving|rrp|only|price|offer)\b/gi;
+
+/**
+ * The shelf price on a line, skipping unit prices and old or promotional
+ * figures. A grid that prints "£0.34/100g" above "£1.40" otherwise reads the
+ * unit price as the pack price — and, being the smaller number, it wins.
+ */
+const shelfPrice = (line) => {
+  for (const match of line.matchAll(PRICE_TOKEN)) {
+    const before = line.slice(0, match.index);
+    const after = line.slice(match.index + match[0].length);
+    if (UNIT_SUFFIX.test(after) || NOT_SHELF.test(before)) continue;
+    const price = parseMoney(match[0]);
+    if (price) return { price, token: match[0] };
+  }
+  return null;
 };
 
 /**
@@ -323,14 +355,9 @@ export const productsFromText = (text = '', { query = '' } = {}) => {
   const lines = String(text).split('\n').map((line) => line.trim()).filter(Boolean);
   const rows = [];
   lines.forEach((line, index) => {
-    // Also matches a currency code, because plenty of pages render the symbol
-    // in a separate element and the flattened text reads "GBP 1.45".
-    const priceMatch = line.match(
-      /[£$€]\s?\d+(?:\.\d{1,2})?|\bGBP\s?\d+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?\s?GBP\b|\b\d{1,3}p\b/i,
-    );
-    if (!priceMatch) return;
-    const price = parseMoney(priceMatch[0]);
-    if (price === null || price === 0) return;
+    const shelf = shelfPrice(line);
+    if (!shelf) return;
+    const { price } = shelf;
     // Strip every price token, not just the matched one: a line reading
     // "£2.15 — £0.94/litre" has no product name left in it, and the name is
     // on the line above. Letters are what make a remainder a name.
@@ -338,18 +365,30 @@ export const productsFromText = (text = '', { query = '' } = {}) => {
       .replace(/[£$€]\s?\d+(?:\.\d{1,2})?(?:\s*(?:\/|per\s+)\s*[\w.]+)?/gi, ' ')
       .replace(/\bGBP\s?\d+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?\s?GBP\b/gi, ' ')
       .replace(/\b\d{1,3}p\b/gi, ' ')
+      .replace(PRICE_LABEL, ' ')
       .replace(/[^\p{L}\p{N} .,'&%()-]/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     const hasWords = (value) => (value.match(/\p{L}/gu) || []).length >= 4;
-    const name = (hasWords(inline) ? inline : lines[index - 1] || '').replace(/\s+/g, ' ').trim();
+    // The name is usually the line above, but a unit price or "Was £2.00"
+    // line can sit between them. Look past one such line, never past another
+    // product's shelf price.
+    const above = () => {
+      for (const back of [1, 2]) {
+        const candidate = lines[index - back] || '';
+        if (hasWords(candidate)) return candidate;
+        if (shelfPrice(candidate)) return '';
+      }
+      return '';
+    };
+    const name = (hasWords(inline) ? inline : above()).replace(/\s+/g, ' ').trim();
     if (!hasWords(name)) return;
     // Without a query every £ on the page qualifies, which is noise not data.
     if (terms.length && !terms.some((term) => name.toLowerCase().includes(term))) return;
     rows.push({
       name: name.slice(0, 200),
       price,
-      currency: normaliseCurrency(priceMatch[0]),
+      currency: normaliseCurrency(shelf.token),
       url: null,
       brand: null,
       packSize: parsePackSize(name),

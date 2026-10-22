@@ -60,6 +60,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const covered = coveredByLeftovers(app.plan, dates, app.pantry, { people: effectivePeople });
   const batches = batchGroups(app.plan, dates, { people: effectivePeople });
   const thisWeekDates = useMemo(() => weekDates(app.day), [app.day]);
+  const aheadNextWeek = view === 'week' && offset === 0 ? planStats(app.plan, weekDates(shiftWeek(app.day, 1)), { people: effectivePeople }).meals : 0;
   const prepSteps = useMemo(() => prepChecklist(app.plan, dates), [app.plan, dates]);
   const prep = prepProgress(prepSteps, prepDone);
   const rangeLabel = view === 'week'
@@ -110,6 +111,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           {stats.meals
             ? `${stats.meals} meal${stats.meals === 1 ? '' : 's'} planned · about ${gbp(stats.cost, { always: true })} for ${effectivePeople} ${view === 'week' ? 'this week' : 'this month'}`
             : 'Tap any slot to plan a meal, or let the generator fill the week.'}
+          {/* Late in the week, meals planned from today run into next week: say so rather than look lost. */}
+          {aheadNextWeek > 0 && <button type="button" onClick={() => setOffset(1)} className="ml-1.5 font-bold underline" style={{ color: 'var(--accent)' }}>+ {aheadNextWeek} more next week</button>}
         </p>
       </div>
 

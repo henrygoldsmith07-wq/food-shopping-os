@@ -90,6 +90,14 @@ describe.skipIf(!haveIndexedDb)('backup export and restore', () => {
     vi.restoreAllMocks();
   });
 
+  it('still exports when the health vault record on the device is corrupt', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded({ healthVaultEnabled: true })));
+    localStorage.setItem(HEALTH_VAULT_KEY, '{not json');
+    const getApp = await renderStore();
+    const backup = await act(async () => getApp().exportData());
+    expect(JSON.parse(backup).format).toBe('forq-backup');
+  });
+
   it('round-trips a household through export, a wiped install and a restore', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded()));
     const getApp = await renderStore();

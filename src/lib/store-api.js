@@ -47,6 +47,16 @@ import {
 import { buildDomainCommands } from './store-commands.js';
 import { ledgerCommands } from './event-ledger.js';
 import { pantryLifecycleActions } from './store-pantry-slice.js';
+// A corrupt vault record must not make the whole backup export throw.
+const readVaultRecord = () => {
+  try {
+    const record = JSON.parse(localStorage.getItem(HEALTH_VAULT_KEY) || 'null');
+    return record && typeof record === 'object' && !Array.isArray(record) ? record : null;
+  } catch {
+    return null;
+  }
+};
+
 export function useStoreApi({
   blockPersistence, cloudStatus, latest, setState, setStorageIssue, storageIssue,
   undoHistory, undoBatch, vaultKey, vaultSalt, vaultWrites, setVaultUnlocked,
@@ -86,7 +96,7 @@ export function useStoreApi({
       exportData: () => serialiseBackup(
         latest.current,
         latest.current.healthVaultEnabled
-          ? JSON.parse(localStorage.getItem(HEALTH_VAULT_KEY) || 'null')
+          ? readVaultRecord()
           : null,
       ),
       restoreData: (text) => {

@@ -319,7 +319,7 @@ export default function PriceCompare() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-extrabold text-[0.90625rem] flex items-center gap-1.5">
-                      <Glyph e={p.emoji} size={15} style={{ color: 'var(--muted)' }} /> {p.name}
+                      <Glyph e={p.emoji} name={p.name} size={15} style={{ color: 'var(--muted)' }} /> {p.name}
                     </p>
                     <p className="text-[0.8125rem] font-bold mt-0.5">
                       {gbp(p.latest, { always: true })}

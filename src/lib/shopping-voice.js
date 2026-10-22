@@ -27,7 +27,9 @@ const voiceItem = (chunk) => {
     const packed = normaliseVoiceQty(bulk[2]).replace(/\s+/g, '');
     return { name: bulk[3].replace(/[.!?]+$/, '').trim(), qty: `${bulk[1]} x ${packed}` };
   }
-  const prefix = text.match(new RegExp(`^(\\d+(?:\\.\\d+)?|${Object.keys(VOICE_NUMBERS).join('|')})\\s*((${VOICE_UNIT_PATTERN})\\b)?\\s*(?:of\\s+)?(.+)$`, 'i'));
+  // Digits may touch their unit ("2kg"); number words must stand alone, or
+  // "apples" reads as "a" + "pples" and "tenderstem" as "ten" + "derstem".
+  const prefix = text.match(new RegExp(`^(\\d+(?:\\.\\d+)?|(?:${Object.keys(VOICE_NUMBERS).join('|')})(?=\\s))\\s*((${VOICE_UNIT_PATTERN})\\b)?\\s*(?:of\\s+)?(.+)$`, 'i'));
   if (!prefix) return { name: text.replace(/[.!?]+$/, '').trim(), qty: '' };
   const number = VOICE_NUMBERS[prefix[1].toLowerCase()] || prefix[1];
   const unit = prefix[3] ? (VOICE_UNIT_ALIASES[prefix[3].toLowerCase()] || prefix[3].toLowerCase()) : '';

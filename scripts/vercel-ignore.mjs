@@ -139,6 +139,14 @@ if (!base || !hasCommit(base)) {
   process.exit(BUILD);
 }
 
+// The same commit as the last deployment is a deliberate redeploy — almost
+// always to pick up changed environment variables, which no diff can see.
+// Skipping it would make "Redeploy" a no-op, so it always builds.
+if (base === head) {
+  console.log(`vercel-ignore: ${project}: redeploy of ${head.slice(0, 8)} — building.`);
+  process.exit(BUILD);
+}
+
 // The app owns every tracked file except the marketing site's own directory;
 // the marketing site owns only itself. `appOwnedPaths` returns null when the
 // repo cannot be enumerated, and an unknown scope is a reason to build.

@@ -10,8 +10,9 @@ import { Glyph } from './icons.jsx';
 import { Chip, GestureMenu, Pill } from './ui.jsx';
 import CorrectionSheet from './CorrectionSheet.jsx';
 import { listRowCorrections } from '../lib/corrections.js';
+import { rowEstimate } from '../lib/basket-estimate.js';
 
-export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, largeTouch = false, pastCap = false, guardOver = false }) {
+export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, priceEvidence = null, largeTouch = false, pastCap = false, guardOver = false }) {
   const app = useApp();
   const [moving, setMoving] = useState(false);
   const [swapping, setSwapping] = useState(false);
@@ -28,6 +29,8 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
   const substitutions = insight.substitutions?.candidates || [];
   const change = insight.priceChange;
   const favourite = app.favouriteShopping.some((saved) => shoppingNameKey(saved.name) === shoppingNameKey(item.name));
+  // A row with no price of its own shows what it is estimated at, and from what.
+  const borrowed = Number(item.price) > 0 ? null : rowEstimate(item, priceEvidence || {});
   const toggle = () => {
     app.toggleChecked(item.id);
     if (!item.checked) haptic();
@@ -68,7 +71,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
           {item.checked && <Check className="check-in" size={13} strokeWidth={3} />}
         </button>
         <button onClick={() => setMoving((v) => !v)} aria-label={`Move ${item.name} to another aisle`} className="press shrink-0">
-          <Glyph e={item.emoji} size={20} style={{ color: 'var(--muted)' }} />
+          <Glyph e={item.emoji} name={item.name} size={20} style={{ color: 'var(--muted)' }} />
         </button>
         <div className="min-w-0 flex-1">
           {/* Wrapped, not truncated. This row puts the name in a flexible
@@ -213,6 +216,11 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
               <span className="text-[0.625rem]" style={{ color: 'var(--faint)' }}>community observed — not live</span>
             </p>
           )}
+          {borrowed && borrowed.source !== 'observed' && (
+            <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              about {gbp(borrowed.price, { always: true })} · {borrowed.label}
+            </p>
+          )}
           {observedPrice?.error && (
             <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>{observedPrice.error}</p>
           )}
@@ -242,7 +250,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
           step="0.25"
           value={item.price || ''}
           onChange={(e) => app.updateListItem(item.id, { price: Number(e.target.value) || 0 })}
-          placeholder="£"
+          placeholder={borrowed ? borrowed.price.toFixed(2) : '£'}
           aria-label={`Price of ${item.name}`}
           className={cx('shrink-0 rounded-xl border px-2 text-right outline-none', largeTouch ? 'w-24 py-3 text-[0.9375rem]' : 'w-14 py-1.5 text-[0.8125rem]', 'font-bold')}
           style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}

@@ -106,13 +106,28 @@ describe('monidPrices', () => {
       calls.push(args.join(' '));
       // argv[0] is the CLI entry path once resolved; match on the subcommand.
       if (args.includes('discover')) cb(null, JSON.stringify({ results: [{ provider: 'apify', endpoint: '/grocery/scraper' }] }), '');
-      else cb(null, JSON.stringify({ products: [{ name: 'Heinz beans', price: 0.95 }] }), '');
+      else cb(null, JSON.stringify({ products: [{ name: 'Heinz Baked Beans', price: 0.95 }] }), '');
     };
     const result = await monidPrices('baked beans', { execImpl: exec });
     expect(calls[0]).toContain('discover');
     expect(result.status).toBe('ok');
     expect(result.provider).toBe('apify');
-    expect(result.rows[0]).toMatchObject({ name: 'Heinz beans', price: 0.95, source: 'monid' });
+    expect(result.rows[0]).toMatchObject({ name: 'Heinz Baked Beans', price: 0.95, source: 'monid' });
+    delete process.env.MONID_FORCE_CONFIGURED;
+  });
+
+  it('drops rows that are not the product, like the batch path does', async () => {
+    process.env.MONID_DISABLED = '';
+    process.env.MONID_FORCE_CONFIGURED = 'true';
+    const exec = (cmd, args, opts, cb) => {
+      if (args.includes('discover')) cb(null, JSON.stringify({ results: [{ provider: 'apify', endpoint: '/grocery/scraper' }] }), '');
+      else cb(null, JSON.stringify({ products: [
+        { name: 'Cadbury Dairy Milk Chocolate Bar', price: 0.75 },
+        { name: 'Semi Skimmed Milk 2 Pints', price: 1.25 },
+      ] }), '');
+    };
+    const result = await monidPrices('milk', { execImpl: exec });
+    expect(result.rows.map((row) => row.name)).toEqual(['Semi Skimmed Milk 2 Pints']);
     delete process.env.MONID_FORCE_CONFIGURED;
   });
 

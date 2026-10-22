@@ -144,7 +144,7 @@ export default function PantryCapture({ onDone }) {
             {items.map((item, i) => (
               <div key={`${item.name}-${i}`} className="p-3 space-y-2" style={{ borderColor: 'var(--line)' }}>
                 <div className="flex items-center gap-3">
-                  <Glyph e={item.emoji} size={20} style={{ color: 'var(--muted)' }} />
+                  <Glyph e={item.emoji} name={item.name} size={20} style={{ color: 'var(--muted)' }} />
                   <input
                     value={item.name}
                     onChange={(e) => update(i, { name: e.target.value })}

@@ -18,6 +18,7 @@ import { haptic } from '../lib/haptics.js';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { Card, Chip, Stepper, Toggle } from './ui.jsx';
 import StarterPicker from './StarterPicker.jsx';
+import OnboardingAccount from './AccountSignIn.jsx';
 import { NumberField } from './FoodDetail.jsx';
 import { TargetPreview } from './TargetSafety.jsx';
 import { QUICK_START_DEFAULTS, firstSessionPlan } from '../lib/onboarding-quick-start.js';
@@ -184,6 +185,7 @@ export default function Onboarding() {
       <div className="mt-6 space-y-4 rise rise-1">
         {step === 0 && (
           <>
+            <OnboardingAccount />
             <fieldset>
               <legend className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
                 What would you like help with first?

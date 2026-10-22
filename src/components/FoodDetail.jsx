@@ -75,7 +75,7 @@ function HealthierSwaps({ food }) {
       <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
         {swaps.map(({ food: alt, why, kcalDiff }) => (
           <div key={alt.id} className="flex items-center gap-3 p-2.5">
-            <Glyph e={alt.emoji} size={18} style={{ color: 'var(--muted)' }} />
+            <Glyph e={alt.emoji} name={alt.name} size={18} style={{ color: 'var(--muted)' }} />
             <div className="min-w-0 flex-1">
               <p className="text-[0.84375rem] font-bold truncate">{alt.name}</p>
               <p className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>

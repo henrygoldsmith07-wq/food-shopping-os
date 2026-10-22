@@ -281,6 +281,8 @@ export default function RecipesTab({ openRecipe }) {
         <div className="mb-3 grid min-w-0 gap-2 sm:flex sm:items-center sm:justify-between">
           <p className="min-w-0 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
             {recipes.length} recipe{recipes.length === 1 ? '' : 's'}
+            {/* Named, so this count and the Library tab's total read as the part and the whole. */}
+            {view === 'library' && !query.trim() && filter && ` in ${filter}`}
             {filters.maxMissing === 0 && ' you can cook right now'}
             {filters.maxTime && ` in ${filters.maxTime} minutes or less`}
             {filters.diets.length > 0 && ` · ${filters.diets.join(', ')}`}

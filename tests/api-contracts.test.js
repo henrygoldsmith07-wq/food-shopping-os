@@ -46,6 +46,9 @@ const NO_AUTH_ROUTES = new Set([
   'api/readiness/route.js',
   'api/jobs/reminders/route.js', // cron bearer secret, not a session
   'api/coach/[token]/route.js', // token bearer, not a session
+  'api/account/register/route.js', // creates the account a session needs
+  'api/account/verify/route.js', // one-time emailed token, not a session
+  'api/account/password-reset/route.js', // one-time emailed token, not a session
 ]);
 
 // Routes that intentionally skip assertSameOrigin (GET-only probes, SSE

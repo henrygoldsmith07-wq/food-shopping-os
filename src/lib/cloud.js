@@ -7,7 +7,8 @@ const BASE_FP_KEY = 'forq-cloud-base-v2';
 
 const readMeta = () => {
   try {
-    return JSON.parse(localStorage.getItem(META_KEY) || '{}');
+    const parsed = JSON.parse(localStorage.getItem(META_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -36,7 +37,7 @@ const saveMetaIfNewer = (next) => {
 const readQueue = () => {
   try {
     const queued = JSON.parse(localStorage.getItem(QUEUE_KEY) || 'null');
-    return queued?.state && queued?.meta ? queued : null;
+    return queued && typeof queued === 'object' && queued.state && queued.meta ? queued : null;
   } catch {
     return null;
   }
@@ -57,7 +58,8 @@ export function lastSyncedAt() {
 
 const readBase = () => {
   try {
-    return JSON.parse(localStorage.getItem(BASE_FP_KEY) || 'null');
+    const parsed = JSON.parse(localStorage.getItem(BASE_FP_KEY) || 'null');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -175,6 +177,25 @@ export const listConflictStatus = (applied, mergedMessage) => (applied.conflicts
   }
   : { kind: 'ready', message: mergedMessage });
 
+/**
+ * What a finished push means for the sync loop. A 409 that carried the
+ * household copy is folded in by `adopt`, which moves this device onto that
+ * version — so syncing carries on, fights or not (they wait for a pick; edits
+ * keep flowing). Only a bare conflict or an error stops it until the next
+ * pull. Stopping on every 409 left later edits on the device for good.
+ *
+ * @param {{ kind: string, remoteState?: any, remoteVersion?: number }} status
+ * @param {(remoteState: any, remoteVersion: number) => ({ conflicts: number } | null)} adopt
+ */
+export const settlePush = (status, adopt) => {
+  if (status.kind !== 'conflict' || !status.remoteState) return { status, keepSyncing: status.kind === 'ready' };
+  const applied = adopt(status.remoteState, status.remoteVersion);
+  return {
+    status: applied ? listConflictStatus(applied, 'Household changes merged with yours.') : { kind: 'ready', message: 'All changes synced.' },
+    keepSyncing: true,
+  };
+};
+
 /** Wire the pure fold into a live store: latest/meta/push guards are refs. */
 export const makeCloudStateAdopter = ({ latest, cloudMeta, skipCloudPush, setState }) => (remoteState, remoteVersion) => {
   const applied = adoptRemoteSharedState(latest.current, remoteState, readBase());
@@ -248,9 +269,23 @@ export function hasQueuedCloud() {
   return Boolean(readQueue());
 }
 
+/**
+ * Point this device at another household. The saved base is what this device
+ * last agreed with the *previous* household, so it goes too: merging against
+ * it would treat that household's rows as this one's history.
+ */
 export function selectCloudHousehold(householdId) {
+  if (String(readMeta().householdId || '') !== String(householdId || '')) forgetBaseState();
   saveMeta({ ...readMeta(), householdId, version: 0 });
 }
+
+const forgetBaseState = () => {
+  try {
+    localStorage.removeItem(BASE_FP_KEY);
+  } catch {
+    // Nothing stored is the same outcome as a cleared base.
+  }
+};
 
 export async function pullCloud(meta) {
   try {
@@ -422,7 +457,7 @@ export const acceptHouseholdInvitation = async (token) => {
     headers: selectedHeaders(),
     body: JSON.stringify({ token }),
   });
-  if (result?.householdId) saveMeta({ ...readMeta(), householdId: result.householdId, version: 0 });
+  if (result?.householdId) selectCloudHousehold(result.householdId);
   return result;
 };
 

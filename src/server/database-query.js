@@ -168,7 +168,7 @@ export class RedisCursor {
     return this;
   }
 
-  /** Include only the fields the caller names, like Mongo's projection. */
+  /** Include only the fields the caller names, like Mongo's cursor.project(). */
   project(spec) {
     this.projection = spec;
     return this;

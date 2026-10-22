@@ -95,7 +95,8 @@ describe('merge-conflict tripwires', () => {
     // the message which surface it belongs to; the point is that a new one gets
     // reviewed, not that the number stays put.
     // 24: Week templates announces save/apply/delete results (WeekTemplates.jsx).
-    expect(liveRegions).toBeLessThanOrEqual(24);
+    // 26: sign-in and password-reset errors are announced (AccountSignIn.jsx, reset-password/page.jsx).
+    expect(liveRegions).toBeLessThanOrEqual(26);
   });
 
   it('keeps one page-level heading per primary screen', () => {

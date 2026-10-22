@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addQuantities, compareUnitPrices, convert, formatQuantity, parseQuantity,
-  scaleQuantity, subtractQuantities, sufficientFor, unitPriceOf,
+  pluralUnit, scaleQuantity, singularUnit, subtractQuantities, sufficientFor, unitPriceOf,
 } from '../src/lib/measure.js';
 import { packageSize } from '../src/data/package-sizes.js';
 import { RECIPES } from '../src/data/recipes.js';
@@ -44,6 +44,17 @@ describe('reading a quantity', () => {
     expect(parseQuantity('3 x 200g')).toMatchObject({ amount: 600, dim: 'mass' });
     expect(parseQuantity('6 × 125 g')).toMatchObject({ amount: 750, dim: 'mass' });
     expect(parseQuantity('2 tins (400g)')).toMatchObject({ amount: 800, dim: 'mass' });
+    // Written-out counts are read, not dropped.
+    expect(parseQuantity('two onions')).toMatchObject({ amount: 2, dim: 'count' });
+    expect(parseQuantity('Three cloves')).toMatchObject({ amount: 3, dim: 'count' });
+    expect(parseQuantity('one onion')).toMatchObject({ amount: 1, dim: 'count' });
+    expect(parseQuantity('one 400g tin')).toMatchObject({ amount: 400, dim: 'mass' });
+    // Size words and "a couple of" no longer make a quantity unreadable.
+    expect(parseQuantity('3 medium eggs')).toMatchObject({ amount: 3, dim: 'count' });
+    expect(parseQuantity('a couple of carrots')).toMatchObject({ amount: 2, dim: 'count' });
+    // Size-first spelling must not silently drop the count.
+    expect(parseQuantity('400g x 2')).toMatchObject({ amount: 800, dim: 'mass' });
+    expect(parseQuantity('250 ml x 4 cartons')).toMatchObject({ amount: 1000, dim: 'volume' });
   });
 
   it('marks a hedge or a range as approximate instead of pretending', () => {
@@ -129,6 +140,24 @@ describe('writing a quantity back', () => {
     expect(formatQuantity(parseQuantity('3 lemons'))).toBe('3 lemons');
     expect(formatQuantity(null)).toBe('');
   });
+
+  it('writes count plurals the way a person would', () => {
+    expect(formatQuantity(parseQuantity('2 bunches'))).toBe('2 bunches');
+    expect(formatQuantity(parseQuantity('3 boxes'))).toBe('3 boxes');
+    expect(formatQuantity(parseQuantity('2 loaves'))).toBe('2 loaves');
+    expect(formatQuantity(parseQuantity('2 pinches'))).toBe('2 pinches');
+    expect(formatQuantity(parseQuantity('4 tomatoes'))).toBe('4 tomatoes');
+    expect(formatQuantity(parseQuantity('3 potatoes'))).toBe('3 potatoes');
+    expect(formatQuantity(parseQuantity('3 cloves'))).toBe('3 cloves');
+    expect(formatQuantity(parseQuantity('1 bunch'))).toBe('1 bunch');
+    expect(formatQuantity(addQuantities('1 bunch', '1 bunch'))).toBe('2 bunches');
+  });
+
+  it('reads back every plural it writes', () => {
+    for (const unit of ['bunch', 'box', 'loaf', 'pinch', 'dash', 'tomato', 'potato', 'clove', 'head', 'tin']) {
+      expect(singularUnit(pluralUnit(unit))).toBe(unit);
+    }
+  });
 });
 
 describe('unit price', () => {
@@ -189,5 +218,23 @@ describe('coverage against the app’s own recipe book', () => {
       const parsed = parseQuantity(line.qty, { ingredient: line.name });
       if (parsed) expect(parsed.amount).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('negative amounts', () => {
+  it('are unreadable rather than silently positive', () => {
+    expect(parseQuantity('-2 g')).toBeNull();
+    expect(parseQuantity('− 3 tbsp')).toBeNull();
+    expect(parseQuantity('2-3 tbsp').range).toEqual({ min: 2, max: 3 });
+  });
+});
+
+describe('unreadable numeric forms', () => {
+  it('rejects scientific notation instead of reading a fragment', () => {
+    expect(parseQuantity('1e3 g')).toBeNull();
+    expect(parseQuantity('2E2 ml')).toBeNull();
+  });
+  it('still reads ordinary amounts', () => {
+    expect(parseQuantity('1 egg').amount).toBe(1);
   });
 });

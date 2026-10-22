@@ -24,6 +24,8 @@
  * can never widen what counts as an answer.
  */
 
+import { answerOrder } from '../lib/shop-ranking.js';
+
 /** Words that carry no product identity, so they cost tokens and find nothing. */
 const NOISE = new Set([
   'a', 'an', 'and', 'of', 'the', 'with', 'for', 'any', 'some', 'plus',
@@ -202,6 +204,42 @@ const termMatches = (term, words, joined) => {
 export const missBudget = (termCount) => Math.floor(termCount / 3);
 
 /**
+ * Foods that, written after the one asked for, turn it into a flavour.
+ *
+ * "Milk" is in "Dairy Milk Chocolate", "tomato" in "Tomato Ketchup" and
+ * "chicken" in "Chicken Flavour Noodles" — and each is the cheapest row on its
+ * page, so a head-word test alone reports a chocolate bar as the price of
+ * milk. The word only disqualifies when the person did not ask for it.
+ */
+const DERIVED = new Set([
+  'chocolate', 'flavour', 'flavor', 'flavoured', 'flavored', 'crisps', 'sauce',
+  'ketchup', 'soup', 'stock', 'gravy', 'cake', 'biscuit', 'digestive', 'cookie',
+  'noodle', 'puree', 'paste', 'juice', 'drink', 'smoothie', 'yogurt', 'yoghurt',
+  'dessert', 'mousse', 'sweets', 'jelly', 'jam', 'marmalade', 'cordial', 'pie',
+  'pasty', 'cracker', 'seasoning', 'powder', 'spread', 'dip', 'pudding',
+  'muffin', 'popcorn', 'bread', 'flour', 'oil', 'salt', 'vinegar',
+]);
+
+/** "Tuna in Sunflower Oil" is tuna: what follows these describes, not replaces. */
+const CONNECTORS = new Set(['in', 'with']);
+
+/** Is the head word only a modifier here — the flavour of some other product? */
+const headIsModifier = (head, words, terms) => {
+  const at = words.findIndex((word) => termMatches(head, [word], word));
+  if (at < 0) return false;
+  // Both foldings, because `stem` reads "sauces" as "sauc" and "pies" as "pi".
+  // "crisps" and "sweets" are listed as written: "Apples Crisp & Sweet" is fruit.
+  const derived = (word) => [word, stem(word), word.replace(/s$/, '')].find((base) => DERIVED.has(base)) || null;
+  const asked = new Set(terms.map(derived).filter(Boolean));
+  for (const word of words.slice(at + 1)) {
+    if (CONNECTORS.has(word)) return false;
+    const base = derived(word);
+    if (base && !asked.has(base)) return true;
+  }
+  return false;
+};
+
+/**
  * Is this row the product that was asked for?
  *
  * Separate from the score because they answer different questions: the score
@@ -213,10 +251,23 @@ export const isMatch = (name = '', query = '') => {
   const words = tokenise(name);
   if (!words.length) return false;
   const joined = words.join(' ');
-  if (!termMatches(terms[terms.length - 1], words, joined)) return false;
+  const head = terms[terms.length - 1];
+  if (!termMatches(head, words, joined)) return false;
+  if (headIsModifier(head, words, terms)) return false;
   const missed = terms.filter((term) => !termMatches(term, words, joined)).length;
   return missed <= missBudget(terms.length);
 };
+
+/**
+ * The row that answers the item, across every shop that priced it.
+ *
+ * Rows a shop's own scrape scored carry `relevance`; rows from the market or
+ * Monid are scored here against the same query, so the comparison is fair.
+ */
+export const bestAnswer = (rows = [], query = '') => rows
+  .filter((row) => row?.price > 0)
+  .map((row) => (typeof row.relevance === 'number' ? row : { ...row, relevance: matchScore(row.name, query) }))
+  .sort(answerOrder)[0] || null;
 
 export const matchScore = (name = '', query = '') => {
   // Judged against the product they named, minus the notes they wrote to

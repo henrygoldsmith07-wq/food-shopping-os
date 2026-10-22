@@ -46,12 +46,21 @@ const SOURCE_META = {
   community: { source: 'community', confidence: 'medium' },
 };
 
+/** Finite number from a number or numeric string; blank/garbage/Infinity → null (never 0). */
+const toFinite = (v) => {
+  if (v === undefined || v === null || typeof v === 'boolean') return null;
+  if (typeof v === 'string' && v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
 /** Build a NutrientValue. Pass null/undefined for "not measured / not reported". */
 export const nutrientValue = (value, source = 'verified_database', confidence = 'high') => {
-  if (value === undefined || value === null || (typeof value === 'number' && Number.isNaN(value))) {
+  const n = toFinite(value);
+  if (n === null) {
     return { value: null, source, confidence: confidence === 'high' ? 'low' : confidence };
   }
-  return { value: Number(value), source, confidence };
+  return { value: n, source, confidence };
 };
 
 /** Normalise a raw cell (plain number, null, or NutrientValue) into NutrientValue. */
@@ -62,20 +71,20 @@ export const asNutrientValue = (raw, defaults = {}) => {
     return nutrientValue(null, source, 'low');
   }
   if (typeof raw === 'object' && raw !== null && 'value' in raw) {
-    const v = raw.value;
-    if (v === undefined || v === null || (typeof v === 'number' && Number.isNaN(v))) {
+    const v = toFinite(raw.value);
+    if (v === null) {
       return nutrientValue(null, raw.source || source, raw.confidence || 'low');
     }
     return {
-      value: Number(v),
+      value: v,
       source: raw.source || source,
       confidence: raw.confidence || confidence,
     };
   }
-  if (typeof raw === 'number' && Number.isNaN(raw)) {
+  if (toFinite(raw) === null) {
     return nutrientValue(null, source, 'low');
   }
-  return nutrientValue(Number(raw), source, confidence);
+  return nutrientValue(raw, source, confidence);
 };
 
 /** True when a value was actually measured or estimated (including real zero). */
