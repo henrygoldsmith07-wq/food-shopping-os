@@ -1,3 +1,4 @@
+import { accountErrorMessage } from '../lib/account-error.js';
 import { useEffect, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { LogIn, Mail } from 'lucide-react';
@@ -63,7 +64,7 @@ export function SignInOptions({ providers = {}, callbackUrl = '/' }) {
       await post('/api/account/verify', { email });
       setNotice(`Sent — check ${email} for the confirmation link.`);
     } catch (caught) {
-      setError(caught.message);
+      setError(accountErrorMessage(caught));
     }
   };
 
@@ -103,7 +104,7 @@ export function SignInOptions({ providers = {}, callbackUrl = '/' }) {
       }
       window.location.assign(callbackUrl);
     } catch (caught) {
-      setError(caught.message);
+      setError(accountErrorMessage(caught));
       setBusy(false);
     }
   };
