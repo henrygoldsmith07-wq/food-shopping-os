@@ -188,3 +188,10 @@ describe('the cross-shop table', () => {
     expect(screen.queryByText('best value')).toBeNull();
   });
 });
+
+describe('product catalogue storage hardening', () => {
+  it('ignores an array saved under its storage key', () => {
+    localStorage.setItem('forq.productCatalogue.v1', '[1,2]');
+    expect(loadProductCatalogue()).toEqual({});
+  });
+});
