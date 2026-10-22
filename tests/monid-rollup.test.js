@@ -70,3 +70,13 @@ describe('monidRollup', () => {
     expect(rollup.totals).toEqual({ filled: 0, missed: 0, failed: 0, paused: 0 });
   });
 });
+
+describe('monid rollup storage hardening', () => {
+  beforeEach(() => localStorage.clear());
+  it('ignores an array saved under its storage key', () => {
+    const key = 'forq.monidRollup.v1';
+    localStorage.setItem(key, '[1,2]');
+    expect(() => recordMonidOutcomes({}, { date: '2026-10-22' })).not.toThrow();
+    expect(() => monidRollup()).not.toThrow();
+  });
+});

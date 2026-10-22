@@ -73,7 +73,7 @@ const loadCache = () => {
     const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const now = Date.now();
     for (const [key, value] of Object.entries(parsed)) {
       if (!value?.checkedAt || now - new Date(value.checkedAt).getTime() > TTL_MS) delete parsed[key];
