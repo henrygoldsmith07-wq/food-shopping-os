@@ -5,7 +5,7 @@ const SESSION_KEY = 'forq-shopping-session-v1';
 const readSession = () => {
   try {
     const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
-    return saved?.active ? { active: true, store: saved.store || '' } : null;
+    return saved?.active ? { active: true, store: typeof saved.store === 'string' ? saved.store : '' } : null;
   } catch {
     return null;
   }
