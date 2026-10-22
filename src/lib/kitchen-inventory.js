@@ -293,7 +293,7 @@ export const INVENTORY_ROUTE = '/api/kitchen/inventory';
 const routeError = async (response) => {
   try {
     const body = await response.json();
-    return body?.error || 'That could not be read.';
+    return typeof body?.error === 'string' && body.error ? body.error : 'That could not be read.';
   } catch {
     return 'That could not be read.';
   }
@@ -314,6 +314,11 @@ export const assistedInventory = async ({ text, image }, { fetchImpl = fetch } =
     body: JSON.stringify(image ? { image } : { text }),
   });
   if (!response.ok) throw new Error(await routeError(response));
-  const body = await response.json();
-  return { text: body.text || '', read: body.read || 'text', model: body.model || null };
+  const parsed = await response.json().catch(() => null);
+  const body = parsed && typeof parsed === 'object' ? parsed : {};
+  return {
+    text: typeof body.text === 'string' ? body.text : '',
+    read: typeof body.read === 'string' && body.read ? body.read : 'text',
+    model: typeof body.model === 'string' && body.model ? body.model : null,
+  };
 };
