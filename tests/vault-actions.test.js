@@ -59,4 +59,10 @@ describe('vault actions', () => {
     const { a } = setup();
     await expect(a.unlockHealthVault('anything')).rejects.toThrow(/No encrypted health record/);
   });
+
+  it('unlock with a corrupt stored record gives a readable error', async () => {
+    const { a } = setup();
+    localStorage.setItem(HEALTH_VAULT_KEY, '{not json');
+    await expect(a.unlockHealthVault('anything')).rejects.toThrow(/unreadable/);
+  });
 });
