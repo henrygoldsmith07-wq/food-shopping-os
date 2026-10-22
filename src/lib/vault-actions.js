@@ -30,6 +30,9 @@ export const vaultActions = ({
     } catch {
       throw new Error('The encrypted health record on this device is unreadable. Restore from a backup to recover it.');
     }
+    if (record !== null && (typeof record !== 'object' || Array.isArray(record))) {
+      throw new Error('The encrypted health record on this device is unreadable. Restore from a backup to recover it.');
+    }
     if (!record) throw new Error('No encrypted health record was found on this device.');
     const vault = await decryptHealth(record, passphrase);
     vaultKey.current = vault.key;
