@@ -1,5 +1,6 @@
 'use client';
 
+import { accountErrorMessage } from '../../lib/account-error.js';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
@@ -39,7 +40,7 @@ export default function ResetPasswordPage() {
       if (!response.ok) throw new Error(body.error || 'The password could not be changed.');
       setDone(true);
     } catch (caught) {
-      setError(caught.message);
+      setError(accountErrorMessage(caught));
     } finally {
       setBusy(false);
     }
