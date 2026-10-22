@@ -53,4 +53,10 @@ describe('useShoppingSession', () => {
     expect(result.current.active).toBe(true);
     spy.mockRestore();
   });
+
+  it('ignores a non-string saved store name', () => {
+    sessionStorage.setItem(KEY, JSON.stringify({ active: true, store: { name: 'x' } }));
+    const { result } = renderHook(() => useShoppingSession());
+    expect(result.current).toMatchObject({ active: true, store: '' });
+  });
 });
