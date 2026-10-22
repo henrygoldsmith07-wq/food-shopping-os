@@ -3,6 +3,7 @@ import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody, re
 import { scrapeListRequestSchema, scrapeRequestSchema } from '../../../../server/schemas.js';
 import { cheapestAcross, scrapePrices, scrapeableRetailers, scraperEnabled } from '../../../../server/price-scraper.js';
 import { monidBatchPrices, monidOnPath } from '../../../../server/monid-prices.js';
+import { bestAnswer } from '../../../../server/search-terms.js';
 import { isOpenRouterConfigured } from '../../../../server/openrouter.js';
 import { availableStrategies, firecrawlConfigured } from '../../../../server/crawler.js';
 import { diagnoseScraper } from '../../../../server/scrape-diagnostics.js';
@@ -74,7 +75,7 @@ export async function POST(request) {
                     retailerId: 'monid', retailer: 'Monid', query: check.query, rows: matched, status: 'ok', source: 'monid',
                   }];
                   check.cheapest = cheapestAcross(check.results);
-                  check.best = check.cheapest[0] || null;
+                  check.best = bestAnswer(check.cheapest, check.query);
                   check.monid = { status: 'ok', provider: batch.provider, rows: matched.length };
                 } else check.monid = { status: 'no-match', provider: batch.provider, rows: 0 };
               }

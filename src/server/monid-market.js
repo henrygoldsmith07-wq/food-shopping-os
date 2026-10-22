@@ -17,6 +17,7 @@
 
 import { monidRunOutput } from './crawler.js';
 import { isMatch } from './search-terms.js';
+import { parseMoney } from './scrape-parse.js';
 
 const DEFAULT_PROVIDER = 'apify';
 const DEFAULT_ENDPOINT = '/burbn/google-shopping-scraper';
@@ -32,10 +33,10 @@ export const marketMode = () => {
 
 const expand = (template, query) => JSON.parse(String(template).split('{{query}}').join(query));
 
+/** "£1,049.00" is £1,049, not £1 — thousands separators are read, not split on. */
 const parsePrice = (value) => {
-  const match = String(value ?? '').match(/(\d+(?:\.\d{1,2})?)/);
-  const price = match && Number.parseFloat(match[1]);
-  return Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null;
+  const price = parseMoney(typeof value === 'string' ? value : String(value ?? ''));
+  return price !== null && price > 0 ? price : null;
 };
 
 /** Google Shopping's field names, read defensively like every other versioned API. */
