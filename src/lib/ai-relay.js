@@ -141,7 +141,7 @@ export const parseAiOutput = (output) => {
 const readHouseholdHeader = () => {
   try {
     const meta = JSON.parse(localStorage.getItem('forq-cloud-meta-v1') || '{}');
-    return meta && meta.householdId ? { 'x-forq-household-id': meta.householdId } : {};
+    return meta && typeof meta.householdId === 'string' && meta.householdId ? { 'x-forq-household-id': meta.householdId } : {};
   } catch {
     return {};
   }

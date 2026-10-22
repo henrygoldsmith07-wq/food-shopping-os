@@ -133,7 +133,8 @@ export const recordProductEvent = (name, properties = {}, at = new Date().toISOS
 
 const selectedHouseholdId = () => {
   try {
-    return JSON.parse(browserStorage()?.getItem(CLOUD_META_KEY) || '{}')?.householdId || null;
+    const id = JSON.parse(browserStorage()?.getItem(CLOUD_META_KEY) || '{}')?.householdId;
+    return typeof id === 'string' && id ? id : null;
   } catch {
     return null;
   }
