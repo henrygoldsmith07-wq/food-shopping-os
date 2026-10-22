@@ -37,7 +37,7 @@ const saveMetaIfNewer = (next) => {
 const readQueue = () => {
   try {
     const queued = JSON.parse(localStorage.getItem(QUEUE_KEY) || 'null');
-    return queued?.state && queued?.meta ? queued : null;
+    return queued && typeof queued === 'object' && queued.state && queued.meta ? queued : null;
   } catch {
     return null;
   }
@@ -58,7 +58,8 @@ export function lastSyncedAt() {
 
 const readBase = () => {
   try {
-    return JSON.parse(localStorage.getItem(BASE_FP_KEY) || 'null');
+    const parsed = JSON.parse(localStorage.getItem(BASE_FP_KEY) || 'null');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
   }
