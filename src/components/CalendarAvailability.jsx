@@ -1,3 +1,4 @@
+import { accountErrorMessage } from '../lib/account-error.js';
 import { useRef, useState } from 'react';
 import { CalendarClock, Upload } from 'lucide-react';
 import { busyFromIcs, readCalendarAvailability } from '../lib/calendar.js';
@@ -30,7 +31,7 @@ export default function CalendarAvailability({ dates }) {
           : 'No events overlap dinner time in this range.',
       );
     } catch (error) {
-      setStatus(error.message);
+      setStatus(accountErrorMessage(error));
     } finally {
       setReading(false);
     }
