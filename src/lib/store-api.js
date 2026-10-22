@@ -50,7 +50,8 @@ import { pantryLifecycleActions } from './store-pantry-slice.js';
 // A corrupt vault record must not make the whole backup export throw.
 const readVaultRecord = () => {
   try {
-    return JSON.parse(localStorage.getItem(HEALTH_VAULT_KEY) || 'null');
+    const record = JSON.parse(localStorage.getItem(HEALTH_VAULT_KEY) || 'null');
+    return record && typeof record === 'object' && !Array.isArray(record) ? record : null;
   } catch {
     return null;
   }
