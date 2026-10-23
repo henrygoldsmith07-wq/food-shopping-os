@@ -276,10 +276,10 @@ describe('the shopping list for a plan', () => {
     const onionRows = rows.filter((r) => /onion/i.test(r.name));
     expect(onionRows).toHaveLength(1);
     const row = onionRows[0];
-    // Curry scales 1 × 5/4 → 1.3, risotto 1 × 5/3 → 1.7 (each rounded to 0.1
-    // before summing) — one row carrying the whole requirement.
+    // Curry scales 1 × 5/4 → 1.25, risotto 1 × 5/3 → 1.67 — one row
+    // carrying the whole requirement, rounded up to whole onions to buy.
     expect(row.qty).toBe('3');
-    expect(row.requiredQty).toBe(row.qty);
+    expect(row.requiredQty).toBe('2.92');
     expect(row.sourceRecipes).toEqual(expect.arrayContaining(['Coconut Chickpea Curry', 'Garlic Mushroom Risotto']));
   });
 
@@ -296,7 +296,7 @@ describe('the shopping list for a plan', () => {
     const onionRows = rows.filter((r) => /onion/i.test(r.name));
     expect(onionRows).toHaveLength(1);
     expect(onionRows[0].qty).toBe('2');
-    expect(onionRows[0].requiredQty).toBe('3');
+    expect(onionRows[0].requiredQty).toBe('2.92');
     expect(onionRows[0].explanation).toBeTruthy();
   });
 

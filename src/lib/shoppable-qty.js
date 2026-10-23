@@ -65,7 +65,15 @@ function fractionToDecimal(text) {
  * @returns {string} the amount to buy; `qty` unchanged when it is already buyable
  */
 export function shoppableQty(qty, name = '') {
-  const raw = String(qty || '').trim();
+  const whole = String(qty || '').trim();
+  // Mixed amounts are made buyable part by part, and two parts that both
+  // come down to "1 jar" are one jar, not "1 jar + 1 jar".
+  const parts = whole.split(/\s+\+\s+/).filter(Boolean);
+  if (parts.length > 1) {
+    return [...new Set(parts.map((part) => shoppableQty(part, name)))].join(' + ');
+  }
+  // A prep note is the cook's business: "1.5, juiced" is 2 lemons to buy.
+  const raw = whole.replace(/^(\d+(?:[.,]\d+)?)\s*,(?!\d).*$/, '$1');
   // "2-3 tbsp" / "2 to 3 cloves": buy for the top of the range.
   const range = raw.match(/^\d+(?:\.\d+)?\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)(?=\s|$)(.*)$/i);
   // "half a lemon" / "half an onion" is 0.5 of one, which you buy whole.
@@ -92,7 +100,7 @@ export function shoppableQty(qty, name = '') {
   if (packaged) return `1 ${packaged}`;
   // A bare count, or a count word ("heads", "fillets"): round up to whole.
   if (Number.isInteger(amount)) return range ? text : raw;
-  const whole = Math.ceil(amount);
-  if (!unit) return String(whole);
-  return `${whole} ${whole === 1 ? SINGULAR[unit.toLowerCase()] || unit : unit}`;
+  const roundedUp = Math.ceil(amount);
+  if (!unit) return String(roundedUp);
+  return `${roundedUp} ${roundedUp === 1 ? SINGULAR[unit.toLowerCase()] || unit : unit}`;
 }

@@ -230,6 +230,10 @@ export const parseQuantity = (value, { ingredient = '' } = {}) => {
   if (!text) return null;
   // "a pinch", "an onion" — an article is a count of one, not a vagueness.
   text = text.replace(/^an?\s+/, '1 ');
+  // "1, juiced" / "2, finely chopped": a bare count with a prep note is still
+  // a count of the thing itself. (A comma between digits is a thousands
+  // separator, handled by normalise, so it never reaches here.)
+  text = text.replace(/^(\d+(?:\.\d+)?)\s*,\s*[a-z][a-z\s-]*$/, '$1');
 
   // A range — "2-3 tbsp", "2 to 3 tbsp". We plan against the top of the range
   // so a shopping list never sends you home short, and record both ends.

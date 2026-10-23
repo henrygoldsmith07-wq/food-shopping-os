@@ -16,7 +16,7 @@
  */
 
 import {
-  addQuantities, formatQuantity, parseQuantity, sufficientFor,
+  addQuantities, combineQtyParts, formatQuantity, isCompoundQty, isVagueAmount, parseQuantity, sufficientFor,
 } from './measure.js';
 import { GENERIC_PACKAGES, INGREDIENT_PACKAGES, packageSize } from '../data/package-sizes.js';
 
@@ -69,6 +69,11 @@ export const mergeQtys = (qtyA, qtyB, options = {}) => {
   const b = clean(qtyB);
   if (!a) return qtyB || '';
   if (!b) return qtyA || '';
+  // A side that already holds several amounts ("300 g + 1 cup") is merged
+  // part by part, so the next "100 g" joins the grams instead of trailing on.
+  if (isCompoundQty(a) || isCompoundQty(b) || isVagueAmount(a) || isVagueAmount(b)) {
+    return combineQtyParts(`${a} + ${b}`, options) || `${a} + ${b}`;
+  }
   const summed = addQuantities(a, b, options);
   if (!summed) return `${a} + ${b}`;
   return formatQuantity(summed);
