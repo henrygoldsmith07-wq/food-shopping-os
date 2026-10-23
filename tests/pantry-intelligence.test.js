@@ -164,3 +164,13 @@ describe('pantry intelligence', () => {
     expect(inferConsumption({ recipe: { id: 'r1', name: 'Curry' }, shortfalls: [{ name: 'Rice' }], today: '2026-08-19' }).confidence).toBe('low');
   });
 });
+
+describe('shortfallQuantity with incomparable units', () => {
+  it('keeps the full need when pantry and recipe units cannot be compared', () => {
+    expect(shortfallQuantity('2 cloves', '1 bulb', { ingredient: 'garlic' })).toBe('1 bulb');
+    expect(shortfallQuantity('2', '3 tins', { ingredient: 'tomatoes' })).not.toBe('');
+  });
+  it('still returns empty when the pantry covers the need', () => {
+    expect(shortfallQuantity('1 kg', '500 g', { ingredient: 'flour' })).toBe('');
+  });
+});
