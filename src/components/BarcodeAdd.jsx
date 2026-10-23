@@ -48,8 +48,9 @@ export default function BarcodeAdd({ onPick, action = 'Add' }) {
     setOnlineMessage('');
     try {
       const response = await fetch(`/api/integrations/products?${new URLSearchParams({ barcode: code, prices: '1' })}`);
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'Online product data is unavailable.');
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((body && typeof body.error === 'string' && body.error) || 'Online product data is unavailable.');
+      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('Online product data is unavailable.');
       if (requestId !== onlineRequestRef.current || requestedCode !== code) return;
       setOnline(body);
     } catch (error) {
