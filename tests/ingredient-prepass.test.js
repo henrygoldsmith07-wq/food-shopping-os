@@ -44,3 +44,16 @@ describe('ingredient pre-pass — normalise, group, merge', () => {
     expect(out.every((r) => r.key != null)).toBe(true);
   });
 });
+
+describe('garlic spellings are one ingredient', () => {
+  it('folds clove/bulb phrasings into one Garlic group and one list row', async () => {
+    const { canonicalName, displayNameFor, sameIngredient } = await import('../src/lib/aliases.js');
+    for (const n of ['garlic clove', 'Cloves of garlic', 'clove garlic', 'garlic bulb', 'Fresh garlic']) {
+      expect(canonicalName(n)).toBe('garlic');
+      expect(displayNameFor(n)).toBe('Garlic');
+      expect(sameIngredient(n, 'Garlic')).toBe(true);
+    }
+    const { duplicateGroups } = await import('../src/lib/ingredient-prepass.js');
+    expect(duplicateGroups([{ name: 'Garlic' }, { name: 'garlic clove' }, { name: 'Spring onion' }])).toEqual([[0, 1]]);
+  });
+});
