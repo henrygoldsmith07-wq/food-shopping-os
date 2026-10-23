@@ -148,9 +148,10 @@ const readHouseholdHeader = () => {
 };
 
 const readJson = async (response) => {
-  const body = await response.json().catch(() => ({}));
+  const parsedBody = await response.json().catch(() => ({}));
+  const body = parsedBody && typeof parsedBody === 'object' ? parsedBody : {};
   if (!response.ok) {
-    const error = new Error(body.error || `AI relay failed (HTTP ${response.status}).`);
+    const error = new Error((typeof body.error === 'string' && body.error) || `AI relay failed (HTTP ${response.status}).`);
     error.status = response.status;
     throw error;
   }

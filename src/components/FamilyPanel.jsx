@@ -1,3 +1,4 @@
+import { accountErrorMessage } from '../lib/account-error.js';
 import { useState } from 'react';
 import {
   Bell, Check, ClipboardList, Copy, Download, Share2, Trash2,
@@ -126,7 +127,7 @@ function SharingView() {
       setCode('');
       setMessage('Household snapshot imported.');
     } catch (error) {
-      setMessage(error.message);
+      setMessage(accountErrorMessage(error));
     }
   };
 

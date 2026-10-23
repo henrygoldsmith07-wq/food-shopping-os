@@ -22,7 +22,7 @@ export default function ReminderEmailCard() {
     let live = true;
     fetch('/api/reminders/digest', { headers: headers() })
       .then((response) => (response.ok ? response.json() : null))
-      .then((body) => { if (live) setStatus(body); })
+      .then((body) => { if (live) setStatus(body && typeof body === 'object' && !Array.isArray(body) ? body : null); })
       .catch(() => {});
     return () => { live = false; };
   }, []);
@@ -35,7 +35,8 @@ export default function ReminderEmailCard() {
     setError('');
     try {
       const response = await fetch('/api/reminders/digest', { method: 'POST', headers: headers(), body: JSON.stringify({ on: !status.on }) });
-      const body = await response.json().catch(() => ({}));
+      const parsed = await response.json().catch(() => ({}));
+      const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
       if (!response.ok) throw new Error(body.error || 'That did not save. Try again.');
       setStatus(body);
     } catch (caught) {

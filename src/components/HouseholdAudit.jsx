@@ -1,3 +1,4 @@
+import { accountErrorMessage } from '../lib/account-error.js';
 import { useEffect, useState } from 'react';
 import { History } from 'lucide-react';
 import { listHouseholdAudit } from '../lib/cloud.js';
@@ -25,7 +26,7 @@ export default function HouseholdAudit() {
         setEvents(rows);
         setMessage(rows.length ? '' : 'No synced household changes yet.');
       })
-      .catch((error) => setMessage(error.message));
+      .catch((error) => setMessage(accountErrorMessage(error)));
   }, []);
 
   return (

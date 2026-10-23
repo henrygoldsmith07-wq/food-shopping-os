@@ -337,3 +337,11 @@ describe('crediting where a recipe came from', () => {
     expect(provenance.attribution).toContain('YouTube');
   });
 });
+
+describe('odd error bodies from the import route', () => {
+  it('ignores a non-string error field', async () => {
+    const { importFromLink } = await import('../src/lib/recipe-import.js');
+    const fetchImpl = async () => ({ ok: false, json: async () => ({ error: { x: 1 } }) });
+    await expect(importFromLink('https://example.com/r', { fetchImpl })).rejects.toThrow('The import could not be completed.');
+  });
+});

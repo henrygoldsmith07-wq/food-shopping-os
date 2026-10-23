@@ -29,7 +29,7 @@ export default function MonidProvenance({ results = [] }) {
   const loadStatus = useCallback(() => {
     fetch('/api/integrations/monid-status', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : { configured: false, balance: null }))
-      .then((body) => setStatus(body || { configured: false, balance: null }))
+      .then((body) => setStatus(body && typeof body === 'object' && !Array.isArray(body) ? body : { configured: false, balance: null }))
       // A probe that could not run at all is an unknown, not a "no": claiming
       // the deployment is unconfigured would be a false statement, and the
       // balance line says "unknown" instead.

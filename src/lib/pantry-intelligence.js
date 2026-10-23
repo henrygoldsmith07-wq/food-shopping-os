@@ -411,7 +411,10 @@ export const shortfallQuantity = (available, needed, { ingredient = '' } = {}) =
   if (!need) return clean(needed);
   if (!have) return clean(needed);
   const difference = subtractQuantities(have, need, { ingredient });
-  if (!difference || difference.shortfall <= 0) return '';
+  // Pantry "2 cloves" against a "1 bulb" need cannot be compared. That is not
+  // "nothing short": keep the whole need so the item is never silently dropped.
+  if (!difference) return clean(needed);
+  if (difference.shortfall <= 0) return '';
   return formatQuantity({ ...need, amount: difference.shortfall });
 };
 

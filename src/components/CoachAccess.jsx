@@ -1,3 +1,4 @@
+import { accountErrorMessage } from '../lib/account-error.js';
 import { useEffect, useState } from 'react';
 import { Clipboard, Link2, ShieldCheck, Trash2 } from 'lucide-react';
 import {
@@ -33,15 +34,15 @@ export default function CoachAccess() {
   const [serverReady, setServerReady] = useState(null);
 
   const refresh = () => listCoachShares()
-    .then(setShares)
-    .catch((error) => setStatus(error.message));
+    .then((items) => setShares(Array.isArray(items) ? items.filter((item) => item && typeof item === 'object') : []))
+    .catch((error) => setStatus(accountErrorMessage(error)));
 
   useEffect(() => {
     refresh();
     fetch('/api/backend/status', { credentials: 'same-origin' })
       .then((response) => response.json())
       .then((backend) => {
-        if (backend && typeof backend.integrations?.coachShares?.ready === 'boolean') {
+        if (backend && typeof backend === 'object' && typeof backend.integrations?.coachShares?.ready === 'boolean') {
           setServerReady(backend.integrations.coachShares.ready);
         }
       })
@@ -65,7 +66,7 @@ export default function CoachAccess() {
       setShares((current) => [share, ...current]);
       setStatus('Read-only link created. It expires in 30 days.');
     } catch (error) {
-      setStatus(error.message);
+      setStatus(accountErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -89,7 +90,7 @@ export default function CoachAccess() {
       )));
       setStatus('Coach access revoked.');
     } catch (error) {
-      setStatus(error.message);
+      setStatus(accountErrorMessage(error));
     } finally {
       setBusy(false);
     }

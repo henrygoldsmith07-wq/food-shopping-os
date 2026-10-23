@@ -113,8 +113,9 @@ export async function readCalendarAvailability(provider, dates) {
   const response = await fetch(`/api/integrations/calendar/events?${new URLSearchParams({
     provider, from, to,
   })}`, { credentials: 'same-origin' });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Calendar availability could not be read.');
+  const parsed = await response.json().catch(() => null);
+  const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  if (!response.ok) throw new Error((typeof body.error === 'string' && body.error) || 'Calendar availability could not be read.');
   const source = provider === 'google' ? 'Google Calendar' : 'Outlook Calendar';
   return busyMealDates(body.events).map((date) => ({ date, source, importedAt: Date.now() }));
 }

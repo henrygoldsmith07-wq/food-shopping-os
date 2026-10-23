@@ -151,3 +151,17 @@ describe('sending through the shared gate', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('fetchAiUsage with unexpected response bodies', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('a null JSON body on an error gives a plain HTTP error, not a TypeError', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, json: async () => null })));
+    const { fetchAiUsage } = await import('../src/lib/ai-relay.js');
+    await expect(fetchAiUsage()).rejects.toMatchObject({ message: 'AI relay failed (HTTP 502).', status: 502 });
+  });
+  it('a non-string error field is ignored', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: { x: 1 } }) })));
+    const { fetchAiUsage } = await import('../src/lib/ai-relay.js');
+    await expect(fetchAiUsage()).rejects.toMatchObject({ message: 'AI relay failed (HTTP 500).' });
+  });
+});
