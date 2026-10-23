@@ -34,7 +34,7 @@ export default function CoachAccess() {
   const [serverReady, setServerReady] = useState(null);
 
   const refresh = () => listCoachShares()
-    .then(setShares)
+    .then((items) => setShares(Array.isArray(items) ? items.filter((item) => item && typeof item === 'object') : []))
     .catch((error) => setStatus(accountErrorMessage(error)));
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function CoachAccess() {
     fetch('/api/backend/status', { credentials: 'same-origin' })
       .then((response) => response.json())
       .then((backend) => {
-        if (backend && typeof backend.integrations?.coachShares?.ready === 'boolean') {
+        if (backend && typeof backend === 'object' && typeof backend.integrations?.coachShares?.ready === 'boolean') {
           setServerReady(backend.integrations.coachShares.ready);
         }
       })
