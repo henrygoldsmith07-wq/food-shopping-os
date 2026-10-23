@@ -8,7 +8,7 @@ import {
   regenerateProposalMeal,
 } from '../lib/autopilot-week.js';
 import { PLANNING_STRATEGIES, strategyComparison, strategyFor } from '../lib/planning-strategies.js';
-import { gbp } from '../lib/utils.js';
+import { formatCookTime, gbp } from '../lib/utils.js';
 import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 
@@ -236,7 +236,7 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
                     <span className="min-w-0">
                       <span className="block text-[0.875rem] font-extrabold truncate">{recipe.name}</span>
                       <span className="block text-[0.71875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
-                        {recipe.time} min · {gbp(recipe.costPerServing, { always: true })}/serving
+                        {formatCookTime(recipe.time)} · {gbp(recipe.costPerServing, { always: true })}/serving
                       </span>
                     </span>
                   </button>

@@ -135,6 +135,26 @@ export default function DemoWalkthrough({ onNavigate }) {
             <X size={18} />
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (app.adoptDemoWeek?.()) {
+              onNavigate?.('plan');
+            } else {
+              setNote('Could not adopt the demo week — exit and try again.');
+            }
+          }}
+          aria-label="Use this demo week as my starting plan"
+          className="press mt-3 w-full rounded-xl py-2.5 text-[0.8125rem] font-extrabold"
+          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+        >
+          <span className="inline-flex items-center justify-center gap-1.5">
+            <Check size={14} strokeWidth={3} /> Use this week as my starting plan
+          </span>
+        </button>
+        <p className="mt-1.5 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+          Copies the 7 dinners + pantry staples into your real kitchen, rebased to this week. Meals you already planned are kept. Demo receipts stay behind.
+        </p>
         <div className="mt-3 flex gap-2">
           <button
             type="button"

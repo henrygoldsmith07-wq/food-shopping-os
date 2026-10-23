@@ -36,6 +36,20 @@ export default function DemoPage() {
       <p className="mt-3 text-[0.6875rem] font-bold" style={{ color: 'var(--faint)' }}>
         No account · nothing saved · exit anytime
       </p>
+      <div className="mx-auto mt-8 max-w-xl rounded-2xl border px-5 py-4 text-left" style={{ borderColor: 'var(--line)' }}>
+        <p className="text-[0.875rem] font-extrabold">Like this week? Start your kitchen from it.</p>
+        <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+          Copies the 7 dinners and pantry staples into your real kitchen, rebased onto this week —
+          meals you already planned are kept. Demo receipts stay behind — your spending history starts empty and honest.
+        </p>
+        <Link
+          href="/?demo=1&adopt=1"
+          className="press mt-3 inline-flex rounded-2xl border px-4 py-2.5 text-sm font-extrabold"
+          style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+        >
+          Start my kitchen from this week →
+        </Link>
+      </div>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 .vercel
 
 .env*
+!.env.example
 node_modules/
 .next/
 playwright-report/

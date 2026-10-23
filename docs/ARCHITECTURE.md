@@ -67,6 +67,17 @@ not a budget.
 Raising a limit is allowed, but it is a decision about what a first-time
 visitor waits for, and belongs in the commit that makes it.
 
+## The store provider stays under 500 lines by extraction, not by exception
+
+`tests/invariants.test.js` fails any source module over 500 lines, and
+`src/lib/store.jsx` (the `AppProvider`) grows every time the kitchen gains a
+new concern. When a cohesive block of callbacks outgrows its room — the demo
+sandbox and `adoptDemoWeek` did first — it moves to a sibling hook module
+(`src/lib/store-demo.js`) with its dependencies passed in explicitly, not to
+a utils grab-bag. The provider keeps the state declarations and the value
+assembly; the extracted hook keeps the behaviour. Same callbacks, new
+address — the demo walkthrough suite pins the behaviour across the move.
+
 ## Household concurrency
 
 Shared state is merged, not overwritten. `src/lib/state-merge.js` holds the pure

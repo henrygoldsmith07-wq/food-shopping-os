@@ -137,7 +137,11 @@ describe('the weekly planner', () => {
     expect(screen.getByText(/Send this week's ingredients to the list/)).toBeDefined();
   });
 
-  it('takes a generated plan to the shopping list after adding it', () => {
+  // The suite's heaviest synchronous flow: month-plan generation over the
+  // whole book plus the shopping hand-off. Sibling journeys pass in 3–9s;
+  // this one needs headroom on a slow machine, same principle as the file's
+  // 15s ceiling. 60s still catches a real hang — a hang never resolves.
+  it('takes a generated plan to the shopping list after adding it', { timeout: 60_000 }, () => {
     onboard();
     openPlan();
     fireEvent.click(screen.getByRole('button', { name: 'Generate a plan for me' }));

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle2, ChevronRight } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
-import { gbp } from '../lib/utils.js';
+import { formatCookTime, gbp } from '../lib/utils.js';
 import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS } from '../data/plan.js';
 import {
@@ -16,6 +16,7 @@ import { runDecision } from '../lib/food-intelligence.js';
 import { DecisionStack } from './DecisionCard.jsx';
 import { Section, Card, FoodArt } from './ui.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
+import AdoptionCard from './AdoptionCard.jsx';
 import AutopilotCard from './AutopilotCard.jsx';
 import LoopConfirmCard from './LoopConfirmCard.jsx';
 import NextActionCard from './NextActionCard.jsx';
@@ -140,7 +141,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
   const tonightConfidence = planLed ? null : tonight?.confidence || app.tonightDecision?.confidence || null;
 
   const recovery = app.weekRecovery;
-  const foodLoop = weeklyFoodLoop(app);
+  // Pure derivation over the whole kitchen: memoised like the Week Manager
+  // below so local card state (dismissals, "Not tonight") doesn't recompute it.
+  const foodLoop = useMemo(() => weeklyFoodLoop(app), [app]);
   const runGuidanceAction = (item) => {
     const { action } = item;
     if (action.kind === 'view') openGuidance(action.target);
@@ -208,6 +211,13 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
 
   return (
     <div className="pb-6 space-y-6">
+      {/* 0 — Adoption receipt. One-time: what the example week put in the
+          real kitchen, with Undo discoverable while it still applies.
+          Rendered directly: a measured lazy split of this card moved none
+          of the app-chunk budgets (identical bytes pre/post), so simplicity
+          wins over a split chunk nobody's first paint can feel. */}
+      <AdoptionCard goTab={goTab} />
+
       {/* 1 — One next action. The ranking lives in lib/next-action.js so a
           screen can add urgency without adding a card; the cards it can name
           are all still further down this page. When the week has no plan, the
@@ -251,7 +261,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                 <div className="min-w-0 flex-1">
                   <p className="font-extrabold text-[0.9375rem] truncate">{tonightRecipe.name}</p>
                   <p className="text-[0.75rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
-                    {tonightRecipe.cuisine} · {tonightRecipe.time} min · {gbp(tonightRecipe.costPerServing, { always: true })}/serving
+                    {tonightRecipe.cuisine} · {formatCookTime(tonightRecipe.time)} · {gbp(tonightRecipe.costPerServing, { always: true })}/serving
                   </p>
                 </div>
                 <ChevronRight size={16} style={{ color: 'var(--faint)' }} />
@@ -276,7 +286,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                       </span>
                       <span className="block text-[0.8125rem] font-extrabold truncate">{tonightAlternative.recipe.name}</span>
                       <span className="block text-[0.6875rem] font-semibold truncate" style={{ color: 'var(--muted)' }}>
-                        {tonightAlternative.explanation?.coverage?.pct ?? 0}% in your kitchen · {tonightAlternative.recipe.time} min
+                        {tonightAlternative.explanation?.coverage?.pct ?? 0}% in your kitchen · {formatCookTime(tonightAlternative.recipe.time)}
                       </span>
                     </span>
                     <ChevronRight size={14} style={{ color: 'var(--faint)' }} />

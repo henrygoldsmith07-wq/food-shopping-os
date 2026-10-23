@@ -94,6 +94,12 @@ export function buildPlan(
       if (narrowed.length >= Math.min(wanted, 3)) out = narrowed;
     }
     return [...out].sort((a, b) => {
+      // Leftover-first: a dish that consumes more use-soon items outranks one
+      // that consumes fewer, before seasonal/cost tie-breaks. Expiry only
+      // filters (>=1 hit) above, so without this a 3-hit dish ties a 1-hit one.
+      const expA = expiry.length ? pantryHits(a, expiry) : 0;
+      const expB = expiry.length ? pantryHits(b, expiry) : 0;
+      if (expB !== expA) return expB - expA;
       const seasonal = month ? seasonScore(b, month) - seasonScore(a, month) : 0;
       const costA = Number.isFinite(Number(a.costPerServing)) ? Number(a.costPerServing) : Number.POSITIVE_INFINITY;
       const costB = Number.isFinite(Number(b.costPerServing)) ? Number(b.costPerServing) : Number.POSITIVE_INFINITY;

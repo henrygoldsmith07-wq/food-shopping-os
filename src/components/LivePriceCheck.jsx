@@ -43,6 +43,31 @@ import MonidProvenance from './MonidProvenance.jsx';
  * Every item on the list is checked, not a sample. Each check is also kept, so
  * asking repeatedly builds the price history charted under each item.
  */
+/**
+ * The honest total miss: no shop answered a single item. A 0% hit rate with no
+ * breakdown reads as malfunction, so this says what it usually is instead —
+ * postcode gates, bot walls and honoured robots refusals — and where the real
+ * numbers still live (receipts, per-item retailer links, community prices).
+ */
+export function NoShopAnswered() {
+  return (
+    <Card className="mb-2 !p-3">
+      <p className="text-[0.8125rem] font-bold">No shop answered this time.</p>
+      <p className="mt-1 text-[0.6875rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+        This is normal, not a malfunction: some grocers only price after a store or
+        postcode is chosen, some block automated readers, and one refuses them in
+        robots.txt — which Forq honours. An empty result is reported as empty rather
+        than filled in, because a made-up price looks exactly like a real one.
+      </p>
+      <p className="mt-1 text-[0.6875rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+        What still works: your recorded receipt prices, each item&apos;s retailer links
+        below for checking the shelf by hand, and “Check community prices” for dated
+        observations where the shops stay silent.
+      </p>
+    </Card>
+  );
+}
+
 export default function LivePriceCheck({
   items = [], offlineMode = false, isOnline = true, allergens = [], purchaseCounts = {},
   alertConfig = {}, onChecked,
@@ -307,6 +332,9 @@ export default function LivePriceCheck({
                   different network the same check should behave completely differently.
                 </p>
               </Card>
+            )}
+            {state && !busy && entries.length > 0 && priced.length === 0 && !coverage.networkBlocked && (
+              <NoShopAnswered />
             )}
             {coverage.unpriced > 0 && !coverage.networkBlocked && (
               <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--faint)' }}>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { gbp } from '../lib/utils.js';
+import { formatCookTime, gbp } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { filterByDiet } from '../lib/goals.js';
 import { monthOf, seasonalHits } from '../data/seasons.js';
@@ -78,7 +78,7 @@ export default function RecipePicker({ slot, onPick, onClear, hasMeal, initialQu
               <span className="min-w-0 flex-1">
                 <span className="block font-bold text-[0.875rem] truncate">{r.name}</span>
                 <span className="block text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {r.time} min · {gbp(r.costPerServing, { always: true })}/serving · {r.protein}g protein
+                  {formatCookTime(r.time)} · {gbp(r.costPerServing, { always: true })}/serving · {r.protein}g protein
                 </span>
               </span>
               {portions > 0 && <Pill tone="good">{portions} in fridge</Pill>}

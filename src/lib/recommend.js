@@ -15,7 +15,7 @@ import { tasteScore } from './taste.js';
 import { seasonScore } from '../data/seasons.js';
 import { LEFTOVER_CAT } from './mealplan.js';
 
-const normalize = (name) => String(name || '').trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+export const normalize = (name) => String(name || '').trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
 
 const ingredientMatchesPantry = (ingredientName, pantryNames) => {
   const wanted = normalize(ingredientName);
@@ -160,10 +160,18 @@ export const explainRecommendation = (recipe, ctx = {}) => {
   };
   const score = pantryFactor * expiryFactor * timeFactor * costFactor * leftoverFactor * tasteFactor * seasonalFactor;
 
+  const dayLabel = availability[date]?.dayName || 'today';
+  const expiryLabel = (e) => {
+    const name = e.pantryItem.name.toLowerCase();
+    if (e.daysLeft < 0) return `${name} past its recorded date`;
+    if (e.daysLeft === 0) return `${name} use today`;
+    if (e.daysLeft === 1) return `${name} expiring tomorrow`;
+    return `${name} expiring in ${e.daysLeft}d`;
+  };
   const lines = [
     `${coverage.pct}% already in your kitchen`,
-    expiring.length ? `Uses ${expiring.map((e) => `${e.pantryItem.name.toLowerCase()}${e.daysLeft <= 1 ? ' expiring tomorrow' : ` expiring in ${e.daysLeft}d`}`).join(', ')}` : null,
-    `${timeMins} minutes — ${schedule.fits ? `fits ${availability[date]?.dayName || 'today'}'s schedule` : `too long for ${availability[date]?.dayName || date}`}`,
+    expiring.length ? `Uses ${expiring.map(expiryLabel).join(', ')}` : null,
+    `${timeMins} minutes — ${schedule.fits ? `fits ${dayLabel}'s schedule` : `too long for ${dayLabel}`}`,
     `£${cost.toFixed(2)}/person`,
     leftover.note,
   ].filter(Boolean);

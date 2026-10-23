@@ -32,14 +32,14 @@ import { loadCanonicalState } from './persistence-boot.js';
 import { idbSupported } from './persistent-state.js';
 import { usePersistence } from './store-persistence-hook.js';
 import { useStoreApi } from './store-api.js';
+import { useDemoKitchen } from './store-demo.js';
 import { isUnderEighteen } from './youth.js';
-import { readAnalyticsConsent, setAnalyticsConsent, setDemoAnalyticsSuppressed } from './product-analytics.js';
-import { createExampleWeekState } from '../data/exampleWeek.js';
+import { readAnalyticsConsent, setAnalyticsConsent } from './product-analytics.js';
 
 export { PHOTO_LIMIT } from './health-actions.js';
 
 import {
-  ACCENT_IDS, emojiFor, EMPTY_STATE, rolloverDay, STATE_VERSION, todayStamp, uid,
+  ACCENT_IDS, emojiFor, EMPTY_STATE, rolloverDay, STATE_VERSION, uid,
 } from './state.js';
 
 export {
@@ -442,28 +442,13 @@ export function AppProvider({ children }) {
     };
   }, [effectiveState.reminders, effectiveState.reminderDone, seenFrom, tick]);
 
-  const enterDemoMode = useCallback(() => {
-    const demoSession = createExampleWeekState(todayStamp());
-    demoRef.current = demoSession;
-    // Undo history is a stack of real states; a demo undo must never pop one
-    // back into the sandbox (or a demo state back into the real app).
-    realUndoStack.current = undoHistory.current;
-    undoHistory.current = [];
-    // The sandbox never counts toward analytics — suppress recording for the
-    // whole session, not per call site.
-    setDemoAnalyticsSuppressed(true);
-    setDemoState(demoSession);
-  }, [undoHistory]);
-
-  const exitDemoMode = useCallback(() => {
-    demoRef.current = null;
-    undoHistory.current = realUndoStack.current ?? [];
-    realUndoStack.current = null;
-    undoBatch.current = null;
-    setDemoAnalyticsSuppressed(false);
-    setDemoState(null);
-  }, [undoHistory]);
-
+  /* Sandbox behaviour (demo session + adoption) lives beside the store —
+     see store-demo.js — so this module stays within the 500-line boundary
+     the merge-conflict tripwires enforce. Same callbacks, new address. */
+  const { enterDemoMode, exitDemoMode, adoptDemoWeek } = useDemoKitchen({
+    demoRef, realUndoStack, undoHistory, undoBatch, editedSinceBoot,
+    setDemoState, state, api, beginImportBatch, endImportBatch,
+  });
   const value = useMemo(() => ({
     ...effectiveState,
     ...derived,
@@ -471,6 +456,7 @@ export function AppProvider({ children }) {
     isDemoMode: Boolean(demo),
     enterDemoMode,
     exitDemoMode,
+    adoptDemoWeek,
     beginImportBatch,
     endImportBatch,
     reminderLine: (kind) => reminderContext(kind, { ...effectiveState, ...derived }),
@@ -480,7 +466,7 @@ export function AppProvider({ children }) {
       platformAvailable: platformUnlockAvailable(),
     },
     ...api,
-  }), [effectiveState, state.healthVaultEnabled, derived, alerts, api, vaultUnlocked, enterDemoMode, exitDemoMode, beginImportBatch, endImportBatch, demo]);
+  }), [effectiveState, state.healthVaultEnabled, derived, alerts, api, vaultUnlocked, enterDemoMode, exitDemoMode, adoptDemoWeek, beginImportBatch, endImportBatch, demo]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

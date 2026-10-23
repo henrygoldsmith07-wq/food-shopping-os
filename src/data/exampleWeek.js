@@ -164,4 +164,97 @@ export const createExampleWeekState = (day = todayStamp()) => {
   };
 };
 
+/**
+ * Build a real-kitchen patch from a demo session — the "this demo → my week"
+ * bridge. Pure (no React, no storage) so tests can pin the contract.
+ *
+ * Rules:
+ * - the demo's dinner rotation is rebased onto the current week, so adopting
+ *   on any day yields a full 7-day plan starting today rather than stale dates
+ * - a real planned dinner is never replaced: dates the household already
+ *   planned keep their meal and the demo fills only the empty ones, so
+ *   adopting from Settings cannot destroy a real week (undo still reverts)
+ * - pantry staples are appended only when the real kitchen lacks that name;
+ *   nothing real is removed or overwritten
+ * - favourites are merged without duplicates; unknown ids are dropped
+ * - demo-only flags (`isDemoSession`, `demo` list rows, `imported` receipts,
+ *   `demoMeta`) never cross over — the adopted kitchen is real data
+ * - receipt history stays behind: past demo trips are illustration, not the
+ *   household's spending, and adopting them would fabricate a budget history
+ */
+export const buildDemoAdoptionPatch = (demo = {}, real = {}, day = todayStamp()) => {
+  const dates = weekDates(day);
+  const realPlan = real.plan || {};
+  let keptMeals = 0;
+  const plan = Object.fromEntries(
+    dates.map((date, i) => {
+      const existing = realPlan[date]?.dinner || null;
+      if (existing) {
+        keptMeals += 1;
+        return [date, realPlan[date]];
+      }
+      return [date, { dinner: DEMO_DINNER_IDS[i % DEMO_DINNER_IDS.length] }];
+    }),
+  );
+  const havePantry = new Set(
+    (real.pantry || []).map((p) => String(p?.name || '').trim().toLowerCase()).filter(Boolean),
+  );
+  const staples = (demo.pantry || [])
+    .filter((p) => {
+      const name = String(p?.name || '').trim();
+      return name && !havePantry.has(name.toLowerCase());
+    })
+    .map((p) => ({
+      ...p,
+      id: uid('p'),
+      purchaseDate: day,
+      lastConfirmedAt: day,
+      confidenceUpdatedAt: day,
+    }));
+  const favourites = [...(real.favourites || [])];
+  (demo.favourites || []).forEach((id) => {
+    if (id && byId(id) && !favourites.includes(id)) favourites.push(id);
+  });
+  const mergedPantry = [...(real.pantry || []), ...staples];
+  return {
+    onboarded: true,
+    usefulSetupPending: false,
+    welcomeDismissed: true,
+    // Adoption is the only path that skips the onboarding name step, which
+    // defaults blanks to 'you' — without the same default the Home header
+    // greets "Good evening, " with a dangling comma and Profile shows a
+    // blank title. A real name is always kept.
+    name: String(real.name || '').trim() ? real.name : 'you',
+    plan,
+    pantry: mergedPantry,
+    favourites,
+    // Household size 1 is a valid choice (and the fresh-kitchen default), so it
+    // is always kept — the adopted plan simply re-derives quantities for it.
+    // A zero budget means "not set", so the demo's starter budget applies.
+    household: real.household || 2,
+    weeklyBudget: real.weeklyBudget || demo.weeklyBudget || 0,
+    adoptedFromDemo: {
+      at: Date.now(),
+      dinners: [...DEMO_DINNER_IDS],
+      keptMeals,
+      staples: staples.length,
+    },
+  };
+};
+
+/**
+ * What the one-time adoption receipt should say, or null when there is no
+ * adoption to acknowledge. Pure so the card and its tests share one reading:
+ * dinners the demo added (rotation length minus kept real meals), real meals
+ * kept, and pantry staples adopted.
+ */
+export const adoptionSummary = (marker) => {
+  if (!marker || typeof marker !== 'object') return null;
+  const dinners = Array.isArray(marker.dinners) ? marker.dinners.length : 0;
+  const kept = Math.max(0, Number(marker.keptMeals) || 0);
+  const staples = Math.max(0, Number(marker.staples) || 0);
+  if (!dinners && !kept && !staples) return null;
+  return { added: Math.max(0, dinners - kept), kept, staples };
+};
+
 export const isDemoState = (state) => Boolean(state?.isDemoSession);

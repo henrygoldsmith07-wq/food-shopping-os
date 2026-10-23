@@ -1,5 +1,5 @@
 import { ClipboardList } from 'lucide-react';
-import { gbp } from '../lib/utils.js';
+import { formatCookTime, gbp } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
 
@@ -94,7 +94,7 @@ export default function WeekLoopPlan({
                     <span className="min-w-0 flex-1">
                       <span className="block text-[0.8125rem] font-bold truncate">{r.name}</span>
                       <span className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                        {r.time} min · {gbp(r.costPerServing, { always: true })}/serving
+                        {formatCookTime(r.time)} · {gbp(r.costPerServing, { always: true })}/serving
                       </span>
                     </span>
                     {usesExpiring(r) && <Pill tone="warn">Going off soon</Pill>}

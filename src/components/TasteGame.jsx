@@ -3,6 +3,7 @@ import { Heart, RotateCcw, Sparkles, ThumbsDown, Utensils } from 'lucide-react';
 import { buildTasteDeck } from '../lib/taste.js';
 import { useApp } from '../lib/store.jsx';
 import { FoodArt, Pill } from './ui.jsx';
+import { formatCookTime } from '../lib/utils.js';
 
 const SWIPE_DISTANCE = 72;
 
@@ -117,7 +118,7 @@ export default function TasteGame() {
             <div className="absolute inset-x-5 bottom-4 text-white">
               <h3 className="text-2xl font-black leading-tight">{current.name}</h3>
               <p className="mt-1 text-[0.8125rem] font-bold text-white/85">
-                {current.cuisine} · {current.time} min · {current.protein}g protein
+                {current.cuisine} · {formatCookTime(current.time)} · {current.protein}g protein
               </p>
             </div>
           </div>

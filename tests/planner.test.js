@@ -118,6 +118,27 @@ describe('planning around what you have and what month it is', () => {
     expect(odd.meals.every(Boolean)).toBe(true);
   });
 
+  it('ranks the dish using more use-soon items first (leftover-first)', () => {
+    const oneHit = {
+      id: 't-one-hit', name: 'One Hit', meal: 'dinner', cuisine: 'Test', tags: [],
+      time: 20, servings: 2, costPerServing: 1.5,
+      ingredients: [{ name: 'Spinach' }, { name: 'Rice' }, { name: 'Beans' }],
+      steps: [{ text: 'Cook it.' }],
+    };
+    const threeHit = {
+      id: 't-three-hit', name: 'Three Hit', meal: 'dinner', cuisine: 'Test', tags: [],
+      time: 20, servings: 2, costPerServing: 1.5,
+      ingredients: [{ name: 'Spinach' }, { name: 'Peppers' }, { name: 'Eggs' }],
+      steps: [{ text: 'Cook it.' }],
+    };
+    const expiry = ['Spinach', 'Peppers', 'Eggs'];
+    const { meals } = buildPlan({
+      scope: '1 meal', budget: 4, recipes: [oneHit, threeHit],
+      pantry: expiry, expiry,
+    }, 7);
+    expect(meals[0].id).toBe('t-three-hit');
+  });
+
   it('favours dishes with something in season', () => {
     const { meals } = buildPlan({ scope: 'A week', budget: 4, month: 7 }, 33);
     expect(meals).toHaveLength(7);

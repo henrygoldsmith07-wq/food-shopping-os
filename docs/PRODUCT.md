@@ -44,7 +44,14 @@ Temporary guided demonstration, **outside** the real user store:
 - Walks plan → shopping list → aisle shop → pantry update
 - Never persisted, never cloud-synced, never counts toward streaks, XP, badges or analytics
 
-Code: `src/data/exampleWeek.js`, `DemoWalkthrough.jsx`, demo overlay in `store.jsx`.
+Adoption bridge (the demo converts instead of discarding):
+
+- One action copies the 7 dinners (rebased onto this week) and pantry staples
+  into the real kitchen; meals already planned are kept, demo receipts stay behind
+- Lands with a generated shopping list, a Home receipt card, and single-step Undo
+- Measured once by the coarse `demo_adopted` event — the sandbox itself never counts
+
+Code: `src/data/exampleWeek.js`, `DemoWalkthrough.jsx`, `AdoptionCard.jsx`, demo overlay and `adoptDemoWeek` in `store.jsx`.
 
 ## Onboarding stages
 

@@ -5,18 +5,16 @@ import {
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { Glyph } from './icons.jsx';
-import { gbp, cx, prettyDate } from '../lib/utils.js';
+import { cx } from '../lib/utils.js';
 import { AISLE_ORDER, COMMON_STORES, checkedTotalOf } from '../data/stores.js';
 import {
   affordableCap, basketProjection, dealQuality, groupForStore, parseVoiceShopping, recurringStaples, rowsOverHeadroom, shoppingNameKey,
 } from '../lib/shopping.js';
-import { AISLE_ORDER as ALL_AISLES } from '../data/stores.js';
 import { clearObservedPriceCache } from '../lib/observed-prices.js';
 import { useObservedPrices } from '../lib/use-observed-prices.js';
 import { loadLivePriceCache } from '../lib/live-prices.js';
 import { estimateBasket } from '../lib/basket-estimate.js';
 import { haptic } from '../lib/haptics.js';
-import { gbp as gbpFmt } from '../lib/utils.js';
 import ReceiptScan from './ReceiptScan.jsx';
 import {
   Section, Card, Empty, Meter, Chip, GestureMenu, Pill, Sheet,
@@ -125,7 +123,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
     [app.offers, visibleList, app.day],
   );
   const openRouteEditor = () => {
-    setRouteOrder(known || ALL_AISLES);
+    setRouteOrder(known || AISLE_ORDER);
     setRouteEditor(true);
   };
   const saveRoute = () => {

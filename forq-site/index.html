@@ -110,7 +110,7 @@
   </section>
   <section class="stats" aria-label="Stats">
     <div class="stat"><b>31</b><span>data modules</span></div>
-    <div class="stat"><b>200+</b><span>reference foods</span></div>
+    <div class="stat"><b>500+</b><span>reference foods</span></div>
     <div class="stat"><b>.ics</b><span>calendar export</span></div>
     <div class="stat"><b>Local</b><span>first, sync optional</span></div>
   </section>
@@ -120,7 +120,7 @@
     <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V3M8 21V13M16 3v18M16 8h3"/></svg>Plan → Shop → Cook</h3><p>A single weekly flow; households share the list, not silent storage.</p></div>
     <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Export</h3><p>Meal plan → calendar (.ics), backups to JSON importable elsewhere.</p></div>
     <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v8l-7 4-7-4V7z"/><path d="M12 12v8"/></svg>Open formats</h3><p>.ics / JSON / CSV in and out; sync only if you sign in (Upstash Redis + Ably).</p></div>
-    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>What it won't do</h3><p>Live supermarket prices or DNA diet claims — capability register says so plainly.</p></div>
+    <div class="card"><h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>What it won't do</h3><p>Invented prices or DNA diet claims — every price names its source, and the capability register says the rest plainly.</p></div>
   </section>
   <section class="privacy" style="margin-top:28px">
     <h2>Honest by design</h2>
@@ -130,7 +130,7 @@
   </section>
   <section class="faq" id="faq">
     <h2>FAQ</h2>
-    <details><summary>Do you track prices live?</summary><p>No — receipt prices are recorded, retailer hub links you to official shops for today's price/stock.</p></details>
+    <details><summary>Do you track prices live?</summary><p>Only when you ask: an explicit check reads public shop search pages, each row labelled with its source, date and confidence — never presented as a quote. Your receipt prices stay the trusted record.</p></details>
     <details><summary>Is there cloud?</summary><p>Optional: Auth.js + Upstash Redis household sync. Without env vars it stays 100% local.</p></details>
     <details><summary>Can I barcode scan?</summary><p>Optional Open Food Facts lookup (signed-in, explicit action) for identity/allergens/nutrition.</p></details>
   </section>

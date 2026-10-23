@@ -5,6 +5,7 @@
 export const PRODUCT_EVENT_NAMES = [
   'app_opened',
   'onboarding_completed',
+  'demo_adopted',
   'screen_viewed',
   'plan_generated',
   'plan_accepted',

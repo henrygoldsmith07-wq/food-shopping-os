@@ -4,7 +4,7 @@ import {
   Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
-import { cx, gbp } from '../lib/utils.js';
+import { cx, formatCookTime, gbp } from '../lib/utils.js';
 import { allRecipes, DISCOVER_FILTERS, filterRecipes } from '../data/recipes.js';
 import { DIET_PATTERNS } from '../data/goals.js';
 import { missingFrom, searchRecipes } from '../lib/recipe-tools.js';
@@ -330,14 +330,14 @@ export default function RecipesTab({ openRecipe }) {
                               : app.pantry.length > 0 && short === 0 ? <Pill tone="good"><ChefHat size={11} /> can cook now</Pill>
                                 : fit?.warnings?.length ? <Pill tone="warn">check</Pill>
                                   : r.tags.includes('high-protein') ? <Pill tone="accent">{r.protein}g protein</Pill>
-                                    : r.time <= 20 ? <Pill tone="muted"><Clock size={11} /> {r.time} min</Pill>
+                                    : r.time <= 20 ? <Pill tone="muted"><Clock size={11} /> {formatCookTime(r.time)}</Pill>
                                       : null}
                         </span>
                       </div>
                       <div className="p-3">
                         <p className="font-bold text-[0.84375rem] leading-tight line-clamp-2">{r.name}</p>
                         <p className="mt-1 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                          {r.time <= 60 ? `${r.time} min` : `${Math.round(r.time / 60)} h`} · {r.nutritionStatus === 'estimated-from-ingredients' ? '≈' : ''}{r.kcal} kcal · {r.protein}g protein
+                          {formatCookTime(r.time)} · {r.nutritionStatus === 'estimated-from-ingredients' ? '≈' : ''}{r.kcal} kcal · {r.protein}g protein
                         </p>
                         <p className="mt-1 text-[0.75rem] font-extrabold" style={{ color: 'var(--accent)' }}>
                           {gbp(r.costPerServing, { always: true })}/serving

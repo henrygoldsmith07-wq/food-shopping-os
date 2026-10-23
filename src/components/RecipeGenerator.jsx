@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronRight, Package, RefreshCw, Sparkles, Zap } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
-import { gbp } from '../lib/utils.js';
+import { formatCookTime, gbp } from '../lib/utils.js';
 import { generatorInputs, inventRecipe } from '../lib/recipe-ai.js';
 import { monthOf } from '../data/seasons.js';
 import { Card, Chip, Pill, Stepper, FoodArt } from './ui.jsx';
@@ -126,7 +126,7 @@ export default function RecipeGenerator({ openRecipe }) {
             <div>
               <p className="font-extrabold text-[1rem] leading-tight">{recipe.name}</p>
               <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                {recipe.time} min · serves {recipe.servings} · {gbp(recipe.costPerServing, { always: true })}/serving · {recipe.kcal} kcal
+                {formatCookTime(recipe.time)} · serves {recipe.servings} · {gbp(recipe.costPerServing, { always: true })}/serving · {recipe.kcal} kcal
               </p>
             </div>
 

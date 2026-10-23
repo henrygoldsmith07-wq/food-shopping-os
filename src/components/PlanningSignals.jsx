@@ -1,12 +1,23 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Clock3 } from 'lucide-react';
 import { SKIP_REASONS, skipReasonLabel } from '../lib/planning-intelligence.js';
+import { getUseItUpMatches } from '../lib/use-it-up.js';
 import { Card, Pill, Section } from './ui.jsx';
+import { formatCookTime } from '../lib/utils.js';
 
 const EMPTY_ADHERENCE = { planned: 0, completed: 0, skipped: 0, pending: 0, rate: null, rows: [] };
 
-export default function PlanningSignals({ app }) {
+export default function PlanningSignals({ app, openRecipe = null }) {
   const [skipping, setSkipping] = useState(null);
+  // "Use it up": the diet-safe dishes that consume the most use-soon
+  // items, ranked by the same matcher as the rest of the app. Rendered
+  // only when the host passes an opener — a row that cannot open its
+  // recipe would be a dead end, not a suggestion.
+  const useItUp = useMemo(() => getUseItUpMatches(app.safeRecipes || [], {
+    useSoonRows: app.useSoonIngredients || [],
+    pantry: app.pantry || [],
+  }), [app.safeRecipes, app.useSoonIngredients, app.pantry]);
+  const showUseItUp = typeof openRecipe === 'function' && useItUp.length > 0;
   const adherence = app.planningAdherence || EMPTY_ADHERENCE;
   const rows = adherence.rows || [];
   const pendingToday = rows.filter((row) => row.date === app.day && row.status === 'pending');
@@ -36,14 +47,53 @@ export default function PlanningSignals({ app }) {
               {app.useSoonIngredients.slice(0, 4).map((row) => `${row.item.name}${row.daysLeft !== null ? ` · ${row.daysLeft <= 0 ? 'today' : `${row.daysLeft}d`}` : ''}`).join(' · ')}
               {app.useSoonIngredients.length > 4 ? ' · …' : ''}
             </p>
+            {showUseItUp && (
+              <ul className="mt-2 space-y-1.5" aria-label="Meals that use these ingredients">
+                {useItUp.map(({ recipe, used, coverage }) => (
+                  <li key={recipe.id || recipe.name}>
+                    <button
+                      type="button"
+                      onClick={() => openRecipe(recipe)}
+                      className="press flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-left"
+                      style={{ borderColor: 'var(--line)' }}
+                      aria-label={`Open ${recipe.name}, uses ${used.join(', ')}`}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[0.78125rem] font-extrabold">{recipe.name}</span>
+                        <span className="block truncate text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                          Uses {used.slice(0, 3).join(', ')}{used.length > 3 ? ' + more' : ''} · {coverage.pct}% in your kitchen{Number(recipe.time) ? ` · ${formatCookTime(recipe.time)}` : ''}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
         {app.leftoverAwareness?.length > 0 && (
           <div className="border-t pt-3" style={{ borderColor: 'var(--line)' }}>
             <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Leftover awareness</p>
-            <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-              {app.leftoverAwareness.slice(0, 3).map((row) => `${row.item.name} · ${row.item.portions} portion${row.item.portions === 1 ? '' : 's'}${row.daysLeft !== null ? ` · ${row.daysLeft <= 0 ? 'use today' : `${row.daysLeft}d left`}` : ''}`).join(' · ')}
-            </p>
+            <ul className="mt-2 space-y-1.5" aria-label="Saved leftover portions">
+              {app.leftoverAwareness.slice(0, 3).map((row) => (
+                <li key={row.item.id || row.item.name} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                    {row.item.name} · {row.item.portions} portion{row.item.portions === 1 ? '' : 's'}{row.daysLeft !== null ? ` · ${row.daysLeft <= 0 ? 'use today' : `${row.daysLeft}d left`}` : ''}
+                  </span>
+                  {typeof app.useLeftover === 'function' && (
+                    <button
+                      type="button"
+                      onClick={() => app.useLeftover(row.item.id)}
+                      className="press shrink-0 rounded-full border px-2.5 py-1 text-[0.6875rem] font-extrabold"
+                      style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                      aria-label={`Eat a portion of ${row.item.name}`}
+                    >
+                      Eat one
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {hasPerishability && (

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  adoptionSummary,
+  buildDemoAdoptionPatch,
   createExampleWeekState,
   isDemoState,
   DEMO_LABEL,
@@ -94,5 +96,114 @@ describe('example week demonstration data', () => {
     const before = JSON.stringify(EMPTY_STATE);
     createExampleWeekState('2026-07-28');
     expect(JSON.stringify(EMPTY_STATE)).toBe(before);
+  });
+});
+
+describe('demo adoption (demo week becomes the real kitchen)', () => {
+  it('rebases the dinner rotation onto the current week with a full 7-day plan', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const patch = buildDemoAdoptionPatch(demo, { ...EMPTY_STATE }, '2026-10-20');
+    const dates = weekDates('2026-10-20');
+    expect(Object.keys(patch.plan)).toEqual(dates);
+    dates.forEach((date, i) => {
+      expect(patch.plan[date].dinner).toBe(DEMO_DINNER_IDS[i % DEMO_DINNER_IDS.length]);
+    });
+    expect(patch.onboarded).toBe(true);
+  });
+
+  it('merges pantry staples without touching real rows and never carries demo flags', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const realPantry = [{ id: 'p1', name: 'Olive oil' }];
+    const patch = buildDemoAdoptionPatch(demo, { ...EMPTY_STATE, pantry: realPantry }, '2026-10-20');
+    // Real row kept exactly once; demo duplicate skipped.
+    expect(patch.pantry.filter((p) => p.name.toLowerCase() === 'olive oil')).toHaveLength(1);
+    expect(patch.pantry[0].id).toBe('p1');
+    // Other staples adopted with fresh ids.
+    expect(patch.pantry.length).toBeGreaterThan(realPantry.length);
+    expect(patch.pantry.every((p) => p.id)).toBe(true);
+    // No demo-only surface crosses over.
+    expect(patch.isDemoSession).toBeUndefined();
+    expect(patch.demoMeta).toBeUndefined();
+    expect(patch.shops).toBeUndefined();
+    expect(patch.adoptedFromDemo.dinners).toEqual(DEMO_DINNER_IDS);
+  });
+
+  it('merges favourites without duplicates and keeps the real budget when set', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const patch = buildDemoAdoptionPatch(
+      demo,
+      { ...EMPTY_STATE, favourites: [DEMO_DINNER_IDS[0]], weeklyBudget: 60, household: 3 },
+      '2026-10-20',
+    );
+    expect(patch.favourites.filter((id) => id === DEMO_DINNER_IDS[0])).toHaveLength(1);
+    expect(patch.weeklyBudget).toBe(60);
+    expect(patch.household).toBe(3);
+  });
+
+  it('never replaces a real planned dinner — the demo fills only empty dates', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const dates = weekDates('2026-10-20');
+    const real = {
+      ...EMPTY_STATE,
+      plan: {
+        [dates[0]]: { dinner: 'my-roast', lunch: 'my-soup' },
+        [dates[3]]: { dinner: 'my-curry' },
+      },
+    };
+    const patch = buildDemoAdoptionPatch(demo, real, '2026-10-20');
+    // Real slots survive untouched, including the non-dinner slot.
+    expect(patch.plan[dates[0]]).toEqual({ dinner: 'my-roast', lunch: 'my-soup' });
+    expect(patch.plan[dates[3]]).toEqual({ dinner: 'my-curry' });
+    // Empty dates still get the rebased demo rotation.
+    expect(patch.plan[dates[1]].dinner).toBe(DEMO_DINNER_IDS[1]);
+    expect(patch.plan[dates[2]].dinner).toBe(DEMO_DINNER_IDS[2]);
+    expect(patch.adoptedFromDemo.keptMeals).toBe(2);
+  });
+
+  it('gives adopted kitchens the same nameless default as skipped onboarding', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    // Onboarding turns a blank name into 'you'; adoption is the only other
+    // path past setup, so it must too — otherwise Home greets "Good evening, ".
+    expect(buildDemoAdoptionPatch(demo, { ...EMPTY_STATE, name: '' }, '2026-10-20').name).toBe('you');
+    expect(buildDemoAdoptionPatch(demo, { ...EMPTY_STATE, name: '   ' }, '2026-10-20').name).toBe('you');
+    expect(buildDemoAdoptionPatch(demo, { ...EMPTY_STATE, name: 'Sam' }, '2026-10-20').name).toBe('Sam');
+  });
+
+  it('reports zero kept meals for a brand-new kitchen', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const patch = buildDemoAdoptionPatch(demo, { ...EMPTY_STATE }, '2026-10-20');
+    expect(patch.adoptedFromDemo.keptMeals).toBe(0);
+    expect(patch.adoptedFromDemo.staples).toBe(demo.pantry.length);
+    expect(Object.keys(patch.plan)).toHaveLength(7);
+  });
+
+  it('keeps a new kitchen\'s household size and seeds the demo budget', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const patch = buildDemoAdoptionPatch(demo, { ...EMPTY_STATE }, '2026-10-20');
+    // Household 1 is valid (and the fresh default) — the plan re-derives for it.
+    expect(patch.household).toBe(1);
+    // Zero budget means unset, so the demo starter budget applies.
+    expect(patch.weeklyBudget).toBe(demo.weeklyBudget);
+  });
+});
+
+describe('adoption receipt', () => {
+  it('summarises what the demo added and what it kept', () => {
+    expect(adoptionSummary(null)).toBeNull();
+    expect(adoptionSummary(undefined)).toBeNull();
+    expect(adoptionSummary({ dinners: [], keptMeals: 0, staples: 0 })).toBeNull();
+    expect(adoptionSummary({
+      dinners: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], keptMeals: 2, staples: 4,
+    })).toEqual({ added: 5, kept: 2, staples: 4 });
+  });
+
+  it('reads straight off a real adoption patch', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const patch = buildDemoAdoptionPatch(demo, { ...EMPTY_STATE }, '2026-10-20');
+    expect(adoptionSummary(patch.adoptedFromDemo)).toEqual({
+      added: 7,
+      kept: 0,
+      staples: demo.pantry.length,
+    });
   });
 });

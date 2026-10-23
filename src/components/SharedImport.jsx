@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../lib/store.jsx';
 import { parseShareCode } from '../lib/recipe-tools.js';
 import { Card } from './ui.jsx';
+import { formatCookTime } from '../lib/utils.js';
 
 /** Paste in a recipe someone sent you. */
 export default function SharedImport({ onDone }) {
@@ -44,7 +45,7 @@ export default function SharedImport({ onDone }) {
         <Card className="space-y-2">
           <p className="font-extrabold text-[0.9375rem]">{preview.name}</p>
           <p className="text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            {preview.sharedBy ? `From ${preview.sharedBy} · ` : ''}{preview.ingredients.length} ingredients · {preview.steps.length} steps · {preview.time} min
+            {preview.sharedBy ? `From ${preview.sharedBy} · ` : ''}{preview.ingredients.length} ingredients · {preview.steps.length} steps · {formatCookTime(preview.time)}
           </p>
           {(() => {
             const fit = app.suitabilityFor?.(preview);

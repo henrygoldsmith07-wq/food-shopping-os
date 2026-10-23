@@ -14,7 +14,7 @@ It does not invent a pretend household or hide uncertainty behind a polished num
 
 ## See it in 10 seconds
 
-Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping, receipt history and the complete loop. Then choose **Explore an example week first** to enter the interactive sandbox. Nothing is saved, synced, or counted toward analytics.
+Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping, receipt history and the complete loop. Then choose **Explore an example week first** to enter the interactive sandbox. Nothing is saved, synced, or counted toward analytics. From the walkthrough you can **Use this demo week as my starting plan**: the sandbox closes, the dinners are rebased onto this week as your real plan, and **Review plan** navigates to it — adopting never carries demo pantry, receipts, or analytics with it.
 
 ### Product loop
 

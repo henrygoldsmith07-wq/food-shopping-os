@@ -390,7 +390,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
           <span className="text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>signals · what-if · batch cooking</span>
         </summary>
         <div className="-mx-5 mt-4 space-y-6">
-      <PlanningSignals app={app} />
+      <PlanningSignals app={app} openRecipe={openRecipe} />
       <Section title="What-if planning" className="rise rise-2">
         <PlanSimulator />
       </Section>

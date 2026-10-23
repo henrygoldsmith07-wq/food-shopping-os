@@ -110,6 +110,28 @@ describe('privacy-safe product analytics', () => {
     expect(readAnalyticsConsent()).toBe(false);
   });
 
+  // demo_adopted is how the adoption rate gets watched: the sandbox promises
+  // the demo never counts, so the event must fail while suppressed and record
+  // coarsely (counts only — never names or prices) once the sandbox ends.
+  it('records demo adoption coarsely once the sandbox ends', () => {
+    setAnalyticsConsent(true);
+    setDemoAnalyticsSuppressed(true);
+    try {
+      expect(recordProductEvent('demo_adopted', { source: 'demo', mealCount: 7, count: 3 })).toBe(false);
+      expect(queuedProductEventCount()).toBe(0);
+    } finally {
+      setDemoAnalyticsSuppressed(false);
+    }
+    expect(recordProductEvent('demo_adopted', {
+      source: 'demo', mealCount: 7, count: 3, recipeName: 'must not leak',
+    })).toBe(true);
+    const queued = JSON.parse(localStorage.getItem(ANALYTICS_QUEUE_KEY));
+    expect(queued[0]).toMatchObject({
+      name: 'demo_adopted',
+      properties: { source: 'demo', mealCount: 7, count: 3 },
+    });
+  });
+
   it('never records while a demo session is open, consent or not', () => {
     setAnalyticsConsent(true);
     setDemoAnalyticsSuppressed(true);

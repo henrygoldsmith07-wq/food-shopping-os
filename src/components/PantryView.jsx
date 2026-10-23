@@ -219,13 +219,27 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                         {pantryUncertaintyLabel(item, app.day)}{days !== null ? ` · ${expiryStatus(days).label}` : ''}{item.cost > 0 ? ` · ${gbp(item.cost, { always: true })}` : ''}
                       </p>
                     </div>
-                    <button
-                      onClick={() => app.binPantryItem(item.id)}
-                      className="press rounded-full border px-3 py-1.5 text-[0.75rem] font-extrabold shrink-0"
-                      style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
-                    >
-                      Threw it away
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {typeof onPlan === 'function' && (
+                        <button
+                          type="button"
+                          onClick={() => onPlan(item.name)}
+                          className="press rounded-full border px-3 py-1.5 text-[0.75rem] font-extrabold"
+                          style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                          aria-label={`Find recipes using ${item.name}`}
+                        >
+                          Cook with this
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => app.binPantryItem(item.id)}
+                        className="press rounded-full border px-3 py-1.5 text-[0.75rem] font-extrabold"
+                        style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+                      >
+                        Threw it away
+                      </button>
+                    </div>
                   </div>
                 ))}
               </Card>

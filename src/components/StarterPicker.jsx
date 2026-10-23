@@ -12,6 +12,7 @@
 import { Check, RefreshCw } from 'lucide-react';
 import { MAX_STARTER_PICKS } from '../lib/starter-recipes.js';
 import { FoodArt } from './ui.jsx';
+import { formatCookTime } from '../lib/utils.js';
 
 export default function StarterPicker({ starters, picked, onToggle, onMore }) {
   return (
@@ -40,7 +41,7 @@ export default function StarterPicker({ starters, picked, onToggle, onMore }) {
               <span className="block p-2.5">
                 <span className="block text-[0.75rem] font-extrabold leading-tight">{recipe.name}</span>
                 <span className="mt-1 block text-[0.65625rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {recipe.time} min · £{recipe.costPerServing.toFixed(2)}/serving
+                  {formatCookTime(recipe.time)} · £{recipe.costPerServing.toFixed(2)}/serving
                 </span>
                 {/* Why this one, in its own words — a suggestion nobody can see
                     the reason for is just a guess with a photo on it. */}

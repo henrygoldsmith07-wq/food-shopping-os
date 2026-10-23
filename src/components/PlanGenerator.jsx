@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Check, ChevronRight, Info, Leaf, Package, ShoppingCart, Snowflake, Sparkles, Zap,
 } from 'lucide-react';
-import { gbp } from '../lib/utils.js';
+import { formatCookTime, gbp } from '../lib/utils.js';
 import { buildPlan, EQUIPMENT_TAGS, pantryHits, windowBudget } from '../lib/planner.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { shoppingForGeneratedEntries, planCostFor } from '../lib/mealplan.js';
@@ -428,7 +428,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
                       </p>
                       <p className="font-bold text-[0.9375rem] truncate">{r.name}</p>
                       <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                        {r.time} min · {gbp(r.costPerServing, { always: true })}/serving
+                        {formatCookTime(r.time)} · {gbp(r.costPerServing, { always: true })}/serving
                       </p>
                     </div>
                     {focusList.length > 0 && pantryHits(r, focusList) >= 1 && <span className="shrink-0 rounded-full px-2 py-1 text-[0.625rem] font-extrabold uppercase tracking-wide" style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>Pinned</span>}

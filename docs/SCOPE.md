@@ -19,6 +19,8 @@ Three steps, in this order:
 - Cook mode, leftover save, waste record.
 - Next suggestion after cooking cites the record that caused it
   (expiring item, leftover, cooked meal, wasted item).
+- Use-it-up suggestions: expiring ingredients link straight to diet-safe
+  dishes that consume them, ranked by most use-soon items used.
 - Receipt totals ("you paid this") as the trusted price.
 - Local-first IndexedDB store, export and delete on device.
 - Optional Upstash household sync after sign-in only.

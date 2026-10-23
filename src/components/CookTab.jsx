@@ -3,7 +3,7 @@ import { ChefHat, ChevronRight, Clock, Plus } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { MEAL_SLOTS } from '../data/plan.js';
 import { RECIPES } from '../data/recipes.js';
-import { gbp } from '../lib/utils.js';
+import { formatCookTime, gbp } from '../lib/utils.js';
 import { RecipeGlyph } from './recipe-icons.jsx';
 import { Card } from './ui.jsx';
 
@@ -12,6 +12,8 @@ import { Card } from './ui.jsx';
  * start its cooking mode in a tap. Nothing planned yet reads as an action —
  * plan something — rather than an empty screen.
  */
+
+export { formatCookTime };
 export default function CookTab({ openRecipe, goTab }) {
   const app = useApp();
   const byId = useMemo(() => {
@@ -61,7 +63,7 @@ export default function CookTab({ openRecipe, goTab }) {
               <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>{label}</p>
               <p className="truncate text-[0.9375rem] font-extrabold">{recipe.name}</p>
               <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                <Clock size={11} className="inline" /> {recipe.time <= 60 ? `${recipe.time} min` : `${Math.round(recipe.time / 60)} h`}
+                <Clock size={11} className="inline" /> {formatCookTime(recipe.time)}
                 {recipe.kcal ? ` · ${recipe.kcal} kcal` : ''}
                 {recipe.costPerServing ? ` · ${gbp(recipe.costPerServing, { always: true })}/serving` : ''}
               </p>
