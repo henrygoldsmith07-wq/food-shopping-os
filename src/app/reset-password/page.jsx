@@ -36,8 +36,9 @@ export default function ResetPasswordPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...link, password }),
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'The password could not be changed.');
+      const parsed = await response.json().catch(() => null);
+      const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      if (!response.ok) throw new Error((typeof body.error === 'string' && body.error) || 'The password could not be changed.');
       setDone(true);
     } catch (caught) {
       setError(accountErrorMessage(caught));

@@ -53,8 +53,9 @@ export function SignInOptions({ providers = {}, callbackUrl = '/' }) {
 
   const post = async (url, body, method = 'POST') => {
     const response = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'That did not work. Try again.');
+    const parsed = await response.json().catch(() => null);
+    const data = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    if (!response.ok) throw new Error((typeof data.error === 'string' && data.error) || 'That did not work. Try again.');
     return data;
   };
 
@@ -192,7 +193,7 @@ export default function OnboardingAccount() {
     let live = true;
     fetch('/api/backend/status')
       .then((response) => (response.ok ? response.json() : null))
-      .then((body) => { if (live) setStatus(body); })
+      .then((body) => { if (live) setStatus(body && typeof body === 'object' && !Array.isArray(body) ? body : null); })
       .catch(() => {});
     return () => { live = false; };
   }, []);
