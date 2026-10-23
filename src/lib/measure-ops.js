@@ -38,11 +38,23 @@ export const convert = (parsed, dim, { ingredient = '' } = {}) => {
   };
 };
 
+const WHOLE_ITEMS = new Set([
+  'egg', 'piece', 'lemon', 'lime', 'onion', 'apple', 'banana', 'pepper', 'potato',
+  'tomato', 'carrot', 'courgette', 'aubergine', 'avocado', 'mushroom',
+]);
+
 /** Both quantities on one scale, converting through density only if allowed. */
 const align = (a, b, { ingredient = '', allowDensity = false } = {}) => {
   if (!a || !b) return null;
   if (a.dim === b.dim) {
-    if (a.dim === 'count' && a.unit !== b.unit) return null;
+    if (a.dim === 'count' && a.unit !== b.unit) {
+      // "a dozen" / a bare "2" are counts of the thing itself, so they sit on
+      // the same scale as "6 eggs" or "3 lemons" (but never as "2 tins").
+      const loose = (x) => x.unit === 'unit' || WHOLE_ITEMS.has(x.unit);
+      if (!(loose(a) && loose(b) && (a.unit === 'unit' || b.unit === 'unit'))) return null;
+      const unit = a.unit === 'unit' ? b.unit : a.unit;
+      return [{ ...a, unit }, { ...b, unit }];
+    }
     return [a, b];
   }
   if (!allowDensity) return null;
