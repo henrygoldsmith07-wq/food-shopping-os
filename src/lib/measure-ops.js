@@ -70,11 +70,138 @@ const align = (a, b, { ingredient = '', allowDensity = false } = {}) => {
  * "check before you shop" rather than a confident wrong answer.
  */
 export const sufficientFor = (have, need, options = {}) => {
+  if (isCompoundQty(have) || isCompoundQty(need)) return compoundSufficient(have, need, options);
   const h = have && typeof have === 'object' ? have : parseQuantity(have, options);
   const n = need && typeof need === 'object' ? need : parseQuantity(need, options);
   const pair = align(h, n, options);
   if (!pair) return null;
   return pair[0].amount >= pair[1].amount;
+};
+
+/* ---------- Mixed amounts ("300 g + 2 cups") ---------- */
+
+/**
+ * Words that say "some" without saying how much. Next to a real amount they
+ * add nothing a shopper can act on, so "to taste + 1 tsp" is just "1 tsp".
+ */
+const VAGUE_AMOUNT = /^(?:to taste|as (?:needed|required)|optional|(?:for|to) (?:serve|serving|garnish|decorate)|for the table|some|a little|a few|to season|for frying|for greasing)$/i;
+
+/** Is this text an amount-free hedge such as "to taste" or "as needed"? */
+export const isVagueAmount = (text) => VAGUE_AMOUNT.test(String(text ?? '').trim());
+
+/**
+ * The separate amounts inside a merged quantity. Two recipes asking for
+ * "300 g" and "2 cups" of rice produce the text "300 g + 2 cups"; each part
+ * is still a real amount and must be weighed on its own.
+ */
+export const splitQtyParts = (qty) => {
+  if (qty == null) return [];
+  if (typeof qty === 'object') return [qty];
+  return String(qty).split(/\s+\+\s+/).map((part) => part.trim()).filter(Boolean);
+};
+
+/** Does this quantity hold more than one amount? */
+export const isCompoundQty = (qty) => typeof qty === 'string' && splitQtyParts(qty).length > 1;
+
+/**
+ * Pool the readable parts of a quantity by scale: every part that sits on
+ * the same scale as an earlier pool is added to it, the rest start a pool.
+ * Parts that cannot be read stay as text. Vague hedges drop out once there
+ * is at least one real amount.
+ */
+const poolParts = (qty, options = {}) => {
+  const pools = [];
+  const text = [];
+  const parts = splitQtyParts(qty);
+  const real = parts.filter((part) => !isVagueAmount(part));
+  for (const part of (real.length ? real : parts)) {
+    const parsed = typeof part === 'object' ? part : parseQuantity(part, options);
+    if (!parsed) {
+      if (!text.includes(part)) text.push(part);
+      continue;
+    }
+    let placed = false;
+    for (let i = 0; i < pools.length; i += 1) {
+      const pair = align(pools[i], parsed, options);
+      if (!pair) continue;
+      pools[i] = {
+        amount: round2(pair[0].amount + pair[1].amount),
+        dim: pair[0].dim,
+        unit: pair[0].unit,
+        confidence: pair[0].confidence === 'exact' && pair[1].confidence === 'exact' ? 'exact' : 'approximate',
+      };
+      placed = true;
+      break;
+    }
+    if (!placed) pools.push(parsed);
+  }
+  return { pools, text };
+};
+
+/** A part nobody added to reads as it was written ("2 cups", not "480 ml"). */
+const showPart = (part) => (part.raw ? String(part.raw).trim() : formatQuantity(part));
+
+/**
+ * Add up a quantity that may hold several amounts: like amounts are summed
+ * ("200 g + 1 cup + 100 g" → "300 g + 1 cup"), unlike ones stay visible side
+ * by side, and "to taste" disappears next to a real amount.
+ */
+export const combineQtyParts = (qty, options = {}) => {
+  const { pools, text } = poolParts(qty, options);
+  return [...pools.map(showPart), ...text].filter(Boolean).join(' + ');
+};
+
+/**
+ * `sufficientFor` for mixed amounts. Every part of the need that sits on the
+ * pantry's scale is added up and compared; if that alone is more than the
+ * pantry holds, the answer is a firm "no" even when another part cannot be
+ * compared. Only when every part compares and fits is it a "yes".
+ */
+const compoundSufficient = (have, need, options = {}) => {
+  const stock = poolParts(have, options).pools;
+  const wanted = poolParts(need, options);
+  if (!stock.length || (!wanted.pools.length && !wanted.text.length)) return null;
+  let unknown = wanted.text.length > 0;
+  let compared = false;
+  for (const part of wanted.pools) {
+    const pantry = stock.find((pool) => align(pool, part, options));
+    if (!pantry) {
+      unknown = true;
+      continue;
+    }
+    compared = true;
+    const pair = align(pantry, part, options);
+    if (pair[0].amount < pair[1].amount) return false;
+  }
+  if (!compared || unknown) return null;
+  return true;
+};
+
+/**
+ * What is still short after the pantry, part by part. Each part that sits on
+ * the pantry's scale is reduced by what is there (stock used once, never
+ * twice); a part the pantry cannot be compared with is kept whole. Empty
+ * string when everything is covered; null when nothing could be compared.
+ */
+export const compoundShortfall = (have, need, options = {}) => {
+  const stock = poolParts(have, options).pools.map((pool) => ({ ...pool }));
+  const wanted = poolParts(need, options);
+  const left = [];
+  let compared = false;
+  for (const part of wanted.pools) {
+    const index = stock.findIndex((pool) => align(pool, part, options));
+    if (index < 0) {
+      left.push(showPart(part));
+      continue;
+    }
+    compared = true;
+    const pair = align(stock[index], part, options);
+    const short = round2(Math.max(0, pair[1].amount - pair[0].amount));
+    stock[index] = { ...stock[index], amount: round2(Math.max(0, pair[0].amount - pair[1].amount)) };
+    if (short > 0) left.push(formatQuantity({ ...part, ...pair[1], amount: short }));
+  }
+  if (!compared) return null;
+  return [...left, ...wanted.text].join(' + ');
 };
 
 /**
@@ -136,7 +263,8 @@ export const formatQuantity = (parsed) => {
       const scaled = round2(amount / 1000);
       return `${scaled} ${big}`;
     }
-    return `${round2(amount)} ${small}`;
+    // Nobody weighs out 843.26 g: from 100 g up, whole grams / millilitres.
+    return `${amount >= 100 ? Math.round(amount) : round2(amount)} ${small}`;
   }
   const glyph = Object.entries(UNICODE_FRACTIONS).find(([, v]) => Math.abs(v - amount) < 0.001);
   const number = glyph ? glyph[0] : String(round2(amount));

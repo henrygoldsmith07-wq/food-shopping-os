@@ -8,7 +8,9 @@
  */
 
 import { canonicalName, learnAlias, sameIngredient } from './aliases.js';
-import { addQuantities, formatQuantity, parseQuantity, subtractQuantities } from './measure.js';
+import {
+  addQuantities, compoundShortfall, formatQuantity, isCompoundQty, parseQuantity, subtractQuantities,
+} from './measure.js';
 import { mergeQtys } from './pantry.js';
 
 const DAY_MS = 86400000;
@@ -406,6 +408,13 @@ export const inferConsumption = ({
 
 /** The quantity short of a recipe need, when both sides can be compared. */
 export const shortfallQuantity = (available, needed, { ingredient = '' } = {}) => {
+  // Mixed amounts ("300 g + 2 cups" of rice) are reduced part by part: the
+  // grams in the pantry come off the grams the week needs, and the cups
+  // that cannot be weighed against them stay on the list in full.
+  if (clean(available) && (isCompoundQty(clean(available)) || isCompoundQty(clean(needed)))) {
+    const left = compoundShortfall(clean(available), clean(needed), { ingredient });
+    return left === null ? clean(needed) : left;
+  }
   const have = parseQuantity(available, { ingredient });
   const need = parseQuantity(needed, { ingredient });
   if (!need) return clean(needed);
