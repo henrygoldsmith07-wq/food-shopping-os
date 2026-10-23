@@ -32,7 +32,7 @@ export const isSupportedImportLink = (value) => /^https?:\/\/[^\s/$.?#][^\s]*$/i
 const message = async (response) => {
   try {
     const body = await response.json();
-    return body?.error || 'The import could not be completed.';
+    return typeof body?.error === 'string' && body.error ? body.error : 'The import could not be completed.';
   } catch {
     return 'The import could not be completed.';
   }
