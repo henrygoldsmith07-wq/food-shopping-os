@@ -191,7 +191,10 @@ function BackendPanelRuntime() {
         if (!response.ok) throw new Error(`status ${response.status}`);
         return response.json();
       })
-      .then(setBackend)
+      .then((body) => {
+        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('odd status body');
+        setBackend(body);
+      })
       // A server that errors is not a server without credentials; say which.
       .catch(() => setBackend({ enabled: false, failed: true, providers: {}, capabilities: {}, integrations: {} }));
   }, []);
