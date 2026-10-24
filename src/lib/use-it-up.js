@@ -13,10 +13,14 @@ import { normalize, pantryCoverage } from './recommend.js';
  * screen. See the performance-budget notes in docs/ARCHITECTURE.md.
  *
  * Returns [{ recipe, used, coverage }] sorted by most use-soon items
- * consumed, then pantry coverage, then shortest cook. The caller decides
+ * consumed, then the soonest-expiring item saved (already-past first), then pantry coverage, then shortest cook. The caller decides
  * how many to show.
  */
 export const getUseItUpMatches = (recipes = [], { useSoonRows = [], pantry = [], max = 3 } = {}) => {
+  const daysByName = new Map();
+  for (const row of useSoonRows) {
+    if (row?.item?.name) daysByName.set(row.item.name, Number.isFinite(row.daysLeft) ? row.daysLeft : 999);
+  }
   const soonItems = useSoonRows.map((row) => row?.item).filter((item) => item && item.name);
   if (!soonItems.length || !recipes.length) return [];
   const pantryNames = (pantry.length ? pantry : soonItems).map((item) => item.name);
@@ -39,10 +43,12 @@ export const getUseItUpMatches = (recipes = [], { useSoonRows = [], pantry = [],
         }
       }
       if (!used.length) return null;
-      return { recipe, used, coverage: pantryCoverage(recipe, pantryNames) };
+      const urgency = Math.min(...used.map((name) => daysByName.get(name) ?? 999));
+      return { recipe, used, urgency, coverage: pantryCoverage(recipe, pantryNames) };
     })
     .filter(Boolean)
     .sort((a, b) => b.used.length - a.used.length
+      || a.urgency - b.urgency
       || b.coverage.pct - a.coverage.pct
       || (Number(a.recipe.time) || 999) - (Number(b.recipe.time) || 999))
     .slice(0, Math.max(0, max));
