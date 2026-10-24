@@ -29,7 +29,7 @@ export const convert = (parsed, dim, { ingredient = '' } = {}) => {
   if (!density) return null;
   const amount = parsed.dim === 'volume' ? parsed.amount * density : parsed.amount / density;
   // Density figures are approximate, so don't imply gram precision: 55.2 g -> 55 g.
-  const tidy = amount >= 20 ? Math.round(amount / 5) * 5 : round2(amount);
+  const tidy = amount >= 20 ? Math.round(amount) : round2(amount);
   return {
     ...parsed,
     amount: tidy,
