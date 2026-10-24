@@ -9,6 +9,7 @@
  */
 
 import { guessAisle } from '../data/stores.js';
+import { parseQuantity } from './measure.js';
 
 const SPOONS = /^(tsps?|teaspoons?|tbsps?|tablespoons?|pinch(es)?|dash(es)?)$/i;
 const MEASURES = /^(g|grams?|kg|ml|millilitres?|l|litres?|oz|lb|cups?)$/i;
@@ -103,4 +104,60 @@ export function shoppableQty(qty, name = '') {
   const roundedUp = Math.ceil(amount);
   if (!unit) return String(roundedUp);
   return `${roundedUp} ${roundedUp === 1 ? SINGULAR[unit.toLowerCase()] || unit : unit}`;
+}
+
+const PACK_WORDS = 'tins?|cans?|jars?|packs?|packets?|cartons?|bottles?|bags?|boxes|box';
+const NUMBER = '\\d+(?:\\.\\d+)?';
+const SIZE = '(g|grams?|ml|millilitres?)';
+
+/**
+ * The pack a recipe line names: "400g tin", "2 x 400g tins", "1 tin (400 g)".
+ * Returns { size, unit: 'g'|'ml', word } or null when the line states no size.
+ */
+export function packOf(qty) {
+  const text = String(qty || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const forms = [
+    [new RegExp(`^${NUMBER}\\s*x\\s*(${NUMBER})\\s*${SIZE}\\s*(${PACK_WORDS})?$`), [1, 2, 3]],
+    [new RegExp(`^(${NUMBER})\\s*${SIZE}\\s*(${PACK_WORDS})$`), [1, 2, 3]],
+    [new RegExp(`^${NUMBER}\\s*(${PACK_WORDS})\\s*\\(\\s*(${NUMBER})\\s*${SIZE}\\s*\\)$`), [2, 3, 1]],
+  ];
+  for (const [re, [si, ui, wi]] of forms) {
+    const m = text.match(re);
+    if (!m) continue;
+    const size = Number(m[si]);
+    const unit = /^g/.test(m[ui]) ? 'g' : 'ml';
+    const word = (m[wi] || 'pack').replace(/^boxes$/, 'box').replace(/s$/, '');
+    if (!(size > 0)) return null;
+    return { size, unit, word };
+  }
+  return null;
+}
+
+/** Whole packs for a need: 1200 g of 400 g tins is "3 tins (400 g)". */
+export function packsToBuy(totalAmount, pack) {
+  if (!pack || !(totalAmount > 0)) return null;
+  const count = Math.max(1, Math.ceil(totalAmount / pack.size - 1e-9));
+  const word = count === 1 ? pack.word : pack.word === 'box' ? 'boxes' : `${pack.word}s`;
+  return `${count} ${word} (${pack.size} ${pack.unit})`;
+}
+
+/** Per ingredient key: the one pack every recipe asks for, or null. */
+export function packsByIngredient(recipes, keyFn) {
+  const map = new Map();
+  for (const recipe of recipes) {
+    for (const ing of recipe.ingredients || []) {
+      const k = keyFn(ing.name);
+      const pack = packOf(ing.qty);
+      const seen = map.get(k);
+      if (seen === undefined) map.set(k, pack);
+      else if (!pack || !seen || pack.size !== seen.size || pack.unit !== seen.unit) map.set(k, null);
+    }
+  }
+  return map;
+}
+
+/** "5 tins (400 g)" for a total need in the pack's unit, else null. */
+export function packQtyFor(requiredQty, pack) {
+  const need = pack ? parseQuantity(requiredQty) : null;
+  return need && need.unit === pack.unit ? packsToBuy(need.amount, pack) : null;
 }

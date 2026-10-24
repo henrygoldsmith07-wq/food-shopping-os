@@ -19,7 +19,7 @@ import { itemsFromRecipes } from '../data/stores.js';
 import { addDays, dayStamp, pantryAvailability, pantryTruthForNeed, weekStart } from './kitchen.js';
 import { canonicalName, displayNameFor } from './aliases.js';
 import { scaleQty } from './portions.js';
-import { shoppableQty } from './shoppable-qty.js';
+import { shoppableQty, packsByIngredient, packQtyFor } from './shoppable-qty.js';
 import { mergeQtys, qtySuffices } from './pantry.js';
 import { explainPantryShortfall, shortfallQuantity } from './pantry-intelligence.js';
 
@@ -424,9 +424,8 @@ export const shoppingForPlan = (plan = {}, dates = [], {
   // therefore re-list an alias-equivalent item (for example "tin tomatoes"
   // versus "Chopped tomatoes").
   const raw = itemsFromRecipes(filteredRecipes, [], { learnedAliases });
-  // The week's need for an ingredient is every recipe's need added together.
-  const needByKey = new Map();
-  const sourceRecipesByKey = new Map();
+  const needByKey = new Map(), sourceRecipesByKey = new Map();
+  const packByKey = packsByIngredient(recipeNeeds.map((n) => n.recipe), (n) => canonicalName(n, learnedAliases));
   for (const r of filteredRecipes) {
     for (const ing of r.ingredients) {
       const k = canonicalName(ing.name, learnedAliases);
@@ -447,12 +446,13 @@ export const shoppingForPlan = (plan = {}, dates = [], {
     const availableQty = availableFor(key);
     const sufficient = pantryCoversNeed(key, requiredQty);
     const shortfallQty = sufficient ? '' : shortfallQuantity(availableQty, requiredQty, { ingredient: key });
+    const packQty = availableQty ? null : packQtyFor(requiredQty, packByKey.get(key)); // whole tins
     return {
       ...row,
       name: displayName,
       // What still needs buying, in an amount a shop sells (0.7 tsp -> 1 jar);
       // requiredQty keeps the original need behind the pantry deduction.
-      qty: shoppableQty(availableQty && shortfallQty ? shortfallQty : (requiredQty || row.qty), displayName),
+      qty: packQty || shoppableQty(availableQty && shortfallQty ? shortfallQty : (requiredQty || row.qty), displayName),
       requiredQty,
       pantryQty: availableQty,
       shortfallQty,
