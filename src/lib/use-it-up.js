@@ -16,6 +16,10 @@ import { normalize, pantryCoverage } from './recommend.js';
  * consumed, then the soonest-expiring item saved (already-past first), then pantry coverage, then shortest cook. The caller decides
  * how many to show.
  */
+const stem = (w) => w.replace(/ies$/, 'y').replace(/(ch|sh|x|o)es$/, '$1').replace(/s$/, '');
+// A second word that makes it a different product (rice vinegar is not rice).
+const DIFFERENT_PRODUCT = new Set(['vinegar', 'stock', 'cube', 'cubes', 'powder', 'essence', 'extract', 'sauce', 'paste', 'oil', 'flour', 'noodles', 'milk']);
+
 export const getUseItUpMatches = (recipes = [], { useSoonRows = [], pantry = [], max = 3 } = {}) => {
   const daysByName = new Map();
   for (const row of useSoonRows) {
@@ -28,8 +32,16 @@ export const getUseItUpMatches = (recipes = [], { useSoonRows = [], pantry = [],
     const wanted = normalize(ingredientName);
     const stocked = normalize(item.name);
     if (!wanted || !stocked) return false;
-    return stocked === wanted
-      || (Math.min(stocked.length, wanted.length) >= 4 && (stocked.includes(wanted) || wanted.includes(stocked)));
+    if (stocked === wanted) return true;
+    // Whole-word containment ("cherry tomatoes" uses up "tomatoes"), never a
+    // raw substring: expiring butter must not pull in butternut squash, nor
+    // rice a recipe that only wants rice vinegar.
+    const [short, long] = stocked.length <= wanted.length ? [stocked, wanted] : [wanted, stocked];
+    if (short.length < 4) return false;
+    const longWords = long.split(' ');
+    const shortWords = short.split(' ');
+    if (!shortWords.every((w) => longWords.some((l) => stem(l) === stem(w)))) return false;
+    return !longWords.some((l) => DIFFERENT_PRODUCT.has(l) && !shortWords.includes(l));
   };
   return recipes
     .map((recipe) => {

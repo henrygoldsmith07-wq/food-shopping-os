@@ -141,3 +141,15 @@ describe('use-it-up urgency tie-break', () => {
     expect(out[0].urgency).toBe(-1);
   });
 });
+
+describe('use-it-up name matching', () => {
+  const mk = (name, ing) => dish({ id: `m-${name}`, name, ingredients: [{ name: ing, qty: '1' }] });
+  const rows = ['Butter', 'Tomatoes', 'Rice'].map((name) => ({ item: { name }, daysLeft: 1 }));
+  it('matches whole words, not substrings or different products', () => {
+    const out = useItUpMatches(
+      [mk('Squash', 'Butternut squash'), mk('Toast', 'Butter'), mk('Cherry', 'Cherry tomatoes'), mk('Sushi', 'Rice vinegar'), mk('Pilaf', 'Rice')],
+      { useSoonRows: rows, max: 9 },
+    );
+    expect(out.map((m) => m.recipe.name).sort()).toEqual(['Cherry', 'Pilaf', 'Toast']);
+  });
+});
