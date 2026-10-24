@@ -22,7 +22,7 @@ describe('mixed amounts are added part by part', () => {
   });
 
   it('adds a third amount to the part on the same scale instead of trailing it on', () => {
-    expect(mergeQtys(mergeQtys('200 g', '1 cup'), '100 g', { ingredient: 'flour' })).toBe('300 g + 1 cup');
+    expect(mergeQtys(mergeQtys('200 g', '1 cup'), '100 g', { ingredient: 'quinoa' })).toBe('300 g + 1 cup');
     expect(combineQtyParts('200 g + 1 cup + 100 g + 1 cup')).toBe('300 g + 480 ml');
   });
 
@@ -46,19 +46,19 @@ describe('the pantry is checked against every part of a mixed need', () => {
   it('says "not enough" when the comparable part alone is more than the pantry holds', () => {
     // Before: the cups could not be weighed, so the whole answer was "can't
     // tell" and the planner trusted the pantry name — rice vanished from the list.
-    expect(sufficientFor('250 g', '2 cups + 300 g', { ingredient: 'rice' })).toBe(false);
-    expect(qtySuffices('250 g', '2 cups + 300 g', { ingredient: 'rice' })).toBe(false);
+    expect(sufficientFor('250 g', '2 cups + 300 g', { ingredient: 'quinoa' })).toBe(false);
+    expect(qtySuffices('250 g', '2 cups + 300 g', { ingredient: 'quinoa' })).toBe(false);
   });
 
   it('says "enough" only when every part compares and fits', () => {
     expect(sufficientFor('1 kg', '300 g + 200 g + to taste')).toBe(true);
-    expect(sufficientFor('1 kg', '300 g + 2 cups', { ingredient: 'rice' })).toBe(null);
+    expect(sufficientFor('1 kg', '300 g + 2 cups', { ingredient: 'quinoa' })).toBe(null);
     expect(sufficientFor('2 tins', '1 bulb + 3 cloves', { ingredient: 'garlic' })).toBe(null);
   });
 
   it('reduces only the comparable part and keeps the rest whole', () => {
-    expect(shortfallQuantity('250 g', '2 cups + 300 g', { ingredient: 'rice' })).toBe('2 cups + 50 g');
-    expect(shortfallQuantity('1 kg', '2 cups + 300 g', { ingredient: 'rice' })).toBe('2 cups');
+    expect(shortfallQuantity('250 g', '2 cups + 300 g', { ingredient: 'quinoa' })).toBe('2 cups + 50 g');
+    expect(shortfallQuantity('1 kg', '2 cups + 300 g', { ingredient: 'quinoa' })).toBe('2 cups');
     expect(shortfallQuantity('1 kg', '300 g + 200 g')).toBe('');
     expect(compoundShortfall('2 cloves', '1 bulb + 4 cloves', { ingredient: 'garlic' })).toBe('1 bulb + 2 cloves');
     expect(shortfallQuantity('1 tin', '1 bulb + 4 cloves', { ingredient: 'garlic' })).toBe('1 bulb + 4 cloves');
@@ -109,11 +109,11 @@ describe('the week list with recipes that disagree on units', () => {
 
   it('keeps rice on the list when the pantry covers less than the grams alone', () => {
     const rows = listFor(
-      recipe('mq-pilaf', 'Pilaf', [['rice', '2 cups']]),
-      recipe('mq-risotto', 'Risotto', [['basmati rice', '300 g']]),
-      [pantryRow('rice', '250 g')],
+      recipe('mq-pilaf', 'Pilaf', [['quinoa', '2 cups']]),
+      recipe('mq-risotto', 'Risotto', [['quinoa', '300 g']]),
+      [pantryRow('quinoa', '250 g')],
     );
-    const rice = rows.find((row) => /rice/i.test(row.name));
+    const rice = rows.find((row) => /quinoa/i.test(row.name));
     expect(rice).toBeTruthy();
     expect(rice.qty).toBe('2 cups + 50 g');
     expect(rice.pantryTruth).toBe('confirmed_insufficient');
