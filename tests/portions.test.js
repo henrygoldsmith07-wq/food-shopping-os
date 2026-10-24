@@ -65,3 +65,14 @@ describe('scaling a plan list to those portions', () => {
     expect(scaled[3].qty).toBe('6');
   });
 });
+
+describe('scaleQty single pack sizes', () => {
+  it('scales the number of tins, not the tin size', async () => {
+    const { scaleQty } = await import('../src/lib/portions.js');
+    const { shoppableQty } = await import('../src/lib/shoppable-qty.js');
+    expect(scaleQty('400g tin', 1.5)).toBe('1.5 x 400g tin');
+    expect(shoppableQty(scaleQty('400g tin', 1.5), 'chopped tomatoes')).toBe('2 x 400g tin');
+    expect(scaleQty('400g tin', 1)).toBe('400g tin');
+    expect(scaleQty('200 g flour', 2)).toBe('400 g flour');
+  });
+});

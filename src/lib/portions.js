@@ -82,6 +82,8 @@ export const householdPortionsFor = (source = {}) => {
   return { portions: configured, source: 'configured', configured, override, evidence, autoPortions, autoLearned };
 };
 
+const PACK_SIZE_RE = /^(?:g|kg|ml|l|cl|oz|lb)s?\.?\s+(?:tin|can|jar|pack|packet|bag|bottle|carton|tub|box|pot|tube)s?$/i;
+
 /** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */
 export const scaleQty = (qty, factor = 1) => {
   if (!qty || !(factor > 0) || Math.abs(factor - 1) < 0.05) return qty || '';
@@ -94,6 +96,12 @@ export const scaleQty = (qty, factor = 1) => {
   // rounding it to 2.3 lb quietly adds 23 g to the list.
   const scaled = Math.round(n * factor * 100) / 100;
   const unit = (m[2] || '').trim();
+  // "400g tin" is ONE pack of 400 g: scaling it 1.5x means 1.5 of those
+  // packs, never a 600 g tin. Keep the pack size and scale the count so the
+  // shopping list can round up to whole tins.
+  if (PACK_SIZE_RE.test(unit)) {
+    return `${Math.round(factor * 100) / 100} x ${text}`;
+  }
   // "1, juiced" keeps its note attached ("1.5, juiced"), not "1.5 , juiced".
   if (unit.startsWith(',')) return `${scaled}${unit}`;
   return unit ? `${scaled} ${unit}` : String(scaled);
