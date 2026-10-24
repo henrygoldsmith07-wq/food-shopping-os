@@ -29,7 +29,7 @@
  * @returns {PortionDecision}
  */
 
-import { pluralUnit } from './measure-parse.js';
+import { pluralUnit, UNICODE_FRACTIONS } from './measure-parse.js';
 import { isAdaptationHeld } from './adaptation-suppression.js';
 
 /** Portion numbers from recorded cooks, in order. */
@@ -87,10 +87,32 @@ const PACK_SIZE_RE = /^(?:g|kg|ml|l|cl|oz|lb)s?\.?\s+(?:tin|can|jar|pack|packet|
 
 const COUNTABLE_UNIT_RE = /^(?:cup|jar|tin|can|bunch|clove|slice|pack|packet|bag|bottle|carton|head|stick|pot|tub|box|loaf)$/i;
 
+// "1/2", "1 1/2", "1½", "½" → decimals, so "1/2 cup" ×2 is "1 cup", not "2 /2 cup".
+const decimalise = (text) => {
+  let t = text;
+  for (const [glyph, v] of Object.entries(UNICODE_FRACTIONS)) {
+    t = t.replace(new RegExp(`(\\d)\\s*${glyph}`, 'g'), (_, w) => `${Number(w) + v}`);
+    t = t.replace(new RegExp(glyph, 'g'), `${Math.round(v * 1000) / 1000}`);
+  }
+  return t
+    .replace(/(\d+)\s+(\d+)\s*\/\s*(\d+)/g, (_, w, n, d) => `${Number(w) + Number(n) / Number(d)}`)
+    .replace(/(\d+)\s*\/\s*(\d+)/g, (_, n, d) => `${Number(n) / Number(d)}`);
+};
+
 /** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */
 export const scaleQty = (qty, factor = 1) => {
   if (!qty || !(factor > 0) || Math.abs(factor - 1) < 0.05) return qty || '';
-  const text = String(qty).trim();
+  let text = String(qty).trim();
+  if (/\d\s*\/\s*\d|[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/.test(text)) text = decimalise(text);
+  // A range scales at both ends: "1-2 tbsp" ×2 is "2-4 tbsp".
+  const rng = text.match(/^(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*(.*)$/);
+  if (rng && Number(rng[2]) > Number(rng[1])) {
+    const r2 = (n) => Math.round(n * factor * 100) / 100;
+    const rest = rng[3].trim();
+    const hi = r2(Number(rng[2]));
+    const unit = rest && hi !== 1 && COUNTABLE_UNIT_RE.test(rest) ? pluralUnit(rest) : rest;
+    return `${r2(Number(rng[1]))}-${hi}${unit ? ` ${unit}` : ''}`;
+  }
   const m = text.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
   if (!m) return text;
   const n = Number(String(m[1]).replace(',', '.'));
