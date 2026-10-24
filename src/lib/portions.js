@@ -29,6 +29,7 @@
  * @returns {PortionDecision}
  */
 
+import { pluralUnit } from './measure-parse.js';
 import { isAdaptationHeld } from './adaptation-suppression.js';
 
 /** Portion numbers from recorded cooks, in order. */
@@ -84,6 +85,8 @@ export const householdPortionsFor = (source = {}) => {
 
 const PACK_SIZE_RE = /^(?:g|kg|ml|l|cl|oz|lb)s?\.?\s+(?:tin|can|jar|pack|packet|bag|bottle|carton|tub|box|pot|tube)s?$/i;
 
+const COUNTABLE_UNIT_RE = /^(?:cup|jar|tin|can|bunch|clove|slice|pack|packet|bag|bottle|carton|head|stick|pot|tub|box|loaf)$/i;
+
 /** Scale a free-text qty by a factor (e.g. 2 people / 1 serving). */
 export const scaleQty = (qty, factor = 1) => {
   if (!qty || !(factor > 0) || Math.abs(factor - 1) < 0.05) return qty || '';
@@ -104,6 +107,8 @@ export const scaleQty = (qty, factor = 1) => {
   }
   // "1, juiced" keeps its note attached ("1.5, juiced"), not "1.5 , juiced".
   if (unit.startsWith(',')) return `${scaled}${unit}`;
+  // "1 cup" ×1.5 reads "1.5 cups"; only countable container words change.
+  if (unit && scaled !== 1 && COUNTABLE_UNIT_RE.test(unit)) return `${scaled} ${pluralUnit(unit)}`;
   return unit ? `${scaled} ${unit}` : String(scaled);
 };
 
