@@ -43,7 +43,7 @@ export const ALIAS_GROUPS = [
   ['Closed-cup mushrooms', ['closed-cup mushrooms', 'white mushrooms']],
   ['Courgette', ['courgette', 'courgettes', 'zucchini']],
   ['Aubergine', ['aubergine', 'aubergines', 'eggplant']],
-  ['Peppers', ['peppers', 'bell peppers', 'mixed peppers', 'red pepper', 'green pepper', 'yellow pepper', 'capsicum']],
+  ['Peppers', ['peppers', 'bell peppers', 'bell pepper', 'mixed peppers', 'mixed pepper', 'red pepper', 'red peppers', 'red bell pepper', 'green pepper', 'green peppers', 'green bell pepper', 'yellow pepper', 'yellow peppers', 'yellow bell pepper', 'orange pepper', 'orange peppers', 'sweet pepper', 'sweet peppers', 'capsicum', 'capsicums']],
   ['Red onion', ['red onion', 'red onions']],
   ['Onion', ['onion', 'onions', 'white onion', 'brown onion']],
   ['Garlic', ['garlic', 'garlic clove', 'garlic cloves', 'clove of garlic', 'cloves of garlic', 'cloves garlic', 'clove garlic', 'fresh garlic', 'garlic (bulb)', 'garlic bulb']],
