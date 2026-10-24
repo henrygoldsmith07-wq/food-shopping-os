@@ -123,6 +123,14 @@ export const DENSITIES = {
   honey: 1.42, 'maple syrup': 1.32, 'soy sauce': 1.15, passata: 1.05,
   'tomato puree': 1.1, 'peanut butter': 1.08, tahini: 1.05, flour: 0.53,
   sugar: 0.85, salt: 1.2, rice: 0.85, oats: 0.41, butter: 0.91,
+  // Common shop names for the staples above. Approximate cup-weight figures
+  // (King Arthur ingredient weight chart, USDA FoodData Central household
+  // measures); a packet-vs-spoon bridge, never a nutrition figure.
+  'plain flour': 0.53, 'self-raising flour': 0.53, 'wholemeal flour': 0.51, 'bread flour': 0.54,
+  'caster sugar': 0.85, 'granulated sugar': 0.85, 'brown sugar': 0.93, 'icing sugar': 0.5,
+  'basmati rice': 0.85, 'long grain rice': 0.85, 'cocoa powder': 0.42, 'rolled oats': 0.41,
+  'porridge oats': 0.41, 'double cream': 1.0, 'whole milk': 1.03, 'skimmed milk': 1.03,
+  'sea salt': 1.2, 'table salt': 1.2,
 };
 
 /* ---------- Text normalisation ---------- */
