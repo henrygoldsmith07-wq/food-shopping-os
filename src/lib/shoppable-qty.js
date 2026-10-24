@@ -9,6 +9,7 @@
  */
 
 import { guessAisle } from '../data/stores.js';
+import { parseQuantity } from './measure.js';
 
 const SPOONS = /^(tsps?|teaspoons?|tbsps?|tablespoons?|pinch(es)?|dash(es)?)$/i;
 const MEASURES = /^(g|grams?|kg|ml|millilitres?|l|litres?|oz|lb|cups?)$/i;
@@ -138,4 +139,25 @@ export function packsToBuy(totalAmount, pack) {
   const count = Math.max(1, Math.ceil(totalAmount / pack.size - 1e-9));
   const word = count === 1 ? pack.word : pack.word === 'box' ? 'boxes' : `${pack.word}s`;
   return `${count} ${word} (${pack.size} ${pack.unit})`;
+}
+
+/** Per ingredient key: the one pack every recipe asks for, or null. */
+export function packsByIngredient(recipes, keyFn) {
+  const map = new Map();
+  for (const recipe of recipes) {
+    for (const ing of recipe.ingredients || []) {
+      const k = keyFn(ing.name);
+      const pack = packOf(ing.qty);
+      const seen = map.get(k);
+      if (seen === undefined) map.set(k, pack);
+      else if (!pack || !seen || pack.size !== seen.size || pack.unit !== seen.unit) map.set(k, null);
+    }
+  }
+  return map;
+}
+
+/** "5 tins (400 g)" for a total need in the pack's unit, else null. */
+export function packQtyFor(requiredQty, pack) {
+  const need = pack ? parseQuantity(requiredQty) : null;
+  return need && need.unit === pack.unit ? packsToBuy(need.amount, pack) : null;
 }

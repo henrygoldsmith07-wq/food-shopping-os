@@ -19,8 +19,7 @@ import { itemsFromRecipes } from '../data/stores.js';
 import { addDays, dayStamp, pantryAvailability, pantryTruthForNeed, weekStart } from './kitchen.js';
 import { canonicalName, displayNameFor } from './aliases.js';
 import { scaleQty } from './portions.js';
-import { shoppableQty, packOf, packsToBuy } from './shoppable-qty.js';
-import { parseQuantity } from './measure.js';
+import { shoppableQty, packsByIngredient, packQtyFor } from './shoppable-qty.js';
 import { mergeQtys, qtySuffices } from './pantry.js';
 import { explainPantryShortfall, shortfallQuantity } from './pantry-intelligence.js';
 
@@ -425,21 +424,8 @@ export const shoppingForPlan = (plan = {}, dates = [], {
   // therefore re-list an alias-equivalent item (for example "tin tomatoes"
   // versus "Chopped tomatoes").
   const raw = itemsFromRecipes(filteredRecipes, [], { learnedAliases });
-  // The week's need for an ingredient is every recipe's need added together.
-  const needByKey = new Map();
-  const sourceRecipesByKey = new Map();
-  // A recipe that writes "400g tin" names the pack; when every recipe asks
-  // for the same pack, the list says how many to pick up, not 1.8 kg.
-  const packByKey = new Map();
-  for (const { recipe } of recipeNeeds) {
-    for (const ing of recipe.ingredients || []) {
-      const k = canonicalName(ing.name, learnedAliases);
-      const pack = packOf(ing.qty);
-      const seen = packByKey.get(k);
-      if (seen === undefined) packByKey.set(k, pack);
-      else if (!pack || !seen || pack.size !== seen.size || pack.unit !== seen.unit) packByKey.set(k, null);
-    }
-  }
+  const needByKey = new Map(), sourceRecipesByKey = new Map();
+  const packByKey = packsByIngredient(recipeNeeds.map((n) => n.recipe), (n) => canonicalName(n, learnedAliases));
   for (const r of filteredRecipes) {
     for (const ing of r.ingredients) {
       const k = canonicalName(ing.name, learnedAliases);
@@ -460,9 +446,7 @@ export const shoppingForPlan = (plan = {}, dates = [], {
     const availableQty = availableFor(key);
     const sufficient = pantryCoversNeed(key, requiredQty);
     const shortfallQty = sufficient ? '' : shortfallQuantity(availableQty, requiredQty, { ingredient: key });
-    const pack = packByKey.get(key);
-    const parsedNeed = pack && !availableQty ? parseQuantity(requiredQty) : null;
-    const packQty = parsedNeed && parsedNeed.unit === pack.unit ? packsToBuy(parsedNeed.amount, pack) : null;
+    const packQty = availableQty ? null : packQtyFor(requiredQty, packByKey.get(key)); // whole tins
     return {
       ...row,
       name: displayName,
