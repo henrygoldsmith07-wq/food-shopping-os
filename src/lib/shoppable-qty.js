@@ -16,6 +16,8 @@ const MEASURES = /^(g|grams?|kg|ml|millilitres?|l|litres?|oz|lb|cups?)$/i;
 /** Small volumes are a container's worth of a condiment, not a purchase. */
 const SMALL_ML = 150;
 
+const GARLIC_CLOVES_PER_BULB = 11;
+
 /** Count words a shop sells by something bigger. */
 const COUNT_PACKAGES = {
   square: 'bar', squares: 'bar',
@@ -97,6 +99,12 @@ export function shoppableQty(qty, name = '') {
   }
   if (MEASURES.test(unit)) return range ? text : raw;
 
+  // Garlic is counted in cloves, and a bulb holds about 11 (package-sizes.js):
+  // 14 cloves is 2 bulbs, not 1, and a bare "14" is cloves too.
+  if (/garlic/i.test(name) && /^(?:cloves?)?$/i.test(unit)) {
+    const bulbs = Math.max(1, Math.ceil(amount / GARLIC_CLOVES_PER_BULB));
+    return `${bulbs} bulb${bulbs === 1 ? '' : 's'}`;
+  }
   const packaged = COUNT_PACKAGES[unit.toLowerCase()];
   if (packaged) return `1 ${packaged}`;
   // A bare count, or a count word ("heads", "fillets"): round up to whole.
