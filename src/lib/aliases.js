@@ -46,7 +46,7 @@ export const ALIAS_GROUPS = [
   ['Peppers', ['peppers', 'bell peppers', 'mixed peppers', 'red pepper', 'green pepper', 'yellow pepper', 'capsicum']],
   ['Red onion', ['red onion', 'red onions']],
   ['Onion', ['onion', 'onions', 'white onion', 'brown onion']],
-  ['Garlic', ['garlic', 'garlic cloves', 'cloves of garlic', 'garlic (bulb)']],
+  ['Garlic', ['garlic', 'garlic clove', 'garlic cloves', 'clove of garlic', 'cloves of garlic', 'cloves garlic', 'clove garlic', 'fresh garlic', 'garlic (bulb)', 'garlic bulb']],
   ['Ginger', ['ginger', 'fresh ginger', 'ginger root']],
   ['Carrots', ['carrots', 'carrot', 'baby carrots']],
   ['Celery', ['celery', 'celery sticks', 'celery stalks']],
