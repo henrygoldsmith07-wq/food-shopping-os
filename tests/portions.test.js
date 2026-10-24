@@ -76,3 +76,11 @@ describe('scaleQty single pack sizes', () => {
     expect(scaleQty('200 g flour', 2)).toBe('400 g flour');
   });
 });
+
+import { scaleQty as scaleQtyPlural } from '../src/lib/portions.js';
+describe('scaleQty pluralises countable units', () => {
+  it('reads 1 cup x1.5 as 1.5 cups', () => {
+    expect(scaleQtyPlural('1 cup', 1.5)).toBe('1.5 cups');
+    expect(scaleQtyPlural('1 tbsp', 1.5)).toBe('1.5 tbsp');
+  });
+});
