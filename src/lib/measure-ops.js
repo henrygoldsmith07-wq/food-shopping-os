@@ -28,9 +28,11 @@ export const convert = (parsed, dim, { ingredient = '' } = {}) => {
   const density = DENSITIES[String(ingredient || '').toLowerCase()];
   if (!density) return null;
   const amount = parsed.dim === 'volume' ? parsed.amount * density : parsed.amount / density;
+  // Density figures are approximate, so don't imply gram precision: 55.2 g -> 55 g.
+  const tidy = amount >= 20 ? Math.round(amount / 5) * 5 : round2(amount);
   return {
     ...parsed,
-    amount: round2(amount),
+    amount: tidy,
     dim,
     unit: dim === 'mass' ? 'g' : 'ml',
     confidence: 'approximate',
@@ -44,7 +46,7 @@ const WHOLE_ITEMS = new Set([
 ]);
 
 /** Both quantities on one scale, converting through density only if allowed. */
-const align = (a, b, { ingredient = '', allowDensity = false } = {}) => {
+const align = (a, b, { ingredient = '', allowDensity = true } = {}) => {
   if (!a || !b) return null;
   if (a.dim === b.dim) {
     if (a.dim === 'count' && a.unit !== b.unit) {

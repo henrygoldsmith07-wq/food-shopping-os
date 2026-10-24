@@ -131,6 +131,10 @@ export const DENSITIES = {
   'basmati rice': 0.85, 'long grain rice': 0.85, 'cocoa powder': 0.42, 'rolled oats': 0.41,
   'porridge oats': 0.41, 'double cream': 1.0, 'whole milk': 1.03, 'skimmed milk': 1.03,
   'sea salt': 1.2, 'table salt': 1.2,
+  // Grated/shredded cheese by the cup (USDA FoodData Central: cheddar 113 g,
+  // mozzarella 112 g, parmesan 100 g per US cup). Approximate; lets "1 cup grated"
+  // fold into a "200 g" block instead of listing two rows.
+  cheddar: 0.48, mozzarella: 0.47, parmesan: 0.42,
 };
 
 /* ---------- Text normalisation ---------- */
