@@ -124,3 +124,20 @@ describe('PlanningSignals use-it-up', () => {
     expect(screen.getByText(/Spinach/)).toBeTruthy();
   });
 });
+
+import { getUseItUpMatches as _g } from '../src/lib/use-it-up.js';
+describe('use-it-up urgency tie-break', () => {
+  it('puts the recipe saving the soonest-expiring item first when counts tie', () => {
+    const rows = [
+      { item: { name: 'spinach' }, daysLeft: -1 },
+      { item: { name: 'yoghurt' }, daysLeft: 3 },
+    ];
+    const recipes = [
+      { id: 'a', name: 'Yoghurt bowl', time: 5, ingredients: [{ name: 'yoghurt' }] },
+      { id: 'b', name: 'Spinach eggs', time: 20, ingredients: [{ name: 'spinach' }] },
+    ];
+    const out = _g(recipes, { useSoonRows: rows });
+    expect(out.map((m) => m.recipe.id)).toEqual(['b', 'a']);
+    expect(out[0].urgency).toBe(-1);
+  });
+});
