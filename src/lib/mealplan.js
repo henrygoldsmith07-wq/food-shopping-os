@@ -373,10 +373,6 @@ export const shoppingForPlan = (plan = {}, dates = [], {
   const recipeNeeds = [];
   for (const entry of leftoverCoverageForPlan(plan, dates, pantry, { people: scaledPeople || 1 })) {
     if (entry.freshPortions <= 0) continue;
-    // Keep every uncovered occurrence. `itemsFromRecipes` still creates one
-    // visible row per ingredient, while `needByKey` below adds the quantities
-    // together. Dropping repeated recipe ids here made two planned dinners buy
-    // only one dinner's ingredients.
     recipeNeeds.push({ recipe: entry.recipe, freshPortions: entry.freshPortions });
   }
   // quantity-aware pass: if an ingredient needs e.g. "500 g" but pantry has "100 g", treat as insufficient
@@ -393,9 +389,18 @@ export const shoppingForPlan = (plan = {}, dates = [], {
   });
   const availableFor = (key) => usablePantryRows(key)
     .reduce((total, item) => mergeQtys(total, item.qty || '', { ingredient: key }), '');
+  // Pantry "1 bag" vs need "300 g" can't be compared: keep the row, flagged.
+  const amountNeedsCheck = (key, needQty) => {
+    if (!needQty) return false;
+    const rows = usablePantryRows(key).filter((item) => String(item.qty || '').trim());
+    if (!rows.length) return false;
+    if (qtySuffices(availableFor(key), needQty, { ingredient: key }) !== null) return false;
+    return rows.every((item) => qtySuffices(item.qty, needQty, { ingredient: key }) === null);
+  };
   const pantryCoversNeed = (key, needQty) => {
     const candidates = usablePantryRows(key);
     if (!candidates.length) return false;
+    if (amountNeedsCheck(key, needQty)) return false;
     const combined = qtySuffices(availableFor(key), needQty, { ingredient: key });
     if (combined !== null) return combined;
     return candidates.some((item) => {
@@ -418,11 +423,8 @@ export const shoppingForPlan = (plan = {}, dates = [], {
         })),
       };
     });
-  // Build one row for every distinct ingredient first, then decide whether the
-  // pantry covers that canonical ingredient. Passing canonical pantry names to
-  // itemsFromRecipes used to compare them against raw recipe names and could
-  // therefore re-list an alias-equivalent item (for example "tin tomatoes"
-  // versus "Chopped tomatoes").
+  // One row per distinct ingredient first, then check pantry cover per canonical
+  // name (raw-name comparison re-listed alias-equivalents like "tin tomatoes").
   const raw = itemsFromRecipes(filteredRecipes, [], { learnedAliases });
   const needByKey = new Map(), sourceRecipesByKey = new Map();
   const packByKey = packsByIngredient(recipeNeeds.map((n) => n.recipe), (n) => canonicalName(n, learnedAliases));
@@ -438,14 +440,12 @@ export const shoppingForPlan = (plan = {}, dates = [], {
     const key = canonicalName(row.name, learnedAliases);
     const requiredQty = needByKey.get(key);
     if (!requiredQty) return { ...row, name: displayNameFor(row.name, learnedAliases) || row.name };
-    // One canonical ingredient must also READ as one ingredient: "White
-    // onion" from one recipe and "Onion" from another are the same row, so
-    // both carry the group's everyday name instead of two spellings that
-    // each look like a separate purchase.
+    // "White onion" and "Onion" are one row: carry the group's everyday name.
     const displayName = displayNameFor(row.name, learnedAliases) || row.name;
     const availableQty = availableFor(key);
     const sufficient = pantryCoversNeed(key, requiredQty);
-    const shortfallQty = sufficient ? '' : shortfallQuantity(availableQty, requiredQty, { ingredient: key });
+    const checkAmount = amountNeedsCheck(key, requiredQty);
+    const shortfallQty = sufficient || checkAmount ? '' : shortfallQuantity(availableQty, requiredQty, { ingredient: key });
     const packQty = availableQty ? null : packQtyFor(requiredQty, packByKey.get(key)); // whole tins
     return {
       ...row,
@@ -457,7 +457,9 @@ export const shoppingForPlan = (plan = {}, dates = [], {
       pantryQty: availableQty,
       shortfallQty,
       sourceRecipes: sourceRecipesByKey.get(key) || [],
-      explanation: shortfallQty || !sufficient
+      explanation: checkAmount
+        ? `You have ${availableQty} of this in the pantry, but the recipes need ${requiredQty}. Check it covers that before you shop.`
+        : shortfallQty || !sufficient
         ? explainPantryShortfall({
           name: row.name,
           needQty: requiredQty,
@@ -466,11 +468,9 @@ export const shoppingForPlan = (plan = {}, dates = [], {
           sourceRecipes: sourceRecipesByKey.get(key) || [],
         })
         : row.explanation,
-      // Only claim "confirmed_insufficient" when usable pantry evidence
-      // exists and fell short. With no evidence at all the honest answer is
-      // "unknown" — the item is listed either way, but the label must not
-      // invent confidence the pantry never gave us.
-      pantryTruth: sufficient
+          pantryTruth: checkAmount
+        ? 'check_amount'
+        : sufficient
         ? row.pantryTruth
         : (availableQty ? 'confirmed_insufficient' : 'unknown'),
     };

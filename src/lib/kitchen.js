@@ -138,6 +138,7 @@ export const pantryTruthLabel = (truth) => ({
   probably_available: "Probably have",
   running_low: "Running low",
   unknown: "Unknown — check before you shop",
+  check_amount: "Check the amount before you shop",
 }[truth] || truth);
 
 export const pantryTruthTone = (truth) => ({
@@ -146,6 +147,7 @@ export const pantryTruthTone = (truth) => ({
   probably_available: "muted",
   running_low: "warn",
   unknown: "faint",
+  check_amount: "warn",
 }[truth] || "muted");
 
 export const pantryUncertaintyLabel = (item, today = dayStamp()) => {
