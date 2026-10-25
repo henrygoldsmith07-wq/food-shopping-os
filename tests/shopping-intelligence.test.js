@@ -66,3 +66,13 @@ describe('shopping intelligence', () => {
     expect(plan.reason).toMatch(/unavailable/);
   });
 });
+
+import { shoppableQty as _sq } from '../src/lib/shoppable-qty.js';
+describe('shoppableQty portions bought as packs', () => {
+  it('turns slices, rashers and handfuls into a loaf, pack and bag', () => {
+    expect(_sq('6 slices', 'bread')).toBe('1 loaf');
+    expect(_sq('4 rashers', 'smoked bacon')).toBe('1 pack');
+    expect(_sq('1 handful', 'baby spinach')).toBe('1 bag');
+    expect(_sq('2 slices', 'lemon')).toBe('2 slices');
+  });
+});
