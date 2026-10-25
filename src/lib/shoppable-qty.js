@@ -73,6 +73,18 @@ export function shoppableQty(qty, name = '') {
   // come down to "1 jar" are one jar, not "1 jar + 1 jar".
   const parts = whole.split(/\s+\+\s+/).filter(Boolean);
   if (parts.length > 1) {
+    // Garlic written as cloves in one recipe and bulbs in another is one pile
+    // of cloves: "2 cloves + 1 bulb" is 13 cloves, so 2 bulbs, not 1.
+    if (/garlic/i.test(name)) {
+      let cloves = 0;
+      const allGarlic = parts.every((part) => {
+        const m = part.match(/^(\d+(?:\.\d+)?)\s*(cloves?|bulbs?|heads?)?$/i);
+        if (!m) return false;
+        cloves += Number(m[1]) * (/^(bulb|head)/i.test(m[2] || '') ? GARLIC_CLOVES_PER_BULB : 1);
+        return true;
+      });
+      if (allGarlic) return shoppableQty(`${cloves} cloves`, name);
+    }
     return [...new Set(parts.map((part) => shoppableQty(part, name)))].join(' + ');
   }
   // A prep note is the cook's business: "1.5, juiced" is 2 lemons to buy.

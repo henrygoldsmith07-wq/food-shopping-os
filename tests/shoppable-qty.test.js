@@ -145,3 +145,12 @@ describe('shoppableQty containers for small amounts', () => {
     expect(shoppableQtyContainers('2 tbsp', 'olive oil')).toBe('1 bottle');
   });
 });
+
+describe('garlic across cloves and bulbs', () => {
+  it('adds cloves and bulbs together before rounding to bulbs', () => {
+    expect(shoppableQty('2 cloves + 1 bulb', 'garlic')).toBe('2 bulbs');
+    expect(shoppableQty('3 cloves + 1 head', 'garlic')).toBe('2 bulbs');
+    expect(shoppableQty('2 cloves + 3 cloves', 'garlic')).toBe('1 bulb');
+    expect(shoppableQty('1 bulb + 1 bulb', 'garlic')).toBe('2 bulbs');
+  });
+});
