@@ -67,6 +67,8 @@ function fractionToDecimal(text) {
  * @param {string} name the ingredient
  * @returns {string} the amount to buy; `qty` unchanged when it is already buyable
  */
+const SPRING_ONIONS_PER_BUNCH = 8;
+
 export function shoppableQty(qty, name = '') {
   const whole = String(qty || '').trim();
   // Mixed amounts are made buyable part by part, and two parts that both
@@ -84,6 +86,21 @@ export function shoppableQty(qty, name = '') {
         return true;
       });
       if (allGarlic) return shoppableQty(`${cloves} cloves`, name);
+    }
+    // Spring onions as "1 bunch" in one recipe and "4" in another are one
+    // pile: a bunch holds about 8, so "1 bunch + 4" is 2 bunches to buy.
+    if (/spring onion|scallion/i.test(name)) {
+      let stems = 0;
+      const all = parts.every((part) => {
+        const m = part.match(/^(\d+(?:\.\d+)?)\s*(bunch(?:es)?)?$/i);
+        if (!m) return false;
+        stems += Number(m[1]) * (m[2] ? SPRING_ONIONS_PER_BUNCH : 1);
+        return true;
+      });
+      if (all) {
+        const n = Math.ceil(stems / SPRING_ONIONS_PER_BUNCH);
+        return `${n} ${n === 1 ? 'bunch' : 'bunches'}`;
+      }
     }
     const bought = [...new Set(parts.map((part) => shoppableQty(part, name)))];
     // "500 g + 2" reads as a typo: say the bare count is whole items.
