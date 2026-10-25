@@ -30,3 +30,15 @@ describe('weight and cup/spoon amounts of the same staple become one row', () =>
     expect(rows.some((r) => /flour/i.test(r.name))).toBe(false);
   });
 });
+
+describe('mixed weight and cup amounts add up in grams', () => {
+  it('flour: 1 cup then 100 g is one gram figure, not millilitres', () => {
+    const m = mergeQtys('1 cup', '100 g', { ingredient: 'plain flour' });
+    expect(m).toMatch(/\bg$/);
+    expect(m).not.toContain('ml');
+    expect(m).not.toContain('+');
+  });
+  it('butter sums are whole grams', () => {
+    expect(mergeQtys('50 g', '1 tbsp', { ingredient: 'butter' })).toMatch(/^\d+ g$/);
+  });
+});
