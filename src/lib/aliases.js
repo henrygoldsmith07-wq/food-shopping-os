@@ -177,7 +177,14 @@ export const canonicalName = (name, learned = {}) => {
   if (!key) return '';
   const taught = resolveLearned(key, learned);
   if (taught) return clean(taught);
-  return byAlias.get(key) || key;
+  const direct = byAlias.get(key);
+  if (direct) return direct;
+  // "tinned chickpeas" / "canned black beans" are the
+  // same shopping line as the plain name when the plain name is a known group.
+  const bare = key
+    .replace(/^(?:tinned|canned|tin of|can of|tins of|cans of)\s+/, '')
+    .trim();
+  return (bare !== key && byAlias.get(bare)) || key;
 };
 
 /** Two names refer to the same ingredient (canonical match, or substring fallback). */
