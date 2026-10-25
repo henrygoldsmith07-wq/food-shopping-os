@@ -29,7 +29,7 @@
  * @returns {PortionDecision}
  */
 
-import { pluralUnit, UNICODE_FRACTIONS } from './measure-parse.js';
+import { pluralUnit, singularUnit, UNICODE_FRACTIONS } from './measure-parse.js';
 import { isAdaptationHeld } from './adaptation-suppression.js';
 
 /** Portion numbers from recorded cooks, in order. */
@@ -85,7 +85,8 @@ export const householdPortionsFor = (source = {}) => {
 
 const PACK_SIZE_RE = /^(?:g|kg|ml|l|cl|oz|lb)s?\.?\s+(?:tin|can|jar|pack|packet|bag|bottle|carton|tub|box|pot|tube)s?$/i;
 
-const COUNTABLE_UNIT_RE = /^(?:cup|jar|tin|can|bunch|clove|slice|pack|packet|bag|bottle|carton|head|stick|pot|tub|box|loaf)$/i;
+const oneOf = (u) => (/^cups$/i.test(u) ? 'cup' : singularUnit(u));
+const COUNTABLE_UNIT_RE = /^(?:cup|jar|tin|can|bunch|clove|slice|pack|packet|bag|bottle|carton|head|stick|pot|tub|box|loaf)(?:e?s)?$/i;
 
 // "1/2", "1 1/2", "1½", "½" → decimals, so "1/2 cup" ×2 is "1 cup", not "2 /2 cup".
 const decimalise = (text) => {
@@ -110,7 +111,7 @@ export const scaleQty = (qty, factor = 1) => {
     const r2 = (n) => Math.round(n * factor * 100) / 100;
     const rest = rng[3].trim();
     const hi = r2(Number(rng[2]));
-    const unit = rest && hi !== 1 && COUNTABLE_UNIT_RE.test(rest) ? pluralUnit(rest) : rest;
+    const unit = rest && COUNTABLE_UNIT_RE.test(rest) ? (hi === 1 ? oneOf(rest) : pluralUnit(oneOf(rest))) : rest;
     return `${r2(Number(rng[1]))}-${hi}${unit ? ` ${unit}` : ''}`;
   }
   const m = text.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
@@ -130,7 +131,9 @@ export const scaleQty = (qty, factor = 1) => {
   // "1, juiced" keeps its note attached ("1.5, juiced"), not "1.5 , juiced".
   if (unit.startsWith(',')) return `${scaled}${unit}`;
   // "1 cup" ×1.5 reads "1.5 cups"; only countable container words change.
-  if (unit && scaled !== 1 && COUNTABLE_UNIT_RE.test(unit)) return `${scaled} ${pluralUnit(unit)}`;
+  if (unit && COUNTABLE_UNIT_RE.test(unit)) {
+    return `${scaled} ${scaled === 1 ? oneOf(unit) : pluralUnit(oneOf(unit))}`;
+  }
   return unit ? `${scaled} ${unit}` : String(scaled);
 };
 
