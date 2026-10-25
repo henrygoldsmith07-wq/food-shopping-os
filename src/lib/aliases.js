@@ -127,6 +127,7 @@ export const ALIAS_GROUPS = [
   ['Frozen berries', ['frozen berries', 'frozen mixed berries']],
   ['Fresh berries', ['fresh berries', 'strawberries', 'raspberries', 'blueberries']],
   ['Bananas', ['bananas', 'banana', 'ripe bananas']],
+  ['Double cream', ['double cream', 'cream', 'heavy cream', 'heavy whipping cream', 'whipping cream', 'thick cream']],
   ['Soured cream', ['soured cream', 'sour cream']],
   ['Crème fraîche', ['crème fraîche', 'creme fraiche', 'half fat creme fraiche']],
   ['Mascarpone', ['mascarpone', 'mascarpone cheese']],
