@@ -93,7 +93,7 @@ export const ALIAS_GROUPS = [
   ['Rice noodles', ['rice noodles']],
   ['Couscous', ['couscous', 'cous cous']],
   ['Quinoa', ['quinoa', 'white quinoa', 'tri-colour quinoa']],
-  ['Flour', ['flour', 'plain flour', 'self raising flour', 'strong white flour', 'wholemeal flour']],
+  ['Flour', ['flour', 'plain flour', 'self raising flour', 'strong white flour', 'wholemeal flour', 'all-purpose flour', 'all purpose flour', 'plain white flour', 'white flour', 'bread flour']],
   ['Sugar', ['sugar', 'granulated sugar', 'caster sugar', 'brown sugar']],
   ['Honey', ['honey', 'runny honey', 'set honey']],
   ['Maple syrup', ['maple syrup', 'maple syrup (bottle)']],
