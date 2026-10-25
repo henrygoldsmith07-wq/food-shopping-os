@@ -40,6 +40,9 @@ export const convert = (parsed, dim, { ingredient = '' } = {}) => {
   };
 };
 
+// A sum that includes a density conversion is approximate: 63.65 g -> 64 g.
+const tidyAmount = (amount, converted) => (converted && amount >= 20 ? Math.round(amount) : round2(amount));
+
 const WHOLE_ITEMS = new Set([
   'egg', 'piece', 'lemon', 'lime', 'onion', 'apple', 'banana', 'pepper', 'potato',
   'tomato', 'carrot', 'courgette', 'aubergine', 'avocado', 'mushroom',
@@ -60,6 +63,12 @@ const align = (a, b, { ingredient = '', allowDensity = true } = {}) => {
     return [a, b];
   }
   if (!allowDensity) return null;
+  // Shops sell these staples by weight, so a volume/mass pair is added up in
+  // grams, whichever side was written first ("1 cup" + "100 g" is 220 g, not 429 ml).
+  if (a.dim === 'volume' && b.dim === 'mass') {
+    const mass = convert(a, 'mass', { ingredient });
+    if (mass) return [mass, b];
+  }
   const converted = convert(b, a.dim, { ingredient });
   return converted ? [a, converted] : null;
 };
@@ -127,7 +136,7 @@ const poolParts = (qty, options = {}) => {
       const pair = align(pools[i], parsed, options);
       if (!pair) continue;
       pools[i] = {
-        amount: round2(pair[0].amount + pair[1].amount),
+        amount: tidyAmount(pair[0].amount + pair[1].amount, pair[0].convertedFrom || pair[1].convertedFrom),
         dim: pair[0].dim,
         unit: pair[0].unit,
         confidence: pair[0].confidence === 'exact' && pair[1].confidence === 'exact' ? 'exact' : 'approximate',
@@ -223,7 +232,7 @@ export const addQuantities = (a, b, options = {}) => {
   const confidence = pair[0].confidence === 'exact' && pair[1].confidence === 'exact'
     ? 'exact' : 'approximate';
   return {
-    amount: round2(pair[0].amount + pair[1].amount),
+    amount: tidyAmount(pair[0].amount + pair[1].amount, pair[0].convertedFrom || pair[1].convertedFrom),
     dim: pair[0].dim,
     unit: pair[0].unit,
     confidence,
@@ -239,12 +248,12 @@ export const subtractQuantities = (have, used, options = {}) => {
   const pair = align(h, u, options);
   if (!pair) return null;
   return {
-    amount: round2(Math.max(0, pair[0].amount - pair[1].amount)),
+    amount: tidyAmount(Math.max(0, pair[0].amount - pair[1].amount), pair[0].convertedFrom || pair[1].convertedFrom),
     dim: pair[0].dim,
     unit: pair[0].unit,
     confidence: pair[0].confidence === 'exact' && pair[1].confidence === 'exact'
       ? 'exact' : 'approximate',
-    shortfall: round2(Math.max(0, pair[1].amount - pair[0].amount)),
+    shortfall: tidyAmount(Math.max(0, pair[1].amount - pair[0].amount), pair[0].convertedFrom || pair[1].convertedFrom),
   };
 };
 
