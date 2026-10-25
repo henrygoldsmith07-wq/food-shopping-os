@@ -135,6 +135,12 @@ export const DENSITIES = {
   // mozzarella 112 g, parmesan 100 g per US cup). Approximate; lets "1 cup grated"
   // fold into a "200 g" block instead of listing two rows.
   cheddar: 0.48, mozzarella: 0.47, parmesan: 0.42,
+  // More cupboard staples a recipe spoons or cups but a packet weighs (King
+  // Arthur weight chart; USDA household measures, per US cup or tbsp).
+  cornflour: 0.54, 'baking powder': 0.93, 'ground almonds': 0.41,
+  'desiccated coconut': 0.36, couscous: 0.73, 'red lentils': 0.81, polenta: 0.68,
+  mayonnaise: 0.93, 'sour cream': 0.97, 'cream cheese': 0.98, 'golden syrup': 1.4,
+  ketchup: 1.02, 'white wine vinegar': 1.01,
 };
 
 /* ---------- Text normalisation ---------- */
