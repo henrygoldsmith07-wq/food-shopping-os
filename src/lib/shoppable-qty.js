@@ -85,7 +85,10 @@ export function shoppableQty(qty, name = '') {
       });
       if (allGarlic) return shoppableQty(`${cloves} cloves`, name);
     }
-    return [...new Set(parts.map((part) => shoppableQty(part, name)))].join(' + ');
+    const bought = [...new Set(parts.map((part) => shoppableQty(part, name)))];
+    // "500 g + 2" reads as a typo: say the bare count is whole items.
+    const hasMeasure = bought.some((p) => /^\d+(?:\.\d+)?\s*(?:g|kg|ml|l)\b/i.test(p));
+    return bought.map((p) => (hasMeasure && /^\d+$/.test(p) ? `${p} whole` : p)).join(' + ');
   }
   // A prep note is the cook's business: "1.5, juiced" is 2 lemons to buy.
   const raw = whole.replace(/^(\d+(?:[.,]\d+)?)\s*,(?!\d).*$/, '$1');
