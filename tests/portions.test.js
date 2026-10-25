@@ -84,3 +84,13 @@ describe('scaleQty pluralises countable units', () => {
     expect(scaleQtyPlural('1 tbsp', 1.5)).toBe('1.5 tbsp');
   });
 });
+
+describe('scaleQty countable units', () => {
+  it('uses the singular when the scaled amount is exactly one', async () => {
+    const { scaleQty } = await import('../src/lib/portions.js');
+    expect(scaleQty('2 cups', 0.5)).toBe('1 cup');
+    expect(scaleQty('4 cloves', 0.25)).toBe('1 clove');
+    expect(scaleQty('1 cup', 1.5)).toBe('1.5 cups');
+    expect(scaleQty('2 cups', 2)).toBe('4 cups');
+  });
+});
