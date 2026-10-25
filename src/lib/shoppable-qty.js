@@ -137,6 +137,12 @@ export function shoppableQty(qty, name = '') {
     const bulbs = Math.max(1, Math.ceil(amount / GARLIC_CLOVES_PER_BULB));
     return `${bulbs} bulb${bulbs === 1 ? '' : 's'}`;
   }
+  // Slices of bread, rashers of bacon and handfuls of salad leaves are bought
+  // as a loaf, a pack and a bag, not as the cook's portions.
+  const u = unit.toLowerCase();
+  if (/^slices?$/.test(u) && /bread|loaf|toast|sourdough|baguette/i.test(name)) return '1 loaf';
+  if (/^(rashers?|strips?)$/.test(u) && /bacon|pancetta|gammon/i.test(name)) return '1 pack';
+  if (/^(handfuls?|handful of)$/.test(u) && /spinach|rocket|kale|salad|lettuce|watercress|leaves/i.test(name)) return '1 bag';
   const packaged = COUNT_PACKAGES[unit.toLowerCase()];
   if (packaged) return `1 ${packaged}`;
   // A bare count, or a count word ("heads", "fillets"): round up to whole.
