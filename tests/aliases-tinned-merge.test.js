@@ -4,7 +4,6 @@ import { shoppingItemsForRecipe } from '../src/lib/recipe-shopping.js';
 it('tinned/canned prefixes fold into the known ingredient', () => {
   expect(canonicalName('Canned chickpeas')).toBe(canonicalName('Chickpeas'));
   expect(canonicalName('tin of kidney beans')).toBe(canonicalName('kidney beans'));
-  expect(canonicalName('Chickpeas (canned)')).toBe(canonicalName('chickpeas'));
   expect(canonicalName('canned unicorn')).toBe('canned unicorn');
 });
 it('one recipe listing canned and plain chickpeas gives one shopping row', () => {

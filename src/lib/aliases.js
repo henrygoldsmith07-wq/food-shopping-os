@@ -179,11 +179,10 @@ export const canonicalName = (name, learned = {}) => {
   if (taught) return clean(taught);
   const direct = byAlias.get(key);
   if (direct) return direct;
-  // "tinned chickpeas" / "canned black beans" / "chickpeas (canned)" are the
+  // "tinned chickpeas" / "canned black beans" are the
   // same shopping line as the plain name when the plain name is a known group.
   const bare = key
     .replace(/^(?:tinned|canned|tin of|can of|tins of|cans of)\s+/, '')
-    .replace(/\s+(?:tinned|canned|tin|can|cans|tins)$/, '')
     .trim();
   return (bare !== key && byAlias.get(bare)) || key;
 };
