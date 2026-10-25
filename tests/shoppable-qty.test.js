@@ -154,3 +154,11 @@ describe('garlic across cloves and bulbs', () => {
     expect(shoppableQty('1 bulb + 1 bulb', 'garlic')).toBe('2 bulbs');
   });
 });
+
+describe('mixed weight and bare count', () => {
+  it('labels the bare count so "500 g + 2" is not read as a typo', () => {
+    expect(shoppableQty('500 g + 2', 'chicken breasts')).toBe('500 g + 2 whole');
+    expect(shoppableQty('2 + 1', 'onions')).toBe('2 + 1');
+    expect(shoppableQty('2 breasts + 300 g', 'chicken breast')).toBe('2 breasts + 300 g');
+  });
+});
