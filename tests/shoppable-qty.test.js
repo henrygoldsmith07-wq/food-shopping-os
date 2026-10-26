@@ -162,3 +162,15 @@ describe('mixed weight and bare count', () => {
     expect(shoppableQty('2 breasts + 300 g', 'chicken breast')).toBe('2 breasts + 300 g');
   });
 });
+
+describe('shoppableQty same-unit amounts from different recipes', () => {
+  it('adds the same unit together', () => {
+    expect(shoppableQty('1 bunch + 2 bunches', 'parsley')).toBe('3 bunches');
+    expect(shoppableQty('3 cans + 1 can', 'tomatoes')).toBe('4 cans');
+    expect(shoppableQty('400 g + 400 g', 'mince')).toBe('800 g');
+    expect(shoppableQty('1 box + 1 box', 'pasta')).toBe('2 boxes');
+  });
+  it('still turns spoons into one jar', () => {
+    expect(shoppableQty('1 tbsp + 2 tbsp', 'paprika')).toBe('1 jar');
+  });
+});
