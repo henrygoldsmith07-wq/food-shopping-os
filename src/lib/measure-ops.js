@@ -274,8 +274,10 @@ export const formatQuantity = (parsed) => {
       const scaled = round2(amount / 1000);
       return `${scaled} ${big}`;
     }
-    // Nobody weighs out 843.26 g: from 100 g up, whole grams / millilitres.
-    return `${amount >= 100 ? Math.round(amount) : round2(amount)} ${small}`;
+    // Nobody weighs out 843.26 g or 78.35 g: from 20 g up, whole grams / millilitres;
+    // 1 to 20 keeps one decimal; under 1 keeps two.
+    const shown = amount >= 20 ? Math.round(amount) : amount >= 1 ? Math.round(amount * 10) / 10 : round2(amount);
+    return `${shown} ${small}`;
   }
   const glyph = Object.entries(UNICODE_FRACTIONS).find(([, v]) => Math.abs(v - amount) < 0.001);
   const number = glyph ? glyph[0] : String(round2(amount));
