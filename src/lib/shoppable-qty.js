@@ -69,6 +69,33 @@ function fractionToDecimal(text) {
  */
 const SPRING_ONIONS_PER_BUNCH = 8;
 
+const FIXED_UNITS = new Set(['g', 'kg', 'ml', 'l', 'oz', 'lb', 'tbsp', 'tsp']);
+
+function mergeSameUnit(items) {
+  const order = [];
+  const sums = new Map();
+  const rest = [];
+  for (const item of items) {
+    const m = item.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)$/i);
+    if (!m) { rest.push(item); continue; }
+    const unit = m[2].toLowerCase();
+    const key = FIXED_UNITS.has(unit) ? unit : unit.replace(/(?:es|s)$/, (x) => (/(?:ch|sh|x|ss)es$/.test(unit) ? '' : x === 'es' ? 'e' : ''));
+    if (!sums.has(key)) { sums.set(key, { n: 0, unit }); order.push(key); }
+    const e = sums.get(key);
+    e.n += Number(m[1]);
+    if (Number(m[1]) !== 1) e.unit = unit;
+  }
+  const out = order.map((key) => {
+    const { n, unit } = sums.get(key);
+    const v = Number(n.toFixed(3));
+    if (FIXED_UNITS.has(unit)) return `${v} ${unit}`;
+    const base = key;
+    const plural = /(?:ch|sh|x|s)$/.test(base) ? `${base}es` : `${base}s`;
+    return `${v} ${v === 1 ? base : plural}`;
+  });
+  return [...out, ...rest];
+}
+
 export function shoppableQty(qty, name = '') {
   const whole = String(qty || '').trim();
   // Mixed amounts are made buyable part by part, and two parts that both
@@ -103,6 +130,10 @@ export function shoppableQty(qty, name = '') {
       }
     }
     const bought = [...new Set(parts.map((part) => shoppableQty(part, name)))];
+    // The same unit counted in two recipes is one pile: "1 bunch + 2 bunches"
+    // is 3 bunches, "400 g + 400 g" is 800 g (spoons still end up as a jar).
+    const merged = mergeSameUnit(parts);
+    if (merged.length < parts.length) return shoppableQty(merged.join(' + '), name);
     // "500 g + 2" reads as a typo: say the bare count is whole items.
     const hasMeasure = bought.some((p) => /^\d+(?:\.\d+)?\s*(?:g|kg|ml|l)\b/i.test(p));
     return bought.map((p) => (hasMeasure && /^\d+$/.test(p) ? `${p} whole` : p)).join(' + ');
