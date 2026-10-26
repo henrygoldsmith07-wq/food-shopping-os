@@ -252,6 +252,9 @@ export const parseQuantity = (value, { ingredient = '' } = {}) => {
   // a count of the thing itself. (A comma between digits is a thousands
   // separator, handled by normalise, so it never reaches here.)
   text = text.replace(/^(\d+(?:\.\d+)?)\s*,\s*[a-z][a-z\s-]*$/, '$1');
+  // "2 whole" is how a merged list labels a bare count next to a weight; it
+  // must read back as the same plain count so "2 + 1 whole" adds to 3.
+  text = text.replace(/^(\d+(?:\.\d+)?)\s+(?:whole|wholes)$/, '$1');
 
   // A range — "2-3 tbsp", "2 to 3 tbsp". We plan against the top of the range
   // so a shopping list never sends you home short, and record both ends.
