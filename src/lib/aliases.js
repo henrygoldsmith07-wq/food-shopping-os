@@ -19,7 +19,7 @@ const clean = (value) => String(value || '')
 
 /** Canonical → the everyday names that mean it. First entry is the canonical. */
 export const ALIAS_GROUPS = [
-  ['Chopped tomatoes', ['chopped tomatoes', 'tinned tomatoes', 'tin tomatoes', 'canned tomatoes', 'crushed tomatoes', 'plum tomatoes', 'whole tomatoes', 'tomatoes (tins)', 'chopped tomatoes (tins)']],
+  ['Chopped tomatoes', ['chopped tomatoes', 'tinned tomatoes', 'tin tomatoes', 'canned tomatoes', 'crushed tomatoes', 'whole tomatoes', 'tomatoes (tins)', 'chopped tomatoes (tins)']],
   ['Passata', ['passata', 'tomato passata', 'sieved tomatoes']],
   ['Tomato puree', ['tomato puree', 'tomato paste', 'tomato concentrate', 'double concentrate tomato puree']],
   ['Coconut milk', ['coconut milk', 'coconut milk (tins)', 'tinned coconut milk']],
@@ -45,7 +45,7 @@ export const ALIAS_GROUPS = [
   ['Aubergine', ['aubergine', 'aubergines', 'eggplant']],
   ['Peppers', ['peppers', 'bell peppers', 'bell pepper', 'mixed peppers', 'mixed pepper', 'red pepper', 'red peppers', 'red bell pepper', 'green pepper', 'green peppers', 'green bell pepper', 'yellow pepper', 'yellow peppers', 'yellow bell pepper', 'orange pepper', 'orange peppers', 'sweet pepper', 'sweet peppers', 'capsicum', 'capsicums']],
   ['Red onion', ['red onion', 'red onions']],
-  ['Onion', ['onion', 'onions', 'white onion', 'brown onion']],
+  ['Onion', ['onion', 'onions', 'white onion', 'brown onion', 'yellow onion']],
   ['Garlic', ['garlic', 'garlic clove', 'garlic cloves', 'clove of garlic', 'cloves of garlic', 'cloves garlic', 'clove garlic', 'fresh garlic', 'garlic (bulb)', 'garlic bulb']],
   ['Ginger', ['ginger', 'fresh ginger', 'ginger root']],
   ['Carrots', ['carrots', 'carrot', 'baby carrots']],
@@ -55,6 +55,7 @@ export const ALIAS_GROUPS = [
   ['Sweet potato', ['sweet potato', 'sweet potatoes', 'sweet potatoes (medium)']],
   ['Broccoli', ['broccoli', 'broccoli head', 'tenderstem broccoli']],
   ['Spinach', ['spinach', 'baby spinach', 'frozen spinach', 'leaf spinach']],
+  ['Chard', ['chard', 'swiss chard', 'rainbow chard']],
   ['Kale', ['kale', 'curly kale', 'cavolo nero']],
   ['Cherry tomatoes', ['cherry tomatoes', 'baby plum tomatoes', 'vine tomatoes']],
   ['Tomatoes', ['tomatoes', 'tomato', 'ripe tomatoes', 'fresh tomatoes', 'large tomatoes', 'medium tomatoes']],
@@ -65,7 +66,7 @@ export const ALIAS_GROUPS = [
   ['Avocado', ['avocado', 'avocados', 'ripe avocado']],
   ['Lemons', ['lemons', 'lemon', 'lemon (juice and zest)', 'lemon juice', 'juice of a lemon', 'juice of 1 lemon', 'lemon zest']],
   ['Limes', ['limes', 'lime', 'lime juice', 'juice of a lime', 'juice of 1 lime', 'lime zest']],
-  ['Chicken breast', ['chicken breast', 'chicken breasts', 'chicken breast fillets']],
+  ['Chicken breast', ['chicken breast', 'chicken breasts', 'chicken breast fillets', 'skinless chicken breast', 'skinless chicken breasts', 'boneless chicken breast', 'boneless skinless chicken breast', 'boneless skinless chicken breasts']],
   ['Chicken thighs', ['chicken thighs', 'chicken thigh', 'bone-in chicken thighs', 'skinless chicken thighs']],
   ['Chicken mince', ['chicken mince', 'minced chicken', 'ground chicken']],
   ['Beef mince', ['beef mince', 'minced beef', 'mince beef', 'beef mince (lean)', 'ground beef', 'beef (minced)', 'lean beef mince', '5% beef mince', 'mince', 'lean mince', 'minced meat']],
