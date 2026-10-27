@@ -29,7 +29,7 @@ import StoreIntegrations from './StoreIntegrations.jsx';
 import ShoppingListRow from './ShoppingListRow.jsx';
 import BulkListActions from './BulkListActions.jsx';
 import RestockSection from './RestockSection.jsx';
-import ListConflictCard from './ListConflictCard.jsx';
+import ListConflictCard from './ListConflictCard.jsx'; import ShopChecks from './ShopChecks.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { useShoppingSession } from '../lib/shopping-session.js';
 import ShoppingProgress from './ShoppingProgress.jsx'; import CloudSyncRow from './CloudSyncRow.jsx';
@@ -347,6 +347,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             </Section>
           )}
 
+          <ShopChecks app={app} />{/* soft pantry evidence, settled before the trip */}
           {!shoppingMode && <RestockSection items={app.restock} store={store} />}
 
           {staplesDue.length > 0 && !shoppingMode && (

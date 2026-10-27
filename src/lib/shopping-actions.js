@@ -9,6 +9,7 @@ import { upsertPredictions, listSnapshotSync, buildShopRecord } from './shopping
 import { PREDICTION_PROVENANCE, refreshBasketFreeze } from './prediction-evidence.js';
 import { receiptOutcomeRecords } from './price-evidence.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
+import { applyShopCheck } from './shop-checks.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
 
@@ -130,6 +131,21 @@ export const shoppingActions = (set) => ({
       const shoppingList = moveBefore(s.shoppingList, id, beforeId);
       return shoppingList === s.shoppingList ? {} : { shoppingList };
     }),
+  /**
+   * Answer a "check before you shop" question. 'have' confirms the pantry
+   * rows involved and takes the item off the list (with its prediction
+   * snapshot, same as any removal); 'buy' keeps it and stops asking.
+   */
+  resolveShopCheck: (id, answer) => set((s) => {
+    if (!householdPermission(s, 'shopping')) return {};
+    const change = applyShopCheck(s, id, answer);
+    if (!change) return {};
+    if (answer === 'buy') return { shoppingList: change.shoppingList };
+    // Confirming stock edits the pantry, which some profiles may not do.
+    if (!householdPermission(s, 'pantry')) return {};
+    const removal = removeRowsWithSnapshots(s, [id]) || {};
+    return { ...removal, pantry: change.pantry };
+  }),
   removeListItem: (id) => set((s) => {
     const changes = removeRowsWithSnapshots(s, [id]);
     return changes || {};
