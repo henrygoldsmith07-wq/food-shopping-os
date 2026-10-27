@@ -10,6 +10,7 @@ import { PREDICTION_PROVENANCE, refreshBasketFreeze } from './prediction-evidenc
 import { receiptOutcomeRecords } from './price-evidence.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { applyShopCheck } from './shop-checks.js';
+import { LOCATIONS } from '../data/pantry.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
 
@@ -277,7 +278,7 @@ export const shoppingActions = (set) => ({
  * ride the same single write.
  */
 const recordShopAction = (set) => ({
-  recordShop: ({ store, total, toPantry = true, location = 'Cupboard', itemIds = null }) =>
+  recordShop: ({ store, total, toPantry = true, location = 'Cupboard', locations = null, itemIds = null }) =>
     set((s) => {
       if (!householdPermission(s, 'shopping')) return {};
       const bought = s.shoppingList.filter((i) => i.checked && (!itemIds || itemIds.includes(i.id)));
@@ -287,7 +288,8 @@ const recordShopAction = (set) => ({
       const purchaseDate = s.day;
       const reconciled = toPantry && householdPermission(s, 'pantry')
         ? reconcilePurchase(s.pantry, bought.map((item) => ({
-          ...item, store: shopStore, location, price: Number(item.price) || 0,
+          ...item, store: shopStore, price: Number(item.price) || 0,
+          location: (locations && LOCATIONS.includes(locations[item.id]) && locations[item.id]) || location,
         })), {
           learnedAliases: s.aliasMemory || {},
           date: purchaseDate,
