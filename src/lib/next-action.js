@@ -23,6 +23,8 @@
  * what is possible.
  */
 
+import { shopChecks } from './shop-checks.js';
+
 const severity = { urgent: 3, soon: 2, normal: 1 };
 
 /** The pantry items Forq has evidence are going unused, worst first. */
@@ -31,6 +33,12 @@ const goingOff = (app) =>
     .filter((row) => row.likelihood === 'high' || (row.daysLeft ?? 99) <= 2)
     .map((row) => row.name)
     .filter(Boolean);
+
+const checksFor = (app) => {
+  try {
+    return shopChecks(app.shoppingList || [], app.pantry || [], { today: app.day, learnedAliases: app.aliasMemory || {} }).length;
+  } catch { return 0; }
+};
 
 /**
  * The single next action, or null when there isn't one worth leading with.
@@ -90,6 +98,17 @@ export const nextAction = (app, { onOpenPantry, goTab, openGuidance, onOpenWeekL
     };
   }
   if (unchecked) {
+    const toCheck = app.householdAccess?.shopping === false ? 0 : checksFor(app);
+    if (toCheck) {
+      return {
+        id: 'shop',
+        priority: severity.normal,
+        title: `${toCheck} ${toCheck === 1 ? 'thing' : 'things'} to check before you shop`,
+        detail: `${unchecked} ${unchecked === 1 ? 'item' : 'items'} on the list; your pantry may already cover ${toCheck === 1 ? 'one' : 'some'}. A quick look saves buying twice.`,
+        cta: 'Check the list',
+        run: () => goTab?.('shop'),
+      };
+    }
     return {
       id: 'shop',
       priority: severity.normal,

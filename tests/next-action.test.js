@@ -134,4 +134,26 @@ describe('what should I do next', () => {
     const action = nextAction(app({ shoppingList: [{ id: 's1', checked: false }] }));
     expect(action.id).toBe('plan-week');
   });
+
+  it('leads with pantry checks when the list has rows the pantry might cover', () => {
+    const goTab = vi.fn();
+    const action = nextAction(app({
+      plan: { '2026-07-28': {} },
+      shoppingList: [{ id: 'l1', name: 'Couscous', qty: '300 g', requiredQty: '300 g', checked: false }],
+      pantry: [{ id: 'p1', name: 'Couscous', qty: '1 box', confidence: 'definite', lastConfirmedAt: '2026-07-28' }],
+    }), { goTab });
+    expect(action.id).toBe('shop');
+    expect(action.title).toBe('1 thing to check before you shop');
+    action.run();
+    expect(goTab).toHaveBeenCalledWith('shop');
+  });
+
+  it('keeps the plain count when nothing needs checking or the profile cannot edit the list', () => {
+    const base = { plan: { '2026-07-28': {} }, shoppingList: [{ id: 'l1', name: 'Eggs', qty: '6', checked: false }] };
+    expect(nextAction(app(base)).title).toBe('1 item still to buy');
+    const gated = app({ ...base, householdAccess: { shopping: false },
+      shoppingList: [{ id: 'l1', name: 'Couscous', qty: '300 g', requiredQty: '300 g', checked: false }],
+      pantry: [{ id: 'p1', name: 'Couscous', qty: '1 box', confidence: 'definite', lastConfirmedAt: '2026-07-28' }] });
+    expect(nextAction(gated).title).toBe('1 item still to buy');
+  });
 });

@@ -249,6 +249,16 @@ describe('week loop workflow', () => {
     expect(check.missingItems.some((item) => item.name === 'Chopped tomatoes')).toBe(false);
   });
 
+  it('snapshot counts pantry checks for the shop step', () => {
+    const state = { ...EMPTY_STATE, day, onboarded: true,
+      shoppingList: [{ id: 'l1', name: 'Couscous', qty: '300 g', requiredQty: '300 g', checked: false }],
+      pantry: [{ id: 'p1', name: 'Couscous', qty: '1 box', confidence: 'definite', lastConfirmedAt: day }] };
+    const app = { ...state, ...deriveApp(state) };
+    expect(weekLoopSnapshot(app).shopCheckCount).toBe(1);
+    const none = { ...EMPTY_STATE, day, onboarded: true };
+    expect(weekLoopSnapshot({ ...none, ...deriveApp(none) }).shopCheckCount).toBe(0);
+  });
+
   it('snapshot points at plan when nothing is scheduled', () => {
     const state = { ...EMPTY_STATE, day, onboarded: true };
     const app = { ...state, ...deriveApp(state) };

@@ -18,6 +18,7 @@ import {
 import { wasteAwareList } from './loop-learning.js';
 import { heldAdaptationKeys } from './adaptation-suppression.js';
 import { replacePredictionsForList } from './shopping-predictions.js';
+import { shopChecks } from './shop-checks.js';
 import { deriveDynamicShoppingList } from './dynamic-shopping.js';
 import { householdPermission } from './household.js';
 import { uid } from './state.js';
@@ -111,6 +112,8 @@ export const weekLoopSnapshot = (app) => {
     memory: app.aisleMemory || {},
   });
 
+  const pantryChecks = shopChecks(list, app.pantry || [], { today: app.day, learnedAliases: app.aliasMemory || {} });
+
   const done = {
     plan: stats.meals > 0,
     portions: household.portions >= 1,
@@ -153,6 +156,7 @@ export const weekLoopSnapshot = (app) => {
     listPreview: listPreview.items,
     portions: listPreview.portions,
     checkedCount: checked.length,
+    shopCheckCount: pantryChecks.length,
     shopsToday,
     cookedToday,
     plannedToday,
