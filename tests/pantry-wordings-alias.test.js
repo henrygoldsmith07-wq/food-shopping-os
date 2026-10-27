@@ -38,3 +38,15 @@ describe('herb, fish, tinned-pulse and prep wordings merge on the shopping list'
     expect(canonicalName('red onion')).not.toBe(canonicalName('garlic'));
   });
 });
+
+describe('mint, onion, celery, ginger and potato wordings merge', () => {
+  it.each([
+    ['chopped mint', 'fresh mint'], ['sprigs of mint', 'mint'], ['large onions', 'onions'], ['diced onion', 'onion'],
+    ['medium red onion', 'red onions'], ['celery stick', 'celery stalks'], ['stalks of celery', 'celery'],
+    ['grated ginger', 'root ginger'], ['large potatoes', 'potatoes'], ['baking potatoes', 'potato'],
+  ])('%s merges with %s', (a, b) => expect(canonicalName(a)).toBe(canonicalName(b)));
+  it('keeps different things apart', () => {
+    expect(canonicalName('red onion')).not.toBe(canonicalName('onion'));
+    expect(canonicalName('new potatoes')).not.toBe(canonicalName('potatoes'));
+  });
+});
