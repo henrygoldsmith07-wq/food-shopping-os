@@ -35,6 +35,7 @@ import { useShoppingSession } from '../lib/shopping-session.js';
 import ShoppingProgress from './ShoppingProgress.jsx'; import CloudSyncRow from './CloudSyncRow.jsx';
 import ShopSheets from './ShopSheets.jsx';
 import ShopBasket from './ShopBasket.jsx';
+import ListTotalBar, { AisleHeading } from './ListTotalBar.jsx';
 import ShopPrices from './ShopPrices.jsx';
 import ShopHistory from './ShopHistory.jsx';
 import ShoppingExport from './ShoppingExport.jsx';
@@ -414,14 +415,12 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
           ) : (
             <Section className="rise rise-2" title={shoppingMode ? `${visibleList.length - ticked} items to go` : 'Your list'}>
               <BulkListActions ticked={ticked} />
+              <ListTotalBar items={visibleList} evidence={priceEvidence} />
               <div className="space-y-4">
                 {grouped.map(([aisle, items]) => {
-                  const allDone = items.every((i) => i.checked);
                   return (
                     <div key={aisle}>
-                      <p className="mb-2 text-[0.75rem] font-bold uppercase tracking-wide flex items-center gap-2" style={{ color: allDone ? 'var(--good)' : 'var(--faint)' }}>
-                        {aisle} {allDone && '✓'}
-                      </p>
+                      <AisleHeading aisle={aisle} items={items} evidence={priceEvidence} />
                       <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
                         {items.map((item) => (
                           <ShoppingListRow key={item.id || item.name}

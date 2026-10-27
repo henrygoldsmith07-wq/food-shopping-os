@@ -100,6 +100,21 @@ describe('the weekly planner', () => {
     expect(screen.getByText(/Tap any slot to plan a meal/)).toBeDefined();
   });
 
+  it('fills open nights by swiping, and undo takes the last one back', () => {
+    onboard();
+    openPlan();
+    const before = screen.getByRole('button', { name: /Swipe to fill \d+/ }).textContent;
+    fireEvent.click(screen.getByRole('button', { name: /Swipe to fill \d+/ }));
+    const deck = screen.getByTestId('swipe-week');
+    fireEvent.click(within(deck).getByRole('button', { name: /^Add / }));
+    fireEvent.click(within(deck).getByRole('button', { name: 'Skip this dinner' }));
+    fireEvent.click(within(deck).getByRole('button', { name: /^Add / }));
+    expect(screen.getByText(/2 meals planned/)).toBeDefined();
+    fireEvent.click(within(deck).getByRole('button', { name: 'Undo the last dinner added' }));
+    expect(screen.getByText(/1 meal planned/)).toBeDefined();
+    expect(before).toMatch(/Swipe to fill \d+/);
+  });
+
   it('starts cooking a planned meal from the calendar', () => {
     onboard();
     openPlan();

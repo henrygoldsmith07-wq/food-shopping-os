@@ -8,6 +8,7 @@ import { safeExternalUrl } from '../lib/recipe-tools.js';
 import { defaultLeftoverPortions } from '../lib/loop-learning.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { Card, Meter, Stepper } from './ui.jsx';
+import { NextStepPreview, StepText, TimerTray } from './CookStepParts.jsx';
 
 /**
  * Cooking mode: one step at a time, full screen, with timers that survive
@@ -133,7 +134,7 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
           const v = next[k];
           if (v.running && v.left > 0) {
             const left = v.left - 1;
-            next[k] = { left, running: left > 0 };
+            next[k] = { ...v, left, running: left > 0 };
             if (left === 0) navigator.vibrate?.(300);
             changed = true;
           }
@@ -172,6 +173,11 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
           </span>
         </div>
         <div className="mt-3"><Meter value={step + 1} max={recipe.steps.length} /></div>
+        <TimerTray
+          timers={timers}
+          onToggle={(key) => setTimers((t) => (t[key] && t[key].left > 0 ? { ...t, [key]: { ...t[key], running: !t[key].running } } : t))}
+          onDismiss={(key) => setTimers((t) => { const next = { ...t }; delete next[key]; return next; })}
+        />
         {wakeState === 'active' && (
           <p className="mt-2 inline-flex items-center gap-1 text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>
             <Lightbulb size={12} /> Screen stays awake while you cook
@@ -249,7 +255,14 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
         <>
           <div className="flex flex-1 flex-col justify-center px-7 rise" key={step}>
             <p className="text-[0.8125rem] font-extrabold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>Step {step + 1}</p>
-            <p className="mt-3 text-[1.5rem] font-bold leading-snug">{s.text}</p>
+            <StepText
+              text={s.text}
+              ingredients={recipe.ingredients || []}
+              onStartTimer={(segment) => setTimers((t) => ({
+                ...t,
+                [`x:${step}:${segment.text}`]: { left: segment.seconds, running: true, label: segment.text },
+              }))}
+            />
             {s.timerMins && s.timerMins <= 90 && (
               <div>
                 <Timer
@@ -285,6 +298,7 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
             <p className="mt-3 text-[0.78125rem] font-semibold inline-flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
               <Mic size={13} /> Voice mode: say “next” or swipe — hands-free.
             </p>
+            <NextStepPreview text={recipe.steps[step + 1]?.text} />
           </div>
 
           <div className="flex gap-3 px-5 pb-8 shrink-0">

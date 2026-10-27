@@ -79,3 +79,29 @@ export const estimateBasket = (items = [], evidence = {}) => {
     sources,
   };
 };
+
+/**
+ * The list's running total for the sticky bar and the aisle headings: the same
+ * per-row price as estimateBasket (yours first, then live, observed, typical),
+ * split into what is already in the trolley and what is still to pick up.
+ * `estimated` says whether any of it is borrowed, so the UI can say "about".
+ */
+export const listTotals = (items = [], evidence = {}) => {
+  let total = 0;
+  let inTrolley = 0;
+  let estimated = false;
+  let unpriced = 0;
+  let left = 0;
+  for (const item of items) {
+    const estimate = rowEstimate(item, evidence);
+    if (!item?.checked) left += 1;
+    if (!estimate) {
+      unpriced += 1;
+      continue;
+    }
+    if (estimate.source !== 'yours') estimated = true;
+    total += estimate.price;
+    if (item?.checked) inTrolley += estimate.price;
+  }
+  return { total: round2(total), inTrolley: round2(inTrolley), toGo: round2(total - inTrolley), left, unpriced, estimated };
+};
