@@ -25,3 +25,16 @@ describe('more everyday wordings merge on the shopping list', () => {
     expect(canonicalName('tuna')).not.toBe(canonicalName('salmon'));
   });
 });
+
+describe('herb, fish, tinned-pulse and prep wordings merge on the shopping list', () => {
+  it.each([
+    ['coriander sprigs', 'fresh coriander'], ['chopped parsley', 'parsley'], ['sprigs of basil', 'basil'],
+    ['tiger prawns', 'king prawns'], ['fillet of cod', 'cod fillets'], ['tinned chickpeas', 'chickpeas'],
+    ['canned kidney beans', 'kidney beans'], ['tinned cannellini beans', 'cannellini beans'],
+    ['light olive oil', 'olive oil'], ['large carrots', 'carrots'], ['minced garlic', 'garlic cloves'],
+  ])('%s merges with %s', (a, b) => expect(canonicalName(a)).toBe(canonicalName(b)));
+  it('keeps different things apart', () => {
+    expect(canonicalName('prawns')).not.toBe(canonicalName('cod'));
+    expect(canonicalName('red onion')).not.toBe(canonicalName('garlic'));
+  });
+});
