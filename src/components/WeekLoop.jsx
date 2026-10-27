@@ -218,6 +218,11 @@ export default function WeekLoop({ onClose, onCook, initialStep }) {
               <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
                 Tick as you go · {(app.shoppingList || []).filter((i) => i.checked).length} of {(app.shoppingList || []).length} done
               </p>
+              {snap.shopCheckCount > 0 && (
+                <p className="mt-1 text-[0.78125rem] font-bold" style={{ color: 'var(--accent-strong, inherit)' }}>
+                  {snap.shopCheckCount} {snap.shopCheckCount === 1 ? 'thing' : 'things'} to check against your pantry first. Open the Shop tab.
+                </p>
+              )}
             </Card>
             {(app.shoppingList || []).length === 0 ? (
               <Card>
