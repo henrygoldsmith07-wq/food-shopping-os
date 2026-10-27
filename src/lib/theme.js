@@ -50,6 +50,18 @@ export const onSystemThemeChange = (listener) => {
 };
 
 /**
+ * Apply a chosen theme, mirror it for the pre-paint script, and follow the OS
+ * while it is "system". Returns an unsubscribe.
+ */
+export const syncTheme = (theme) => {
+  const chosen = normaliseTheme(theme);
+  applyTheme(resolveTheme(chosen));
+  try { localStorage.setItem(THEME_STORAGE_KEY, chosen); } catch { /* private mode: the OS default still applies */ }
+  if (chosen !== 'system') return () => {};
+  return onSystemThemeChange((dark) => applyTheme(dark ? 'dark' : 'light'));
+};
+
+/**
  * Runs before first paint (inline, with the CSP nonce) so a dark phone never
  * sees a white launch shell. Kept dependency-free and tiny on purpose.
  */

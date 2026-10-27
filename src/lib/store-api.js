@@ -1,4 +1,3 @@
-import { normaliseTheme, resolveTheme } from './theme.js';
 import { useMemo } from 'react';
 import { CATALOGUE } from '../data/foods.js';
 import { guessAisle } from '../data/stores.js';
@@ -179,8 +178,8 @@ export function useStoreApi({
         latest, set, setVaultUnlocked, undoHistory, vaultKey, vaultSalt, vaultWrites,
       }),
       // Flips what the page is wearing right now into an explicit choice.
-      toggleTheme: () => set((s) => ({ theme: resolveTheme(s.theme) === 'dark' ? 'light' : 'dark' })),
-      setTheme: (theme) => set(() => ({ theme: normaliseTheme(theme) })),
+      // Unknown values are normalised where the theme is applied (lib/theme.js).
+      setTheme: (theme) => set(() => ({ theme })),
       setAccent: (accent) => set({ accent }),
       addWater: (d) => set((s) => ({ water: Math.max(0, Math.min(8, s.water + d)) })),
       addWaterMl: (ml) => set((s) => ({ waterExtraMl: Math.max(0, s.waterExtraMl + ml) })),

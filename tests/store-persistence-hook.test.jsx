@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, act, cleanup } from '@testing-library/react';
+import { renderHook, act, cleanup, waitFor } from '@testing-library/react';
 import { usePersistence } from '../src/lib/store-persistence-hook.js';
 import { EMPTY_STATE } from '../src/lib/state.js';
 import { STORAGE_KEY } from '../src/lib/state-versions.js';
@@ -20,11 +20,13 @@ beforeEach(() => localStorage.clear());
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('usePersistence (localStorage fallback)', () => {
-  it('writes the state on mount and sets the theme on the document', () => {
+  it('writes the state on mount and sets the theme on the document', async () => {
     const { props } = setup();
     renderHook(() => usePersistence(props));
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).schemaVersion).toBeTruthy();
-    expect(document.documentElement.dataset.theme).toBe('dark');
+    // The theme sync is lazy-loaded (the pre-paint script covers first paint),
+    // so it lands a tick after mount.
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
     expect(document.documentElement.dataset.accent).toBe('green');
   });
 
