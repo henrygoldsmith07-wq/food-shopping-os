@@ -27,6 +27,7 @@ import TonightSlotGuard from './TonightSlotGuard.jsx';
 import JustPlannedOffer from './JustPlannedOffer.jsx';
 import PlanConflictCard from './PlanConflictCard.jsx';
 import WeekCostCard from './WeekCostCard.jsx';
+import ExpiryRescueCard from './ExpiryRescueCard.jsx';
 import SwipeWeekBuilder from './SwipeWeekBuilder.jsx';
 import { openDinnerDates, weekCostSummary } from '../lib/swipe-week.js';
 
@@ -110,6 +111,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   return (
     <div className="pb-6 space-y-6">
       <PlanConflictCard app={app} />
+      {view === 'week' && <ExpiryRescueCard />}
       {view === 'week' ? (
         <div className="px-5">
           <WeekCostCard
