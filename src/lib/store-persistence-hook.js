@@ -18,6 +18,7 @@
  * state changed, and it writes it.
  */
 
+import { applyTheme, normaliseTheme, onSystemThemeChange, resolveTheme, THEME_STORAGE_KEY } from './theme.js';
 import { useCallback, useEffect, useRef } from 'react';
 import {
   encryptHealth, healthSnapshot, HEALTH_VAULT_KEY, withoutHealth,
@@ -213,9 +214,18 @@ export const usePersistence = ({
   }, [blockPersistence, demoRef, latest, persist]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.accent = accent;
-  }, [theme, accent]);
+  }, [accent]);
+
+  // Appearance: resolve "system" against the OS and keep following it live;
+  // mirror the choice to localStorage for the pre-paint script in app/page.jsx.
+  useEffect(() => {
+    const chosen = normaliseTheme(theme);
+    applyTheme(resolveTheme(chosen));
+    try { localStorage.setItem(THEME_STORAGE_KEY, chosen); } catch { /* private mode: the OS default still applies */ }
+    if (chosen !== 'system') return undefined;
+    return onSystemThemeChange((dark) => applyTheme(dark ? 'dark' : 'light'));
+  }, [theme]);
 
   return persist;
 };

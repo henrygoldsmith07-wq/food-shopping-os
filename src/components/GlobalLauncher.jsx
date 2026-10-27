@@ -204,17 +204,20 @@ export function LauncherButtons({ onSearch, onQuickAdd }) {
   return (
     <div
         className="launcher-buttons fixed z-40 flex gap-2"
-      // Clear of the screen's primary action, which sits in the thumb zone
-      // just above the tab bar.
+      // One bottom toolbar: these sit on the same row as the screen's primary
+      // action (which makes room for them, see .primary-action in index.css),
+      // at the left edge of the same column. They used to float a row higher,
+      // over the list content and, when the action wrapped to two lines, over
+      // the action itself.
       style={{
         left: 'max(1.25rem, calc(50vw - 16rem + 1.25rem))',
-        bottom: 'calc(9rem + env(safe-area-inset-bottom))',
+        bottom: 'calc(4.75rem + env(safe-area-inset-bottom))',
       }}
     >
       <button
         onClick={onSearch}
         aria-label="Global search"
-        className="press flex h-11 w-11 items-center justify-center rounded-full border"
+        className="press flex h-12 w-12 items-center justify-center rounded-full border"
         style={{ background: 'var(--card)', borderColor: 'var(--line)', boxShadow: 'var(--shadow)' }}
       >
         <Search size={18} />
@@ -222,7 +225,7 @@ export function LauncherButtons({ onSearch, onQuickAdd }) {
       <button
         onClick={onQuickAdd}
         aria-label="Quick add"
-        className="press flex h-11 w-11 items-center justify-center rounded-full"
+        className="press flex h-12 w-12 items-center justify-center rounded-full"
         style={{ background: 'var(--ink)', color: 'var(--bg)', boxShadow: 'var(--shadow)' }}
       >
         <Plus size={19} />

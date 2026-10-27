@@ -41,7 +41,8 @@ describe('settings are separated from the dashboard scroll', () => {
     const sheet = openSettings();
 
     expect(within(sheet).getByText('Appearance')).toBeDefined();
-    expect(within(sheet).getByText('Dark mode')).toBeDefined();
+    expect(within(sheet).getByRole('radiogroup', { name: 'Theme' })).toBeDefined();
+    expect(within(sheet).getByRole('radio', { name: 'Match phone' }).getAttribute('aria-checked')).toBe('true');
     expect(within(sheet).getByText('Privacy & data')).toBeDefined();
     expect(within(sheet).getByRole('button', { name: 'Privacy, storage & deletion' })).toBeDefined();
     expect(within(sheet).getByRole('button', { name: /Export/ })).toBeDefined();
@@ -81,9 +82,12 @@ describe('settings are separated from the dashboard scroll', () => {
         }} />
       </AppProvider>,
     );
-    const toggle = screen.getByRole('switch', { name: 'Dark mode' });
-    fireEvent.click(toggle);
+    // Appearance is a three-way choice that defaults to following the phone.
+    expect(snap.theme).toBe('system');
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
     expect(snap.theme).toBe('dark');
+    fireEvent.click(screen.getByRole('radio', { name: 'Match phone' }));
+    expect(snap.theme).toBe('system');
   });
 });
 
