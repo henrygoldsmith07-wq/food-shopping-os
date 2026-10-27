@@ -29,8 +29,9 @@ export const viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fafafa' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
+    // The page canvas (--bg); lib/theme.js re-points these to the in-app theme.
+    { media: '(prefers-color-scheme: light)', color: '#f4f4f6' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0b0d' },
   ],
 };
 

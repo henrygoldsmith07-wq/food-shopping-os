@@ -207,6 +207,12 @@ select { font-size: 1rem !important; }
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
 }
 
+/* Phone bottom toolbar: search and quick add sit on the primary action's row,
+   so the action starts after them (2 × 3rem buttons + gaps). */
+@media (max-width: 1023.98px) {
+  body:has(.launcher-buttons) .primary-action { padding-left: calc(1.25rem + 6.5rem + 0.5rem); }
+}
+
 @media (min-width: 1024px) {
   .launch-shell { padding-left: 15rem; }
   .launch-nav {
