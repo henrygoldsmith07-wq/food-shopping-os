@@ -6,6 +6,7 @@ import { parsePastedList } from '../lib/shopping-paste.js';
 import { gbp } from '../lib/utils.js';
 import { COMMON_STORES, checkedTotalOf, guessAisle } from '../data/stores.js';
 import { findShoppingDuplicate, quantitySuggestion } from '../lib/shopping.js';
+import { shopLocationMap, shopLocationPlan, SHOP_LOCATION_CHOICES } from '../lib/shop-locations.js';
 import { Card, Chip } from './ui.jsx';
 import { NumberField } from './FoodDetail.jsx';
 
@@ -161,6 +162,8 @@ export function FinishShop({ items, store: initial, onDone }) {
   const [store, setStore] = useState(initial || '');
   const [total, setTotal] = useState(suggested ? suggested.toFixed(2) : '');
   const [toPantry, setToPantry] = useState(true);
+  const [picked, setPicked] = useState({});
+  const plan = shopLocationPlan(items, picked);
 
   return (
     <div className="px-5 pb-10 space-y-4">
@@ -212,9 +215,29 @@ export function FinishShop({ items, store: initial, onDone }) {
         </span>
       </button>
 
+      {toPantry && plan.rows.length > 0 && (
+        <Card>
+          <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
+            Where it goes ({SHOP_LOCATION_CHOICES.map((l) => `${plan.counts[l]} ${l.toLowerCase()}`).join(', ')})
+          </p>
+          <ul className="mt-2 space-y-2">
+            {plan.rows.map((row) => (
+              <li key={row.id} className="flex items-center justify-between gap-2">
+                <span className="text-[0.8125rem] font-semibold truncate">{row.name}{row.qty ? ` · ${row.qty}` : ''}</span>
+                <span className="flex gap-1 shrink-0">
+                  {SHOP_LOCATION_CHOICES.map((l) => (
+                    <Chip key={l} active={row.location === l} onClick={() => setPicked((p) => ({ ...p, [row.id]: l }))}>{l}</Chip>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <button
         onClick={() => {
-          app.recordShop({ store, total, toPantry, itemIds: items.map((item) => item.id) });
+          app.recordShop({ store, total, toPantry, locations: shopLocationMap(items, picked), itemIds: items.map((item) => item.id) });
           if (toPantry) recordProductEvent('pantry_reconciled', { count: items.filter((i) => i.checked).length }, undefined, app);
           onDone();
         }}
