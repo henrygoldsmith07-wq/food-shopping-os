@@ -154,7 +154,9 @@ describe('shopping and spending', () => {
     addListItem('Milk', '1.45');
     addListItem('Bread', '1.20');
 
-    expect(screen.getByText('£2.65')).toBeDefined();
+    // Once in the basket card, once in the list's sticky total bar.
+    expect(screen.getAllByText('£2.65')).toHaveLength(2);
+    expect(within(screen.getByTestId('list-total-bar')).getByText('£2.65')).toBeDefined();
     expect(screen.getByText('Dairy & eggs')).toBeDefined(); // aisle guessed
     expect(screen.getByText('Bakery')).toBeDefined();
 

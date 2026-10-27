@@ -26,6 +26,9 @@ import PlanSimulator from './PlanSimulator.jsx';
 import TonightSlotGuard from './TonightSlotGuard.jsx';
 import JustPlannedOffer from './JustPlannedOffer.jsx';
 import PlanConflictCard from './PlanConflictCard.jsx';
+import WeekCostCard from './WeekCostCard.jsx';
+import SwipeWeekBuilder from './SwipeWeekBuilder.jsx';
+import { openDinnerDates, weekCostSummary } from '../lib/swipe-week.js';
 
 const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -42,6 +45,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const [calendarStatus, setCalendarStatus] = useState('');
   const [prepDone, setPrepDone] = useState([]);
   const [justPlanned, setJustPlanned] = useState(null); // a just-picked tonight dinner → shopping offer {id, rows}
+  const [building, setBuilding] = useState(false); // the swipe-to-build sheet
   // Runs when navigation asks for a focus date/item, not when the plan edits:
   // depending on `app.plan` would yank the calendar offset and reopen the
   // generator on every meal move.
@@ -106,15 +110,26 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   return (
     <div className="pb-6 space-y-6">
       <PlanConflictCard app={app} />
-      <div className="hero-gradient px-5 pt-1 pb-3">
-        <p className="text-[0.84375rem] font-semibold rise rise-1" style={{ color: 'var(--muted)' }}>
-          {stats.meals
-            ? `${stats.meals} meal${stats.meals === 1 ? '' : 's'} planned · about ${gbp(stats.cost, { always: true })} for ${effectivePeople} ${view === 'week' ? 'this week' : 'this month'}`
-            : 'Tap any slot to plan a meal, or let the generator fill the week.'}
-          {/* Late in the week, meals planned from today run into next week: say so rather than look lost. */}
-          {aheadNextWeek > 0 && <button type="button" onClick={() => setOffset(1)} className="ml-1.5 font-bold underline" style={{ color: 'var(--accent)' }}>+ {aheadNextWeek} more next week</button>}
-        </p>
-      </div>
+      {view === 'week' ? (
+        <div className="px-5">
+          <WeekCostCard
+            summary={weekCostSummary(stats, effectivePeople, app.plan, dates)}
+            people={effectivePeople}
+            title={offset === 0 ? 'This week’s food' : `Food for the ${rangeLabel.charAt(0).toLowerCase()}${rangeLabel.slice(1)}`}
+            openNights={openDinnerDates(app.plan, dates, app.day).length}
+            onBuild={() => setBuilding(true)} onAddToList={sendToList} addedToList={addedToList}
+            aheadNextWeek={aheadNextWeek} onNextWeek={() => setOffset(1)}
+          />
+        </div>
+      ) : (
+        <div className="hero-gradient px-5 pt-1 pb-3">
+          <p className="text-[0.84375rem] font-semibold rise rise-1" style={{ color: 'var(--muted)' }}>
+            {stats.meals
+              ? `${stats.meals} meal${stats.meals === 1 ? '' : 's'} planned · about ${gbp(stats.cost, { always: true })} for ${effectivePeople} this month`
+              : 'Tap any slot to plan a meal, or let the generator fill the week.'}
+          </p>
+        </div>
+      )}
 
       <Section className="rise rise-1">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -414,6 +429,9 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       )}
         </div>
       </details>
+      <Sheet open={building} onClose={() => setBuilding(false)} title="Swipe to build your week">
+        {building && <SwipeWeekBuilder dates={dates} onDone={() => { setBuilding(false); setAddedToList(false); }} />}
+      </Sheet>
       <Sheet open={!!picking} onClose={() => setPicking(null)} title="Plan a meal">
         {picking && (picking.guard
           ? <TonightSlotGuard existing={picking.guard} item={picking.query} onReplace={() => setPicking({ ...picking, guard: null })} onKeep={() => setPicking(null)} />
