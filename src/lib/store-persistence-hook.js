@@ -213,9 +213,24 @@ export const usePersistence = ({
   }, [blockPersistence, demoRef, latest, persist]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.accent = accent;
-  }, [theme, accent]);
+  }, [accent]);
+
+  // Appearance: resolve "system" against the OS and keep following it live.
+  // Loaded lazily: the pre-paint script in app/page.jsx has already applied
+  // the theme before first paint, so this only keeps it in step afterwards,
+  // and its code stays out of the first-load chunk (performance budget).
+  useEffect(() => {
+    let live = true;
+    let stop;
+    import('./theme.js').then(({ syncTheme }) => {
+      if (live) stop = syncTheme(theme);
+    });
+    return () => {
+      live = false;
+      stop?.();
+    };
+  }, [theme]);
 
   return persist;
 };

@@ -80,7 +80,7 @@ export const EMPTY_STATE = {
    * Cleared when filled or dismissed so planning is never blocked.
    */
   usefulSetupPending: false,
-  theme: 'light',
+  theme: 'system', // follow the phone; see lib/theme.js
   accent: 'mono',
   name: '',
   day: todayStamp(),

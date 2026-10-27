@@ -1,4 +1,8 @@
+import { headers } from 'next/headers';
 import ClientRoot from './ClientRoot.jsx';
+import { THEME_BOOTSTRAP } from '../lib/theme.js';
+import { labelFor } from '../lib/screens.js';
+import { DEFAULT_PRODUCT_MODE, tabsForMode } from '../data/productModes.js';
 import Link from 'next/link';
 import { PRODUCT } from '../data/product.js';
 
@@ -35,17 +39,22 @@ function LaunchShell() {
         <div className="launch-card launch-card-small" />
       </main>
       <nav className="launch-nav">
-        {['Home', 'Plan', 'Log', 'Shop', 'Recipes'].map((label) => (
-          <span key={label} className="launch-nav-item">{label}</span>
+        {/* The real bar's labels, in its default order, so nothing swaps
+            when the app takes over (this used to say Home/Log/Shop). */}
+        {tabsForMode(DEFAULT_PRODUCT_MODE).map((id) => (
+          <span key={id} className="launch-nav-item">{labelFor(id)}</span>
         ))}
       </nav>
     </div>
   );
 }
 
-export default function Page() {
+export default async function Page() {
+  // Set by src/proxy.js: the per-request CSP nonce for the pre-paint theme script.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <>
+      <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       <LaunchShell />
       <ClientRoot />
     </>

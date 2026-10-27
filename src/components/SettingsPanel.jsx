@@ -8,6 +8,8 @@ import { Card, Section, Sheet, Toggle } from './ui.jsx';
 import { ACCENT_UNLOCKS } from '../data/quests.js';
 import StorageHealth from './StorageHealth.jsx';
 
+const THEME_OPTIONS = [['system', 'Match phone'], ['light', 'Light'], ['dark', 'Dark']];
+
 const UNLOCK_COLOURS = { sage: '#6b7f6a', clay: '#8c5a44', ink: '#2f3640' };
 const ACCENTS = [
   ['mono', 'var(--ink)'],
@@ -62,12 +64,28 @@ export default function SettingsPanel() {
     <div className="space-y-5">
       <Section title="Appearance" className="rise rise-1">
         <Card className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-bold text-[0.875rem]">Dark mode</p>
-              <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Follows your accent everywhere</p>
+          <div>
+            <p id="theme-label" className="font-bold text-[0.875rem]">Theme</p>
+            <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Match phone follows your phone&apos;s light or dark setting</p>
+            {/* A three-way choice, not a dark-mode switch: the default follows the phone. */}
+            <div role="radiogroup" aria-labelledby="theme-label" className="mt-2 grid grid-cols-3 gap-1 rounded-xl border p-1" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
+              {THEME_OPTIONS.map(([id, label]) => {
+                const selected = (app.theme || 'system') === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => app.setTheme(id)}
+                    className="tap rounded-lg px-2 py-2 text-[0.8125rem] font-bold transition-colors"
+                    style={selected ? { background: 'var(--card)', color: 'var(--ink)', boxShadow: 'var(--shadow)' } : { color: 'var(--muted)' }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
-            <Toggle label="Dark mode" on={app.theme === 'dark'} onChange={app.toggleTheme} />
           </div>
           <div>
             <p className="font-bold text-[0.875rem] mb-2">Accent colour</p>

@@ -177,7 +177,9 @@ export function useStoreApi({
       ...vaultActions({
         latest, set, setVaultUnlocked, undoHistory, vaultKey, vaultSalt, vaultWrites,
       }),
-      toggleTheme: () => set((s) => ({ theme: s.theme === 'light' ? 'dark' : 'light' })),
+      // Flips what the page is wearing right now into an explicit choice.
+      // Unknown values are normalised where the theme is applied (lib/theme.js).
+      setTheme: (theme) => set(() => ({ theme })),
       setAccent: (accent) => set({ accent }),
       addWater: (d) => set((s) => ({ water: Math.max(0, Math.min(8, s.water + d)) })),
       addWaterMl: (ml) => set((s) => ({ waterExtraMl: Math.max(0, s.waterExtraMl + ml) })),
