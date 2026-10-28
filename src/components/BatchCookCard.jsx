@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ChefHat } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { RECIPES } from '../data/recipes.js';
 import { batchCookPairs } from '../lib/batch-cook.js';
+import { buildBatchSession } from '../lib/batch-session.js';
 import { Card } from './ui.jsx';
 
 /** Plan tab card: two planned dishes that share ingredients, to prep in one session. */
 export default function BatchCookCard({ dates }) {
   const app = useApp();
+  const [open, setOpen] = useState(null);
   const pairs = useMemo(() => {
     const byId = new Map();
     for (const r of [...RECIPES, ...(app.myRecipes || [])]) if (r?.id) byId.set(r.id, r);
@@ -28,9 +30,16 @@ export default function BatchCookCard({ dates }) {
                 Both use {p.shared.slice(0, 4).join(', ').toLowerCase()}
                 {p.minutesSaved ? ` · prep once, save about ${p.minutesSaved} min` : ''}
               </span>
-              <ol className="mt-1 list-decimal pl-4 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                {p.steps.map((s) => <li key={s}>{s}</li>)}
-              </ol>
+              <button type="button" className="mt-1 min-h-[44px] text-[0.75rem] font-extrabold underline" aria-expanded={open === p.id} onClick={() => setOpen(open === p.id ? null : p.id)}>
+                {open === p.id ? 'Hide session plan' : 'Show session plan'}
+              </button>
+              {open === p.id && (
+                <ol className="list-decimal pl-4 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                  {(buildBatchSession(p)?.steps || []).map((s, i) => (
+                    <li key={`${i}-${s.text}`}><b>{s.recipe}</b>: {s.text}{s.mins ? ` (${s.mins} min, hands-free)` : ''}</li>
+                  ))}
+                </ol>
+              )}
             </li>
           ))}
         </ul>
