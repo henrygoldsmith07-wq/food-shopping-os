@@ -1,3 +1,4 @@
+import CookGiveBack from './CookGiveBack.jsx';
 import { useEffect, useState } from 'react';
 import {
   Check, ExternalLink, Lightbulb, Mic, Pause, PartyPopper, Play, PlayCircle, Snowflake, TriangleAlert, X,
@@ -217,6 +218,7 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
                   ))}
                 </div>
               )}
+              <CookGiveBack event={pantryEvent} onGiveBack={app.giveBackCookUse} />
               {pantryEvent.confirmationNeeded?.length > 0 && (
                 <p className="mt-2 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
                   {pantryEvent.confirmationNeeded.length} low-confidence item{pantryEvent.confirmationNeeded.length === 1 ? '' : 's'} need checking in the pantry.
