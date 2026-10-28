@@ -269,6 +269,21 @@ export const planActions = (set) => ({
    * the rows entirely; more than saved adds a row, so the fridge always ends
    * up matching what the household says is there.
    */
+  /**
+   * Put saved leftovers into the plan: each given {date, slot} that is still
+   * empty gets the dish, so the plan's leftover coverage stops the list
+   * buying it again. Occupied slots are never overwritten.
+   */
+  planLeftoverMeals: (recipe, slots = []) =>
+    set((s) => {
+      if (!householdPermission(s, 'pantry') || !recipe?.id || !Array.isArray(slots)) return {};
+      const entries = slots
+        .filter((x) => x?.date && ['lunch', 'dinner'].includes(x.slot) && !s.plan?.[x.date]?.[x.slot])
+        .map((x) => ({ date: x.date, slot: x.slot, recipeId: recipe.id }));
+      if (!entries.length) return {};
+      return withEvent(s, { plan: applyEntries(s.plan || {}, entries) },
+        createLedgerEvent('MealPlanned', { leftovers: true, recipeId: recipe.id, slots: entries.map((e) => `${e.date}:${e.slot}`) }, { origin: 'user' }));
+    }),
   setLeftoverPortions: (recipe, portions) =>
     set((s) => {
       if (!householdPermission(s, 'pantry') || !recipe?.id) return {};
