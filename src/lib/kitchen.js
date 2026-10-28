@@ -221,7 +221,7 @@ export const FROZEN_DAYS = {
 };
 
 export const freezerDays = (item, today = dayStamp()) =>
-  item?.location === 'Freezer' ? daysSince(item?.purchaseDate || item?.addedAt, today) : null;
+  item?.location === 'Freezer' ? daysSince(item?.frozenAt || item?.purchaseDate || item?.addedAt, today) : null;
 
 /**
  * An honest freshness read for one row: what we know, and whether it says

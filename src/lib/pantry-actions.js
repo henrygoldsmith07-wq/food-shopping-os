@@ -2,6 +2,7 @@ import { householdPermission } from './household.js';
 import { decrementPantryItem } from './kitchen.js';
 import { learnHouseholdAlias, consolidatePantry as consolidate, normalisePantryItem } from './pantry-intelligence.js';
 import { uid } from './state.js';
+import { canFreeze, freezePatch } from './freeze-rescue.js';
 
 const eventFor = (type, state, details = {}) => ({
   id: uid('pe'),
@@ -33,6 +34,18 @@ export const pantryActions = (set) => ({
       pantry: next.remove
         ? state.pantry.filter((entry) => entry.id !== id)
         : state.pantry.map((entry) => (entry.id === id ? next.item : entry)),
+      pantryEvents: appendEvent(state, event),
+      lastPantryEvent: event,
+    };
+  }),
+  /** Freeze a row: freezer shelf, freezer clock from today, new expiry. */
+  freezePantryItem: (id) => set((state) => {
+    if (!householdPermission(state, 'pantry')) return {};
+    const item = state.pantry.find((entry) => entry.id === id);
+    if (!item || !canFreeze(item)) return {};
+    const event = eventFor('pantry_freeze', state, { itemId: id, name: item.name, wasExpiry: item.expiry || null });
+    return {
+      pantry: state.pantry.map((entry) => (entry.id === id ? { ...entry, ...freezePatch(entry, state.day) } : entry)),
       pantryEvents: appendEvent(state, event),
       lastPantryEvent: event,
     };

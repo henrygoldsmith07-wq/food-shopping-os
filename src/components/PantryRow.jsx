@@ -37,7 +37,7 @@ export default function PantryRow({ item: p, app, onRemove, onCorrect }) {
   if (p.location === 'Freezer') {
     menuActions.splice(3, 0, { label: 'Move to fridge (thaw)', onClick: () => app.updatePantryItem(p.id, { location: 'Fridge' }) });
   } else if (p.cat !== 'Leftovers') {
-    menuActions.splice(3, 0, { label: 'Move to freezer', onClick: () => app.updatePantryItem(p.id, { location: 'Freezer' }) });
+    menuActions.splice(3, 0, { label: 'Move to freezer', onClick: () => (app.freezePantryItem ? app.freezePantryItem(p.id) : app.updatePantryItem(p.id, { location: 'Freezer' })) });
   }
 
   return (
