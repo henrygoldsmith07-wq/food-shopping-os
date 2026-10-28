@@ -7,6 +7,7 @@ import { gbp } from '../lib/utils.js';
 import { COMMON_STORES, checkedTotalOf, guessAisle } from '../data/stores.js';
 import { findShoppingDuplicate, quantitySuggestion } from '../lib/shopping.js';
 import { shopLocationMap, shopLocationPlan, SHOP_LOCATION_CHOICES } from '../lib/shop-locations.js';
+import { carryOverSummary, outOfStockRows, affectedMeals } from '../lib/out-of-stock.js';
 import { Card, Chip } from './ui.jsx';
 import { NumberField } from './FoodDetail.jsx';
 
@@ -174,6 +175,18 @@ export function FinishShop({ items, store: initial, onDone }) {
           Estimated {gbp(suggested, { always: true })} — put in what you actually paid.
         </p>
       </Card>
+
+      {carryOverSummary(items) && (
+        <Card>
+          <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Not found this trip</p>
+          <p className="mt-1 text-[0.8125rem] font-semibold">{carryOverSummary(items)}</p>
+          {[...new Set(outOfStockRows(items).map(affectedMeals).filter(Boolean))].length > 0 && (
+            <p className="mt-1 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              Affects: {[...new Set(outOfStockRows(items).map(affectedMeals).filter(Boolean))].join(', ')}. Swap or re-plan before you cook.
+            </p>
+          )}
+        </Card>
+      )}
 
       <label className="block">
         <span className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Where</span>
