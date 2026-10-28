@@ -3,6 +3,7 @@ import { AlertTriangle, Check, ShoppingBasket } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { optimiseLiveBasket } from '../lib/basket-optimizer.js';
 import { Card, Pill, Section } from './ui.jsx';
+import SplitBasketCard from './SplitBasketCard.jsx';
 
 /**
  * The whole-list decision, kept separate from per-item price evidence.
@@ -61,6 +62,8 @@ export default function CheapestBasket({ items = [], liveResults = {}, shops = [
               )}
             </Card>
           )}
+
+          <SplitBasketCard rows={comparison.rows} />
 
           <div className="mt-2.5 space-y-2">
             {comparison.rows.map((row) => (
