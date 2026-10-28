@@ -6,6 +6,8 @@ import { planStats } from '../lib/mealplan.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import ShoppingProgress from './ShoppingProgress.jsx';
 import TripUndo from './TripUndo.jsx';
+import OutOfStockCard from './OutOfStockCard.jsx';
+import { outOfStockPatch } from '../lib/out-of-stock.js';
 import { Card, Chip, Meter, Section } from './ui.jsx';
 
 /** Where an estimated total came from, in one line. */
@@ -162,6 +164,14 @@ export default function ShopBasket({
         {/* Progress, options and sync detail fold away so the list starts on
             the first screen; the bottom bar already counts what is ticked. */}
         {shoppingMode && <TripUndo list={visibleList} onUndo={app.toggleChecked} />}
+        {shoppingMode && (
+          <OutOfStockCard
+            list={visibleList}
+            verifiedFor={(row) => app.shoppingInsights?.byId?.[row.id]?.substitutions?.candidates || []}
+            onSwap={(id, option) => { app.substituteListItem(id, option); app.updateListItem(id, { outOfStock: false, outOfStockAt: null }); }}
+            onClear={(id) => app.updateListItem(id, outOfStockPatch({ outOfStock: true }))}
+          />
+        )}
         {shoppingMode && (
           <details className="mt-3 rounded-2xl border px-3 py-2" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
           <summary className="cursor-pointer list-none text-[0.75rem] font-extrabold" style={{ color: 'var(--muted)' }}>Progress and shopping options</summary>

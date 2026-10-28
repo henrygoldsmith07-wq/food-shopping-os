@@ -10,6 +10,7 @@ import { Glyph } from './icons.jsx';
 import { Chip, GestureMenu, Pill } from './ui.jsx';
 import CorrectionSheet from './CorrectionSheet.jsx';
 import { listRowCorrections } from '../lib/corrections.js';
+import { isOutOfStock, outOfStockPatch } from '../lib/out-of-stock.js';
 import { rowEstimate } from '../lib/basket-estimate.js';
 
 export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, priceEvidence = null, largeTouch = false, pastCap = false, guardOver = false }) {
@@ -41,6 +42,7 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
       label={item.name}
       actions={[
         { label: item.checked ? 'Mark not bought' : 'Mark bought', onClick: toggle },
+        ...(!item.checked ? [{ label: isOutOfStock(item) ? 'Found it after all' : 'Not on the shelf', onClick: () => app.updateListItem(item.id, outOfStockPatch(item)) }] : []),
         { label: 'Correct this…', onClick: () => setCorrecting(true) },
         { label: item.priority === 'high' ? 'Normal priority' : 'High priority', onClick: () => app.updateListItem(item.id, { priority: item.priority === 'high' ? 'normal' : 'high' }) },
         { label: favourite ? 'Remove favourite' : 'Save as favourite', onClick: () => app.toggleFavouriteShopping(item) },
