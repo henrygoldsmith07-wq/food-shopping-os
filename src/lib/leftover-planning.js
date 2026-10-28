@@ -52,3 +52,26 @@ export const leftoverSummary = (leftovers = [], today = '') => leftovers
     urgent: item.safeUntil && today ? item.safeUntil <= addDays(today, 1) : false,
     label: `${item.remainingPortions} portion${item.remainingPortions === 1 ? '' : 's'} of ${item.recipeName}`,
   }));
+
+/**
+ * Free lunch/dinner slots where saved portions of a dish can be eaten before
+ * they go off. Looks at the days after `from` up to the safe window, lunch
+ * first, earliest day first, never an occupied slot. One slot is offered per
+ * `people` portions saved (a partly-covered slot still counts as one), so
+ * leftovers are planned as meals rather than hoped for.
+ */
+export const suggestLeftoverSlots = (plan = {}, { from, portions = 0, people = 1, safeDays = 3 } = {}) => {
+  const saved = Math.max(0, Math.round(Number(portions) || 0));
+  if (!from || !saved) return [];
+  const eaters = Math.max(1, Math.round(Number(people) || 1));
+  const wanted = Math.ceil(saved / eaters);
+  const picks = [];
+  for (let i = 1; i <= safeDays && picks.length < wanted; i += 1) {
+    const date = addDays(from, i);
+    for (const slot of ['lunch', 'dinner']) {
+      if (picks.length >= wanted) break;
+      if (!plan?.[date]?.[slot]) picks.push({ date, slot });
+    }
+  }
+  return picks;
+};

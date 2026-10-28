@@ -5,6 +5,7 @@ import {
 import { useApp } from '../lib/store.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { safeExternalUrl } from '../lib/recipe-tools.js';
+import { suggestLeftoverSlots } from '../lib/leftover-planning.js';
 import { defaultLeftoverPortions } from '../lib/loop-learning.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { Card, Meter, Stepper } from './ui.jsx';
@@ -61,6 +62,9 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
   const [wakeState, setWakeState] = useState('checking');
   const [startedAt] = useState(() => Date.now());
 
+  const eaters = Math.max(1, Math.round(householdPortionsFor(app).portions));
+  const leftoverSlots = suggestLeftoverSlots(app.plan, { from: app.day, portions: spare, people: eaters });
+  const plannedLeftovers = Object.values(app.plan || {}).filter((d) => d?.lunch === recipe.id || d?.dinner === recipe.id).length;
   const s = recipe.steps[step];
   const last = step === recipe.steps.length - 1;
   const videoUrl = safeExternalUrl(recipe.video);
@@ -239,6 +243,20 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
                   ? `${spare} portion${spare === 1 ? '' : 's'} of ${recipe.name} in the fridge — the next plan uses them before buying again.`
                   : 'Nothing saved for later — adjust if some is left.'}
               </p>
+              {spare > 0 && leftoverSlots.length > 0 && (
+                <button
+                  onClick={() => app.planLeftoverMeals(recipe, leftoverSlots)}
+                  className="press mt-2 w-full rounded-xl px-3 py-2 text-[0.78125rem] font-extrabold"
+                  style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+                >
+                  Plan {leftoverSlots.map((x) => `${x.slot} ${x.date.slice(5)}`).join(' + ')} as leftovers
+                </button>
+              )}
+              {spare > 0 && leftoverSlots.length === 0 && plannedLeftovers > 0 && (
+                <p className="mt-2 text-[0.75rem] font-bold" style={{ color: 'var(--accent)' }}>
+                  Leftovers are in your plan — nothing to buy for them.
+                </p>
+              )}
               {spare > 0 && (
                 <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
                   Source: cooked {recipe.name} just now · {spare} saved · best before use-by on the leftover row.
