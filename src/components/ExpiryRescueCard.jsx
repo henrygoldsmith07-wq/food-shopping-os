@@ -3,10 +3,15 @@ import { Check, Leaf } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { rescueSuggestions } from '../lib/expiry-rescue.js';
 import { Card } from './ui.jsx';
+import FreezeRescueCard from './FreezeRescueCard.jsx';
 import { shortDate } from '../lib/utils.js';
 
 /** Plan tab card: dinners that rescue food going off, each one tap from the plan. */
 export default function ExpiryRescueCard() {
+  return <><DinnerRescue /><FreezeRescueCard /></>;
+}
+
+function DinnerRescue() {
   const app = useApp();
   const [done, setDone] = useState({});
   const rows = useMemo(() => rescueSuggestions({
