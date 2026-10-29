@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { markTripStart, clearTripStart, finishTrip, readTrips, estimateMinutesLeft } from './trip-pace.js';
 
 const SESSION_KEY = 'forq-shopping-session-v1';
 
@@ -22,12 +23,16 @@ const writeSession = (session) => {
 
 export function useShoppingSession() {
   const [session, setSession] = useState(() => readSession() || { active: false, store: '' });
+  const [trips, setTrips] = useState(readTrips);
   const start = (store = '') => {
     const next = { active: true, store };
     writeSession(next);
+    markTripStart();
     setSession(next);
   };
-  const stop = () => {
+  const stop = (ticked) => {
+    // Called bare or from an onClick: only a real number of ticked items counts as a finished trip.
+    if (typeof ticked === 'number') setTrips(finishTrip(ticked)); else clearTripStart();
     writeSession(null);
     setSession((current) => ({ ...current, active: false }));
   };
@@ -38,5 +43,6 @@ export function useShoppingSession() {
       return next;
     });
   };
-  return { active: session.active, store: session.store, start, stop, selectStore };
+  const minutesLeft = (remaining) => (session.active ? estimateMinutesLeft(trips, remaining) : null);
+  return { active: session.active, store: session.store, start, stop, selectStore, minutesLeft };
 }
