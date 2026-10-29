@@ -10,7 +10,7 @@ import { expiringIngredients } from './recommend.js';
  * Tie-break for the recipe: more of the item's expiring neighbours used, then
  * the shortest ingredient list.
  */
-export const useFirstItems = ({ pantry = [], recipes = [], day = '', within = 4, max = 3 } = {}) => {
+export const firstItems = ({ pantry = [], recipes = [], day = '', within = 4, max = 3 } = {}) => {
   if (!day) return [];
   const rows = (pantry || [])
     .filter((p) => p && p.name && p.expiry && pantryConfidence(p) !== 'unknown')
@@ -32,4 +32,4 @@ export const useFirstItems = ({ pantry = [], recipes = [], day = '', within = 4,
   });
 };
 
-export const useFirstWhen = (n) => (n < 0 ? 'overdue' : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`);
+export const firstWhen = (n) => (n < 0 ? 'overdue' : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`);

@@ -1,14 +1,14 @@
 import { useMemo } from 'react';
 import { Leaf } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
-import { useFirstItems, useFirstWhen } from '../lib/use-first.js';
+import { firstItems, firstWhen } from '../lib/use-first.js';
 import { Card } from './ui.jsx';
 
 /** Home card: the three things in the kitchen to use first, each with a recipe that uses it up. */
 export default function UseFirstStrip({ openRecipe, openPantry }) {
   const app = useApp();
   const rows = useMemo(
-    () => useFirstItems({ pantry: app.pantry || [], recipes: app.safeRecipes || [], day: app.day }),
+    () => firstItems({ pantry: app.pantry || [], recipes: app.safeRecipes || [], day: app.day }),
     [app.pantry, app.safeRecipes, app.day],
   );
   if (!rows.length) return null;
@@ -24,7 +24,7 @@ export default function UseFirstStrip({ openRecipe, openPantry }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[0.8125rem] font-extrabold">{item.name}</span>
                 <span className="block truncate text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  Goes off {useFirstWhen(daysLeft)}{recipe ? ` · ${recipe.name}${alsoUses.length ? ` also uses ${alsoUses[0]}` : ''}` : ''}
+                  Goes off {firstWhen(daysLeft)}{recipe ? ` · ${recipe.name}${alsoUses.length ? ` also uses ${alsoUses[0]}` : ''}` : ''}
                 </span>
               </span>
               {recipe ? (
