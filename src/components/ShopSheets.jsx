@@ -29,7 +29,7 @@ export default function ShopSheets({
           onDone={() => {
             recordProductEvent('shopping_completed', { count: ticked }, undefined, app);
             setSheet(null);
-            shoppingSession.stop();
+            shoppingSession.stop(ticked);
           }}
         />
       </Sheet>

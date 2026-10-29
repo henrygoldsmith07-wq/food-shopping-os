@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react';
 import { Meter } from './ui.jsx';
 
-export default function ShoppingProgress({ total, checked }) {
+export default function ShoppingProgress({ total, checked, minutesLeft = null }) {
   const percent = total ? Math.round((checked / total) * 100) : 0;
   const done = total > 0 && checked === total;
 
@@ -23,7 +23,7 @@ export default function ShoppingProgress({ total, checked }) {
         <Meter value={checked} max={Math.max(total, 1)} color={done ? 'var(--good)' : 'var(--accent)'} height={7} />
       </div>
       <p className="mt-2 inline-flex items-center gap-1.5 text-[0.75rem] font-semibold" style={{ color: done ? 'var(--good)' : 'var(--muted)' }}>
-        {done ? <><Check size={13} /> Everything is ticked — finish when you’re ready.</> : `${percent}% complete`}
+        {done ? <><Check size={13} /> Everything is ticked — finish when you’re ready.</> : `${percent}% complete${minutesLeft ? ` · about ${minutesLeft} min left at your usual pace` : ''}`}
       </p>
     </div>
   );

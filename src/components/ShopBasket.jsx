@@ -105,7 +105,7 @@ export default function ShopBasket({
               screen now; only the way out of it belongs up here. */}
           {shoppingMode && (
             <button
-              onClick={shoppingSession.stop}
+              onClick={() => shoppingSession.stop()}
               className="press rounded-2xl px-4 py-3 text-[0.8125rem] font-extrabold shrink-0"
               style={{ background: 'var(--card-2)', color: 'var(--ink)' }}
             >
@@ -175,7 +175,7 @@ export default function ShopBasket({
         {shoppingMode && (
           <details className="mt-3 rounded-2xl border px-3 py-2" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
           <summary className="cursor-pointer list-none text-[0.75rem] font-extrabold" style={{ color: 'var(--muted)' }}>Progress and shopping options</summary>
-          <ShoppingProgress total={visibleList.length} checked={ticked} />
+          <ShoppingProgress total={visibleList.length} checked={ticked} minutesLeft={shoppingSession.minutesLeft(visibleList.length - ticked)} />
           <p className="mt-2 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold" style={{ color: isOnline ? 'var(--good)' : 'var(--warn)' }}>
             {isOnline ? <Check size={12} /> : <CloudOff size={12} />}
             {offlineMode
