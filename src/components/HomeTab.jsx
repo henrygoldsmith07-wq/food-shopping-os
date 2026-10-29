@@ -28,6 +28,7 @@ import HomeNumbers from './HomeNumbers.jsx';
 import HomeFoodLoop from './HomeFoodLoop.jsx';
 import LoopCheck from './LoopCheck.jsx';
 import UseFirstStrip from './UseFirstStrip.jsx';
+import WasteReportCard from './WasteReportCard.jsx';
 import OutcomeDashboard from './OutcomeDashboard.jsx';
 import WeekRecoveryPreview from './WeekRecoveryPreview.jsx';
 
@@ -402,6 +403,7 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       <AdaptationsCard />
 
       <UseFirstStrip openRecipe={openRecipe} openPantry={openPantry} />
+      <WasteReportCard />
 
       {widgets.has('reminders') && app.remindersDue?.length > 0 && (
         <section className="px-5" aria-label="Reminders due">
