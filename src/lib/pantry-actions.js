@@ -3,6 +3,7 @@ import { decrementPantryItem } from './kitchen.js';
 import { learnHouseholdAlias, consolidatePantry as consolidate, normalisePantryItem } from './pantry-intelligence.js';
 import { uid } from './state.js';
 import { canFreeze, freezePatch } from './freeze-rescue.js';
+import { giveBackUsedRow, markGivenBack } from './cook-giveback.js';
 
 const eventFor = (type, state, details = {}) => ({
   id: uid('pe'),
@@ -21,6 +22,23 @@ export const pantryActions = (set) => ({
     const gone = new Set(ids);
     const pantry = state.pantry.filter((entry) => !gone.has(entry.id));
     return pantry.length === state.pantry.length ? {} : { pantry };
+  }),
+
+  /** Hand one ingredient's cook deduction back: "I didn't use that". */
+  giveBackCookUse: (eventId, index) => set((state) => {
+    if (!householdPermission(state, 'pantry')) return {};
+    const event = (state.pantryEvents || []).find((e) => e.id === eventId)
+      || (state.lastPantryEvent?.id === eventId ? state.lastPantryEvent : null);
+    const row = event?.type === 'recipe_consumption' ? event.used?.[index] : null;
+    if (!row) return {};
+    const { pantry, restored } = giveBackUsedRow(state.pantry, row);
+    if (!restored) return {};
+    const updated = markGivenBack(event, index);
+    return {
+      pantry,
+      pantryEvents: (state.pantryEvents || []).map((e) => (e.id === eventId ? updated : e)),
+      lastPantryEvent: state.lastPantryEvent?.id === eventId ? updated : state.lastPantryEvent,
+    };
   }),
 
   usePantryItem: (id) => set((state) => {
