@@ -401,7 +401,6 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
       {/* 6/7 — What Forq handled automatically and learned. Learning only
           shows when it changed something; hidden when it hasn't. */}
       <AdaptationsCard />
-
       <UseFirstStrip openRecipe={openRecipe} openPantry={openPantry} />
       <WasteReportCard />
 
