@@ -72,8 +72,6 @@ export const lookupBarcode = (code, catalogue = CATALOGUE) => {
 
 export const SCANNABLE = FOODS.filter((f) => f.barcode);
 
-export const scanAt = (n) => SCANNABLE[Math.abs(Math.trunc(n)) % SCANNABLE.length];
-
 /* ---------- Voice logging ---------- */
 
 const WORD_NUMBERS = {
