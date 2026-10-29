@@ -3,6 +3,7 @@ import { decrementPantryItem } from './kitchen.js';
 import { learnHouseholdAlias, consolidatePantry as consolidate, normalisePantryItem } from './pantry-intelligence.js';
 import { uid } from './state.js';
 import { canFreeze, freezePatch } from './freeze-rescue.js';
+import { thawPatch } from './thaw-ahead.js';
 import { giveBackUsedRow, markGivenBack } from './cook-giveback.js';
 
 const eventFor = (type, state, details = {}) => ({
@@ -64,6 +65,18 @@ export const pantryActions = (set) => ({
     const event = eventFor('pantry_freeze', state, { itemId: id, name: item.name, wasExpiry: item.expiry || null });
     return {
       pantry: state.pantry.map((entry) => (entry.id === id ? { ...entry, ...freezePatch(entry, state.day) } : entry)),
+      pantryEvents: appendEvent(state, event),
+      lastPantryEvent: event,
+    };
+  }),
+  /** Thaw a frozen row: fridge shelf and a short fridge clock instead of the freezer date. */
+  thawPantryItem: (id) => set((state) => {
+    if (!householdPermission(state, 'pantry')) return {};
+    const item = state.pantry.find((entry) => entry.id === id);
+    if (!item || item.location !== 'Freezer') return {};
+    const event = eventFor('pantry_thaw', state, { itemId: id, name: item.name, wasExpiry: item.expiry || null });
+    return {
+      pantry: state.pantry.map((entry) => (entry.id === id ? { ...entry, ...thawPatch(entry, state.day) } : entry)),
       pantryEvents: appendEvent(state, event),
       lastPantryEvent: event,
     };

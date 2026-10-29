@@ -35,7 +35,7 @@ export default function PantryRow({ item: p, app, onRemove, onCorrect }) {
     menuActions.unshift({ label: 'Confirm stock', onClick: () => app.confirmPantryItem(p.id) });
   }
   if (p.location === 'Freezer') {
-    menuActions.splice(3, 0, { label: 'Move to fridge (thaw)', onClick: () => app.updatePantryItem(p.id, { location: 'Fridge' }) });
+    menuActions.splice(3, 0, { label: 'Move to fridge (thaw)', onClick: () => (app.thawPantryItem ? app.thawPantryItem(p.id) : app.updatePantryItem(p.id, { location: 'Fridge' })) });
   } else if (p.cat !== 'Leftovers') {
     menuActions.splice(3, 0, { label: 'Move to freezer', onClick: () => (app.freezePantryItem ? app.freezePantryItem(p.id) : app.updatePantryItem(p.id, { location: 'Freezer' })) });
   }
