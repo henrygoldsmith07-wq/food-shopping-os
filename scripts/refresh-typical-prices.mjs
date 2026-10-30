@@ -100,6 +100,8 @@ const median = (values) => {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 };
 
+const VARIANT = /\b(the best|savers|organic|free from|mini|snap|cauliflower|plant ?based|reduced fat|light)\b/i;
+
 /**
  * The price of the table's pack, read off the shop's closest listing.
  * Null when no listing is close enough to say.
@@ -112,7 +114,10 @@ export const priceForPack = (rows, pack, { each = false } = {}, { ownBrand = 'mo
   const top = Math.max(0, ...rows.map((row) => row.relevance ?? 0));
   const relevant = rows.filter((row) => (row.relevance ?? 0) >= top - 0.05 && row.inStock !== false && row.price > 0);
   const own = relevant.filter((row) => String(row.name || '').toLowerCase().startsWith(ownBrand));
-  const pool = own.length ? own : relevant;
+  // The table is the standard own-brand line: not the premium range, not the
+  // budget range, and not a variant (mini, organic, cauliflower gnocchi).
+  const standard = own.filter((row) => !VARIANT.test(row.name || ''));
+  const pool = standard.length ? standard : own.length ? own : relevant;
   if (!pool.length) return null;
   const sized = pool.map((row) => ({ row, holds: listingContents(row.packSize, row.name) }));
   const closest = (entries) => entries

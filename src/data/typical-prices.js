@@ -222,12 +222,14 @@ export const PRICES = [
   [/foil|cling film|baking paper/, 1.5, 'roll'],
 ];
 
-const UNIT_GRAMS = { g: 1, gram: 1, grams: 1, kg: 1000, ml: 1, l: 1000, litre: 1000, litres: 1000, cl: 10 };
+const UNIT_GRAMS = {
+  g: 1, gram: 1, grams: 1, kg: 1000, ml: 1, l: 1000, litre: 1000, litres: 1000, cl: 10, pint: 568, pints: 568, pt: 568,
+};
 const COUNT_WORDS = /^(x|each|whole|large|medium|small|bulbs?|heads?|pieces?|cloves?|bunch(es)?|packs?|tins?|cans?|jars?|bottles?|bags?|loaf|loaves|punnets?|fillets?|steaks?|breasts?|thighs?|slices?|rolls?|stalks?|sticks?)?$/i;
 
 /** The grams/ml in a pack label like "500 g" or "2 fillets (240 g)". */
 export const packAmount = (pack) => {
-  const match = String(pack).match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl)\b/i);
+  const match = String(pack).match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl|pints?|pt)\b/i);
   return match ? Number(match[1]) * UNIT_GRAMS[match[2].toLowerCase()] : null;
 };
 
