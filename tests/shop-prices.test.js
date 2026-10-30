@@ -95,5 +95,6 @@ describe('re-pricing the table from a shelf', () => {
 
   it('refuses a listing too far from the table pack to scale honestly', () => {
     expect(priceForPack([row('Morrisons Basmati Rice 5kg', 9, '5kg')], '1 kg')).toBeNull();
+    expect(priceForPack([row('Morrisons Semi Skimmed Milk 2 Pint', 1.2, '2 pint')], '4 pints')).toBeNull();
   });
 });

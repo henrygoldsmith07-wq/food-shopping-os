@@ -121,7 +121,7 @@ export const priceForPack = (rows, pack, { each = false } = {}, { ownBrand = 'mo
   if (!pool.length) return null;
   const sized = pool.map((row) => ({ row, holds: listingContents(row.packSize, row.name) }));
   const closest = (entries) => entries
-    .filter((entry) => entry.ratio >= 0.5 && entry.ratio <= 2)
+    .filter((entry) => entry.ratio >= 0.67 && entry.ratio <= 1.5)
     .sort((a, b) => Math.abs(Math.log(a.ratio)) - Math.abs(Math.log(b.ratio)) || a.price - b.price)[0] || null;
 
   if (each) {
