@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import PlanTab from '../src/components/PlanTab.jsx';
 import LogTab from '../src/components/LogTab.jsx';
 import ShopTab from '../src/components/ShopTab.jsx';
@@ -35,3 +36,10 @@ window.scrollTo = () => {};
 // that exercise Monid's own logic re-enable it locally and point
 // MONID_STATE_FILE at a throwaway file.
 process.env.MONID_DISABLED = 'true';
+
+// The monthly refresh rewrites typical-prices.refreshed.js with live shelf
+// figures. Tests assert against the hand-written table, so a refresh must not
+// be able to change their outcome; tests of the refresh pass its data in.
+vi.mock('../src/data/typical-prices.refreshed.js', () => ({
+  REFRESHED_TYPICAL_PRICES: { generatedAt: null, prices: {} },
+}));

@@ -77,7 +77,7 @@ describe('the basket card with estimated rows', () => {
       estimate={{ known: 5, estimated: 7.25, total: 12.25, estimatedCount: 3, unknownCount: 0, sources: { live: 1, observed: 0, typical: 2 } }}
     />);
     expect(screen.getByText('about £12.25')).toBeDefined();
-    expect(screen.getByText(/£5\.00 from your prices \+ about £7\.25 for 3 items at 1 live, 2 typical UK prices/)).toBeDefined();
+    expect(screen.getByText(/£5\.00 from your prices \+ about £7\.25 for 3 items at 1 live, 2 typical prices/)).toBeDefined();
     expect(screen.queryByText(/with no price yet/)).toBeNull();
   });
 
@@ -89,6 +89,6 @@ describe('the basket card with estimated rows', () => {
     />);
     expect(screen.queryByText('£0.00')).toBeNull();
     expect(screen.getByText('about £3.10')).toBeDefined();
-    expect(screen.getByText(/Estimated: about £3\.10 for 2 items at 2 typical UK prices/)).toBeDefined();
+    expect(screen.getByText(/Estimated: about £3\.10 for 2 items at 2 typical prices/)).toBeDefined();
   });
 });

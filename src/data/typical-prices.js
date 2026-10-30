@@ -11,10 +11,21 @@
  *
  * `each: true` prices one loose item ("3 lemons" is three); otherwise the price
  * is for one pack, and a weighed need buys as many packs as it takes.
+ *
+ * Two things keep it from going stale or being wrong for the person reading it:
+ *
+ *   - A monthly refresh (`npm run refresh:typical-prices`) re-prices each row
+ *     from a live shelf and writes typical-prices.refreshed.js. A refreshed
+ *     price under three months old replaces the hand-written one.
+ *   - The shop index (shop-index.js) moves the mid-range figure to the shop
+ *     the person actually uses, so an Aldi shopper is not quoted Tesco prices.
  */
 
+import { REFRESHED_TYPICAL_PRICES } from './typical-prices.refreshed.js';
+import { shopIndexFor } from './shop-index.js';
+
 /** [pattern, £ price, pack label, options] — specific before general. */
-const PRICES = [
+export const PRICES = [
   // Names whose first word would mislead the rules below
   [/beef tomato/, 0.6, 'each', { each: true }],
   [/butter beans/, 0.65, '400 g tin'],
@@ -215,7 +226,7 @@ const UNIT_GRAMS = { g: 1, gram: 1, grams: 1, kg: 1000, ml: 1, l: 1000, litre: 1
 const COUNT_WORDS = /^(x|each|whole|large|medium|small|bulbs?|heads?|pieces?|cloves?|bunch(es)?|packs?|tins?|cans?|jars?|bottles?|bags?|loaf|loaves|punnets?|fillets?|steaks?|breasts?|thighs?|slices?|rolls?|stalks?|sticks?)?$/i;
 
 /** The grams/ml in a pack label like "500 g" or "2 fillets (240 g)". */
-const packAmount = (pack) => {
+export const packAmount = (pack) => {
   const match = String(pack).match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl)\b/i);
   return match ? Number(match[1]) * UNIT_GRAMS[match[2].toLowerCase()] : null;
 };
@@ -242,7 +253,7 @@ const unitsFor = (qty, pack, each) => {
 };
 
 /** What one shop listing contains: how many items, and how many grams/ml in all. */
-const listingContents = (packSize, name) => {
+export const listingContents = (packSize, name) => {
   const text = `${packSize || ''} ${name || ''}`.toLowerCase();
   const multi = text.match(/(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
   if (multi) {
@@ -307,12 +318,38 @@ export function packsToBuy(qty, listing = {}, itemName = '') {
  * @param {string} [qty] the row's quantity, e.g. "2", "500 g", "1 jar"
  * @returns {{ price: number, unit: number, units: number, pack: string, each: boolean } | null}
  */
-export function typicalPriceFor(name, qty = '') {
+export function typicalPriceFor(name, qty = '', {
+  shop = null, loyalty = false, now = Date.now(), refreshed = REFRESHED_TYPICAL_PRICES,
+} = {}) {
   const text = String(name || '').toLowerCase().trim();
   if (!text) return null;
   const hit = PRICES.find(([pattern]) => pattern.test(text));
   if (!hit) return null;
-  const [, unit, pack, options = {}] = hit;
+  const [pattern, written, pack, options = {}] = hit;
+  const fresh = refreshedBaseline(refreshed, pattern.source, now);
+  const baseline = fresh?.price ?? written;
+  const index = shop ? shopIndexFor(shop, { loyalty }) : null;
+  const unit = Math.round(baseline * (index?.factor ?? 1) * 100) / 100;
   const units = unitsFor(qty, pack, options.each);
-  return { price: Math.round(unit * units * 100) / 100, unit, units, pack, each: Boolean(options.each) };
+  return {
+    price: Math.round(unit * units * 100) / 100,
+    unit,
+    units,
+    pack,
+    each: Boolean(options.each),
+    // Which shop the figure was moved to, if any, and when it was last
+    // checked against a real shelf — so the label can say both.
+    shop: index?.name || null,
+    checkedAt: fresh ? refreshed.generatedAt : null,
+  };
 }
+
+/** Refreshed prices go stale too: older than this, the written figure stands. */
+const REFRESH_MAX_AGE_MS = 92 * 86400000;
+
+const refreshedBaseline = (refreshed, key, now) => {
+  const stamp = Date.parse(refreshed?.generatedAt || '');
+  if (!Number.isFinite(stamp) || now - stamp > REFRESH_MAX_AGE_MS) return null;
+  const row = refreshed.prices?.[key];
+  return row && row.price > 0 ? row : null;
+};
