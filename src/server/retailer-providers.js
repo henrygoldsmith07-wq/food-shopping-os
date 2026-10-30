@@ -1,4 +1,5 @@
 import { ApiError } from './api.js';
+import { isMatch, matchScore } from './search-terms.js';
 import {
   observedPriceSchema,
   priceLookupSchema,
@@ -222,6 +223,7 @@ const normaliseObservedPrice = (raw) => {
     brand: text(product.brands, 200),
     price: amount,
     currency,
+    packSize: text(product.quantity, 120),
     offer: value.price_is_discounted ? 'Observed discounted price' : null,
     store,
     location: locationText,
@@ -247,7 +249,33 @@ const BARCODES_PER_QUERY = 5;
  * Open Food Facts has full-text search, and its barcodes are exactly what
  * Open Prices keys on, so the phrase is resolved there first.
  */
+const DEFAULT_OFF_SEARCH_URL = 'https://search.openfoodfacts.org';
+
+/**
+ * Open Food Facts' search service. The legacy `/cgi/search.pl` with a
+ * country filter answers 503 more often than not; this one is the index the
+ * OFF site itself now searches with, and it filters by country in the query.
+ */
+const barcodesFromSearchService = async (query, { signal } = {}) => {
+  const base = baseUrl(process.env.OPEN_FOOD_FACTS_SEARCH_URL || DEFAULT_OFF_SEARCH_URL);
+  if (!base) return [];
+  const endpoint = new URL('/search', base);
+  const terms = String(query).replace(/["\\:()]/g, ' ').replace(/\s+/g, ' ').trim();
+  endpoint.searchParams.set('q', `${terms} countries_tags:"en:united-kingdom"`);
+  endpoint.searchParams.set('page_size', String(BARCODES_PER_QUERY));
+  endpoint.searchParams.set('fields', 'code');
+  const payload = await getJson(endpoint, { headers: openDataHeaders(), signal }, 'Open Food Facts search is temporarily unavailable.', { allowNotFound: true, timeoutMs: RETAILER_TIMEOUTS.openFoodFacts });
+  const hits = Array.isArray(payload?.hits) ? payload.hits : [];
+  return [...new Set(hits.map((hit) => barcode(hit?.code)).filter(Boolean))];
+};
+
 const barcodesForQuery = async (query, { signal } = {}) => {
+  try {
+    const codes = await barcodesFromSearchService(query, { signal });
+    if (codes.length) return codes;
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+  }
   const base = openFoodFactsBase();
   if (!base) return [];
   const endpoint = new URL('/cgi/search.pl', base);
@@ -275,6 +303,113 @@ const pricesForBarcode = async (code, { signal } = {}) => {
   return rowsFrom(payload).slice(0, 30).map(normaliseObservedPrice).filter(Boolean);
 };
 
+/**
+ * Every GBP observation Open Prices holds, cached.
+ *
+ * The UK corner of Open Prices is small — about two thousand rows, nearly
+ * all with a product name — and the per-barcode route almost never lands on
+ * one: a phrase resolves to five barcodes, and the chance any of them was
+ * ever priced in pounds is close to nil. Reading the whole GBP set once and
+ * matching names locally finds every UK observation there is for an item, in
+ * a couple of dozen requests a day rather than six per item, every one of
+ * which usually came back empty.
+ */
+const CORPUS_TTL_MS = 12 * 60 * 60 * 1000;
+const CORPUS_RETRY_MS = 10 * 60 * 1000;
+const CORPUS_PAGE_SIZE = 100;
+const CORPUS_MAX_PAGES = 60;
+const CORPUS_CONCURRENCY = 4;
+/** Observations older than this say little about today's shelf. */
+const CORPUS_MAX_AGE_DAYS = 548;
+let corpus = { rows: null, fetchedAt: 0, complete: false, pending: null };
+
+export const clearOpenPricesCorpus = () => { corpus = { rows: null, fetchedAt: 0, complete: false, pending: null }; };
+
+const corpusPage = async (page, { signal } = {}) => {
+  const base = openPricesBase();
+  const endpoint = new URL('/api/v1/prices', base);
+  endpoint.searchParams.set('currency', 'GBP');
+  endpoint.searchParams.set('size', String(CORPUS_PAGE_SIZE));
+  endpoint.searchParams.set('page', String(page));
+  endpoint.searchParams.set('order_by', '-date');
+  return getJson(endpoint, { headers: openDataHeaders(), signal }, 'Open Prices is temporarily unavailable.', { timeoutMs: RETAILER_TIMEOUTS.openPrices * 2 });
+};
+
+const loadCorpus = async ({ signal } = {}) => {
+  const first = await corpusPage(1, { signal });
+  const rows = [...rowsFrom(first)];
+  const pages = Math.min(CORPUS_MAX_PAGES, Math.max(1, Number(first?.pages) || 1));
+  let complete = true;
+  let next = 2;
+  const worker = async () => {
+    while (next <= pages && !signal?.aborted) {
+      const page = next;
+      next += 1;
+      try {
+        rows.push(...rowsFrom(await corpusPage(page, { signal })));
+      } catch {
+        complete = false;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: CORPUS_CONCURRENCY }, worker));
+  return { rows, complete: complete && !signal?.aborted };
+};
+
+export const openPricesCorpus = async ({ signal } = {}) => {
+  const age = Date.now() - corpus.fetchedAt;
+  if (corpus.rows && age < (corpus.complete ? CORPUS_TTL_MS : CORPUS_RETRY_MS)) return corpus.rows;
+  if (!corpus.pending) {
+    corpus.pending = loadCorpus({ signal })
+      .then(({ rows, complete }) => {
+        corpus = { rows, fetchedAt: Date.now(), complete, pending: null };
+        return rows;
+      })
+      .catch((error) => {
+        corpus.pending = null;
+        throw error;
+      });
+  }
+  return corpus.pending;
+};
+
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+
+/**
+ * The corpus rows that answer a phrase, best first.
+ *
+ * Community data is typed by hand from receipts and shelf photos, and some of
+ * it is wrong by a factor of a hundred (a 90-pound tin of tomatoes). With
+ * three or more matches, a row more than four times from their median is
+ * dropped as a typo rather than offered as a price.
+ */
+export const observationsFor = (rows = [], query = '', { now = Date.now() } = {}) => {
+  const oldest = now - CORPUS_MAX_AGE_DAYS * 86400000;
+  const matched = rows
+    .map((raw) => {
+      const name = raw?.product?.product_name || raw?.product_name;
+      if (!name || !isMatch(name, query)) return null;
+      const observed = new Date(raw?.date || 0).getTime();
+      if (!(observed >= oldest)) return null;
+      try {
+        const row = normaliseObservedPrice(raw);
+        return row && row.price > 0 ? { row, relevance: matchScore(name, query), observed } : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const mid = matched.length >= 3 ? median(matched.map((entry) => entry.row.price)) : null;
+  return matched
+    .filter((entry) => !mid || (entry.row.price <= mid * 4 && entry.row.price >= mid / 4))
+    .sort((a, b) => b.relevance - a.relevance || b.observed - a.observed)
+    .map((entry) => entry.row);
+};
+
 export const lookupOpenPrices = async (input, { signal } = {}) => {
   const parsed = priceLookupSchema.parse(input);
   if (process.env.OPEN_PRICES_ENABLED === 'false') return [];
@@ -288,6 +423,24 @@ export const lookupOpenPrices = async (input, { signal } = {}) => {
   if (parsed.barcode) {
     rawRows.push(...await pricesForBarcode(parsed.barcode, { signal }));
   } else if (parsed.query) {
+    let rows = null;
+    try {
+      rows = observationsFor(await openPricesCorpus({ signal }), parsed.query);
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+    }
+    // The corpus answered: its matches (or its honest silence) are the answer.
+    if (rows) return rows.slice(0, 30).map((row) => {
+      const freshness = priceFreshness(row.observedAt);
+      return {
+        ...row,
+        freshness: freshness.level,
+        freshnessLabel: freshness.label,
+        isStale: freshness.stale,
+        fallbackLabel: freshness.stale ? 'Stale price — confirm at shelf' : null,
+        unavailable: false,
+      };
+    });
     const codes = await barcodesForQuery(parsed.query, { signal });
     for (const code of codes.slice(0, BARCODES_PER_QUERY)) {
       if (signal?.aborted) break;

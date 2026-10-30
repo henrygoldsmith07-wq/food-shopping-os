@@ -171,12 +171,16 @@ const withinOneEdit = (a, b) => {
  * characters is the floor: at three, "oat" and "eat" are one edit apart.
  */
 const termMatches = (term, words, joined) => {
-  if (joined.includes(term)) return true;
+  // A phrase may span words ("semi skimmed"), but it must start at a word:
+  // a bare substring finds "ham" in "Chamber" and "tea" in "Steaks".
+  if (` ${joined}`.includes(` ${term}`)) return true;
   const wanted = stem(term);
   return words.some((word) => {
     const other = stem(word);
     if (other === wanted || word.startsWith(term)) return true;
-    return term.length >= 5 && withinOneEdit(wanted, other);
+    // A spelling variant keeps its first letter (yoghurt/yogurt, beanz/beans);
+    // "coffee" and "toffee" are one edit apart and different foods.
+    return term.length >= 5 && wanted[0] === other[0] && withinOneEdit(wanted, other);
   });
 };
 
@@ -218,6 +222,9 @@ const DERIVED = new Set([
   'dessert', 'mousse', 'sweets', 'jelly', 'jam', 'marmalade', 'cordial', 'pie',
   'pasty', 'cracker', 'seasoning', 'powder', 'spread', 'dip', 'pudding',
   'muffin', 'popcorn', 'bread', 'flour', 'oil', 'salt', 'vinegar',
+  // "Banana Chips", "Oat Bars", "Chicken Skewers": a snack or a meal made
+  // from the food, not the food.
+  'chips', 'bar', 'bars', 'skewers', 'sandwich', 'pancakes', 'filler',
 ]);
 
 /** "Tuna in Sunflower Oil" is tuna: what follows these describes, not replaces. */
@@ -282,5 +289,20 @@ export const matchScore = (name = '', query = '') => {
   const head = terms[terms.length - 1];
   if (!termMatches(head, words, joined)) return 0;
   const hits = terms.filter((term) => termMatches(term, words, joined)).length;
-  return Math.round((hits / terms.length) * 100) / 100;
+  // Every word of "chicken breast" is in "Tikka Chicken Breast Pieces", so
+  // on hits alone the cheapest ready-to-eat pack wins the item. A product
+  // that has been cooked, sliced or flavoured on the way to the shelf is a
+  // weaker answer to a plain ingredient — unless that is what was asked.
+  const asked = new Set(terms.map((term) => term.toLowerCase()));
+  const prepared = words.filter((word) => PREPARED.has(word) && !asked.has(word)).length;
+  const score = hits / terms.length - Math.min(prepared, 4) * 0.05;
+  return Math.round(Math.max(score, 0.01) * 100) / 100;
 };
+
+/** Words that mark a processed or ready-to-eat version of an ingredient. */
+const PREPARED = new Set([
+  'cooked', 'roast', 'roasted', 'tikka', 'sliced', 'slices', 'chunks', 'pieces', 'marinated',
+  'breaded', 'battered', 'crispy', 'flavoured', 'flavour', 'snap', 'kiev', 'kievs',
+  'ready', 'meal', 'sandwich', 'uht', 'longlife', 'dried', 'snack',
+  'bbq', 'piri', 'peri', 'southern', 'fried', 'glazed', 'stuffed', 'seasoned', 'spiced',
+]);

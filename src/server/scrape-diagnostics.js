@@ -30,7 +30,7 @@ import { RETAILERS, retailerById } from '../data/retailers.js';
 import { isScrapeAllowed, looksIntercepted } from './robots.js';
 import { USER_AGENT, availableStrategies, runStrategy } from './crawler.js';
 import { deterministicPass } from './price-scraper.js';
-import { isMatch, searchQueries } from './search-terms.js';
+import { isMatch, searchQueries, bestAnswer } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
 
 /** A host that is nobody's retailer, so its failure means the connection. */
@@ -83,6 +83,9 @@ export const diagnoseRetailer = async (retailer, query, {
   const ladder = ladderFor(query);
   const attempts = [];
   const base = { retailerId: retailer.id, retailer: retailer.name, ladder };
+  if (retailer.liveCheck === false) {
+    return { ...base, status: 'no-search-url', note: retailer.liveCheckNote, attempts };
+  }
 
   for (const rung of ladder) {
     const url = retailer.search(rung);
@@ -115,7 +118,9 @@ export const diagnoseRetailer = async (retailer, query, {
           rung, strategy, ok: true, bytes, parsed: parsed.rows.length, matching: matching.length,
         });
         if (matching.length) {
-          const cheapest = [...matching].sort((a, b) => a.price - b.price)[0];
+          // The row the app would actually pick, not merely the cheapest:
+          // a report that disagrees with the app about its answer is no check.
+          const cheapest = bestAnswer(matching, query) || [...matching].sort((a, b) => a.price - b.price)[0];
           return {
             ...base,
             url,

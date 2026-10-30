@@ -1,6 +1,12 @@
+/**
+ * `liveCheck: false` marks a shop whose website has no shelf prices to read —
+ * its search link is still useful to a person, but sending the price checker
+ * there costs a fetch and a wait to learn something already known.
+ */
 const retailer = ({
   id, name, shopUrl, offersUrl, deliveryUrl, search, fulfilment = 'delivery',
-}) => ({ id, name, shopUrl, offersUrl, deliveryUrl, search, fulfilment });
+  liveCheck = true, liveCheckNote = null,
+}) => ({ id, name, shopUrl, offersUrl, deliveryUrl, search, fulfilment, liveCheck, liveCheckNote });
 
 export const RETAILERS = [
   retailer({
@@ -22,10 +28,11 @@ export const RETAILERS = [
   retailer({
     id: 'asda',
     name: 'Asda',
-    shopUrl: 'https://groceries.asda.com/',
-    offersUrl: 'https://groceries.asda.com/special-offers',
-    deliveryUrl: 'https://groceries.asda.com/slot/view',
-    search: (query) => `https://groceries.asda.com/search/${encodeURIComponent(query)}`,
+    // groceries.asda.com now redirects every path to www.asda.com/groceries.
+    shopUrl: 'https://www.asda.com/groceries',
+    offersUrl: 'https://www.asda.com/groceries/special-offers/all-offers',
+    deliveryUrl: 'https://www.asda.com/groceries/delivery',
+    search: (query) => `https://www.asda.com/groceries/search/${encodeURIComponent(query)}`,
   }),
   retailer({
     id: 'aldi',
@@ -44,6 +51,8 @@ export const RETAILERS = [
     deliveryUrl: 'https://www.lidl.co.uk/c/store-finder/s10023096',
     search: (query) => `https://www.lidl.co.uk/q/search?q=${encodeURIComponent(query)}`,
     fulfilment: 'browse',
+    liveCheck: false,
+    liveCheckNote: 'Lidl GB does not sell groceries online, so its website has no shelf prices to read.',
   }),
   retailer({
     id: 'morrisons',
@@ -51,7 +60,7 @@ export const RETAILERS = [
     shopUrl: 'https://groceries.morrisons.com/',
     offersUrl: 'https://groceries.morrisons.com/offers',
     deliveryUrl: 'https://groceries.morrisons.com/',
-    search: (query) => `https://groceries.morrisons.com/search?entry=${encodeURIComponent(query)}`,
+    search: (query) => `https://groceries.morrisons.com/search?q=${encodeURIComponent(query)}`,
   }),
   retailer({
     id: 'waitrose',
@@ -67,7 +76,7 @@ export const RETAILERS = [
     shopUrl: 'https://www.ocado.com/',
     offersUrl: 'https://www.ocado.com/browse/offers-20425',
     deliveryUrl: 'https://www.ocado.com/',
-    search: (query) => `https://www.ocado.com/search?entry=${encodeURIComponent(query)}`,
+    search: (query) => `https://www.ocado.com/search?q=${encodeURIComponent(query)}`,
   }),
   retailer({
     id: 'amazon-fresh',

@@ -14,7 +14,7 @@
  * £8.40 or a single number that hides how much of it is a guess.
  */
 
-import { typicalPriceFor } from '../data/typical-prices.js';
+import { packsToBuy, typicalPriceFor } from '../data/typical-prices.js';
 import { shoppingNameKey } from './shopping-names.js';
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -33,15 +33,17 @@ export const rowEstimate = (item, { live = null, observed = null } = {}) => {
   if (own > 0) return { price: own, source: 'yours', label: 'your price' };
   const key = shoppingNameKey(item?.name);
   const typical = typicalPriceFor(item?.name, item?.qty);
-  // A shop's price is for one product; a row asking for three buys three.
-  const units = typical?.units || 1;
+  // A shop's price is for one listing as the shop sells it — a box of six, a
+  // four-tin multipack, one loose lemon — so the row buys as many listings as
+  // its quantity needs, not one per item it counts.
+  const packs = (listing) => packsToBuy(item?.qty, listing, item?.name);
   const best = key ? live?.[key]?.best : null;
   if (best?.price > 0) {
-    return { price: round2(best.price * units), source: 'live', label: best.retailer ? `${best.retailer}, live` : 'live price' };
+    return { price: round2(best.price * packs(best)), source: 'live', label: best.retailer ? `${best.retailer}, live` : 'live price' };
   }
   const seen = key ? observed?.[key] : null;
   if (seen && !seen.error && seen.price > 0) {
-    return { price: round2(seen.price * units), source: 'observed', label: `seen at ${seen.store || 'a shop'}` };
+    return { price: round2(seen.price * packs(seen)), source: 'observed', label: `seen at ${seen.store || 'a shop'}` };
   }
   if (typical) return { price: typical.price, source: 'typical', label: `typical, ${typical.pack}` };
   return null;

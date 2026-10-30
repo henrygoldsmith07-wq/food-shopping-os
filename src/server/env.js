@@ -106,6 +106,7 @@ export const envSchema = z.object({
   OPEN_FOOD_FACTS_ENABLED: z.enum(['true', 'false']).optional(),
   OPEN_FOOD_FACTS_API_BASE_URL: z.string().url().optional(),
   OPEN_FOOD_FACTS_USER_AGENT: z.string().min(1).optional(),
+  OPEN_FOOD_FACTS_SEARCH_URL: z.string().url().optional(),
   OPEN_PRICES_ENABLED: z.enum(['true', 'false']).optional(),
   OPEN_PRICES_API_BASE_URL: z.string().url().optional(),
 });

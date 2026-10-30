@@ -22,6 +22,13 @@ const PRICES = [
   [/tuna steak/, 3.5, '2 steaks (250 g)'],
   [/breadcrumbs|panko/, 1.0, '200 g'],
   [/toasted almonds|flaked almonds/, 2.0, '200 g'],
+  [/pineapple/, 1.2, 'each', { each: true }],
+  [/grapefruit/, 0.6, 'each', { each: true }],
+  [/bread flour|plain flour|self[- ]raising|wholemeal flour/, 1.0, '1.5 kg'],
+  [/mince pies?/, 1.5, '6'],
+  [/buttermilk/, 0.9, '284 ml'],
+  [/coconut cream/, 1.0, '200 ml'],
+  [/rice milk/, 1.4, '1 l'],
 
   // Packaging decides first, as in the icon rules
   [/chopped tomatoes|plum tomatoes|tinned tomatoes/, 0.45, '400 g tin'],
@@ -234,13 +241,71 @@ const unitsFor = (qty, pack, each) => {
   return 1;
 };
 
+/** What one shop listing contains: how many items, and how many grams/ml in all. */
+const listingContents = (packSize, name) => {
+  const text = `${packSize || ''} ${name || ''}`.toLowerCase();
+  const multi = text.match(/(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
+  if (multi) {
+    const each = Number(multi[2]) * UNIT_GRAMS[multi[3]];
+    return { count: Number(multi[1]), grams: Number(multi[1]) * each };
+  }
+  const countMatch = text.match(/\b(\d{1,3})\s*(?:pk|pack|x\b|eggs?|rolls?|pieces?|pcs|bagels?|wraps?|tins?|cans?|bottles?|bulbs?|fillets?|steaks?|breasts?|burgers?|sausages?)\b/)
+    || text.match(/\bx\s?(\d{1,3})\b/);
+  const count = countMatch ? Number(countMatch[1]) : null;
+  const grams = packAmount(text);
+  return { count: count > 0 ? count : null, grams: grams > 0 ? grams : null };
+};
+
+/**
+ * How many of a shop's listing a row needs, given what that listing holds.
+ *
+ * A live price is for one product as the shop sells it — a box of six eggs,
+ * a 4 × 415 g multipack, a loose lemon. Multiplying it by the row's count
+ * ("6 eggs" × £1.85 a box) prices six boxes. So the need is measured against
+ * the listing's own contents; where the listing does not say what is in it,
+ * a ticket several times the typical single price is read as a pack of
+ * roughly that many, rather than as one very dear item.
+ *
+ * @param {string} qty the row's quantity
+ * @param {{ price: number, packSize?: string|null, name?: string|null }} listing
+ * @param {string} [itemName] the row's name, to find the typical single price
+ * @returns {number} packs to buy, never fewer than one
+ */
+export function packsToBuy(qty, listing = {}, itemName = '') {
+  const match = String(qty || '').trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+  if (!match) return 1;
+  const amount = Number(match[1].replace(',', '.'));
+  const unit = match[2].trim().toLowerCase();
+  if (!(amount > 0)) return 1;
+  const typical = typicalPriceFor(itemName);
+  const each = Boolean(typical?.each);
+  const holds = listingContents(listing.packSize, listing.name);
+  const gramsPerUnit = UNIT_GRAMS[unit];
+  if (gramsPerUnit) {
+    const needGrams = amount * gramsPerUnit;
+    if (holds.grams) return Math.max(1, Math.ceil(needGrams / holds.grams));
+    return 1;
+  }
+  if (!COUNT_WORDS.test(unit)) return 1;
+  const needCount = Math.ceil(amount);
+  if (holds.count) return Math.max(1, Math.ceil(needCount / holds.count));
+  // Loose produce sold by weight ("onions 1 kg" for "3 onions").
+  if (each && holds.grams) return Math.max(1, Math.ceil((needCount * 150) / holds.grams));
+  if (each && typical.unit > 0 && listing.price > 0) {
+    const implied = Math.min(24, Math.max(1, Math.round(listing.price / typical.unit)));
+    return Math.max(1, Math.ceil(needCount / implied));
+  }
+  // A single tin, jar or bag: "2 tins" buys two.
+  return Math.min(needCount, 6);
+}
+
 /**
  * A typical price for a row, or null when the name is not one this table
  * knows.
  *
  * @param {string} name
  * @param {string} [qty] the row's quantity, e.g. "2", "500 g", "1 jar"
- * @returns {{ price: number, unit: number, units: number, pack: string } | null}
+ * @returns {{ price: number, unit: number, units: number, pack: string, each: boolean } | null}
  */
 export function typicalPriceFor(name, qty = '') {
   const text = String(name || '').toLowerCase().trim();
@@ -249,5 +314,5 @@ export function typicalPriceFor(name, qty = '') {
   if (!hit) return null;
   const [, unit, pack, options = {}] = hit;
   const units = unitsFor(qty, pack, options.each);
-  return { price: Math.round(unit * units * 100) / 100, unit, units, pack };
+  return { price: Math.round(unit * units * 100) / 100, unit, units, pack, each: Boolean(options.each) };
 }
