@@ -4,12 +4,12 @@
       "name": "App + catalogue chunk, gzipped",
       "measure": "appChunkGzip",
       "maxBytes": 315000,
-      "why": "What a first-time visitor actually downloads over the wire before the week screen is usable. The food catalogue and the recipe generator live in here on purpose — matching a spoken sentence, scanning a barcode and generating a plan all need the whole book, offline, immediately — so this is the number that stops the catalogue growing in silence. Raised Oct 2026 (300000 → 310000): the unified Home decision stack and leftover/waste evidence lines are deliberate first-paint product code, not catalogue growth — the catalogue-source budget below is unchanged and still caps the data itself. Raised again 27 Oct 2026 (310000 → 315000; uncompressed 960000 → 970000) for the Check before you shop card. Revisit by code-splitting the decision stack if this moves again."
+      "why": "What a first-time visitor actually downloads over the wire before the week screen is usable. The food catalogue and the recipe generator live in here on purpose — matching a spoken sentence, scanning a barcode and generating a plan all need the whole book, offline, immediately — so this is the number that stops the catalogue growing in silence. Raised Oct 2026 (300000 → 310000): the unified Home decision stack and leftover/waste evidence lines are deliberate first-paint product code, not catalogue growth — the catalogue-source budget below is unchanged and still caps the data itself. Raised again 27 Oct 2026 (310000 → 315000; uncompressed 960000 → 970000) for the Check before you shop card. Raised again 30 Oct 2026 (uncompressed 970000 → 980000) for the hold-for-top-up card. Revisit by code-splitting the decision stack if this moves again."
     },
     {
       "name": "App + catalogue chunk, uncompressed",
       "measure": "appChunk",
-      "maxBytes": 970000,
+      "maxBytes": 980000,
       "why": "The parse cost a phone pays before the app runs. Gzip hides it, so it is budgeted separately. Raised Oct 2026 (920000 → 960000) for the same deliberate first-paint product code as the gzip budget; still bites on any further growth."
     },
     {

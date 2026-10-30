@@ -97,7 +97,8 @@ describe('merge-conflict tripwires', () => {
     // 24: Week templates announces save/apply/delete results (WeekTemplates.jsx).
     // 26: sign-in and password-reset errors are announced (AccountSignIn.jsx, reset-password/page.jsx).
     // 27: "Check before you shop" announces each Got enough / Buy it answer (ShopChecks.jsx).
-    expect(liveRegions).toBeLessThanOrEqual(27);
+    // 28: holding a row for a top-up announces which row moved (ShopLater)
+    expect(liveRegions).toBeLessThanOrEqual(28);
   });
 
   it('keeps one page-level heading per primary screen', () => {

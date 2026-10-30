@@ -10,6 +10,8 @@ import { PREDICTION_PROVENANCE, refreshBasketFreeze } from './prediction-evidenc
 import { receiptOutcomeRecords } from './price-evidence.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { applyShopCheck } from './shop-checks.js';
+import { holdForTopUp as holdForTopUpRows, releaseHeld as releaseHeldRows } from './top-up.js';
+import { weekDates } from './kitchen.js';
 import { LOCATIONS } from '../data/pantry.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
@@ -146,6 +148,17 @@ export const shoppingActions = (set) => ({
     if (!householdPermission(s, 'pantry')) return {};
     const removal = removeRowsWithSnapshots(s, [id]) || {};
     return { ...removal, pantry: change.pantry };
+  }),
+  /** Hold rows for a midweek top-up; they return the day before their first meal. */
+  holdForTopUp: (ids) => set((s) => {
+    if (!householdPermission(s, 'shopping')) return {};
+    const out = holdForTopUpRows(s.shoppingList, ids, s.plan, weekDates(s.day, 14), s.day);
+    return out.held.length ? { shoppingList: out.list } : {};
+  }),
+  releaseTopUp: (ids) => set((s) => {
+    if (!householdPermission(s, 'shopping')) return {};
+    const next = releaseHeldRows(s.shoppingList, ids || null, s.day);
+    return next === s.shoppingList ? {} : { shoppingList: next };
   }),
   removeListItem: (id) => set((s) => {
     const changes = removeRowsWithSnapshots(s, [id]);
