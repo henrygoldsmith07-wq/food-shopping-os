@@ -109,12 +109,9 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   // Price checks (community, and live shops with that tool): the hook owns when to
   // ask and what to say on failure; it reads the *visible* list only.
   const observed = useObservedPrices({ items: visibleList, offlineMode, isOnline, live: app.hasTool?.('live-prices') ?? false });
-  // Prices for unpriced rows (your receipts, live, community, then typical at your usual shop);
-  // the live cache is re-read when a check lands.
-  const receipts = useMemo(() => receiptPrices(app.shops), [app.shops]);
-  const priceShop = store || usualShop(app.shops);
+  const receipts = useMemo(() => receiptPrices(app.shops), [app.shops]); // unpriced rows: receipts > live > community > typical at your shop
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const priceEvidence = useMemo(() => ({ live: loadLivePriceCache(), observed: observed.byKey, receipts, shop: priceShop }), [observed.byKey, observed.liveAt, visibleList, receipts, priceShop]);
+  const priceEvidence = useMemo(() => ({ live: loadLivePriceCache(), observed: observed.byKey, receipts, shop: store || usualShop(app.shops) }), [observed.byKey, observed.liveAt, visibleList, receipts, store, app.shops]);
   const estimate = useMemo(() => estimateBasket(visibleList, priceEvidence), [visibleList, priceEvidence]);
   const staples = useMemo(
     () => recurringStaples(app.shops, app.pantry, list, { today: app.day }),

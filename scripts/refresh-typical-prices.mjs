@@ -156,6 +156,23 @@ export const priceForPack = (rows, pack, { each = false } = {}, { ownBrand = 'mo
   return { price, from: singles.find((row) => row.price === price) || singles[0] };
 };
 
+/** One line per row, so the file stays readable and inside the repo's size limit. */
+export const serialise = (body) => {
+  const rows = Object.entries(body.prices).map(([key, row]) => `    ${JSON.stringify(key)}: ${JSON.stringify(row)},`);
+  return [
+    '// Written by scripts/refresh-typical-prices.mjs — do not edit by hand.',
+    'export const REFRESHED_TYPICAL_PRICES = {',
+    `  generatedAt: ${JSON.stringify(body.generatedAt)},`,
+    `  source: ${JSON.stringify(body.source)},`,
+    `  shopIndexFactor: ${JSON.stringify(body.shopIndexFactor)},`,
+    '  prices: {',
+    ...rows,
+    '  },',
+    '};',
+    '',
+  ].join('\n');
+};
+
 const main = async () => {
   const morrisons = retailerById('morrisons');
   const index = shopIndexFor('Morrisons');
@@ -190,7 +207,7 @@ const main = async () => {
     shopIndexFactor: index.factor,
     prices,
   };
-  writeFileSync(OUT, `// Written by scripts/refresh-typical-prices.mjs — do not edit by hand.\nexport const REFRESHED_TYPICAL_PRICES = ${JSON.stringify(body, null, 2)};\n`);
+  writeFileSync(OUT, serialise(body));
   console.log(`Wrote ${OUT}`);
 };
 
