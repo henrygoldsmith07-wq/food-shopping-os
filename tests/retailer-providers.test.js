@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  clearOpenPricesCorpus,
   lookupOpenFoodFactsProduct,
   lookupOpenPrices,
 } from '../src/server/retailer-providers.js';
 
 afterEach(() => {
+  clearOpenPricesCorpus();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -78,12 +80,16 @@ describe('open product and price data adapters', () => {
     });
   });
 
-  it('resolves a shopping-list phrase to barcodes before pricing it', async () => {
+  it('falls back to resolving a phrase to barcodes when the GBP corpus is unavailable', async () => {
     // `product_name=milk` is an exact-title filter on Open Prices and matches
     // nothing, so a phrase has to be turned into barcodes via Open Food
     // Facts first. Each barcode is then priced on its own request.
     const fetchMock = vi.fn(async (url) => {
       const target = String(url);
+      // The corpus read and the search service are both down.
+      if (target.includes('order_by=-date') || target.includes('search.openfoodfacts.org')) {
+        return new Response('down', { status: 503 });
+      }
       if (target.includes('/cgi/search.pl')) {
         expect(target).toContain('search_terms=semi+skimmed+milk');
         return new Response(JSON.stringify({
@@ -104,12 +110,35 @@ describe('open product and price data adapters', () => {
     const result = await lookupOpenPrices({ query: 'semi skimmed milk' });
     const priced = fetchMock.mock.calls
       .map(([url]) => String(url))
-      .filter((url) => url.includes('/api/v1/prices'));
+      .filter((url) => url.includes('/api/v1/prices') && url.includes('product_code='));
     expect(priced).toHaveLength(2);
     expect(priced[0]).toContain('product_code=5012345678901');
     expect(priced[1]).toContain('product_code=5012345678902');
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ price: 1.2, store: 'Tesco' });
+  });
+
+  it('matches a phrase against the cached GBP observations without per-item barcode calls', async () => {
+    const page = (n) => ({
+      pages: 2,
+      items: n === 1
+        ? [{ price: 1.65, currency: 'GBP', date: new Date().toISOString().slice(0, 10), product: { product_name: 'Semi Skimmed Milk 4 Pints', code: '5000000000001', quantity: '2.272 l' }, location: { osm_brand: 'Aldi' } }]
+        : [{ price: 0.9, currency: 'GBP', date: new Date().toISOString().slice(0, 10), product: { product_name: 'Baked Beans', code: '5000000000002' }, location: { osm_brand: 'Lidl' } }],
+    });
+    const fetchMock = vi.fn(async (url) => {
+      const target = String(url);
+      const n = Number(new URL(target).searchParams.get('page') || 1);
+      return new Response(JSON.stringify(page(n)), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const milk = await lookupOpenPrices({ query: 'semi skimmed milk' });
+    expect(milk).toHaveLength(1);
+    expect(milk[0]).toMatchObject({ price: 1.65, store: 'Aldi', packSize: '2.272 l' });
+    const calls = fetchMock.mock.calls.length;
+    // A second item is answered from the cache.
+    await expect(lookupOpenPrices({ query: 'baked beans' })).resolves.toHaveLength(1);
+    expect(fetchMock.mock.calls.length).toBe(calls);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('search.pl'))).toBe(false);
   });
 
   it('answers an empty search with an empty price list, not an error', async () => {

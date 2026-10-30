@@ -222,9 +222,9 @@ const DERIVED = new Set([
   'dessert', 'mousse', 'sweets', 'jelly', 'jam', 'marmalade', 'cordial', 'pie',
   'pasty', 'cracker', 'seasoning', 'powder', 'spread', 'dip', 'pudding',
   'muffin', 'popcorn', 'bread', 'flour', 'oil', 'salt', 'vinegar',
-  // "Banana Chips", "Oat Bars", "Chicken Skewers": a snack or a meal made
-  // from the food, not the food.
-  'chips', 'bar', 'bars', 'skewers', 'sandwich', 'pancakes', 'filler',
+  // "Banana Chips", "Chicken Skewers": a snack or a meal made from the
+  // food, not the food. ("Bar" is not here: a chocolate bar is chocolate.)
+  'chips', 'skewers', 'sandwich', 'pancakes', 'filler',
 ]);
 
 /** "Tuna in Sunflower Oil" is tuna: what follows these describes, not replaces. */

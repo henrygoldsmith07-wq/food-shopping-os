@@ -27,8 +27,9 @@ import { isScrapeAllowed } from './robots.js';
 import { USER_AGENT, availableStrategies, crawlPage } from './crawler.js';
 import {
   absoluteUrl, condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
-  productsFromMicrodata, productsFromPageState, productsFromText,
+  productsFromMicrodata, productsFromText,
 } from './scrape-parse.js';
+import { productsFromPageState } from './scrape-state.js';
 import { bestAnswer, isMatch, matchScore, searchQueries } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
 import { monidPrices, monidOnPath } from './monid-prices.js';

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { productsFromPageState, stripMarkdown, mergeCandidates } from '../src/server/scrape-parse.js';
+import { stripMarkdown, mergeCandidates } from '../src/server/scrape-parse.js';
+import { productsFromPageState } from '../src/server/scrape-state.js';
 import { deterministicPass, scrapeRetailer } from '../src/server/price-scraper.js';
 import { isMatch, matchScore, bestAnswer } from '../src/server/search-terms.js';
 import { observationsFor } from '../src/server/retailer-providers.js';
