@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
     "check:scraper": "node scripts/check-scraper.mjs",
-    "check:monid": "node scripts/check-monid.mjs"
+    "check:monid": "node scripts/check-monid.mjs",
+    "refresh:typical-prices": "node scripts/refresh-typical-prices.mjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",

@@ -4,9 +4,12 @@
  * A row's own price — typed in, or carried from a receipt — always wins. A row
  * without one borrows the best evidence there is, in this order:
  *
- *   1. a live shop price from the last check (3 h window),
- *   2. a community observation (Open Prices),
- *   3. the typical UK supermarket price for the pack (see typical-prices.js).
+ *   1. what you last paid for it, from a receipt in the last four months —
+ *      the one price that is both real and for the shop you actually use,
+ *   2. a live shop price from the last check (3 h window),
+ *   3. a community observation (Open Prices),
+ *   4. the typical price for the pack, moved to your usual shop's price
+ *      level (see typical-prices.js and shop-index.js).
  *
  * Nothing here writes to the list. Borrowed prices are shown as what they are
  * ("typical", "Tesco, checked 20 min ago") and summed separately, so the
@@ -14,8 +17,50 @@
  * £8.40 or a single number that hides how much of it is a guess.
  */
 
-import { typicalPriceFor } from '../data/typical-prices.js';
+import { packsToBuy, typicalPriceFor } from '../data/typical-prices.js';
 import { shoppingNameKey } from './shopping-names.js';
+
+/** A receipt older than this says less about today's shelf than a live check. */
+const RECEIPT_MAX_AGE_DAYS = 120;
+
+/**
+ * The last price paid for each item, as one shop listing.
+ *
+ * A receipt line is a line total: "2 @ £0.45" reads £0.90, which is two tins,
+ * not a £0.90 tin. A counted line is divided back to one; a weighed line
+ * ("0.482 kg") is kept whole with its weight as the pack size, so the row's
+ * own quantity can scale it.
+ *
+ * @param {Array<{ store?: string, date?: string, items?: Array<{ name: string, price: number|string, qty?: string }> }>} shops
+ * @returns {Record<string, { price: number, store: string|null, date: string|null, name: string, packSize: string|null }>}
+ */
+export const receiptPrices = (shops = []) => {
+  const out = {};
+  const ordered = [...(shops || [])].sort((a, b) => String(a?.date || '').localeCompare(String(b?.date || '')));
+  for (const shop of ordered) {
+    for (const line of shop?.items || []) {
+      const total = Number(line?.price);
+      const key = shoppingNameKey(line?.name);
+      if (!key || !(total > 0)) continue;
+      const qty = String(line?.qty || '').trim();
+      const count = /^\d+$/.test(qty) ? Number(qty) : 1;
+      const weighed = /^\d+(?:\.\d+)?\s*(?:kg|g|l|ml)$/i.test(qty);
+      out[key] = {
+        price: round2(total / Math.max(1, count)),
+        store: shop?.store || null,
+        date: shop?.date || null,
+        name: String(line.name || ''),
+        packSize: weighed ? qty : null,
+      };
+    }
+  }
+  return out;
+};
+
+const recent = (date, now) => {
+  const stamp = Date.parse(date || '');
+  return Number.isFinite(stamp) && now - stamp <= RECEIPT_MAX_AGE_DAYS * 86400000;
+};
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -23,27 +68,38 @@ const round2 = (n) => Math.round(n * 100) / 100;
  * The price a row is estimated at, and where that came from.
  *
  * @param {{ name: string, qty?: string, price?: number }} item
- * @param {{ live?: Record<string, any>, observed?: Record<string, any> }} [evidence]
+ * @param {{ live?: Record<string, any>, observed?: Record<string, any>, receipts?: Record<string, any>, shop?: string|null, now?: number }} [evidence]
  *   live: the live-price cache by shopping-name key; observed: community
- *   observations by the same key
- * @returns {{ price: number, source: 'yours'|'live'|'observed'|'typical', label: string } | null}
+ *   observations by the same key; receipts: receiptPrices(app.shops); shop:
+ *   the shop to price typical rows at when the row names none
+ * @returns {{ price: number, source: 'yours'|'receipt'|'live'|'observed'|'typical', label: string } | null}
  */
-export const rowEstimate = (item, { live = null, observed = null } = {}) => {
+export const rowEstimate = (item, {
+  live = null, observed = null, receipts = null, shop = null, now = Date.now(),
+} = {}) => {
   const own = Number(item?.price);
   if (own > 0) return { price: own, source: 'yours', label: 'your price' };
   const key = shoppingNameKey(item?.name);
-  const typical = typicalPriceFor(item?.name, item?.qty);
-  // A shop's price is for one product; a row asking for three buys three.
-  const units = typical?.units || 1;
+  const typical = typicalPriceFor(item?.name, item?.qty, { shop: item?.store || shop });
+  // A shop's price is for one listing as the shop sells it — a box of six, a
+  // four-tin multipack, one loose lemon — so the row buys as many listings as
+  // its quantity needs, not one per item it counts.
+  const packs = (listing) => packsToBuy(item?.qty, listing, item?.name);
+  const paid = key ? receipts?.[key] : null;
+  if (paid?.price > 0 && recent(paid.date, now)) {
+    return { price: round2(paid.price * packs(paid)), source: 'receipt', label: paid.store ? `you paid at ${paid.store}` : 'you paid' };
+  }
   const best = key ? live?.[key]?.best : null;
   if (best?.price > 0) {
-    return { price: round2(best.price * units), source: 'live', label: best.retailer ? `${best.retailer}, live` : 'live price' };
+    return { price: round2(best.price * packs(best)), source: 'live', label: best.retailer ? `${best.retailer}, live` : 'live price' };
   }
   const seen = key ? observed?.[key] : null;
   if (seen && !seen.error && seen.price > 0) {
-    return { price: round2(seen.price * units), source: 'observed', label: `seen at ${seen.store || 'a shop'}` };
+    return { price: round2(seen.price * packs(seen)), source: 'observed', label: `seen at ${seen.store || 'a shop'}` };
   }
-  if (typical) return { price: typical.price, source: 'typical', label: `typical, ${typical.pack}` };
+  if (typical) {
+    return { price: typical.price, source: 'typical', label: typical.shop ? `typical at ${typical.shop}, ${typical.pack}` : `typical, ${typical.pack}` };
+  }
   return null;
 };
 
@@ -59,7 +115,7 @@ export const estimateBasket = (items = [], evidence = {}) => {
   let estimated = 0;
   let estimatedCount = 0;
   let unknownCount = 0;
-  const sources = { live: 0, observed: 0, typical: 0 };
+  const sources = { receipt: 0, live: 0, observed: 0, typical: 0 };
   for (const item of items) {
     const estimate = rowEstimate(item, evidence);
     if (!estimate) unknownCount += 1;

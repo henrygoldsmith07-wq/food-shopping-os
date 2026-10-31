@@ -52,6 +52,9 @@ export const observedPriceLabel = (price) => {
   return {
     price: price.price,
     currency: price.currency || 'GBP',
+    // What was priced, so a row asking for six eggs is not charged six boxes.
+    name: price.name || null,
+    packSize: price.packSize || null,
     store,
     location: price.location || null,
     observedAt: when,
@@ -106,6 +109,19 @@ export const fetchObservedPrice = async ({ barcode, query }, { signal } = {}) =>
 };
 
 /**
+ * The observation that stands for the item.
+ *
+ * The server returns rows best match first. The cheapest is the wrong pick:
+ * community rows for "semi skimmed milk" include a litre of goat's milk and a
+ * one-pint bottle, and the cheapest of those is a different product. A fresh
+ * row beats a stale one; otherwise the server's order stands.
+ */
+export const pickObserved = (prices = []) => {
+  const usable = prices.filter((row) => row?.price > 0);
+  return usable.find((row) => !row.isStale) || usable[0] || null;
+};
+
+/**
  * Fetch observed prices for a shopping list, keyed by shoppingNameKey.
  * Uses a 24h local cache; respects rate limit by capping to 12 items and
  * spacing calls 180ms apart.
@@ -125,8 +141,8 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
     const name = row?.name || k;
     const cached = cache[k];
     const fresh = cached && Date.now() - new Date(cached.checkedAt).getTime() < TTL_MS;
-    if (fresh && Array.isArray(cached.prices) && cached.prices.length) {
-      const cheapest = [...cached.prices].sort((a, b) => a.price - b.price)[0];
+    if (fresh && Array.isArray(cached.prices) && pickObserved(cached.prices)) {
+      const cheapest = pickObserved(cached.prices);
       byKey[k] = { ...observedPriceLabel(cheapest), raw: cached.prices, checkedAt: cached.checkedAt, cached: true };
       fromCache += 1;
       continue;
@@ -140,8 +156,8 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
       cache[k] = { prices, sourceLabel: body.sourceLabel || 'Open Prices (community observed)', checkedAt: body.checkedAt || new Date().toISOString() };
       saveCache(cache);
       fetched += 1;
-      if (prices.length) {
-        const cheapest = [...prices].sort((a, b) => a.price - b.price)[0];
+      if (pickObserved(prices)) {
+        const cheapest = pickObserved(prices);
         byKey[k] = { ...observedPriceLabel(cheapest), raw: prices, checkedAt: cache[k].checkedAt, cached: false };
       }
       // small gap to stay under rate limit when the user fetches a whole list

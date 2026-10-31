@@ -29,6 +29,7 @@ import {
   absoluteUrl, condenseHtml, mergeCandidates, priceRelevantText, productsFromJsonLd,
   productsFromMicrodata, productsFromText,
 } from './scrape-parse.js';
+import { productsFromPageState } from './scrape-state.js';
 import { bestAnswer, isMatch, matchScore, searchQueries } from './search-terms.js';
 import { brandedQueries } from './branded-queries.js';
 import { monidPrices, monidOnPath } from './monid-prices.js';
@@ -161,7 +162,9 @@ export const verifyAgainstPage = (rows, pageText) => {
 export const deterministicPass = (page, query) => {
   const text = page.html ? condenseHtml(page.html) : String(page.markdown || '');
   const structured = page.html
-    ? mergeCandidates([productsFromJsonLd(page.html), productsFromMicrodata(page.html)])
+    ? mergeCandidates([
+      productsFromPageState(page.html), productsFromJsonLd(page.html), productsFromMicrodata(page.html),
+    ])
     : [];
   if (structured.length) return { rows: structured, text };
   return { rows: mergeCandidates([productsFromText(text, { query })]), text };
@@ -185,6 +188,9 @@ const scrapeRetailerOnce = async (retailer, query, wanted, {
     rows: [],
     checkedAt: new Date().toISOString(),
   };
+  if (retailer.liveCheck === false) {
+    return { ...base, status: 'no-search-url', note: retailer.liveCheckNote || 'This shop has no online shelf prices.' };
+  }
   const url = retailer.search(query);
   if (!url) return { ...base, status: 'no-search-url', note: 'This shop has no public product search.' };
   base.url = url;

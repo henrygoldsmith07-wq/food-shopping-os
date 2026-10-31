@@ -12,11 +12,12 @@ import { Card, Chip, Meter, Section } from './ui.jsx';
 
 /** Where an estimated total came from, in one line. */
 const estimateLine = (basket, estimate) => {
-  const { live, observed, typical } = estimate.sources;
+  const { receipt, live, observed, typical } = estimate.sources;
   const parts = [
+    receipt && `${receipt} receipt`,
     live && `${live} live`,
     observed && `${observed} community`,
-    typical && `${typical} typical UK`,
+    typical && `${typical} typical`,
   ].filter(Boolean).join(', ');
   const borrowed = `about ${gbp(estimate.estimated, { always: true })} for ${estimate.estimatedCount} item${estimate.estimatedCount === 1 ? '' : 's'} at ${parts} price${estimate.estimatedCount === 1 ? '' : 's'}`;
   return basket.projected > 0

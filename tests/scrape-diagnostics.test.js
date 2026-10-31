@@ -126,7 +126,9 @@ describe('the hit rate it reports', () => {
     expect(report.networkBlocked).toBe(false);
     expect(report.priced).toBe(3);
     // Declined shops count as reached — the shop answered, with a refusal.
-    expect(report.reached).toBe(report.shops.filter((s) => s.status !== 'network-blocked').length);
+    // A shop with no online shelf prices is never asked, so is not reached.
+    expect(report.reached).toBe(report.shops.filter((s) => !['network-blocked', 'no-search-url'].includes(s.status)).length);
+    expect(report.tally['no-search-url']).toBe(1);
     expect(report.hitRate).toBe(Math.round((report.priced / report.reached) * 100));
     expect(report.tally.ok).toBe(3);
     expect(report.tally.declined).toBe(2);

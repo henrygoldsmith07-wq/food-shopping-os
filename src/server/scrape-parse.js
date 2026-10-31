@@ -159,7 +159,7 @@ const typeOf = (node) => {
 };
 
 /** Walk @graph / itemListElement so nested Products are found, not just top level. */
-const flattenNodes = (nodes, depth = 0) => {
+export const flattenNodes = (nodes, depth = 0) => {
   if (depth > 4) return [];
   const out = [];
   for (const node of nodes) {
@@ -350,9 +350,26 @@ const shelfPrice = (line) => {
  * Last deterministic resort: a price-shaped string with a product-shaped
  * string near it. Marked low confidence because that is exactly what it is.
  */
+/**
+ * A rendered page arrives as markdown, where a product card reads
+ * `[![Image 7: Heinz Beans 415g](https://…/img.jpg)](https://…/p/123) £1.40`.
+ * The link target and image URL are not the name, and "Image 7:" is the
+ * renderer's label, not the shop's — left in, they become the product name.
+ */
+export const stripMarkdown = (line = '') => String(line)
+  .replace(/!\[(?:Image\s*\d+\s*:\s*)?([^\]]*)\]\([^)]*\)/gi, '$1')
+  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+  // A card truncated mid-alt-text leaves the opening brackets with no close.
+  .replace(/!?\[+!?\[?(?:Image\s*\d+\s*:\s*)?/gi, '')
+  .replace(/\]\(\s*https?:\/\/\S*\)?/gi, '')
+  .replace(/https?:\/\/\S+/gi, ' ')
+  .replace(/[*_`#>]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 export const productsFromText = (text = '', { query = '' } = {}) => {
   const terms = String(query).toLowerCase().split(/\s+/).filter((term) => term.length > 2);
-  const lines = String(text).split('\n').map((line) => line.trim()).filter(Boolean);
+  const lines = String(text).split('\n').map((line) => stripMarkdown(line.trim())).filter(Boolean);
   const rows = [];
   lines.forEach((line, index) => {
     const shelf = shelfPrice(line);
@@ -412,8 +429,11 @@ export const mergeCandidates = (groups = []) => {
   const byName = new Map();
   for (const row of groups.flat()) {
     if (!row?.name || typeof row.price !== 'number') continue;
-    const key = row.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    if (!key) continue;
+    const name = row.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!name) continue;
+    // Same name, different pack ("Branston Baked Beans" in fours and sixes)
+    // is two products; collapsing them keeps one price and the wrong size.
+    const key = `${name}|${row.packSize || ''}`;
     const existing = byName.get(key);
     if (!existing) {
       byName.set(key, row);

@@ -138,6 +138,7 @@ export const observedPriceSchema = z.object({
   brand: z.string().max(200).nullable().optional(),
   price: z.number().nonnegative(),
   currency: z.string().regex(/^[A-Z]{3}$/),
+  packSize: z.string().max(120).nullable().optional(),
   offer: z.string().max(200).nullable().optional(),
   store: z.string().max(200).nullable().optional(),
   location: z.string().max(300).nullable().optional(),

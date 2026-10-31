@@ -13,7 +13,8 @@ import {
 import { clearObservedPriceCache } from '../lib/observed-prices.js';
 import { useObservedPrices } from '../lib/use-observed-prices.js';
 import { loadLivePriceCache } from '../lib/live-prices.js';
-import { estimateBasket } from '../lib/basket-estimate.js';
+import { estimateBasket, receiptPrices } from '../lib/basket-estimate.js';
+import { usualShop } from '../data/shop-index.js';
 import { haptic } from '../lib/haptics.js';
 import ReceiptScan from './ReceiptScan.jsx';
 import {
@@ -108,9 +109,9 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   // Price checks (community, and live shops with that tool): the hook owns when to
   // ask and what to say on failure; it reads the *visible* list only.
   const observed = useObservedPrices({ items: visibleList, offlineMode, isOnline, live: app.hasTool?.('live-prices') ?? false });
-  // Prices for unpriced rows (live, community, then typical UK); the live cache is re-read when a check lands.
+  const receipts = useMemo(() => receiptPrices(app.shops), [app.shops]); // unpriced rows: receipts > live > community > typical at your shop
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const priceEvidence = useMemo(() => ({ live: loadLivePriceCache(), observed: observed.byKey }), [observed.byKey, observed.liveAt, visibleList]);
+  const priceEvidence = useMemo(() => ({ live: loadLivePriceCache(), observed: observed.byKey, receipts, shop: store || usualShop(app.shops) }), [observed.byKey, observed.liveAt, visibleList, receipts, store, app.shops]);
   const estimate = useMemo(() => estimateBasket(visibleList, priceEvidence), [visibleList, priceEvidence]);
   const staples = useMemo(
     () => recurringStaples(app.shops, app.pantry, list, { today: app.day }),

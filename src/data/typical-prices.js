@@ -11,10 +11,21 @@
  *
  * `each: true` prices one loose item ("3 lemons" is three); otherwise the price
  * is for one pack, and a weighed need buys as many packs as it takes.
+ *
+ * Two things keep it from going stale or being wrong for the person reading it:
+ *
+ *   - A monthly refresh (`npm run refresh:typical-prices`) re-prices each row
+ *     from a live shelf and writes typical-prices.refreshed.js. A refreshed
+ *     price under three months old replaces the hand-written one.
+ *   - The shop index (shop-index.js) moves the mid-range figure to the shop
+ *     the person actually uses, so an Aldi shopper is not quoted Tesco prices.
  */
 
+import { REFRESHED_TYPICAL_PRICES } from './typical-prices.refreshed.js';
+import { shopIndexFor } from './shop-index.js';
+
 /** [pattern, £ price, pack label, options] — specific before general. */
-const PRICES = [
+export const PRICES = [
   // Names whose first word would mislead the rules below
   [/beef tomato/, 0.6, 'each', { each: true }],
   [/butter beans/, 0.65, '400 g tin'],
@@ -22,6 +33,13 @@ const PRICES = [
   [/tuna steak/, 3.5, '2 steaks (250 g)'],
   [/breadcrumbs|panko/, 1.0, '200 g'],
   [/toasted almonds|flaked almonds/, 2.0, '200 g'],
+  [/pineapple/, 1.2, 'each', { each: true }],
+  [/grapefruit/, 0.6, 'each', { each: true }],
+  [/bread flour|plain flour|self[- ]raising|wholemeal flour/, 1.0, '1.5 kg'],
+  [/mince pies?/, 1.5, '6'],
+  [/buttermilk/, 0.9, '284 ml'],
+  [/coconut cream/, 1.0, '200 ml'],
+  [/rice milk/, 1.4, '1 l'],
 
   // Packaging decides first, as in the icon rules
   [/chopped tomatoes|plum tomatoes|tinned tomatoes/, 0.45, '400 g tin'],
@@ -204,12 +222,14 @@ const PRICES = [
   [/foil|cling film|baking paper/, 1.5, 'roll'],
 ];
 
-const UNIT_GRAMS = { g: 1, gram: 1, grams: 1, kg: 1000, ml: 1, l: 1000, litre: 1000, litres: 1000, cl: 10 };
+const UNIT_GRAMS = {
+  g: 1, gram: 1, grams: 1, kg: 1000, ml: 1, l: 1000, litre: 1000, litres: 1000, cl: 10, pint: 568, pints: 568, pt: 568,
+};
 const COUNT_WORDS = /^(x|each|whole|large|medium|small|bulbs?|heads?|pieces?|cloves?|bunch(es)?|packs?|tins?|cans?|jars?|bottles?|bags?|loaf|loaves|punnets?|fillets?|steaks?|breasts?|thighs?|slices?|rolls?|stalks?|sticks?)?$/i;
 
 /** The grams/ml in a pack label like "500 g" or "2 fillets (240 g)". */
-const packAmount = (pack) => {
-  const match = String(pack).match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl)\b/i);
+export const packAmount = (pack) => {
+  const match = String(pack).match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl|pints?|pt)\b/i);
   return match ? Number(match[1]) * UNIT_GRAMS[match[2].toLowerCase()] : null;
 };
 
@@ -234,20 +254,104 @@ const unitsFor = (qty, pack, each) => {
   return 1;
 };
 
+/** What one shop listing contains: how many items, and how many grams/ml in all. */
+export const listingContents = (packSize, name) => {
+  const text = `${packSize || ''} ${name || ''}`.toLowerCase();
+  const multi = text.match(/(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
+  if (multi) {
+    const each = Number(multi[2]) * UNIT_GRAMS[multi[3]];
+    return { count: Number(multi[1]), grams: Number(multi[1]) * each };
+  }
+  const countMatch = text.match(/\b(\d{1,3})\s*(?:pk|pack|x\b|eggs?|rolls?|pieces?|pcs|bagels?|wraps?|tins?|cans?|bottles?|bulbs?|fillets?|steaks?|breasts?|burgers?|sausages?)\b/)
+    || text.match(/\bx\s?(\d{1,3})\b/);
+  const count = countMatch ? Number(countMatch[1]) : null;
+  const grams = packAmount(text);
+  return { count: count > 0 ? count : null, grams: grams > 0 ? grams : null };
+};
+
+/**
+ * How many of a shop's listing a row needs, given what that listing holds.
+ *
+ * A live price is for one product as the shop sells it — a box of six eggs,
+ * a 4 × 415 g multipack, a loose lemon. Multiplying it by the row's count
+ * ("6 eggs" × £1.85 a box) prices six boxes. So the need is measured against
+ * the listing's own contents; where the listing does not say what is in it,
+ * a ticket several times the typical single price is read as a pack of
+ * roughly that many, rather than as one very dear item.
+ *
+ * @param {string} qty the row's quantity
+ * @param {{ price: number, packSize?: string|null, name?: string|null }} listing
+ * @param {string} [itemName] the row's name, to find the typical single price
+ * @returns {number} packs to buy, never fewer than one
+ */
+export function packsToBuy(qty, listing = {}, itemName = '') {
+  const match = String(qty || '').trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+  if (!match) return 1;
+  const amount = Number(match[1].replace(',', '.'));
+  const unit = match[2].trim().toLowerCase();
+  if (!(amount > 0)) return 1;
+  const typical = typicalPriceFor(itemName);
+  const each = Boolean(typical?.each);
+  const holds = listingContents(listing.packSize, listing.name);
+  const gramsPerUnit = UNIT_GRAMS[unit];
+  if (gramsPerUnit) {
+    const needGrams = amount * gramsPerUnit;
+    if (holds.grams) return Math.max(1, Math.ceil(needGrams / holds.grams));
+    return 1;
+  }
+  if (!COUNT_WORDS.test(unit)) return 1;
+  const needCount = Math.ceil(amount);
+  if (holds.count) return Math.max(1, Math.ceil(needCount / holds.count));
+  // Loose produce sold by weight ("onions 1 kg" for "3 onions").
+  if (each && holds.grams) return Math.max(1, Math.ceil((needCount * 150) / holds.grams));
+  if (each && typical.unit > 0 && listing.price > 0) {
+    const implied = Math.min(24, Math.max(1, Math.round(listing.price / typical.unit)));
+    return Math.max(1, Math.ceil(needCount / implied));
+  }
+  // A single tin, jar or bag: "2 tins" buys two.
+  return Math.min(needCount, 6);
+}
+
 /**
  * A typical price for a row, or null when the name is not one this table
  * knows.
  *
  * @param {string} name
  * @param {string} [qty] the row's quantity, e.g. "2", "500 g", "1 jar"
- * @returns {{ price: number, unit: number, units: number, pack: string } | null}
+ * @returns {{ price: number, unit: number, units: number, pack: string, each: boolean } | null}
  */
-export function typicalPriceFor(name, qty = '') {
+export function typicalPriceFor(name, qty = '', {
+  shop = null, loyalty = false, now = Date.now(), refreshed = REFRESHED_TYPICAL_PRICES,
+} = {}) {
   const text = String(name || '').toLowerCase().trim();
   if (!text) return null;
   const hit = PRICES.find(([pattern]) => pattern.test(text));
   if (!hit) return null;
-  const [, unit, pack, options = {}] = hit;
+  const [pattern, written, pack, options = {}] = hit;
+  const fresh = refreshedBaseline(refreshed, pattern.source, now);
+  const baseline = fresh?.price ?? written;
+  const index = shop ? shopIndexFor(shop, { loyalty }) : null;
+  const unit = Math.round(baseline * (index?.factor ?? 1) * 100) / 100;
   const units = unitsFor(qty, pack, options.each);
-  return { price: Math.round(unit * units * 100) / 100, unit, units, pack };
+  return {
+    price: Math.round(unit * units * 100) / 100,
+    unit,
+    units,
+    pack,
+    each: Boolean(options.each),
+    // Which shop the figure was moved to, if any, and when it was last
+    // checked against a real shelf — so the label can say both.
+    shop: index?.name || null,
+    checkedAt: fresh ? refreshed.generatedAt : null,
+  };
 }
+
+/** Refreshed prices go stale too: older than this, the written figure stands. */
+const REFRESH_MAX_AGE_MS = 92 * 86400000;
+
+const refreshedBaseline = (refreshed, key, now) => {
+  const stamp = Date.parse(refreshed?.generatedAt || '');
+  if (!Number.isFinite(stamp) || now - stamp > REFRESH_MAX_AGE_MS) return null;
+  const row = refreshed.prices?.[key];
+  return row && row.price > 0 ? row : null;
+};

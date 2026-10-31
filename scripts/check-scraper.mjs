@@ -71,6 +71,8 @@ for (const shop of report.shops) {
     console.log(`OK via ${shop.via}${widened} — £${shop.price.toFixed(2)} "${String(shop.product).slice(0, 44)}" [${shop.method}]`);
   } else if (shop.status === 'declined') {
     console.log(`DECLINED by robots.txt (${shop.robots})`);
+  } else if (shop.status === 'no-search-url') {
+    console.log(`SKIPPED — ${shop.note || 'no online shelf prices'}`);
   } else if (shop.status === 'network-blocked') {
     console.log('BLOCKED BY THIS NETWORK (not by the shop)');
   } else if (shop.status === 'no-match') {
@@ -95,7 +97,13 @@ console.log(report.hitRate === null
 if (report.skipped.length) console.log(`Skipped for time: ${report.skipped.join(', ')}`);
 
 line();
-console.log(`AI provider: ${activeProvider().name} (${activeProvider().baseUrl})`);
+const provider = activeProvider();
+if (!provider) {
+  console.log('AI provider: none configured (set NVIDIA_API_KEY or OPENROUTER_API_KEY to enable the model fallback)');
+  line();
+  process.exit(0);
+}
+console.log(`AI provider: ${provider.id} (${provider.base})`);
 try {
   const models = await rankedFreeModels();
   if (!models.length) console.log('  Catalogue returned nothing — check the key and the base URL.');
