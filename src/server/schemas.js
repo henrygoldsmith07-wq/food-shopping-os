@@ -21,6 +21,18 @@ export const invitationSchema = z.object({
   permissions: z.array(z.enum(['shopping', 'pantry', 'recipes', 'health'])).max(4),
 });
 
+/** The account routes share one email field shape; passwords are checked by
+ *  the same server rules the forms use (see server/passwords.js), so the
+ *  schema only bounds the size of what it will even look at. */
+export const accountEmailSchema = z.object({
+  email: z.string().max(254),
+});
+
+/** The morning reminder digest is one boolean switch; anything else is noise. */
+export const reminderDigestSchema = z.object({
+  on: z.boolean(),
+});
+
 const AI_CONTEXT_ALLOWLIST = ['mealNames', 'pantryItems', 'listGaps'];
 const AI_HEALTH_DENYLIST = [
   'body', 'measurements', 'vitals', 'sleep', 'stress', 'cycles', 'cycle',
