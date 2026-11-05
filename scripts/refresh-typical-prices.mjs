@@ -2,7 +2,7 @@
  * Re-price the typical-price table from a live shelf.
  *
  *   npm run refresh:typical-prices
- *   npm run refresh:typical-prices -- --dry-run --limit 10
+ *   npm run refresh:typical-prices -- --dry-run --limit 10   (a limited run never writes)
  *
  * For every row of the table this searches Morrisons — the one major grocer
  * whose search pages answer a polite, robots-respecting crawler — picks the
@@ -200,6 +200,12 @@ const main = async () => {
   }
   console.log(`\n${report.updated}/${Math.min(LIMIT, PRICES.length)} rows re-priced from Morrisons (index ${index.factor}).`);
   if (DRY_RUN) return;
+  // The file is the whole table: a partial run written out would drop every
+  // row it did not reach back to the hand-written figure.
+  if (LIMIT < PRICES.length) {
+    console.log(`Not writing: --limit ${LIMIT} covers ${LIMIT} of ${PRICES.length} rows. Run without --limit to refresh the table.`);
+    return;
+  }
   const OUT = fileURLToPath(new URL('../src/data/typical-prices.refreshed.js', import.meta.url));
   const body = {
     generatedAt: new Date().toISOString(),

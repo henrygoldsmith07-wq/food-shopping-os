@@ -1,5 +1,7 @@
 import { ApiError } from './api.js';
-import { isMatch, matchScore } from './search-terms.js';
+import {
+  CORPUS_PAGE_SIZE, clearOpenPricesCorpus, matchObservations, openPricesCorpus,
+} from './open-prices-corpus.js';
 import {
   observedPriceSchema,
   priceLookupSchema,
@@ -106,7 +108,9 @@ export const detectPackageMismatch = (listedQty, observedQty) => {
 
 const getJson = async (endpoint, options = {}, failureMessage = 'Provider data is temporarily unavailable.', { allowNotFound = false, timeoutMs = REQUEST_TIMEOUT_MS } = {}) => {
   let response;
-  const signal = options.signal || AbortSignal.timeout(timeoutMs);
+  // A caller's signal cancels the request; it must not also remove the timeout.
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   try {
     response = await fetch(endpoint, {
       ...options,
@@ -303,112 +307,24 @@ const pricesForBarcode = async (code, { signal } = {}) => {
   return rowsFrom(payload).slice(0, 30).map(normaliseObservedPrice).filter(Boolean);
 };
 
-/**
- * Every GBP observation Open Prices holds, cached.
- *
- * The UK corner of Open Prices is small — about two thousand rows, nearly
- * all with a product name — and the per-barcode route almost never lands on
- * one: a phrase resolves to five barcodes, and the chance any of them was
- * ever priced in pounds is close to nil. Reading the whole GBP set once and
- * matching names locally finds every UK observation there is for an item, in
- * a couple of dozen requests a day rather than six per item, every one of
- * which usually came back empty.
- */
-const CORPUS_TTL_MS = 12 * 60 * 60 * 1000;
-const CORPUS_RETRY_MS = 10 * 60 * 1000;
-const CORPUS_PAGE_SIZE = 100;
-const CORPUS_MAX_PAGES = 60;
-const CORPUS_CONCURRENCY = 4;
-/** Observations older than this say little about today's shelf. */
-const CORPUS_MAX_AGE_DAYS = 548;
-let corpus = { rows: null, fetchedAt: 0, complete: false, pending: null };
+export { clearOpenPricesCorpus };
 
-export const clearOpenPricesCorpus = () => { corpus = { rows: null, fetchedAt: 0, complete: false, pending: null }; };
-
-const corpusPage = async (page, { signal } = {}) => {
+/** One page of the GBP corpus, newest first, as `{ rows, pages }`. */
+const corpusPage = async (page) => {
   const base = openPricesBase();
   const endpoint = new URL('/api/v1/prices', base);
   endpoint.searchParams.set('currency', 'GBP');
   endpoint.searchParams.set('size', String(CORPUS_PAGE_SIZE));
   endpoint.searchParams.set('page', String(page));
   endpoint.searchParams.set('order_by', '-date');
-  return getJson(endpoint, { headers: openDataHeaders(), signal }, 'Open Prices is temporarily unavailable.', { timeoutMs: RETAILER_TIMEOUTS.openPrices * 2 });
+  const payload = await getJson(endpoint, { headers: openDataHeaders() }, 'Open Prices is temporarily unavailable.', { timeoutMs: RETAILER_TIMEOUTS.openPrices * 2 });
+  return { rows: rowsFrom(payload), pages: Number(payload?.pages) || 1 };
 };
 
-const loadCorpus = async ({ signal } = {}) => {
-  const first = await corpusPage(1, { signal });
-  const rows = [...rowsFrom(first)];
-  const pages = Math.min(CORPUS_MAX_PAGES, Math.max(1, Number(first?.pages) || 1));
-  let complete = true;
-  let next = 2;
-  const worker = async () => {
-    while (next <= pages && !signal?.aborted) {
-      const page = next;
-      next += 1;
-      try {
-        rows.push(...rowsFrom(await corpusPage(page, { signal })));
-      } catch {
-        complete = false;
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: CORPUS_CONCURRENCY }, worker));
-  return { rows, complete: complete && !signal?.aborted };
-};
-
-export const openPricesCorpus = async ({ signal } = {}) => {
-  const age = Date.now() - corpus.fetchedAt;
-  if (corpus.rows && age < (corpus.complete ? CORPUS_TTL_MS : CORPUS_RETRY_MS)) return corpus.rows;
-  if (!corpus.pending) {
-    corpus.pending = loadCorpus({ signal })
-      .then(({ rows, complete }) => {
-        corpus = { rows, fetchedAt: Date.now(), complete, pending: null };
-        return rows;
-      })
-      .catch((error) => {
-        corpus.pending = null;
-        throw error;
-      });
-  }
-  return corpus.pending;
-};
-
-const median = (values) => {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-};
-
-/**
- * The corpus rows that answer a phrase, best first.
- *
- * Community data is typed by hand from receipts and shelf photos, and some of
- * it is wrong by a factor of a hundred (a 90-pound tin of tomatoes). With
- * three or more matches, a row more than four times from their median is
- * dropped as a typo rather than offered as a price.
- */
-export const observationsFor = (rows = [], query = '', { now = Date.now() } = {}) => {
-  const oldest = now - CORPUS_MAX_AGE_DAYS * 86400000;
-  const matched = rows
-    .map((raw) => {
-      const name = raw?.product?.product_name || raw?.product_name;
-      if (!name || !isMatch(name, query)) return null;
-      const observed = new Date(raw?.date || 0).getTime();
-      if (!(observed >= oldest)) return null;
-      try {
-        const row = normaliseObservedPrice(raw);
-        return row && row.price > 0 ? { row, relevance: matchScore(name, query), observed } : null;
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-  const mid = matched.length >= 3 ? median(matched.map((entry) => entry.row.price)) : null;
-  return matched
-    .filter((entry) => !mid || (entry.row.price <= mid * 4 && entry.row.price >= mid / 4))
-    .sort((a, b) => b.relevance - a.relevance || b.observed - a.observed)
-    .map((entry) => entry.row);
-};
+/** The corpus rows that answer a phrase, best first, as observed-price rows. */
+export const observationsFor = (rows = [], query = '', options = {}) => (
+  matchObservations(rows, query, { normalise: normaliseObservedPrice, ...options })
+);
 
 export const lookupOpenPrices = async (input, { signal } = {}) => {
   const parsed = priceLookupSchema.parse(input);
@@ -425,11 +341,15 @@ export const lookupOpenPrices = async (input, { signal } = {}) => {
   } else if (parsed.query) {
     let rows = null;
     try {
-      rows = observationsFor(await openPricesCorpus({ signal }), parsed.query);
+      const loaded = await openPricesCorpus(corpusPage, { signal });
+      const matched = observationsFor(loaded.rows, parsed.query);
+      // Silence from a partial corpus is not an answer: the missing pages
+      // may hold the item, so the per-barcode route still gets a try.
+      if (matched.length || loaded.complete) rows = matched;
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
     }
-    // The corpus answered: its matches (or its honest silence) are the answer.
+    // The whole corpus answered: its matches (or its honest silence) are the answer.
     if (rows) return rows.slice(0, 30).map((row) => {
       const freshness = priceFreshness(row.observedAt);
       return {

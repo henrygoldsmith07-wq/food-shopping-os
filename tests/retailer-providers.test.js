@@ -141,6 +141,51 @@ describe('open product and price data adapters', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('search.pl'))).toBe(false);
   });
 
+  it('keeps loading the shared corpus when the request that started it is cancelled', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const fetchMock = vi.fn(async (url, { signal } = {}) => {
+      await gate;
+      if (signal?.aborted) throw new DOMException('This operation was aborted', 'AbortError');
+      return new Response(JSON.stringify({
+        pages: 1,
+        items: [{ price: 0.9, currency: 'GBP', date: today, product: { product_name: 'Baked Beans', code: '5000000000002' }, location: { osm_brand: 'Lidl' } }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const first = new AbortController();
+    const cancelled = lookupOpenPrices({ query: 'baked beans' }, { signal: first.signal });
+    const second = lookupOpenPrices({ query: 'baked beans' });
+    first.abort();
+    release();
+    await cancelled.catch(() => null); // the caller gave up; it may reject
+    await expect(second).resolves.toHaveLength(1);
+    // Later lookups use the cached corpus, not a fresh load.
+    const calls = fetchMock.mock.calls.length;
+    await expect(lookupOpenPrices({ query: 'baked beans' })).resolves.toHaveLength(1);
+    expect(fetchMock.mock.calls.length).toBe(calls);
+  });
+
+  it('tries barcodes when a partial corpus has no match', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const fetchMock = vi.fn(async (url) => {
+      const target = new URL(String(url));
+      if (target.pathname === '/api/v1/prices' && !target.searchParams.get('product_code')) {
+        if (target.searchParams.get('page') === '2') return new Response('', { status: 503 });
+        return new Response(JSON.stringify({ pages: 2, items: [] }), { status: 200 });
+      }
+      if (target.pathname === '/search') return new Response(JSON.stringify({ hits: [{ code: '5012345678901' }] }), { status: 200 });
+      return new Response(JSON.stringify({
+        items: [{ product_code: '5012345678901', product_name: 'Baked Beans', price: 0.9, currency: 'GBP', date: today, location: { osm_brand: 'Tesco' } }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await lookupOpenPrices({ query: 'baked beans' });
+    expect(result[0]).toMatchObject({ price: 0.9, store: 'Tesco' });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('product_code=5012345678901'))).toBe(true);
+  });
+
   it('answers an empty search with an empty price list, not an error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ products: [] }),

@@ -62,13 +62,27 @@ export const shopIndexFor = (store, { loyalty = false } = {}) => {
   return { id, name: NAMES[id], factor: Math.round((total / BASELINE) * 1000) / 1000 };
 };
 
-/** The shop someone uses most, from the receipts they have logged. */
+/**
+ * The shop someone uses most, from the receipts they have logged.
+ *
+ * "Tesco", "Tesco Express" and "tesco" are one shop: a person splitting
+ * trips between a big Tesco and a Tesco Express still shops at Tesco, and
+ * should not have that lose to the Aldi they visit slightly more often than
+ * either. Ties go to the shop visited most recently.
+ */
 export const usualShop = (shops = []) => {
-  const counts = new Map();
+  const tally = new Map();
   for (const shop of shops || []) {
     const name = String(shop?.store || '').trim();
-    if (!name) continue;
-    counts.set(name, (counts.get(name) || 0) + 1);
+    if (!name || name === 'Unnamed shop') continue;
+    const indexed = shopIndexFor(name);
+    const key = indexed?.id || fold(name);
+    const entry = tally.get(key) || { name: indexed?.name || name, count: 0, last: '' };
+    entry.count += 1;
+    const date = String(shop?.date || '');
+    if (date > entry.last) entry.last = date;
+    tally.set(key, entry);
   }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const [top] = [...tally.values()].sort((a, b) => b.count - a.count || b.last.localeCompare(a.last));
+  return top?.name || null;
 };
