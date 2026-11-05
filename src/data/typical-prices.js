@@ -269,6 +269,15 @@ export const listingContents = (packSize, name) => {
   return { count: count > 0 ? count : null, grams: grams > 0 ? grams : null };
 };
 
+/** "12 eggs" on an eggs row, "3 lemons" on a lemon row: the unit is the item, so it counts. */
+const singulars = (word) => [word, word.replace(/s$/, ''), word.replace(/es$/, '')];
+const namesItem = (unit, itemName) => {
+  if (!/^[a-z]{3,}$/.test(unit)) return false;
+  const wanted = new Set(singulars(unit));
+  const words = String(itemName || '').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  return words.some((word) => singulars(word).some((form) => wanted.has(form)));
+};
+
 /**
  * How many of a shop's listing a row needs, given what that listing holds.
  *
@@ -299,7 +308,7 @@ export function packsToBuy(qty, listing = {}, itemName = '') {
     if (holds.grams) return Math.max(1, Math.ceil(needGrams / holds.grams));
     return 1;
   }
-  if (!COUNT_WORDS.test(unit)) return 1;
+  if (!COUNT_WORDS.test(unit) && !namesItem(unit, itemName)) return 1;
   const needCount = Math.ceil(amount);
   if (holds.count) return Math.max(1, Math.ceil(needCount / holds.count));
   // Loose produce sold by weight ("onions 1 kg" for "3 onions").
@@ -308,6 +317,9 @@ export function packsToBuy(qty, listing = {}, itemName = '') {
     const implied = Math.min(24, Math.max(1, Math.round(listing.price / typical.unit)));
     return Math.max(1, Math.ceil(needCount / implied));
   }
+  // "4 olives" against a jar of olives is olives, not jars: only a packaging
+  // word or a bare number counts listings.
+  if (!COUNT_WORDS.test(unit)) return 1;
   // A single tin, jar or bag: "2 tins" buys two.
   return Math.min(needCount, 6);
 }
