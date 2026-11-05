@@ -18,6 +18,13 @@ describe('the shop index', () => {
   it('names the usual shop from the receipts logged', () => {
     expect(usualShop([{ store: 'Aldi' }, { store: 'Tesco' }, { store: 'Aldi' }])).toBe('Aldi');
     expect(usualShop([])).toBeNull();
+    // Branch formats of one chain count together.
+    expect(usualShop([
+      { store: 'Tesco Express' }, { store: 'Aldi' }, { store: 'Tesco' }, { store: 'Aldi' }, { store: 'tesco' },
+    ])).toBe('Tesco');
+    // A tie goes to the shop used most recently.
+    expect(usualShop([{ store: 'Aldi', date: '2026-10-01' }, { store: 'Lidl', date: '2026-10-08' }])).toBe('Lidl');
+    expect(usualShop([{ store: 'Unnamed shop' }])).toBeNull();
   });
 
   it('prices a typical row at that shop and says so', () => {
@@ -54,6 +61,24 @@ describe('receipts as a price source', () => {
     const evidence = { receipts: receiptPrices(shops), live: { [key]: { best: { price: 0.37, retailer: 'Morrisons' } } }, now };
     expect(rowEstimate({ name: 'baked beans', qty: '2 tins' }, evidence)).toMatchObject({ price: 0.9, source: 'receipt', label: 'you paid at Aldi' });
     expect(estimateBasket([{ name: 'baked beans' }], evidence).sources.receipt).toBe(1);
+  });
+
+  it('reads a weighed line as it is saved — qty in kg — and scales it by weight', () => {
+    const saved = [{ store: 'Aldi', date: '2026-10-20', items: [
+      { name: 'Carrots', price: 0.48, qty: '0.482', qtyUnit: 'kg' },
+      { name: 'Potatoes', price: 1.6, qty: '2', qtyUnit: 'kg' },
+      { name: 'Leeks', price: 0.7, qty: '0.35' }, // saved before qtyUnit was kept
+    ] }];
+    const paid = receiptPrices(saved);
+    expect(paid[shoppingNameKey('carrots')]).toMatchObject({ price: 0.48, packSize: '0.482 kg', weighed: true });
+    // Two kilos of potatoes is one weighed bag, not two items at 80p.
+    expect(paid[shoppingNameKey('potatoes')]).toMatchObject({ price: 1.6, packSize: '2 kg' });
+    expect(paid[shoppingNameKey('leeks')]).toMatchObject({ packSize: '0.35 kg' });
+    const evidence = { receipts: paid, now };
+    // A kilo at 48p per 482 g is about £1, not three bags.
+    expect(rowEstimate({ name: 'carrots', qty: '1 kg' }, evidence).price).toBe(1);
+    expect(rowEstimate({ name: 'carrots', qty: '500 g' }, evidence).price).toBe(0.5);
+    expect(rowEstimate({ name: 'carrots' }, evidence).price).toBe(0.48);
   });
 
   it('lets an old receipt give way to fresher evidence', () => {

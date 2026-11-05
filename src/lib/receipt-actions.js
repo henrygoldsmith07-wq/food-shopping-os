@@ -9,6 +9,8 @@ const receiptItems = (items, { keepProvenance = false } = {}) => (Array.isArray(
     name: text(item?.name, 120),
     price: Math.max(0, Number(item?.price) || 0),
     qty: text(item?.qty, 60),
+    // A weighed line's qty is kilograms ("0.482"); without its unit it reads as a count.
+    ...(item?.qtyUnit ? { qtyUnit: text(item.qtyUnit, 10) } : {}),
     emoji: text(item?.emoji, 12),
     // Where an item came from and when it was bought are part of the record
     // (price memory keys off them) — but only when the caller supplies them.

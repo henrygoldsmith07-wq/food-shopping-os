@@ -17,11 +17,27 @@
  * £8.40 or a single number that hides how much of it is a guess.
  */
 
-import { packsToBuy, typicalPriceFor } from '../data/typical-prices.js';
+import { packAmount, packsToBuy, typicalPriceFor } from '../data/typical-prices.js';
 import { shoppingNameKey } from './shopping-names.js';
 
 /** A receipt older than this says less about today's shelf than a live check. */
 const RECEIPT_MAX_AGE_DAYS = 120;
+
+/**
+ * The weight on a weighed receipt line, as a pack size ("0.482 kg"), or null.
+ *
+ * The till prints weighed goods as "0.482 kg @ £1.00/kg" and the receipt
+ * parser stores that as qty 0.482 with qtyUnit "kg". A count is always whole,
+ * so a fractional qty is a weight even when its unit was lost.
+ */
+const weighedSize = (line) => {
+  const qty = String(line?.qty ?? '').trim();
+  const unit = String(line?.qtyUnit || '').trim().toLowerCase();
+  if (/^\d+(?:\.\d+)?\s*(?:kg|g|l|ml)$/i.test(qty)) return qty;
+  if (!/^\d+(?:\.\d+)?$/.test(qty) || !(Number(qty) > 0)) return null;
+  if (unit) return /^(?:kg|g|l|ml)$/.test(unit) ? `${qty} ${unit}` : null;
+  return qty.includes('.') ? `${qty} kg` : null;
+};
 
 /**
  * The last price paid for each item, as one shop listing.
@@ -31,8 +47,8 @@ const RECEIPT_MAX_AGE_DAYS = 120;
  * ("0.482 kg") is kept whole with its weight as the pack size, so the row's
  * own quantity can scale it.
  *
- * @param {Array<{ store?: string, date?: string, items?: Array<{ name: string, price: number|string, qty?: string }> }>} shops
- * @returns {Record<string, { price: number, store: string|null, date: string|null, name: string, packSize: string|null }>}
+ * @param {Array<{ store?: string, date?: string, items?: Array<{ name: string, price: number|string, qty?: string|number, qtyUnit?: string }> }>} shops
+ * @returns {Record<string, { price: number, store: string|null, date: string|null, name: string, packSize: string|null, weighed: boolean }>}
  */
 export const receiptPrices = (shops = []) => {
   const out = {};
@@ -42,15 +58,16 @@ export const receiptPrices = (shops = []) => {
       const total = Number(line?.price);
       const key = shoppingNameKey(line?.name);
       if (!key || !(total > 0)) continue;
+      const packSize = weighedSize(line);
       const qty = String(line?.qty || '').trim();
-      const count = /^\d+$/.test(qty) ? Number(qty) : 1;
-      const weighed = /^\d+(?:\.\d+)?\s*(?:kg|g|l|ml)$/i.test(qty);
+      const count = !packSize && /^\d+$/.test(qty) ? Number(qty) : 1;
       out[key] = {
         price: round2(total / Math.max(1, count)),
         store: shop?.store || null,
         date: shop?.date || null,
         name: String(line.name || ''),
-        packSize: weighed ? qty : null,
+        packSize,
+        weighed: Boolean(packSize),
       };
     }
   }
@@ -63,6 +80,13 @@ const recent = (date, now) => {
 };
 
 const round2 = (n) => Math.round(n * 100) / 100;
+
+/** Need ÷ weight paid for, when both are weights; null otherwise. */
+const weighedScale = (qty, packSize) => {
+  const need = packAmount(String(qty || ''));
+  const paidFor = packAmount(String(packSize || ''));
+  return need > 0 && paidFor > 0 ? need / paidFor : null;
+};
 
 /**
  * The price a row is estimated at, and where that came from.
@@ -87,7 +111,11 @@ export const rowEstimate = (item, {
   const packs = (listing) => packsToBuy(item?.qty, listing, item?.name);
   const paid = key ? receipts?.[key] : null;
   if (paid?.price > 0 && recent(paid.date, now)) {
-    return { price: round2(paid.price * packs(paid)), source: 'receipt', label: paid.store ? `you paid at ${paid.store}` : 'you paid' };
+    // Loose goods are sold by the gram: a kilo of what cost 48p for 482 g
+    // is about £1, not three bags.
+    const scale = paid.weighed ? weighedScale(item?.qty, paid.packSize) : null;
+    const price = round2(paid.price * (scale ?? packs(paid)));
+    return { price, source: 'receipt', label: paid.store ? `you paid at ${paid.store}` : 'you paid' };
   }
   const best = key ? live?.[key]?.best : null;
   if (best?.price > 0) {

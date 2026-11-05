@@ -141,9 +141,9 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
     const name = row?.name || k;
     const cached = cache[k];
     const fresh = cached && Date.now() - new Date(cached.checkedAt).getTime() < TTL_MS;
-    if (fresh && Array.isArray(cached.prices) && pickObserved(cached.prices)) {
-      const cheapest = pickObserved(cached.prices);
-      byKey[k] = { ...observedPriceLabel(cheapest), raw: cached.prices, checkedAt: cached.checkedAt, cached: true };
+    const cachedPick = fresh && Array.isArray(cached.prices) ? pickObserved(cached.prices) : null;
+    if (cachedPick) {
+      byKey[k] = { ...observedPriceLabel(cachedPick), raw: cached.prices, checkedAt: cached.checkedAt, cached: true };
       fromCache += 1;
       continue;
     }
@@ -156,9 +156,9 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
       cache[k] = { prices, sourceLabel: body.sourceLabel || 'Open Prices (community observed)', checkedAt: body.checkedAt || new Date().toISOString() };
       saveCache(cache);
       fetched += 1;
-      if (pickObserved(prices)) {
-        const cheapest = pickObserved(prices);
-        byKey[k] = { ...observedPriceLabel(cheapest), raw: prices, checkedAt: cache[k].checkedAt, cached: false };
+      const pick = pickObserved(prices);
+      if (pick) {
+        byKey[k] = { ...observedPriceLabel(pick), raw: prices, checkedAt: cache[k].checkedAt, cached: false };
       }
       // small gap to stay under rate limit when the user fetches a whole list
       await new Promise((r) => setTimeout(r, 180));
