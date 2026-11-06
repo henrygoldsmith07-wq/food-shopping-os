@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canWaitRows, neededBy } from '../src/lib/needed-by.js';
+import { canWaitRows, horizonDates, neededBy } from '../src/lib/needed-by.js';
 import { setMyRecipes } from '../src/data/recipes.js';
 
 const recipe = (id, name) => ({ id, name, servings: 2, time: 20, costPerServing: 1, ingredients: [{ name: 'x', qty: '1' }] });
@@ -25,5 +25,16 @@ describe('needed-by', () => {
   it('ignores past meals and bad input', () => {
     expect(canWaitRows(null, null, null, TODAY)).toEqual([]);
     expect(canWaitRows([row('1', 'Cheese', ['Pasta bake'])], { '2026-10-20': { dinner: 'nb-a' } }, ['2026-10-20'], TODAY)).toEqual([]);
+  });
+});
+
+describe('horizonDates', () => {
+  it('is today and the next 13 days, across a week boundary', () => {
+    const days = horizonDates('2026-10-31');
+    expect(days).toHaveLength(14);
+    expect(days[0]).toBe('2026-10-31');
+    expect(days[3]).toBe('2026-11-03');
+    expect(days[13]).toBe('2026-11-13');
+    expect(horizonDates('not a day')).toEqual([]);
   });
 });

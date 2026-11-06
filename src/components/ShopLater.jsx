@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import { Card, Section } from './ui.jsx';
-import { canWaitRows, neededBy } from '../lib/needed-by.js';
-import { weekDates } from '../lib/kitchen.js';
+import { canWaitRows, horizonDates, neededBy } from '../lib/needed-by.js';
 import { heldRows, tripRows } from '../lib/top-up.js';
 import { haptic } from '../lib/haptics.js';
 
@@ -21,7 +20,7 @@ const dayName = (date, today) => {
  */
 export default function ShopLater({ app, shoppingMode = false }) {
   const [open, setOpen] = useState(false);
-  const dates = useMemo(() => weekDates(app.day, 14), [app.day]);
+  const dates = useMemo(() => horizonDates(app.day), [app.day]);
   const needs = useMemo(() => neededBy(app.shoppingList, app.plan, dates, app.day), [app.shoppingList, app.plan, dates, app.day]);
   const rows = useMemo(
     () => canWaitRows(tripRows(app.shoppingList, app.day, needs), app.plan, dates, app.day),

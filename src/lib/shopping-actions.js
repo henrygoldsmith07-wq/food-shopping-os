@@ -11,7 +11,7 @@ import { receiptOutcomeRecords } from './price-evidence.js';
 import { appendLedgerEvent, createLedgerEvent } from './event-ledger.js';
 import { applyShopCheck } from './shop-checks.js';
 import { holdForTopUp as holdForTopUpRows, releaseHeld as releaseHeldRows } from './top-up.js';
-import { weekDates } from './kitchen.js';
+import { horizonDates } from './needed-by.js';
 import { LOCATIONS } from '../data/pantry.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
@@ -152,7 +152,7 @@ export const shoppingActions = (set) => ({
   /** Hold rows for a midweek top-up; they return the day before their first meal. */
   holdForTopUp: (ids) => set((s) => {
     if (!householdPermission(s, 'shopping')) return {};
-    const out = holdForTopUpRows(s.shoppingList, ids, s.plan, weekDates(s.day, 14), s.day);
+    const out = holdForTopUpRows(s.shoppingList, ids, s.plan, horizonDates(s.day), s.day);
     return out.held.length ? { shoppingList: out.list } : {};
   }),
   releaseTopUp: (ids) => set((s) => {
