@@ -71,6 +71,8 @@ export const CAPABILITIES = [
     'Speech in the browser, parsed into portions — “two slices of wholemeal bread and 200g greek yogurt for lunch”.'),
   cap('voiceAssistant', 'Voice assistant', 'partial',
     'A spoken question can drive the local food coach where browser speech recognition exists. Typed questions remain available everywhere.'),
+  cap('cookVoice', 'Hands-free cooking', 'partial',
+    'Cook mode reads steps aloud and takes “next”, “back”, “repeat” and “start timer” by voice where the browser has speech synthesis and recognition; swiping between steps works everywhere. A command must be said on its own, and finishing the recipe is always a tap.'),
   cap('geofence', 'Geofenced reminders', 'partial',
     'A saved 200m area can trigger a notification on re-entry while Forq is open. Background geofencing needs native operating-system permissions and is not available to this web app.'),
   cap('offline', 'Offline mode', 'built',
