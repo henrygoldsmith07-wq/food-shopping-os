@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  ArrowLeftRight, Check, Copy, Info, Repeat, Share2, Sparkles,
+  ArrowLeftRight, Check, Copy, Info, Printer, Repeat, Send, Share2, Sparkles,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { gbp } from '../lib/utils.js';
@@ -10,6 +10,8 @@ import { PRIVACY_COPY } from '../data/privacy.js';
 import { recipeConflicts } from '../lib/goals.js';
 import { swapsFor, swapsForDiet, swapsForGoal, recipeNutrition, shareCode } from '../lib/recipe-tools.js';
 import { Card, Chip, Pill, Meter, Stepper } from './ui.jsx';
+import { printableRecipe, recipeAsText } from '../lib/recipe-print.js';
+import { printReport } from '../lib/report-export.js';
 
 const SWAP_DIETS = [
   ['vegan', 'Make it vegan'],
@@ -178,10 +180,30 @@ export function NutritionBreakdown({ recipe }) {
  * Sharing is an explicitly local action: a recipe becomes a code the user
  * chooses to send, and the other app reads it back.
  */
-export function SharePanel({ recipe }) {
+export function SharePanel({ recipe, noteFor = recipe.id }) {
   const app = useApp();
   const [code, setCode] = useState('');
   const [copied, setCopied] = useState(false);
+  // What the last print or send did, written on the button itself.
+  const [sent, setSent] = useState('');
+  const note = app.recipeNotes?.[noteFor] || '';
+
+  const print = () => setSent(printReport(printableRecipe(recipe, { note })) ? '' : 'blocked');
+  const send = async () => {
+    const text = recipeAsText(recipe, { note });
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        await navigator.share({ title: recipe.name, text });
+        setSent('shared');
+      } else {
+        await navigator.clipboard?.writeText(text);
+        setSent('copied');
+      }
+    } catch (error) {
+      // Closing the share sheet is a choice, not a failure.
+      setSent(error?.name === 'AbortError' ? '' : 'failed');
+    }
+  };
 
   const make = () => {
     setCode(shareCode(recipe, app.name));
@@ -235,6 +257,19 @@ export function SharePanel({ recipe }) {
           </button>
         </div>
       )}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button type="button" onClick={print} className="press min-h-[44px] rounded-2xl border text-[0.78125rem] font-extrabold" style={{ borderColor: 'var(--line)' }}>
+          <span className="inline-flex items-center gap-1.5"><Printer size={14} /> {sent === 'blocked' ? 'Allow pop-ups to print' : 'Print or save PDF'}</span>
+        </button>
+        <button type="button" onClick={send} className="press min-h-[44px] rounded-2xl border text-[0.78125rem] font-extrabold" style={sent === 'copied' || sent === 'shared' ? { borderColor: 'var(--good)', color: 'var(--good)' } : { borderColor: 'var(--line)' }}>
+          <span className="inline-flex items-center gap-1.5">
+            {sent === 'copied' ? <><Check size={14} strokeWidth={3} /> Recipe copied</>
+              : sent === 'shared' ? <><Check size={14} strokeWidth={3} /> Sent</>
+                : sent === 'failed' ? <>Couldn’t send — try again</>
+                  : <><Send size={14} /> Send as text</>}
+          </span>
+        </button>
+      </div>
     </Card>
   );
 }

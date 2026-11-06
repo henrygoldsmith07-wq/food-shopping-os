@@ -5,6 +5,7 @@ import { cx } from '../lib/utils.js';
 import { explainPantryShortfall } from '../lib/pantry-intelligence.js';
 import { Card, Pill } from './ui.jsx';
 import { ServingsControl } from './RecipeTools.jsx';
+import { useIngredientTicks } from '../lib/ingredient-ticks.js';
 
 /**
  * The ingredient list, scaled to how many you are cooking for and checked
@@ -17,7 +18,7 @@ import { ServingsControl } from './RecipeTools.jsx';
  */
 export default function RecipeIngredients({
   app, recipe, original, servings, setServings, missing, havePantry, has,
-  addedMissingKey, missingKey, addMissing, dislikeSwaps, onSwapDislike, pantryRead,
+  addedMissingKey, missingKey, addMissing, dislikeSwaps, onSwapDislike, pantryRead, metric = null,
 }) {
   // Shopping is a household permission: a member without it still sees what is
   // missing, they just cannot add it to the shared list.
@@ -25,6 +26,9 @@ export default function RecipeIngredients({
   // The button reads "added" only for the list it was pressed for: change the
   // servings, and what is missing changes, so the confirmation is stale.
   const addedMissing = Boolean(addedMissingKey && addedMissingKey === missingKey);
+  // Tap an ingredient once it's out on the counter (kept for this tab only).
+  const [gathered, toggleGathered, clearGathered] = useIngredientTicks(original.id);
+  const gatheredCount = recipe.ingredients.filter((ing) => gathered.has(ing.name)).length;
 
   return (
     <>
@@ -41,18 +45,40 @@ export default function RecipeIngredients({
             <Package size={12} /> You have {havePantry} of {recipe.ingredients.length}
           </Pill>
         </div>
-        <ul className="space-y-2">
-          {recipe.ingredients.map((ing) => (
-            <li key={ing.name} className="flex items-center justify-between text-[0.875rem]">
-              <span className={cx('font-semibold inline-flex items-center gap-2', has(ing) && 'opacity-60')}>
-                {has(ing)
-                  ? <Check size={14} strokeWidth={3} style={{ color: 'var(--good)' }} />
-                  : <ShoppingCart size={14} style={{ color: 'var(--muted)' }} />}
-                {ing.name}
-              </span>
-              <span className="font-bold text-[0.8125rem]" style={{ color: 'var(--muted)' }}>{ing.qty}</span>
-            </li>
-          ))}
+        {metric && (
+          <button type="button" onClick={metric.toggle} aria-pressed={metric.on} className="press mb-1.5 min-h-[44px] rounded-full border px-3 text-[0.75rem] font-extrabold" style={metric.on ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { borderColor: 'var(--line)' }}>
+            {metric.on ? 'Showing metric (≈) · show as written' : 'US measures · show in metric'}
+          </button>
+        )}
+        <p className="mb-1.5 flex items-center justify-between gap-2 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+          <span>{gatheredCount ? `${gatheredCount} of ${recipe.ingredients.length} out on the counter` : 'Tap an ingredient once it’s out on the counter.'}</span>
+          {gatheredCount > 0 && (
+            <button type="button" onClick={clearGathered} className="press min-h-[44px] px-2 font-extrabold" style={{ color: 'var(--accent)' }}>Clear ticks</button>
+          )}
+        </p>
+        <ul className="space-y-1" aria-label="Ingredients">
+          {recipe.ingredients.map((ing) => {
+            const out = gathered.has(ing.name);
+            return (
+              <li key={ing.name}>
+                <button
+                  type="button"
+                  onClick={() => toggleGathered(ing.name)}
+                  aria-pressed={out}
+                  aria-label={`${ing.qty ? `${ing.qty} ` : ''}${ing.name}${has(ing) ? ', in your pantry' : ', not in your pantry'}${out ? ', out on the counter' : ''}`}
+                  className="press flex min-h-[44px] w-full items-center justify-between gap-2 text-left text-[0.875rem]"
+                >
+                  <span className={cx('font-semibold inline-flex items-center gap-2', (out || has(ing)) && 'opacity-60', out && 'line-through')}>
+                    {has(ing)
+                      ? <Check size={14} strokeWidth={3} style={{ color: 'var(--good)' }} aria-hidden="true" />
+                      : <ShoppingCart size={14} style={{ color: 'var(--muted)' }} aria-hidden="true" />}
+                    {ing.name}
+                  </span>
+                  <span className={cx('font-bold text-[0.8125rem]', out && 'line-through')} style={{ color: 'var(--muted)' }}>{ing.qty}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
         {missing.length > 0 && (
           <button
