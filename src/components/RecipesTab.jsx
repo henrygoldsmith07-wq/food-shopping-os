@@ -18,6 +18,7 @@ import TasteGame from './TasteGame.jsx';
 import SharedImport from './SharedImport.jsx';
 import RecipeFilterSheet from './RecipeFilterSheet.jsx';
 import RecipeFolders from './RecipeFolders.jsx';
+import { cookHistoryById, lastMadeLabel } from '../lib/recipe-journal.js';
 
 const PAGE = 24;
 
@@ -36,6 +37,7 @@ export default function RecipesTab({ openRecipe }) {
 
   // Stable identity per pantry change, so the search memo below doesn't re-run.
   const pantryNames = useMemo(() => app.pantry.map((p) => p.name), [app.pantry]);
+  const made = useMemo(() => cookHistoryById(app.cooked, app.day), [app.cooked, app.day]);
   const active = filters.diets.length + filters.include.length + filters.exclude.length
     + (filters.maxTime ? 1 : 0) + (filters.maxMissing !== null ? 1 : 0);
 
@@ -74,8 +76,8 @@ export default function RecipesTab({ openRecipe }) {
       have: pantryNames,
       suitabilityCtx: app.suitabilityCtx,
       ...filters,
-    }), { query, sort }).filter((recipe) => !tagFilter || recipe.tags.includes(tagFilter)),
-    [safePool, query, filters, pantryNames, app.suitabilityCtx, sort, tagFilter],
+    }), { query, sort, history: made }).filter((recipe) => !tagFilter || recipe.tags.includes(tagFilter)),
+    [safePool, query, filters, pantryNames, app.suitabilityCtx, sort, tagFilter, made],
   );
   /* eslint-enable react-hooks/exhaustive-deps */
 
@@ -299,6 +301,8 @@ export default function RecipesTab({ openRecipe }) {
             <option value="calories">Fewest calories</option>
             <option value="health">Health score</option>
             <option value="cost">Lowest cost</option>
+            <option value="often">Cooked most</option>
+            <option value="stale">Not made lately</option>
           </select>
         </div>
         {recipes.length === 0 ? (
@@ -342,9 +346,11 @@ export default function RecipesTab({ openRecipe }) {
                         <p className="mt-1 text-[0.75rem] font-extrabold" style={{ color: 'var(--accent)' }}>
                           {gbp(r.costPerServing, { always: true })}/serving
                         </p>
-                        {app.recipeRatings[r.id] && (
-                          <p className="mt-1 text-[0.71875rem] font-bold" style={{ color: 'var(--warn)' }}>
-                            ★ {app.recipeRatings[r.id]}/5
+                        {(app.recipeRatings[r.id] || made.get(r.id)) && (
+                          <p className="mt-1 text-[0.71875rem] font-bold">
+                            {app.recipeRatings[r.id] && <span style={{ color: 'var(--warn)' }}>★ {app.recipeRatings[r.id]}/5</span>}
+                            {app.recipeRatings[r.id] && made.get(r.id) && ' · '}
+                            {made.get(r.id) && <span style={{ color: 'var(--muted)' }}>{lastMadeLabel(made.get(r.id))}</span>}
                           </p>
                         )}
                       </div>

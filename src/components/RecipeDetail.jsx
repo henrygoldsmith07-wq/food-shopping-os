@@ -17,6 +17,7 @@ import { RecipeFolderPicker } from './RecipeFolders.jsx';
 import RecipeIngredients from './RecipeIngredients.jsx';
 import { Glyph } from './icons.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
+import RecipeJournal from './RecipeJournal.jsx';
 import CookMode from './CookMode.jsx';
 import {
   ConflictPills, NutritionBreakdown, ServingsControl, SharePanel, SwapPanel, VariantBanner,
@@ -200,6 +201,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
               </div>
             </div>
           )}
+          <RecipeJournal app={app} recipeId={original.id} />
           <div className="mt-2"><ConflictPills recipe={recipe} diets={app.planDiets} /></div>
           <Card className="mt-3 !p-3" style={{ background: 'var(--card-2)' }}>
             <p className="text-[0.6875rem] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--faint)' }}>Why this fits your kitchen tonight</p>

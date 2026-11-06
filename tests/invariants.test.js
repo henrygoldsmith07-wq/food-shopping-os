@@ -98,7 +98,8 @@ describe('merge-conflict tripwires', () => {
     // 26: sign-in and password-reset errors are announced (AccountSignIn.jsx, reset-password/page.jsx).
     // 27: "Check before you shop" announces each Got enough / Buy it answer (ShopChecks.jsx).
     // 28: holding a row for a top-up announces which row moved (ShopLater)
-    expect(liveRegions).toBeLessThanOrEqual(28);
+    // 29: saving or removing a recipe note is announced (RecipeJournal.jsx)
+    expect(liveRegions).toBeLessThanOrEqual(29);
   });
 
   it('keeps one page-level heading per primary screen', () => {

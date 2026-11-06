@@ -42,7 +42,7 @@ export const DOMAIN_SLICES = {
   },
   kitchen: {
     title: 'Recipes & diary input',
-    keys: ['myRecipes', 'recipeCollections', 'recipeFolders', 'log', 'favouriteFoods', 'customFoods', 'mealTemplates'],
+    keys: ['myRecipes', 'recipeCollections', 'recipeFolders', 'recipeNotes', 'log', 'favouriteFoods', 'customFoods', 'mealTemplates'],
   },
 };
 
