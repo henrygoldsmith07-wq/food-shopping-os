@@ -26,7 +26,12 @@ export const enrichRecipeTags = (recipe) => ({
   ])],
 });
 
-export const searchAndSortRecipes = (recipes = [], { query = '', sort = 'relevance' } = {}) => {
+/**
+ * `history` (from cookHistoryById) feeds the two rotation sorts: 'often'
+ * puts the household's regulars first, 'stale' the dishes you liked enough
+ * to cook but have not made for longest. Recipes never cooked follow both.
+ */
+export const searchAndSortRecipes = (recipes = [], { query = '', sort = 'relevance', history = null } = {}) => {
   const term = query.trim().toLowerCase();
   const filtered = recipes.map(enrichRecipeTags).filter((recipe) => {
     if (!term) return true;
@@ -40,6 +45,12 @@ export const searchAndSortRecipes = (recipes = [], { query = '', sort = 'relevan
     if (sort === 'protein') return (Number(b.protein) || 0) - (Number(a.protein) || 0) || a.name.localeCompare(b.name);
     if (sort === 'cost') return (finite(a.costPerServing, Infinity) - finite(b.costPerServing, Infinity) || 0) || a.name.localeCompare(b.name);
 
+    if (sort === 'often' || sort === 'stale') {
+      const ha = history?.get?.(a.id);
+      const hb = history?.get?.(b.id);
+      if (!ha || !hb) return (ha ? -1 : 0) + (hb ? 1 : 0) || a.name.localeCompare(b.name);
+      return (sort === 'often' ? hb.count - ha.count || ha.daysAgo - hb.daysAgo : hb.daysAgo - ha.daysAgo) || a.name.localeCompare(b.name);
+    }
     if (sort === 'health') return (finite(b.healthScore, -Infinity) === finite(a.healthScore, -Infinity) ? 0 : finite(b.healthScore, -Infinity) > finite(a.healthScore, -Infinity) ? 1 : -1) || a.name.localeCompare(b.name);
     return (term ? Number(b.name.toLowerCase().startsWith(term)) - Number(a.name.toLowerCase().startsWith(term)) : 0) || a.name.localeCompare(b.name);
   });

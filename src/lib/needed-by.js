@@ -7,6 +7,19 @@ import { planEntries } from './mealplan.js';
 const DAY_MS = 86400000;
 export const LATER_AFTER_DAYS = 3;
 const SLOT_RANK = { breakfast: 0, lunch: 1, dinner: 2 };
+/** How far ahead the plan is read for "first needed": two weeks from today. */
+export const NEEDED_BY_HORIZON_DAYS = 14;
+
+/**
+ * The days neededBy reads: today and the next 13. Not weekDates(), which is
+ * the Monday-to-Sunday week and would leave a Saturday shop seeing only the
+ * weekend, so nothing for next week could ever wait for a top-up.
+ */
+export const horizonDates = (today, days = NEEDED_BY_HORIZON_DAYS) => {
+  const start = Date.parse(`${today}T00:00:00Z`);
+  if (!Number.isFinite(start)) return [];
+  return Array.from({ length: days }, (_, i) => new Date(start + i * DAY_MS).toISOString().slice(0, 10));
+};
 
 const dayGap = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
 

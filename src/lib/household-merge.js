@@ -47,7 +47,7 @@ const SET_KEYS = [
 
 /** Plain objects keyed by an id (ratings, learned aliases, per-item settings). */
 const MAP_KEYS = [
-  'tasteRatings', 'recipeRatings', 'aliasMemory', 'aisleMemory', 'storeRoutes',
+  'tasteRatings', 'recipeRatings', 'recipeNotes', 'aliasMemory', 'aisleMemory', 'storeRoutes',
   'reminderDone', 'skipReasonProfile', 'adventureCompleted', 'units', 'targets',
   'body', 'shoppingMeta', 'shoppingPreferences', 'priceAlertConfig',
   'awayKitchenProfile',

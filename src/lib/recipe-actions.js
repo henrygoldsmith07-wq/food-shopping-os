@@ -16,6 +16,7 @@ import {
   createFolder, deleteFolder, forgetRecipe, moveRecipeToFolder, renameFolder,
 } from './recipe-folders.js';
 import { uid } from './state.js';
+import { withRecipeNote } from './recipe-journal.js';
 
 export const recipeActions = (set) => ({
   saveRecipe: (recipe) =>
@@ -37,6 +38,7 @@ export const recipeActions = (set) => ({
         recipeIds: collection.recipeIds.filter((recipeId) => recipeId !== id),
       })),
       recipeRatings: Object.fromEntries(Object.entries(s.recipeRatings).filter(([recipeId]) => recipeId !== id)),
+      recipeNotes: withRecipeNote(s.recipeNotes, id, ''),
       tasteRatings: Object.fromEntries(Object.entries(s.tasteRatings).filter(([recipeId]) => recipeId !== id)),
     } : {})),
   toggleFavourite: (id) =>
@@ -137,5 +139,12 @@ export const recipeActions = (set) => ({
       const score = Math.round(Number(rating));
       if (!id || score < 1 || score > 5) return {};
       return { recipeRatings: { ...s.recipeRatings, [id]: score } };
+    }),
+  /** Keep (or, when blank, clear) the cook's own note on a recipe. */
+  setRecipeNote: (id, text) =>
+    set((s) => {
+      if (!householdPermission(s, 'recipes')) return {};
+      const notes = withRecipeNote(s.recipeNotes, id, text);
+      return notes === s.recipeNotes ? {} : { recipeNotes: notes };
     }),
 });

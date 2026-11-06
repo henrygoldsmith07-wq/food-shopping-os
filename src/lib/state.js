@@ -155,6 +155,7 @@ export const EMPTY_STATE = {
   // the assignment lives on the folder itself. See lib/recipe-folders.js.
   recipeFolders: [], // {id,name,recipeIds[],createdAt}
   recipeRatings: {}, // recipe id -> personal 1–5 score
+  recipeNotes: {}, // recipe id -> the cook's own note ("less chilli")
   cooked: [], // [{recipeId, date}]
   cookingTimeHistory: [], // {id,recipeId,date,estimatedMins,actualMins}
   /* health — every reading is one you took */

@@ -30,7 +30,7 @@ import StoreIntegrations from './StoreIntegrations.jsx';
 import ShoppingListRow from './ShoppingListRow.jsx';
 import BulkListActions from './BulkListActions.jsx';
 import RestockSection from './RestockSection.jsx';
-import ListConflictCard from './ListConflictCard.jsx'; import ShopChecks from './ShopChecks.jsx'; import ShopLater from './ShopLater.jsx'; import { heldRows, tripRows } from '../lib/top-up.js'; import { neededBy } from '../lib/needed-by.js'; import { weekDates } from '../lib/kitchen.js';
+import ListConflictCard from './ListConflictCard.jsx'; import ShopChecks from './ShopChecks.jsx'; import ShopLater from './ShopLater.jsx'; import { heldRows, tripRows } from '../lib/top-up.js'; import { horizonDates, neededBy } from '../lib/needed-by.js';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { useShoppingSession } from '../lib/shopping-session.js';
 import ShoppingProgress from './ShoppingProgress.jsx'; import CloudSyncRow from './CloudSyncRow.jsx';
@@ -87,7 +87,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
     ...list.map((item) => item.store).filter(Boolean),
   ])], [app.shops, list]);
   const storeChoices = useMemo(() => [...new Set([...stores, ...COMMON_STORES])].slice(0, 8), [stores]);
-  const [visibleList, heldCount] = useMemo(() => { const needs = neededBy(list, app.plan, weekDates(app.day, 14), app.day); const rows = store ? list.filter((item) => item.store === store) : list; return [tripRows(rows, app.day, needs), heldRows(rows, app.day, needs).length]; }, [list, store, app.day, app.plan]); // a hold gives way to a meal moved earlier
+  const [visibleList, heldCount] = useMemo(() => { const needs = neededBy(list, app.plan, horizonDates(app.day), app.day); const rows = store ? list.filter((item) => item.store === store) : list; return [tripRows(rows, app.day, needs), heldRows(rows, app.day, needs).length]; }, [list, store, app.day, app.plan]); // a hold gives way to a meal moved earlier
   const cap = useMemo(() => affordableCap(visibleList, { budget: app.weeklyBudget, spent: app.spentThisWeek }), [visibleList, app.weeklyBudget, app.spentThisWeek]);
   const outsideKeys = reRanked ? cap?.outsideKeys : null; // ranked rows past the cap wear a marker
   const grouped = useMemo(() => groupForStore(reRanked && cap ? cap.ordered : visibleList, { store, routes: app.storeRoutes, memory: app.aisleMemory }), [visibleList, cap, reRanked, store, app.storeRoutes, app.aisleMemory]);
