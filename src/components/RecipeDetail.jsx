@@ -449,7 +449,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
           </ol>
         </Card>
 
-        <SharePanel recipe={recipe} />
+        <SharePanel recipe={recipe} noteFor={original.id} />
 
         <button
           onClick={() => setCooking(true)}

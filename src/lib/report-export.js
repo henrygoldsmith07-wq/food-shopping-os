@@ -75,7 +75,7 @@ export const measurementsCsv = (state) => {
 
 /* ---------- Printable report ---------- */
 
-const esc = (text) => String(text ?? '')
+export const esc = (text) => String(text ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const table = (headers, rows) => `<table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>`
