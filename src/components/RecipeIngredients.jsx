@@ -18,7 +18,7 @@ import { useIngredientTicks } from '../lib/ingredient-ticks.js';
  */
 export default function RecipeIngredients({
   app, recipe, original, servings, setServings, missing, havePantry, has,
-  addedMissingKey, missingKey, addMissing, dislikeSwaps, onSwapDislike, pantryRead,
+  addedMissingKey, missingKey, addMissing, dislikeSwaps, onSwapDislike, pantryRead, metric = null,
 }) {
   // Shopping is a household permission: a member without it still sees what is
   // missing, they just cannot add it to the shared list.
@@ -45,6 +45,11 @@ export default function RecipeIngredients({
             <Package size={12} /> You have {havePantry} of {recipe.ingredients.length}
           </Pill>
         </div>
+        {metric && (
+          <button type="button" onClick={metric.toggle} aria-pressed={metric.on} className="press mb-1.5 min-h-[44px] rounded-full border px-3 text-[0.75rem] font-extrabold" style={metric.on ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { borderColor: 'var(--line)' }}>
+            {metric.on ? 'Showing metric (≈) · show as written' : 'US measures · show in metric'}
+          </button>
+        )}
         <p className="mb-1.5 flex items-center justify-between gap-2 text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
           <span>{gatheredCount ? `${gatheredCount} of ${recipe.ingredients.length} out on the counter` : 'Tap an ingredient once it’s out on the counter.'}</span>
           {gatheredCount > 0 && (

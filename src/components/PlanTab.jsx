@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, ClipboardList, Info, Move, ShoppingCart, Snowflake, Sparkles, X } from 'lucide-react';
-import { gbp, shortDate } from '../lib/utils.js';
-import { useApp } from '../lib/store.jsx';
+import { gbp, shortDate } from '../lib/utils.js'; import { useApp } from '../lib/store.jsx';
 import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS } from '../data/plan.js';
 import { weekDates } from '../lib/kitchen.js';
@@ -27,7 +26,7 @@ import TonightSlotGuard from './TonightSlotGuard.jsx';
 import JustPlannedOffer from './JustPlannedOffer.jsx';
 import PlanConflictCard from './PlanConflictCard.jsx';
 import WeekCostCard from './WeekCostCard.jsx';
-import BatchCookCard from './BatchCookCard.jsx'; import ExpiryRescueCard from './ExpiryRescueCard.jsx'; import WeekBudgetGuard from './WeekBudgetGuard.jsx';
+import BatchCookCard from './BatchCookCard.jsx'; import ExpiryRescueCard from './ExpiryRescueCard.jsx'; import WeekBudgetGuard from './WeekBudgetGuard.jsx'; import PlanSendMenu from './PlanSendMenu.jsx';
 import SwipeWeekBuilder from './SwipeWeekBuilder.jsx';
 import { openDinnerDates, weekCostSummary } from '../lib/swipe-week.js';
 
@@ -335,6 +334,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
                 <CalendarPlus size={15} /> Export {view} to calendar (.ics)
               </span>
             </button>
+            <PlanSendMenu plan={app.plan} dates={dates} view={view} />
             {calendarStatus && (
               <p role="status" className="text-center text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
                 {calendarStatus}

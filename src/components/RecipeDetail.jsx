@@ -18,6 +18,7 @@ import RecipeIngredients from './RecipeIngredients.jsx';
 import { Glyph } from './icons.jsx';
 import RecommendationExplanation from './RecommendationExplanation.jsx';
 import RecipeJournal from './RecipeJournal.jsx';
+import { metricRecipe } from '../lib/recipe-metric.js';
 import CookMode from './CookMode.jsx';
 import {
   ConflictPills, NutritionBreakdown, ServingsControl, SharePanel, SwapPanel, VariantBanner,
@@ -49,6 +50,10 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
 
   const base = variant || original;
   const recipe = useMemo(() => scaleRecipe(base, servings), [base, servings]);
+  // US cups/oz/°F shown in metric on request; `shown` is only what is displayed, printed or sent.
+  const [metric, setMetric] = useState(false);
+  const metricView = useMemo(() => metricRecipe(recipe), [recipe]);
+  const shown = metric && metricView.changed ? metricView.recipe : recipe;
   const videoUrl = safeExternalUrl(recipe.video);
   const sourceUrl = safeExternalUrl(recipe.source);
   const fav = app.favourites.includes(recipe.id);
@@ -60,7 +65,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
   // What you have is read from actual pantry evidence, including aliases and
   // quantities. Several rows of the same ingredient are summed before a
   // recipe is called covered.
-  const pantryRead = (ing) => pantryReadForRecipeIngredient(ing, app.pantry, {
+  const pantryRead = (ing) => pantryReadForRecipeIngredient(ing.qtyAsWritten ? { ...ing, qty: ing.qtyAsWritten } : ing, app.pantry, {
     today: app.day,
     learnedAliases: app.aliasMemory || {},
   });
@@ -352,9 +357,10 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
 
         <RecipeIngredients
           app={app}
-          recipe={recipe}
+          recipe={shown}
           original={original}
           servings={servings}
+          metric={metricView.changed ? { on: metric, toggle: () => setMetric((v) => !v) } : null}
           setServings={setServings}
           missing={missing}
           havePantry={havePantry}
@@ -431,7 +437,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
             Method · {recipe.steps.length} steps
           </p>
           <ol className="space-y-2.5">
-            {recipe.steps.map((s, i) => (
+            {shown.steps.map((s, i) => (
               <li key={i} className="flex gap-3 text-[0.84375rem]">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.6875rem] font-extrabold" style={{ background: 'var(--accent-soft)', color: 'var(--accent-deep)' }}>
                   {i + 1}
@@ -449,7 +455,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
           </ol>
         </Card>
 
-        <SharePanel recipe={recipe} noteFor={original.id} />
+        <SharePanel recipe={shown} noteFor={original.id} />
 
         <button
           onClick={() => setCooking(true)}
