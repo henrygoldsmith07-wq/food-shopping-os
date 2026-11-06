@@ -1,8 +1,9 @@
 import CookGiveBack from './CookGiveBack.jsx';
 import { useEffect, useState } from 'react';
 import {
-  Check, ExternalLink, Lightbulb, Mic, Pause, PartyPopper, Play, PlayCircle, Snowflake, TriangleAlert, X,
+  Check, ExternalLink, Lightbulb, Mic, Pause, PartyPopper, Play, PlayCircle, Snowflake, TriangleAlert, Volume2, X,
 } from 'lucide-react';
+import { canListen, canSpeak, swipeDirection, useStepSpeech, useVoiceCommands } from '../lib/cook-voice.js';
 import { useApp } from '../lib/store.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { safeExternalUrl } from '../lib/recipe-tools.js';
@@ -61,6 +62,9 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
     Math.max(1, Math.round(householdPortionsFor(app).portions)),
   ));
   const [wakeState, setWakeState] = useState('checking');
+  const [readAloud, setReadAloud] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [touchStart, setTouchStart] = useState(null);
   const [startedAt] = useState(() => Date.now());
 
   const eaters = Math.max(1, Math.round(householdPortionsFor(app).portions));
@@ -112,6 +116,20 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
       lock?.release();
     };
   }, [finished]);
+
+  // Voice and swipe move between steps but never finish: logging the meal
+  // spends the pantry, so that stays a deliberate tap.
+  const go = (direction) => {
+    setAuto(false);
+    if (direction === 'next') setStep((i) => Math.min(recipe.steps.length - 1, i + 1));
+    if (direction === 'back') setStep((i) => Math.max(0, i - 1));
+  };
+  const say = useStepSpeech(finished ? '' : s?.text, readAloud);
+  const voice = useVoiceCommands(listening && !finished, (command) => {
+    if (command === 'next' || command === 'back') go(command);
+    else if (command === 'repeat') say();
+    else if (command === 'timer' && s?.timerMins) setTimers((t) => ({ ...t, [step]: { left: s.timerMins * 60, running: true } }));
+  });
 
   const finish = () => {
     // One write: log the meal, spend the pantry it used, mark the planned
@@ -273,7 +291,16 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
         </div>
       ) : (
         <>
-          <div className="flex flex-1 flex-col justify-center px-7 rise" key={step}>
+          <div
+            className="flex flex-1 flex-col justify-center px-7 rise"
+            key={step}
+            onTouchStart={(event) => setTouchStart({ x: event.touches[0].clientX, y: event.touches[0].clientY })}
+            onTouchEnd={(event) => {
+              const direction = swipeDirection(touchStart, { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY });
+              setTouchStart(null);
+              if (direction) go(direction);
+            }}
+          >
             <p className="text-[0.8125rem] font-extrabold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>Step {step + 1}</p>
             <StepText
               text={s.text}
@@ -315,9 +342,19 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
                 </a>
               )}
             </div>
-            <p className="mt-3 text-[0.78125rem] font-semibold inline-flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
-              <Mic size={13} /> Voice mode: say “next” or swipe — hands-free.
-            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {canSpeak() && (
+                <button type="button" onClick={() => setReadAloud((v) => !v)} aria-pressed={readAloud} className="press inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-[0.78125rem] font-extrabold" style={readAloud ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { borderColor: 'var(--line)', color: 'var(--muted)' }}>
+                  <Volume2 size={13} /> {readAloud ? 'Reading steps aloud' : 'Read steps aloud'}
+                </button>
+              )}
+              {canListen() && (
+                <button type="button" onClick={() => setListening((v) => !v)} aria-pressed={listening} className="press inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-[0.78125rem] font-extrabold" style={listening && voice === 'listening' ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { borderColor: 'var(--line)', color: 'var(--muted)' }}>
+                  <Mic size={13} /> {voice === 'blocked' ? 'Microphone blocked' : listening ? 'Listening: “next”, “back”, “repeat”, “start timer”' : 'Voice control'}
+                </button>
+              )}
+            </div>
+            <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--faint)' }}>Swipe left for the next step, right to go back.</p>
             <NextStepPreview text={recipe.steps[step + 1]?.text} />
           </div>
 
