@@ -8,15 +8,26 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86400000;
 const shift = (date, days) => new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 
-/** Held back from today's trip: has a valid topUpOn that is still in the future. */
-export const isHeld = (item, today) => DATE_RE.test(String(item?.topUpOn || '')) && String(item.topUpOn) > String(today || '');
+/**
+ * Held back from today's trip: has a valid topUpOn that is still in the future.
+ *
+ * `needs` (from neededBy, optional) is the plan as it stands now. A hold was
+ * set against the plan as it stood then; if a meal has since moved earlier,
+ * to the return day or before it, the row is needed sooner than it will come
+ * back, so it is on today's trip again.
+ */
+export const isHeld = (item, today, needs = null) => {
+  if (!DATE_RE.test(String(item?.topUpOn || '')) || String(item.topUpOn) <= String(today || '')) return false;
+  const need = needs?.get?.(item.id);
+  return !(need && need.date <= item.topUpOn);
+};
 
 /** Rows for today's trip (everything not held). */
-export const tripRows = (list, today) => (Array.isArray(list) ? list : []).filter((item) => !isHeld(item, today));
+export const tripRows = (list, today, needs = null) => (Array.isArray(list) ? list : []).filter((item) => !isHeld(item, today, needs));
 
 /** Held rows, soonest return first. */
-export const heldRows = (list, today) => (Array.isArray(list) ? list : [])
-  .filter((item) => isHeld(item, today))
+export const heldRows = (list, today, needs = null) => (Array.isArray(list) ? list : [])
+  .filter((item) => isHeld(item, today, needs))
   .sort((a, b) => (a.topUpOn < b.topUpOn ? -1 : a.topUpOn > b.topUpOn ? 1 : String(a.name).localeCompare(String(b.name))));
 
 /** Day a held row should come back: the day before its first meal, never today or earlier. */
@@ -36,7 +47,7 @@ export function holdForTopUp(list, ids, plan, dates, today) {
   const held = [];
   const next = (Array.isArray(list) ? list : []).map((item) => {
     const need = needs.get(item.id);
-    if (!want.has(item.id) || !need || need.inDays < LATER_AFTER_DAYS || item.checked || isHeld(item, today)) return item;
+    if (!want.has(item.id) || !need || need.inDays < LATER_AFTER_DAYS || item.checked || isHeld(item, today, needs)) return item;
     held.push(item.id);
     return { ...item, topUpOn: returnDate(need.date, today) };
   });

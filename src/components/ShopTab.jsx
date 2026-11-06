@@ -30,7 +30,7 @@ import StoreIntegrations from './StoreIntegrations.jsx';
 import ShoppingListRow from './ShoppingListRow.jsx';
 import BulkListActions from './BulkListActions.jsx';
 import RestockSection from './RestockSection.jsx';
-import ListConflictCard from './ListConflictCard.jsx'; import ShopChecks from './ShopChecks.jsx'; import ShopLater from './ShopLater.jsx'; import { tripRows } from '../lib/top-up.js';
+import ListConflictCard from './ListConflictCard.jsx'; import ShopChecks from './ShopChecks.jsx'; import ShopLater from './ShopLater.jsx'; import { heldRows, tripRows } from '../lib/top-up.js'; import { neededBy } from '../lib/needed-by.js'; import { weekDates } from '../lib/kitchen.js';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { useShoppingSession } from '../lib/shopping-session.js';
 import ShoppingProgress from './ShoppingProgress.jsx'; import CloudSyncRow from './CloudSyncRow.jsx';
@@ -87,7 +87,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
     ...list.map((item) => item.store).filter(Boolean),
   ])], [app.shops, list]);
   const storeChoices = useMemo(() => [...new Set([...stores, ...COMMON_STORES])].slice(0, 8), [stores]);
-  const visibleList = useMemo(() => tripRows(store ? list.filter((item) => item.store === store) : list, app.day), [list, store, app.day]);
+  const [visibleList, heldCount] = useMemo(() => { const needs = neededBy(list, app.plan, weekDates(app.day, 14), app.day); const rows = store ? list.filter((item) => item.store === store) : list; return [tripRows(rows, app.day, needs), heldRows(rows, app.day, needs).length]; }, [list, store, app.day, app.plan]); // a hold gives way to a meal moved earlier
   const cap = useMemo(() => affordableCap(visibleList, { budget: app.weeklyBudget, spent: app.spentThisWeek }), [visibleList, app.weeklyBudget, app.spentThisWeek]);
   const outsideKeys = reRanked ? cap?.outsideKeys : null; // ranked rows past the cap wear a marker
   const grouped = useMemo(() => groupForStore(reRanked && cap ? cap.ordered : visibleList, { store, routes: app.storeRoutes, memory: app.aisleMemory }), [visibleList, cap, reRanked, store, app.storeRoutes, app.aisleMemory]);
@@ -406,9 +406,9 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
             <Section className="rise rise-2">
               <Card className="text-center py-10">
                 <ShoppingCart size={30} className="mx-auto mb-2" style={{ color: 'var(--faint)' }} />
-                <p className="font-bold">{store ? `Nothing assigned to ${store}` : 'Nothing on the list yet'}</p>
+                <p className="font-bold">{heldCount ? 'Nothing for today’s trip' : store ? `Nothing assigned to ${store}` : 'Nothing on the list yet'}</p>
                 <p className="mt-1 text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                  {store
+                  {heldCount ? `${heldCount} item${heldCount === 1 ? ' is' : 's are'} held for a top-up and will come back the day before ${heldCount === 1 ? 'it’s' : 'they’re'} needed.` : store
                     ? 'Add an item while this shop is selected, or choose All shops to see unassigned items.'
                     : "Add items here, scan a barcode, send a week's meals over from the planner, or flag something as running low in your pantry."}
                 </p>

@@ -153,6 +153,15 @@ describe('pricing the quantity a row needs', () => {
     expect(packsToBuy('', { price: 3, name: 'Heinz Baked Beans 4x415g' }, 'baked beans')).toBe(1);
   });
 
+  it('counts a quantity written with the item as its unit ("12 eggs", "3 lemons")', () => {
+    expect(packsToBuy('12 eggs', { price: 1.85, name: 'Free Range Eggs 6 Pack' }, 'eggs')).toBe(2);
+    expect(packsToBuy('3 lemons', { price: 0.3, name: 'Lemon' }, 'lemons')).toBe(3);
+    expect(packsToBuy('8 tomatoes', { price: 0.85, name: 'Salad Tomatoes 6 Pack' }, 'tomatoes')).toBe(2);
+    // ...but a count of the food inside a jar is not a count of jars.
+    expect(packsToBuy('4 olives', { price: 1, name: 'Green Olives 350g' }, 'olives')).toBe(1);
+    expect(packsToBuy('2 cups', { price: 1, name: 'Long Grain Rice 1kg' }, 'rice')).toBe(1);
+  });
+
   it('reads an unlabelled box from its price rather than charging six of them', () => {
     // £1.85 is about six eggs at a typical 31p each.
     expect(packsToBuy('6', { price: 1.85, name: 'Free Range Eggs' }, 'eggs')).toBe(1);

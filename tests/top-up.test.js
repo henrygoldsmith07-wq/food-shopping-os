@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { heldRows, holdForTopUp, isHeld, releaseHeld, returnDate, tripRows } from '../src/lib/top-up.js';
+import { neededBy } from '../src/lib/needed-by.js';
 import { setMyRecipes } from '../src/data/recipes.js';
 
 const recipe = (id, name) => ({ id, name, servings: 2, time: 20, costPerServing: 1, ingredients: [{ name: 'x', qty: '1' }] });
@@ -36,6 +37,20 @@ describe('top-up list', () => {
     expect(releaseHeld(held, null, TODAY)[1].topUpOn).toBeUndefined();
     expect(releaseHeld(list, null, TODAY)).toBe(list);
   });
+  it('puts a held row back on today\'s trip when its meal moves earlier', () => {
+    const { list: held } = holdForTopUp(list, ['2'], plan, dates, TODAY); // back on 11-02 for an 11-03 fish pie
+    const moved = { '2026-10-30': { dinner: 'tu-a' }, '2026-10-31': { dinner: 'tu-b' } };
+    const needs = neededBy(held, moved, dates, TODAY);
+    expect(isHeld(held[1], TODAY, needs)).toBe(false);
+    expect(tripRows(held, TODAY, needs).map((r) => r.id)).toEqual(['1', '2', '3']);
+    expect(heldRows(held, TODAY, needs)).toEqual([]);
+    // The plan as it was keeps the hold.
+    expect(isHeld(held[1], TODAY, neededBy(held, plan, dates, TODAY))).toBe(true);
+    // A meal moved later is fine: it still comes back before it's needed.
+    const later = { '2026-11-04': { dinner: 'tu-b' } };
+    expect(isHeld(held[1], TODAY, neededBy(held, later, dates, TODAY))).toBe(true);
+  });
+
   it('is safe on bad input', () => {
     expect(holdForTopUp(null, ['1'], plan, dates, TODAY).list).toBe(null);
     expect(tripRows(undefined, TODAY)).toEqual([]);

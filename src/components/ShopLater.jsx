@@ -1,12 +1,18 @@
 import { useMemo, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import { Card, Section } from './ui.jsx';
-import { canWaitRows } from '../lib/needed-by.js';
+import { canWaitRows, neededBy } from '../lib/needed-by.js';
 import { weekDates } from '../lib/kitchen.js';
 import { heldRows, tripRows } from '../lib/top-up.js';
 import { haptic } from '../lib/haptics.js';
 
-const dayName = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
+const DAY_MS = 86400000;
+/** "Tuesday", or "Tuesday 10 November" once a bare weekday could mean two different days. */
+const dayName = (date, today) => {
+  const at = new Date(`${date}T12:00:00Z`);
+  const far = today && at.getTime() - Date.parse(`${today}T12:00:00Z`) >= 7 * DAY_MS;
+  return at.toLocaleDateString('en-GB', far ? { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' } : { weekday: 'long', timeZone: 'UTC' });
+};
 
 /**
  * "Can wait until later": list rows whose first planned meal is three or
@@ -15,11 +21,13 @@ const dayName = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-G
  */
 export default function ShopLater({ app, shoppingMode = false }) {
   const [open, setOpen] = useState(false);
+  const dates = useMemo(() => weekDates(app.day, 14), [app.day]);
+  const needs = useMemo(() => neededBy(app.shoppingList, app.plan, dates, app.day), [app.shoppingList, app.plan, dates, app.day]);
   const rows = useMemo(
-    () => canWaitRows(tripRows(app.shoppingList, app.day), app.plan, weekDates(app.day, 14), app.day),
-    [app.shoppingList, app.plan, app.day],
+    () => canWaitRows(tripRows(app.shoppingList, app.day, needs), app.plan, dates, app.day),
+    [app.shoppingList, app.plan, dates, app.day, needs],
   );
-  const held = useMemo(() => heldRows(app.shoppingList, app.day), [app.shoppingList, app.day]);
+  const held = useMemo(() => heldRows(app.shoppingList, app.day, needs), [app.shoppingList, app.day, needs]);
   const [announce, setAnnounce] = useState('');
   const canEdit = app.householdAccess?.shopping !== false && typeof app.holdForTopUp === 'function';
   const hold = (ids, text) => { haptic(); app.holdForTopUp(ids); setAnnounce(text); };
@@ -36,7 +44,7 @@ export default function ShopLater({ app, shoppingMode = false }) {
           {held.map((item) => (
             <li key={item.id} className="flex items-center justify-between gap-2 text-[0.8125rem]">
               <span className="font-bold">{item.name}{item.qty ? ` · ${item.qty}` : ''}
-                <span className="block text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>Back on {dayName(item.topUpOn)}</span>
+                <span className="block text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>Back on {dayName(item.topUpOn, app.day)}</span>
               </span>
               {canEdit && (
                 <button type="button" className="press min-h-[44px] px-3 text-[0.75rem] font-extrabold" aria-label={`Buy ${item.name} today instead`}
@@ -70,7 +78,7 @@ export default function ShopLater({ app, shoppingMode = false }) {
                 {item.name}{item.qty ? ` · ${item.qty}` : ''}
               </span>
               <span className="block text-[0.71875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                First needed {dayName(date)} {slot} · {recipe}
+                First needed {dayName(date, app.day)} {slot} · {recipe}
               </span>
               {canEdit && (
                 <button type="button" className="press mt-1 min-h-[44px] rounded-xl border px-3 text-[0.75rem] font-extrabold" style={{ borderColor: 'var(--line)' }}
