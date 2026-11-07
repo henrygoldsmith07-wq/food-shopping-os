@@ -73,6 +73,12 @@ export default function SwipeWeekBuilder({ dates, onDone }) {
         <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
           {added.length ? `You added ${added.length} here.` : 'Nothing left to fill.'} Send the week to your list when you are ready.
         </p>
+        {/* Filling the last night lands here, so the undo for that dinner has to as well. */}
+        {added.length > 0 && (
+          <button type="button" onClick={undo} aria-label="Undo the last dinner added" className="press inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl border px-4 text-[0.8125rem] font-extrabold" style={{ borderColor: 'var(--line)' }}>
+            <Undo2 size={15} /> Undo the last one
+          </button>
+        )}
         <button type="button" onClick={onDone} className="press w-full rounded-2xl py-3 text-[0.875rem] font-extrabold" style={{ background: 'var(--ink)', color: 'var(--card)' }}>
           Back to the plan
         </button>

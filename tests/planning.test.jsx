@@ -110,9 +110,25 @@ describe('the weekly planner', () => {
     fireEvent.click(within(deck).getByRole('button', { name: 'Skip this dinner' }));
     fireEvent.click(within(deck).getByRole('button', { name: /^Add / }));
     expect(screen.getByText(/2 meals planned/)).toBeDefined();
-    fireEvent.click(within(deck).getByRole('button', { name: 'Undo the last dinner added' }));
+    // Late in the week the second dinner fills the last open night and the
+    // deck gives way to the done screen, which keeps the undo.
+    fireEvent.click(screen.getByRole('button', { name: 'Undo the last dinner added' }));
     expect(screen.getByText(/1 meal planned/)).toBeDefined();
     expect(before).toMatch(/Swipe to fill \d+/);
+  });
+
+  it('keeps undo when the last open night has just been filled', () => {
+    onboard();
+    openPlan();
+    fireEvent.click(screen.getByRole('button', { name: /Swipe to fill \d+/ }));
+    let guard = 0;
+    while (!screen.queryByTestId('swipe-week-done') && guard < 8) {
+      fireEvent.click(within(screen.getByTestId('swipe-week')).getByRole('button', { name: /^Add / }));
+      guard += 1;
+    }
+    expect(screen.getByText('Every night this week has a dinner.')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo the last dinner added' }));
+    expect(screen.getByTestId('swipe-week')).toBeDefined();
   });
 
   it('starts cooking a planned meal from the calendar', () => {
