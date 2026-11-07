@@ -6,6 +6,7 @@ import { explainPantryShortfall } from '../lib/pantry-intelligence.js';
 import { Card, Pill } from './ui.jsx';
 import { ServingsControl } from './RecipeTools.jsx';
 import { useIngredientTicks } from '../lib/ingredient-ticks.js';
+import { scaleToPantry } from '../lib/scale-to-pantry.js';
 
 /**
  * The ingredient list, scaled to how many you are cooking for and checked
@@ -29,6 +30,8 @@ export default function RecipeIngredients({
   // Tap an ingredient once it's out on the counter (kept for this tab only).
   const [gathered, toggleGathered, clearGathered] = useIngredientTicks(original.id);
   const gatheredCount = recipe.ingredients.filter((ing) => gathered.has(ing.name)).length;
+  // Read against the recipe as written, so the offer doesn't move as servings change.
+  const fit = scaleToPantry(original, pantryRead, { current: servings });
 
   return (
     <>
@@ -39,6 +42,12 @@ export default function RecipeIngredients({
           onChange={setServings}
           costPerServing={recipe.costPerServing}
         />
+        {fit && (
+          <button type="button" onClick={() => setServings(fit.servings)} className="press mt-2 flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl border px-3 text-left text-[0.75rem] font-bold" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+            <span>You have {fit.have} {fit.ingredient.toLowerCase()}: cook for {fit.servings} (uses {fit.uses})</span>
+            <span className="shrink-0 font-extrabold">Use it</span>
+          </button>
+        )}
         <div className="my-3 flex items-center justify-between">
           <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Ingredients</p>
           <Pill tone={havePantry === recipe.ingredients.length ? 'good' : 'accent'}>
