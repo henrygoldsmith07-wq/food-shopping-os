@@ -131,6 +131,20 @@ describe('the weekly planner', () => {
     expect(screen.getByTestId('swipe-week')).toBeDefined();
   });
 
+  it('marks a night off, which the swipe builder then leaves alone', () => {
+    onboard();
+    openPlan();
+    // "Week is full" at zero, so this holds on a Sunday with one open night too.
+    const open = () => Number(screen.getByRole('button', { name: /Swipe to fill \d+|Week is full/ }).textContent.match(/\d+/)?.[0] || 0);
+    const before = open();
+    const mark = screen.getAllByRole('button', { name: /as a night off$/ })[0];
+    fireEvent.click(mark);
+    expect(screen.getAllByText('Night off').length).toBeGreaterThan(0);
+    expect(open()).toBe(before - 1);
+    fireEvent.click(screen.getAllByRole('button', { name: /again$/ })[0]);
+    expect(open()).toBe(before);
+  });
+
   it('starts cooking a planned meal from the calendar', () => {
     onboard();
     openPlan();

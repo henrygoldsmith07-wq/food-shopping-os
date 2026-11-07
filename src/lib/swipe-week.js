@@ -24,8 +24,9 @@ export function dinnerDeck(recipes = [], {
 }
 
 /** The week's dates, from today on, whose dinner is still open. Past days are never filled. */
-export function openDinnerDates(plan = {}, dates = [], today = '') {
-  return dates.filter((date) => date >= today && !(plan?.[date]?.dinner));
+export function openDinnerDates(plan = {}, dates = [], today = '', busy = null) {
+  // A busy evening (from the calendar, or a night off you marked) is not open.
+  return dates.filter((date) => date >= today && !(plan?.[date]?.dinner) && !busy?.has?.(date));
 }
 
 /** Recipe ids already on the plan for these dates, so the deck does not offer them twice. */
