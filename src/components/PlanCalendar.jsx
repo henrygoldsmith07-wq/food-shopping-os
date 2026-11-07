@@ -4,6 +4,8 @@ import { byId } from '../data/recipes.js';
 import { MEAL_SLOTS, WEEK_DAYS } from '../data/plan.js';
 import { planCost } from '../lib/kitchen-spending.js';
 import { Card, FoodArt, Pill } from './ui.jsx';
+import { useApp } from '../lib/store.jsx';
+import { nightOff, toggleNightOff } from '../lib/nights-off.js';
 
 /**
  * The calendar itself, as a week of meal slots or a month of days.
@@ -31,12 +33,16 @@ export function WeekGrid({
   busyDates, onCook,
 }) {
   const busy = busyDates instanceof Set ? busyDates : new Set(busyDates || []);
+  const app = useApp();
+  const canPlan = app.householdAccess?.recipes !== false;
+  const toggleOff = (date) => app.set({ calendarBusy: toggleNightOff(app.calendarBusy, date) });
   return (
     <div className="space-y-2.5">
       {dates.map((date, i) => {
         const slots = plan[date] || {};
         const isToday = date === today;
         const isBusy = busy.has(date);
+        const off = nightOff(app.calendarBusy, date);
         return (
           <Card
             key={date}
@@ -53,11 +59,17 @@ export function WeekGrid({
                 </span>
                 {isToday && <span className="ml-2 text-[0.6875rem] font-bold" style={{ color: 'var(--accent)' }}>Today</span>}
                 {isBusy && (
-                  <span className="ml-2 text-[0.6875rem] font-bold" style={{ color: 'var(--warn, #a55a12)' }} title="Busy evening from calendar">
-                    Busy evening
+                  <span className="ml-2 text-[0.6875rem] font-bold" style={{ color: 'var(--warn, #a55a12)' }} title={off ? 'You marked this evening off' : 'Busy evening from calendar'}>
+                    {off ? off.label : 'Busy evening'}
                   </span>
                 )}
               </p>
+              {/* A night off is for an empty dinner: eating out, away, takeaway night. */}
+              {canPlan && date >= today && (off || (!isBusy && !slots.dinner)) && (
+                <button type="button" onClick={() => toggleOff(date)} aria-label={off ? `Plan ${WEEK_DAYS[i % 7]} ${dayNumber(date)} again` : `Mark ${WEEK_DAYS[i % 7]} ${dayNumber(date)} as a night off`} className="press min-h-[44px] px-2 text-[0.6875rem] font-extrabold" style={{ color: off ? 'var(--accent)' : 'var(--muted)' }}>
+                  {off ? 'Plan this night' : 'Night off'}
+                </button>
+              )}
               {(() => {
                 // A plan slot names a recipe id; what it cost is looked up
                 // here, where the book already is — planCost stays free of the

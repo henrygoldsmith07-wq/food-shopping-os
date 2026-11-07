@@ -3,6 +3,7 @@ import { Check, Heart, Undo2, X } from 'lucide-react';
 import { formatCookTime, gbp } from '../lib/utils.js';
 import { useApp } from '../lib/store.jsx';
 import { dinnerDeck, openDinnerDates, plannedRecipeIds } from '../lib/swipe-week.js';
+import { busyDateSet } from '../lib/nights-off.js';
 import { FoodArt, Pill } from './ui.jsx';
 
 const SWIPE_PX = 90;
@@ -21,7 +22,7 @@ export default function SwipeWeekBuilder({ dates, onDone }) {
   const [dx, setDx] = useState(0);
   const start = useRef(null);
 
-  const open = openDinnerDates(app.plan, dates, app.day);
+  const open = openDinnerDates(app.plan, dates, app.day, busyDateSet(app.calendarBusy));
   const deck = useMemo(() => dinnerDeck(app.safeRecipes, {
     favourites: app.favourites,
     tasteProfile: app.tasteProfile,

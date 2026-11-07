@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { CalendarClock, Upload } from 'lucide-react';
 import { busyFromIcs, readCalendarAvailability } from '../lib/calendar.js';
 import { useApp } from '../lib/store.jsx';
+import { NIGHT_OFF_SOURCE, mergeImportedBusy } from '../lib/nights-off.js';
 
 export default function CalendarAvailability({ dates }) {
   const app = useApp();
@@ -12,11 +13,9 @@ export default function CalendarAvailability({ dates }) {
   const [status, setStatus] = useState('');
 
   const mergeBusy = (busy) => {
-    const inRange = busy.filter((item) => dates.includes(item.date));
-    const outsideRange = (app.calendarBusy || []).filter((item) => !dates.includes(item.date));
-    const byDate = new Map([...outsideRange, ...inRange].map((item) => [item.date, item]));
-    app.set({ calendarBusy: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)) });
-    return inRange.length;
+    // Nights you marked off yourself survive a re-import (see nights-off.js).
+    app.set({ calendarBusy: mergeImportedBusy(app.calendarBusy, busy, dates) });
+    return busy.filter((item) => dates.includes(item.date)).length;
   };
 
   const importAvailability = async () => {
@@ -128,7 +127,7 @@ export default function CalendarAvailability({ dates }) {
             style={{ color: 'var(--muted)' }}
             onClick={() => {
               app.set({
-                calendarBusy: (app.calendarBusy || []).filter((item) => !dates.includes(item.date)),
+                calendarBusy: (app.calendarBusy || []).filter((item) => !dates.includes(item.date) || item.source === NIGHT_OFF_SOURCE),
               });
               setStatus('Cleared busy evenings for this range.');
             }}

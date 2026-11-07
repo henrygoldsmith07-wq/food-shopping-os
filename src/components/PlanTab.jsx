@@ -117,7 +117,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
             summary={weekCostSummary(stats, effectivePeople, app.plan, dates)}
             people={effectivePeople}
             title={offset === 0 ? 'This week’s food' : `Food for the ${rangeLabel.charAt(0).toLowerCase()}${rangeLabel.slice(1)}`}
-            openNights={openDinnerDates(app.plan, dates, app.day).length}
+            openNights={openDinnerDates(app.plan, dates, app.day, new Set((app.calendarBusy || []).map((b) => b.date))).length}
             onBuild={() => setBuilding(true)} onAddToList={sendToList} addedToList={addedToList}
             aheadNextWeek={aheadNextWeek} onNextWeek={() => setOffset(1)}
           />
