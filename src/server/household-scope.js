@@ -97,11 +97,12 @@ export const scopeHouseholdState = (state, permissions = []) => {
   // Member-level food restrictions drive the same household recipe safety
   // rules as the top-level preferences and need the same access boundary.
   if (!has(permissions, 'recipes') && Array.isArray(next.members)) {
-    next.members = next.members.map(({ diets, allergies, intolerances, ...member }) => ({
+    next.members = next.members.map(({ diets, allergies, intolerances, religious, ...member }) => ({
       ...member,
       ...(diets !== undefined ? { diets: [] } : {}),
       ...(allergies !== undefined ? { allergies: [] } : {}),
       ...(intolerances !== undefined ? { intolerances: [] } : {}),
+      ...(religious !== undefined ? { religious: [] } : {}),
     }));
   }
   return next;
@@ -128,7 +129,7 @@ export const mergePermittedState = (
     next.members = incoming.members.map((member) => {
       const saved = currentMembers.get(member.id);
       const clean = { ...member };
-      for (const field of ['diets', 'allergies', 'intolerances']) {
+      for (const field of ['diets', 'allergies', 'intolerances', 'religious']) {
         if (saved && field in saved) clean[field] = saved[field];
         else delete clean[field];
       }
