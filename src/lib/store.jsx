@@ -76,7 +76,7 @@ export function AppProvider({ children }) {
 
   /* ---- Sandbox / demonstration kitchen --------------------------------
      While a demo session is open, every read comes from the demo copy and
-     every write is routed into it — the whole app is clickable, but the
+     every write is routed into it â€” the whole app is clickable, but the
      real state object is never touched, so nothing persists, nothing syncs,
      and nothing the visitor does can overwrite an empty (or any) kitchen. */
   const [demo, setDemoState] = useState(null);
@@ -86,7 +86,7 @@ export function AppProvider({ children }) {
   // and adopting one that predates an edit the user has already made would be
   // a silent rollback.
   const editedSinceBoot = useRef(false);
-  const [cloudStatus, setCloudStatus] = useState({ kind: 'checking', message: 'Checking cloud sync…' });
+  const [cloudStatus, setCloudStatus] = useState({ kind: 'checking', message: 'Checking cloud syncâ€¦' });
   const blockPersistence = useRef(isBlockingStorageIssue(initial.current.issue));
   const cloudMeta = useRef(null);
   const cloudReady = useRef(false);
@@ -97,7 +97,7 @@ export function AppProvider({ children }) {
   const cloudInitialising = useRef(false);
   const liveConnection = useRef(false);
   const undoHistory = useRef([]);
-  // While an import is in flight its writes share one undo step — reverting a
+  // While an import is in flight its writes share one undo step â€” reverting a
   // 12-trip CSV import should not take 12 presses of Ctrl+Z.
   const undoBatch = useRef(null);
   const vaultKey = useRef(null);
@@ -112,9 +112,11 @@ export function AppProvider({ children }) {
 
   // Stable across the provider's life: the api memoises on this identity.
   const routedSetState = useCallback((update) => {
-    editedSinceBoot.current = true;
     if (demoRef.current) setDemoState(update);
-    else setState(update);
+    else {
+      editedSinceBoot.current = true;
+      setState(update);
+    }
   }, []);
 
   useEffect(() => {
@@ -129,7 +131,7 @@ export function AppProvider({ children }) {
     });
   }, []);
 
-  // The state as it stands right now, for code that runs after a render —
+  // The state as it stands right now, for code that runs after a render â€”
   // leaving the page, a sync reply, a debounced push.
   const latest = useRef(state);
   latest.current = demo ?? state;
@@ -171,7 +173,7 @@ export function AppProvider({ children }) {
     return () => { cancelled = true; };
   }, [setState, setStorage, setStorageIssue]);
 
-  // A losing push — or a pull carrying a newer household copy — gets folded
+  // A losing push â€” or a pull carrying a newer household copy â€” gets folded
   // in by the whole-state adopter: rows both sides changed wait for a person,
   // not a last writer, and independent edits coexist.
   const adoptHouseholdCopy = makeCloudStateAdopter({
@@ -201,7 +203,7 @@ export function AppProvider({ children }) {
         if (update.state) {
           cloudMeta.current = update.meta;
           // Fold the household copy in rather than replacing this device's
-          // state wholesale — unsynced local edits used to vanish here.
+          // state wholesale â€” unsynced local edits used to vanish here.
           adoptHouseholdCopy(hydrate(update.state), remoteVersion);
           cloudReady.current = true; // a fresh household copy re-arms a sync a conflict had stopped
           if (liveConnection.current && update.status.kind === 'ready') {
@@ -306,7 +308,7 @@ export function AppProvider({ children }) {
           else unsubscribeRealtime = unsubscribe;
         }).catch(() => {
           liveConnection.current = false;
-          setCloudStatus({ kind: 'reconnecting', message: 'Cloud sync ready. Reconnecting live updates…' });
+          setCloudStatus({ kind: 'reconnecting', message: 'Cloud sync ready. Reconnecting live updatesâ€¦' });
         });
         }
       } finally {
@@ -362,7 +364,7 @@ export function AppProvider({ children }) {
   }, [state]);
 
   /* Under 18 the product-insights answer is "no" and stays "no". Hiding the
-     toggle isn't enough — a consent granted before a birthday, or restored
+     toggle isn't enough â€” a consent granted before a birthday, or restored
      from a backup, is revoked here rather than quietly honoured. Reading the
      whole profile rather than one field means a consent restored by a backup,
      or granted before a birthday, is revoked even when nothing else changed. */
@@ -393,7 +395,7 @@ export function AppProvider({ children }) {
     routedSetState((s) => {
       const checkpoint = undoBatch.current;
       undoBatch.current = null;
-      // The pre-import state becomes exactly one undo step — but only if the
+      // The pre-import state becomes exactly one undo step â€” but only if the
       // import actually wrote something.
       if (checkpoint && checkpoint !== 'open') {
         undoHistory.current = [...undoHistory.current.slice(-29), checkpoint];
@@ -402,13 +404,13 @@ export function AppProvider({ children }) {
     });
   }, [routedSetState, undoHistory]);
 
-  /* Everything below is derived — the app never stores a number twice. */
+  /* Everything below is derived â€” the app never stores a number twice. */
   const effectiveState = demo ?? state;
   // The eager tier of the book ships in the first paint and is what planning,
   // the shopping list, cooking and logging run on offline from the first
   // second. The long tail is a local module fetch; when it lands it appends to
   // the same live arrays, so the derived view is recomputed once to pick the
-  // extra rows up. A failed load leaves the eager book in place — a partial
+  // extra rows up. A failed load leaves the eager book in place â€” a partial
   // book must never look like a broken app.
   const [catalogueComplete, setCatalogueComplete] = useState(false);
   useEffect(() => {
@@ -434,16 +436,16 @@ export function AppProvider({ children }) {
     const due = dueNow(effectiveState.reminders, { now, done: effectiveState.reminderDone });
     return {
       remindersDue: due,
-      // What came due while the app was shut. It can't notify you then — no
-      // server to wake it — so the least it can do is not pretend otherwise.
+      // What came due while the app was shut. It can't notify you then â€” no
+      // server to wake it â€” so the least it can do is not pretend otherwise.
       remindersMissed: dueBetween(effectiveState.reminders, seenFrom, tick, effectiveState.reminderDone)
         .filter((m) => !due.some((d) => d.reminder.id === m.reminder.id && d.stamp === m.stamp && d.time === m.time)),
       now,
     };
   }, [effectiveState.reminders, effectiveState.reminderDone, seenFrom, tick]);
 
-  /* Sandbox behaviour (demo session + adoption) lives beside the store —
-     see store-demo.js — so this module stays within the 500-line boundary
+  /* Sandbox behaviour (demo session + adoption) lives beside the store â€”
+     see store-demo.js â€” so this module stays within the 500-line boundary
      the merge-conflict tripwires enforce. Same callbacks, new address. */
   const { enterDemoMode, exitDemoMode, adoptDemoWeek } = useDemoKitchen({
     demoRef, realUndoStack, undoHistory, undoBatch, editedSinceBoot,
@@ -477,3 +479,4 @@ export const useApp = () => {
 };
 
 export const useOptionalApp = () => useContext(AppContext);
+

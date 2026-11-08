@@ -9,6 +9,14 @@ const FIELD_PERMISSION = {
   waste: 'shopping',
   weeklyBudget: 'shopping',
   monthlyBudget: 'shopping',
+  // A goal is personal health information. Dietary restrictions remain
+  // available to members who can use recipes, so household meal safety still
+  // has the context it needs.
+  goal: 'health',
+  diets: 'recipes',
+  allergies: 'recipes',
+  intolerances: 'recipes',
+  religious: 'recipes',
   pantry: 'pantry',
   autoUsePantry: 'pantry',
   plan: 'recipes',
@@ -44,6 +52,11 @@ const EMPTY_BY_FIELD = {
   waste: [],
   weeklyBudget: 0,
   monthlyBudget: 0,
+  goal: 'maintain',
+  diets: [],
+  allergies: [],
+  intolerances: [],
+  religious: [],
   pantry: [],
   autoUsePantry: false,
   plan: {},
@@ -81,6 +94,17 @@ export const scopeHouseholdState = (state, permissions = []) => {
   for (const [field, permission] of Object.entries(FIELD_PERMISSION)) {
     if (!has(permissions, permission) && field in next) next[field] = EMPTY_BY_FIELD[field];
   }
+  // Member-level food restrictions drive the same household recipe safety
+  // rules as the top-level preferences and need the same access boundary.
+  if (!has(permissions, 'recipes') && Array.isArray(next.members)) {
+    next.members = next.members.map(({ diets, allergies, intolerances, religious, ...member }) => ({
+      ...member,
+      ...(diets !== undefined ? { diets: [] } : {}),
+      ...(allergies !== undefined ? { allergies: [] } : {}),
+      ...(intolerances !== undefined ? { intolerances: [] } : {}),
+      ...(religious !== undefined ? { religious: [] } : {}),
+    }));
+  }
   return next;
 };
 
@@ -94,13 +118,26 @@ export const mergePermittedState = (
         next[field] = current[field];
       } else {
         // Deny by default: on a document with no agreed value yet (first
-        // write), a member without the permission must not seed one — there
+        // write), a member without the permission must not seed one â€” there
         // is nothing to revert to, so the incoming value is dropped instead.
         delete next[field];
       }
     }
   }
+  if (!has(permissions, 'recipes') && Array.isArray(incoming.members)) {
+    const currentMembers = new Map((current.members || []).map((member) => [member.id, member]));
+    next.members = incoming.members.map((member) => {
+      const saved = currentMembers.get(member.id);
+      const clean = { ...member };
+      for (const field of ['diets', 'allergies', 'intolerances', 'religious']) {
+        if (saved && field in saved) clean[field] = saved[field];
+        else delete clean[field];
+      }
+      return clean;
+    });
+  }
   return next;
 };
 
 export const permissionForField = (field) => FIELD_PERMISSION[field] || null;
+
