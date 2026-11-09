@@ -37,9 +37,9 @@ const STEP_META = [
 ];
 
 const GOAL_FINISH = {
-  plan: { title: 'Choose your first dinners', note: 'Pick a few meals and see them placed into your week.', action: 'Open my meal plan' },
-  shop: { title: 'Build your first list', note: 'Choose a few dinners and Forq will turn them into one clear shopping list.', action: 'Open my shopping list' },
-  pantry: { title: 'Start with your pantry', note: 'Add a few things you already own. Forq will use confirmed stock when it builds your next list.', action: 'Open my pantry' },
+  plan: { title: 'Choose your first dinners', note: 'Pick a few meals and see them placed into your week.', actionLabel: 'Open my meal plan', description: 'Your selected dinners will be waiting in your meal plan.' },
+  shop: { title: 'Build your first list', note: 'Choose a few dinners and Forq will turn them into one clear shopping list.', actionLabel: 'Open my shopping list', description: 'Your shopping list is ready to review.' },
+  pantry: { title: 'Start with your pantry', note: 'Add a few things you already own. Forq will use confirmed stock when it builds your next list.', actionLabel: 'Open my pantry', description: 'Next, add confirmed stock in your pantry before you plan.' },
 };
 
 export default function Onboarding({ onFinish }) {
@@ -596,16 +596,28 @@ export default function Onboarding({ onFinish }) {
           </button>
         )}
         <button
+          type="button"
           onClick={() => (step === 2 ? finish() : setStep(step + 1))}
           disabled={step === 2 && youth && !youthConsent}
+          aria-describedby={step === 2 ? 'onboarding-next-action' : undefined}
           className="press flex min-h-12 flex-1 items-center justify-center rounded-2xl py-3.5 text-[0.9375rem] font-extrabold disabled:opacity-50"
           style={{ background: 'var(--accent)', color: 'var(--on-accent)', boxShadow: '0 10px 24px color-mix(in srgb, var(--accent) 22%, transparent)' }}
         >
           <span className="inline-flex items-center gap-2">
-            {step === 2 ? <><Check size={16} strokeWidth={3} /> {goalFinish.action}</> : <>Continue <ArrowRight size={16} /></>}
+            {step === 2 ? (
+              <>
+                <Check size={16} strokeWidth={3} />
+                <span>Start using Forq</span>
+                <span aria-hidden="true" className="ml-1 rounded-full border px-2 py-1 text-[0.6875rem]" style={{ borderColor: 'color-mix(in srgb, var(--on-accent) 36%, transparent)' }}>
+                  {goalFinish.actionLabel}
+                </span>
+              </>
+            ) : <>Continue <ArrowRight size={16} /></>}
           </span>
         </button>
       </div>
+
+      {step === 2 && <p id="onboarding-next-action" className="sr-only">{goalFinish.description}</p>}
 
       {step === 2 && !youth && (
         <p className="mt-3 text-center text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
