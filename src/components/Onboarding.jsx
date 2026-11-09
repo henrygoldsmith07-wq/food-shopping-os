@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, CalendarDays, Check, FlaskConical, Package, ShoppingCart, SlidersHorizontal,
-  Upload, UtensilsCrossed,
+  ArrowRight, CalendarDays, Check, CheckCircle2, FlaskConical, LockKeyhole, Package,
+  ShoppingCart, SlidersHorizontal, Sparkles, Upload, UtensilsCrossed,
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { DEFAULT_TARGETS } from '../data/nutrients.js';
@@ -13,10 +13,9 @@ import {
 } from '../lib/youth.js';
 import { byId } from '../data/recipes.js';
 import { MAX_STARTER_PICKS, starterOptions, starterSuitable } from '../lib/starter-recipes.js';
-import { addDays } from '../lib/kitchen.js';
 import { haptic } from '../lib/haptics.js';
 import { recordProductEvent } from '../lib/product-analytics.js';
-import { Card, Chip, Stepper, Toggle } from './ui.jsx';
+import { Card, Chip, FoodArt, Stepper, Toggle } from './ui.jsx';
 import StarterPicker from './StarterPicker.jsx';
 import OnboardingAccount from './AccountSignIn.jsx';
 import { NumberField } from './FoodDetail.jsx';
@@ -31,9 +30,22 @@ const ENTRY_GOALS = [
   { id: 'pantry', title: 'Use food I already have', text: 'Start with your kitchen and waste less.', Icon: Package },
 ];
 
-export default function Onboarding() {
+const STEP_META = [
+  { label: 'Your start', title: 'Welcome to Forq', note: 'Make this week yours from the first tap.' },
+  { label: 'Your kitchen', title: 'A little context', note: 'Just enough to make the first list fit.' },
+  { label: 'Your first action', title: 'Your first win', note: 'Choose where Forq should take you first.' },
+];
+
+const GOAL_FINISH = {
+  plan: { title: 'Choose your first dinners', note: 'Pick a few meals and see them placed into your week.', action: 'Open my meal plan' },
+  shop: { title: 'Build your first list', note: 'Choose a few dinners and Forq will turn them into one clear shopping list.', action: 'Open my shopping list' },
+  pantry: { title: 'Start with your pantry', note: 'Add a few things you already own. Forq will use confirmed stock when it builds your next list.', action: 'Open my pantry' },
+};
+
+export default function Onboarding({ onFinish }) {
   const app = useApp();
   const restoreRef = useRef(null);
+  const seenSteps = useRef(new Set());
   const [restoreStatus, setRestoreStatus] = useState('');
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
@@ -75,13 +87,13 @@ export default function Onboarding() {
      earlier round of suggestions do survive. */
   const picked = starterRecipeIds.filter((id) => starterSuitable(byId(id), rules));
 
-  const body = {
+  const body = useMemo(() => ({
     sex,
     age: num(age),
     heightCm: num(heightCm),
     weightKg: num(weightKg),
     activity: 'light',
-  };
+  }), [sex, age, heightCm, weightKg]);
   // With weight, height and age, the equation runs; without, we fall back to
   // whatever figure you typed, and with neither to the default.
   const estimated = maintenanceFrom(body);
@@ -115,11 +127,6 @@ export default function Onboarding() {
   });
 
   const finish = () => {
-    const starterRecipes = picked.map(byId).filter(Boolean);
-    const starterPlan = Object.fromEntries(starterRecipes.map((recipe, index) => [
-      addDays(app.day, index),
-      { dinner: recipe.id },
-    ]));
     const state = {
       goal: chosenGoal,
       diets,
@@ -138,23 +145,17 @@ export default function Onboarding() {
       // is nothing extra to store and it stays null.
       youthConsent: youth && youthConsent ? youthConsentRecord(app.day) : null,
       entryGoal,
-      starterRecipeIds: picked,
-      plan: starterPlan,
-      ...firstSessionPlan({
-        day: app.day,
-        recipes: starterRecipes,
-        pickedRecipeIds: picked,
-        household,
-        budget,
-      }),
+      starterRecipeIds: entryGoal === 'pantry' ? [] : picked,
+      ...firstSession,
       weeklyBudget: Math.max(0, Number(budget) || 0),
       targets: targetsFor(state),
     });
     recordProductEvent('onboarding_completed', {
       intent: entryGoal,
-      count: picked.length,
+      count: entryGoal === 'pantry' ? 0 : picked.length,
     }, undefined, state);
     haptic();
+    onFinish?.(entryGoal);
   };
 
   const restore = async (event) => {
@@ -165,24 +166,127 @@ export default function Onboarding() {
     setRestoreStatus(result.ok ? 'Backup restored.' : result.error);
   };
 
-  return (
-    <div className="mx-auto max-w-lg min-h-screen px-5 pt-16 pb-10" style={{ background: 'var(--bg)' }}>
-      <div className="rise">
-        <UtensilsCrossed size={30} strokeWidth={1.5} style={{ color: 'var(--muted)' }} />
-        <h1 className="mt-3 text-[1.75rem] font-extrabold tracking-tight leading-tight">
-          {step === 0 ? 'Welcome to Forq' : step === 1 ? 'A little context' : 'Your first win'}
-        </h1>
-        <p className="mt-1.5 text-[0.875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-          Tell Forq what you are eating; it works out what to buy; it helps you waste less.
-        </p>
-        <p className="mt-1 text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>
-          {step === 0 && '1. Plan meals · 2. Buy exactly what you need · 3. Waste less. Nothing is filled in for you, and you can change direction at any time.'}
-          {step === 1 && 'A few high-signal details make your first plan and shop useful. Everything else can be learned as you go.'}
-          {step === 2 && 'Pick up to three meals and Forq will turn them into a first plan and one shopping list.'}
-        </p>
-      </div>
+  const currentStep = STEP_META[step];
+  const goalFinish = GOAL_FINISH[entryGoal] || GOAL_FINISH.plan;
+  const stepNote = step === 0
+    ? 'Plan a few meals, use what is already in your kitchen, and get one clear list. You stay in control of every choice.'
+    : step === 1
+      ? 'These details shape portions and suggestions. Skip anything you do not want to share.'
+      : goalFinish.note;
+  const ideaCards = starters.options.slice(0, 3);
+  const starterRecipes = (entryGoal === 'pantry' ? [] : picked).map(byId).filter(Boolean);
+  const firstSession = firstSessionPlan({
+    day: app.day,
+    recipes: starterRecipes,
+    pickedRecipeIds: entryGoal === 'pantry' ? [] : picked,
+    household,
+    budget,
+  });
 
-      <div className="mt-6 space-y-4 rise rise-1">
+  useEffect(() => {
+    if (seenSteps.current.has(step)) return;
+    seenSteps.current.add(step);
+    recordProductEvent(
+      `onboarding_step_${step + 1}_viewed`,
+      {},
+      undefined,
+      { ...app, body },
+    );
+  }, [step, app, body]);
+
+  return (
+    <main
+      className="min-h-screen px-4 py-5 sm:px-6 sm:py-7 lg:px-10"
+      style={{
+        background: 'radial-gradient(ellipse at 12% 4%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 38%), radial-gradient(ellipse at 94% 94%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%), var(--bg)',
+      }}
+    >
+      <div className="mx-auto grid min-h-[calc(100vh-2.5rem)] w-full max-w-6xl gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)] lg:gap-12">
+        <section className="flex flex-col justify-between gap-6 py-2 lg:sticky lg:top-0 lg:min-h-[calc(100vh-3.5rem)] lg:py-8">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+              <UtensilsCrossed size={19} strokeWidth={1.8} />
+            </span>
+            <span className="text-[0.875rem] font-black uppercase tracking-[0.2em]">Forq</span>
+            <span className="ml-auto hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.6875rem] font-bold sm:inline-flex lg:hidden" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+              <LockKeyhole size={12} /> Local first
+            </span>
+          </div>
+
+          <div className="max-w-xl">
+            <p className="mb-3 inline-flex items-center gap-1.5 text-[0.6875rem] font-extrabold uppercase tracking-[0.16em]" style={{ color: 'var(--accent)' }}>
+              <Sparkles size={13} /> A calmer way to plan your week
+            </p>
+            <h2 className="max-w-lg text-[2.25rem] font-black leading-[1.04] tracking-[-0.055em] sm:text-[3rem] lg:text-[3.6rem]">
+              Good food.<br className="hidden sm:block" /> Less guesswork.
+            </h2>
+            <p className="mt-4 max-w-md text-[0.9375rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>
+              A meal plan that knows what is in your kitchen, then turns it into a shopping list that makes sense.
+            </p>
+          </div>
+
+          <div className="hidden space-y-3 lg:block">
+            <div className="flex items-center justify-between">
+              <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.14em]" style={{ color: 'var(--faint)' }}>A taste of your recipe book</p>
+              <span className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>Suggestions, never a plan</span>
+            </div>
+            {ideaCards.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {ideaCards.map(({ recipe }, index) => (
+                  <div
+                    key={recipe.id}
+                    className={`overflow-hidden rounded-[1.4rem] border ${index === 0 ? 'row-span-2' : ''}`}
+                    style={{ borderColor: 'var(--line)', background: 'var(--card)', boxShadow: '0 18px 50px color-mix(in srgb, var(--ink) 7%, transparent)' }}
+                  >
+                    <FoodArt recipe={recipe} className={index === 0 ? 'h-52 w-full' : 'h-24 w-full'} px={index === 0 ? 36 : 22} />
+                    <div className="p-3">
+                      <p className="line-clamp-2 text-[0.8125rem] font-extrabold leading-snug">{recipe.name}</p>
+                      <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+                        {Number(recipe.costPerServing) > 0
+                          ? `£${Number(recipe.costPerServing).toFixed(2)} per serving`
+                          : 'Cost estimate unavailable'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[1.4rem] border p-5 text-[0.8125rem] font-semibold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+                Your recipe ideas will appear here once your food preferences are set.
+              </div>
+            )}
+          </div>
+
+          <div className="hidden items-center gap-3 border-t pt-4 text-[0.75rem] font-semibold lg:flex" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+            <span className="grid h-8 w-8 place-items-center rounded-xl" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><LockKeyhole size={14} /></span>
+            <span><strong style={{ color: 'var(--ink)' }}>Private by default.</strong> No account needed. Sync is optional.</span>
+          </div>
+        </section>
+
+        <section className="flex items-center py-1 lg:py-6">
+          <div
+            className="w-full rounded-[1.75rem] border p-5 sm:p-7 lg:p-8"
+            style={{ borderColor: 'var(--line)', background: 'color-mix(in srgb, var(--card) 96%, transparent)', boxShadow: '0 28px 90px color-mix(in srgb, var(--ink) 9%, transparent)' }}
+          >
+            <div className="mb-7">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.16em]" style={{ color: 'var(--accent)' }}>Step {step + 1} <span style={{ color: 'var(--faint)' }}>/ 3</span></p>
+                <p className="text-[0.6875rem] font-bold" style={{ color: 'var(--muted)' }}>{currentStep.label}</p>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5" role="progressbar" aria-label={`Onboarding: step ${step + 1} of 3`} aria-valuemin={1} aria-valuemax={3} aria-valuenow={step + 1}>
+                {[0, 1, 2].map((index) => (
+                  <span key={index} className="h-1.5 rounded-full transition-colors" style={{ background: index <= step ? 'var(--accent)' : 'var(--line)' }} />
+                ))}
+              </div>
+            </div>
+
+            <header className="mb-6">
+              <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.14em]" style={{ color: 'var(--faint)' }}>{currentStep.note}</p>
+              <h1 className="mt-2 text-[1.75rem] font-black tracking-[-0.045em] leading-tight sm:text-[2rem]">{step === 2 ? goalFinish.title : currentStep.title}</h1>
+              <p className="mt-2 max-w-xl text-[0.875rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>{stepNote}</p>
+            </header>
+
+            <div className="space-y-4">
         {step === 0 && (
           <>
             <OnboardingAccount />
@@ -190,17 +294,18 @@ export default function Onboarding() {
               <legend className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
                 What would you like help with first?
               </legend>
-              <div className="mt-2 grid gap-2.5">
+              <div className="mt-3 grid gap-2.5">
                 {ENTRY_GOALS.map(({ id, title, text, Icon }) => (
                   <button
                     key={id}
                     type="button"
                     aria-pressed={entryGoal === id}
                     onClick={() => setEntryGoal(id)}
-                    className="press flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left"
+                    className="press flex min-h-[4.5rem] w-full items-center gap-3 rounded-[1.25rem] border p-3.5 text-left transition-colors"
                     style={{
                       background: entryGoal === id ? 'var(--accent-soft)' : 'var(--card)',
                       borderColor: entryGoal === id ? 'var(--accent)' : 'var(--line)',
+                      boxShadow: entryGoal === id ? '0 0 0 1px var(--accent), 0 10px 28px color-mix(in srgb, var(--accent) 8%, transparent)' : 'none',
                     }}
                   >
                     <span
@@ -212,6 +317,9 @@ export default function Onboarding() {
                     <span className="min-w-0">
                       <span className="block text-[0.875rem] font-extrabold">{title}</span>
                       <span className="block text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>{text}</span>
+                    </span>
+                    <span className="ml-auto shrink-0" style={{ color: entryGoal === id ? 'var(--accent)' : 'var(--line)' }}>
+                      <CheckCircle2 size={19} strokeWidth={entryGoal === id ? 2.5 : 1.7} />
                     </span>
                   </button>
                 ))}
@@ -293,7 +401,28 @@ export default function Onboarding() {
           </>
         )}
 
-        {step === 2 && (
+        {step === 2 && entryGoal === 'pantry' && (
+          <div className="rounded-[1.5rem] border p-5 sm:p-6" style={{ borderColor: 'var(--line)', background: 'linear-gradient(145deg, var(--accent-soft), color-mix(in srgb, var(--card) 92%, transparent))' }}>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+                <Package size={18} />
+              </span>
+              <div>
+                <p className="text-[0.9375rem] font-extrabold">Your kitchen, before the shopping list</p>
+                <p className="mt-1 text-[0.8125rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>
+                  Start with one item you already have. Add a name and quantity in your pantry; Forq only subtracts stock you confirm.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-2xl border p-4" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
+              <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.12em]" style={{ color: 'var(--faint)' }}>Your next step</p>
+              <p className="mt-1 text-[0.875rem] font-extrabold">Add one cupboard or fridge item</p>
+              <p className="mt-1 text-[0.75rem] font-medium" style={{ color: 'var(--muted)' }}>Then plan a meal to see what you can make before you shop.</p>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && entryGoal !== 'pantry' && (
           <>
             <StarterPicker
               starters={starters}
@@ -303,6 +432,44 @@ export default function Onboarding() {
                 : picked.length < MAX_STARTER_PICKS ? [...current, id] : current))}
               onMore={() => setStarterRound((round) => round + 1)}
             />
+
+            <div className="rounded-[1.35rem] border p-4 sm:p-5" style={{ borderColor: 'var(--line)', background: 'linear-gradient(145deg, var(--accent-soft), color-mix(in srgb, var(--card) 92%, transparent))' }}>
+              <div className="flex items-start gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+                  <ShoppingCart size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.8125rem] font-extrabold">{entryGoal === 'shop' ? 'Your first shopping list' : 'Ingredients for your week'}</p>
+                  {picked.length ? (
+                    <>
+                      <p className="mt-0.5 text-[0.75rem] font-medium" style={{ color: 'var(--muted)' }}>
+                        {picked.length} dinner{picked.length === 1 ? '' : 's'} · {firstSession.shoppingList.length} ingredients · {household} person{household === 1 ? '' : 's'}
+                      </p>
+                      <div className="mt-3 space-y-1.5 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+                        {firstSession.shoppingList.slice(0, 4).map((item) => (
+                          <div key={item.id} className="flex items-center justify-between gap-3 text-[0.75rem]">
+                            <span className="truncate font-semibold">{item.name}</span>
+                            <span className="shrink-0 font-bold" style={{ color: 'var(--muted)' }}>{item.qty}</span>
+                          </div>
+                        ))}
+                        {firstSession.shoppingList.length > 4 && (
+                          <p className="pt-0.5 text-[0.6875rem] font-bold" style={{ color: 'var(--accent)' }}>
+                            + {firstSession.shoppingList.length - 4} more ingredients
+                          </p>
+                        )}
+                      </div>
+                      <p className="mt-2 text-[0.65625rem] font-medium leading-relaxed" style={{ color: 'var(--faint)' }}>
+                        Quantities scale to your household. Pantry stock has not been checked yet.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-0.5 text-[0.75rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>
+                      Choose a dinner to see its ingredients here, or leave your kitchen empty for now.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <button
               type="button"
@@ -418,12 +585,12 @@ export default function Onboarding() {
         )}
       </div>
 
-      <div className="mt-8 flex gap-2.5 rise rise-2">
+      <div className="mt-7 flex gap-2.5 rise rise-2">
         {step > 0 && (
           <button
             onClick={() => setStep(step - 1)}
-            className="press rounded-2xl border px-5 py-3.5 font-extrabold"
-            style={{ borderColor: 'var(--line)' }}
+            className="press min-h-12 rounded-2xl border px-5 py-3.5 text-[0.875rem] font-extrabold"
+            style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
           >
             Back
           </button>
@@ -431,19 +598,27 @@ export default function Onboarding() {
         <button
           onClick={() => (step === 2 ? finish() : setStep(step + 1))}
           disabled={step === 2 && youth && !youthConsent}
-          className="press flex-1 rounded-2xl py-3.5 text-[0.9375rem] font-extrabold disabled:opacity-50"
-          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+          className="press flex min-h-12 flex-1 items-center justify-center rounded-2xl py-3.5 text-[0.9375rem] font-extrabold disabled:opacity-50"
+          style={{ background: 'var(--accent)', color: 'var(--on-accent)', boxShadow: '0 10px 24px color-mix(in srgb, var(--accent) 22%, transparent)' }}
         >
           <span className="inline-flex items-center gap-2">
-            {step === 2 ? <><Check size={16} strokeWidth={3} /> Start using Forq</> : <>Continue <ArrowRight size={16} /></>}
+            {step === 2 ? <><Check size={16} strokeWidth={3} /> {goalFinish.action}</> : <>Continue <ArrowRight size={16} /></>}
           </span>
         </button>
       </div>
 
+      {step === 2 && !youth && (
+        <p className="mt-3 text-center text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
+          Nutrition setup is optional. You can change these choices later.
+        </p>
+      )}
+
+          </div>
+
       {step === 0 && (
-        <div className="mt-4 text-center">
+        <div className="mt-4 rounded-2xl border p-4 text-center" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
           <button
-            className="press px-4 py-2 text-[0.78125rem] font-bold"
+            className="press min-h-11 px-4 py-2 text-[0.8125rem] font-extrabold"
             style={{ color: 'var(--accent)' }}
             onClick={app.enterDemoMode}
           >
@@ -452,13 +627,15 @@ export default function Onboarding() {
           <p className="mt-0.5 px-6 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
             A fully stocked demo kitchen — plan, list, receipts. Nothing is saved and your own start is untouched.
           </p>
-          <button
-            className="press mt-3 px-4 py-2 text-[0.78125rem] font-bold"
-            style={{ color: 'var(--muted)' }}
-            onClick={() => restoreRef.current?.click()}
-          >
-            <span className="inline-flex items-center gap-1.5"><Upload size={14} /> Restore an existing backup</span>
-          </button>
+          <div className="mt-3 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
+            <button
+              className="press min-h-10 px-4 py-2 text-[0.75rem] font-bold"
+              style={{ color: 'var(--muted)' }}
+              onClick={() => restoreRef.current?.click()}
+            >
+              <span className="inline-flex items-center gap-1.5"><Upload size={14} /> Restore an existing backup</span>
+            </button>
+          </div>
           <input
             ref={restoreRef}
             type="file"
@@ -471,15 +648,11 @@ export default function Onboarding() {
         </div>
       )}
 
-      <div className="mt-5 flex justify-center gap-1.5">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="h-1.5 rounded-full transition-all"
-            style={{ width: i === step ? 22 : 8, background: i === step ? 'var(--accent)' : 'var(--line)' }}
-          />
-        ))}
+          <p className="mt-4 text-center text-[0.6875rem] font-semibold lg:hidden" style={{ color: 'var(--faint)' }}>
+            Private by default · No account needed · Sync is optional
+          </p>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

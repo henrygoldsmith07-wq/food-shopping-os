@@ -301,7 +301,16 @@ function Shell() {
 
   // Nothing is pre-filled, so the first run asks for the little it needs.
   if (!app.onboarded) {
-    return <Onboarding />;
+    return (
+      <Onboarding onFinish={(goal) => {
+        if (goal === 'plan') setTab('plan');
+        else if (goal === 'shop') setTab('shop');
+        else {
+          setTab('shop');
+          setPantryOpen(true);
+        }
+      }} />
+    );
   }
 
   return (
