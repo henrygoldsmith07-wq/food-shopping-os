@@ -32,24 +32,7 @@ import WasteReportCard from './WasteReportCard.jsx';
 import OutcomeDashboard from './OutcomeDashboard.jsx';
 import WeekRecoveryPreview from './WeekRecoveryPreview.jsx';
 
-/**
- * This Week — the one surface that answers the product promise.
- *
- * In the order a person actually asks for it:
- *
- *   1. What should I do next?        one card, one action (lib/next-action.js)
- *   2. What am I eating tonight?     the meal decision engine's pick
- *   3. What needs buying or using?   use-soon, next shop, leftovers
- *   4. What changed because Forq     adaptations, shown only where it
- *      learned something?            changes something
- *   5. What else needs attention?    everything else, behind "Explore more"
- *
- * The screen used to open with three cards that all claimed to be the next
- * thing to do. Now one does, and the other two — plus setup guidance and the
- * weekly report — sit behind a single disclosure. No capability was removed:
- * the next-action card links straight into whichever of them is the answer
- * today. Offline-first, no fetching, fully keyboard navigable.
- */
+
 export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, goLog, onOpenWeekLoop }) {
   const app = useApp();
   const widgets = new Set(app.homeWidgets || []);

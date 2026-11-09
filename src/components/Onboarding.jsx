@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ArrowRight, CalendarDays, Check, CheckCircle2, FlaskConical, LockKeyhole, Package,
-  ShoppingCart, SlidersHorizontal, Sparkles, Upload, UtensilsCrossed,
-} from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, FlaskConical, Package, ShoppingCart, SlidersHorizontal, Upload } from 'lucide-react';
+import { STEP_META, GOAL_FINISH } from './onboarding-config.js';
+import OnboardingWelcomeStep from './OnboardingWelcomeStep.jsx';
 import { useApp } from '../lib/store.jsx';
 import { DEFAULT_TARGETS } from '../data/nutrients.js';
 import { BODY_GOALS, DIET_PATTERNS, SEXES } from '../data/goals.js';
@@ -21,26 +20,9 @@ import OnboardingAccount from './AccountSignIn.jsx';
 import { NumberField } from './FoodDetail.jsx';
 import { TargetPreview } from './TargetSafety.jsx';
 import { QUICK_START_DEFAULTS, firstSessionPlan } from '../lib/onboarding-quick-start.js';
+import OnboardingShowcase from './OnboardingShowcase.jsx';
 
 const num = (value) => Math.max(0, Number(value) || 0) || null;
-
-const ENTRY_GOALS = [
-  { id: 'plan', title: 'Plan my meals', text: 'Choose a few dishes and build your week.', Icon: CalendarDays },
-  { id: 'shop', title: 'Build a shopping list', text: 'Get one clear list, organised by aisle.', Icon: ShoppingCart },
-  { id: 'pantry', title: 'Use food I already have', text: 'Start with your kitchen and waste less.', Icon: Package },
-];
-
-const STEP_META = [
-  { label: 'Your start', title: 'Welcome to Forq', note: 'Make this week yours from the first tap.' },
-  { label: 'Your kitchen', title: 'A little context', note: 'Just enough to make the first list fit.' },
-  { label: 'Your first action', title: 'Your first win', note: 'Choose where Forq should take you first.' },
-];
-
-const GOAL_FINISH = {
-  plan: { title: 'Choose your first dinners', note: 'Pick a few meals and see them placed into your week.', actionLabel: 'Next: meal plan', description: 'Forq will open the home screen, where you can run the week loop for your selected dinners.' },
-  shop: { title: 'Build your first list', note: 'Choose a few dinners and Forq will turn them into one clear shopping list.', actionLabel: 'Next: shopping list', description: 'Forq will open the home screen, where you can review your list or plan dinners to make one.' },
-  pantry: { title: 'Start with your pantry', note: 'Add a few things you already own. Forq will use confirmed stock when it builds your next list.', actionLabel: 'Next: pantry', description: 'Forq will open the home screen, where your first action is to add confirmed pantry stock.' },
-};
 
 export default function Onboarding() {
   const app = useApp();
@@ -94,8 +76,6 @@ export default function Onboarding() {
     weightKg: num(weightKg),
     activity: 'light',
   }), [sex, age, heightCm, weightKg]);
-  // With weight, height and age, the equation runs; without, we fall back to
-  // whatever figure you typed, and with neither to the default.
   const estimated = maintenanceFrom(body);
   /* The age is asked before anything is offered, so under-18 mode is on for the
      rest of setup rather than applied afterwards. */
@@ -139,10 +119,7 @@ export default function Onboarding() {
       name: name.trim() || 'you',
       household,
       trackCycle,
-      // Opting in at setup grants the cycle tool, so Health shows the page.
       ...(trackCycle ? { enabledTools: ['cycle'] } : {}),
-      // Under 18 the consent answer is stored as its own record; over 18 there
-      // is nothing extra to store and it stays null.
       youthConsent: youth && youthConsent ? youthConsentRecord(app.day) : null,
       entryGoal,
       starterRecipeIds: entryGoal === 'pantry' ? [] : picked,
@@ -201,67 +178,7 @@ export default function Onboarding() {
       }}
     >
       <div className="mx-auto grid min-h-[calc(100vh-2.5rem)] w-full max-w-6xl gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)] lg:gap-12">
-        <section className="flex flex-col justify-between gap-6 py-2 lg:sticky lg:top-0 lg:min-h-[calc(100vh-3.5rem)] lg:py-8">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
-              <UtensilsCrossed size={19} strokeWidth={1.8} />
-            </span>
-            <span className="text-[0.875rem] font-black uppercase tracking-[0.2em]">Forq</span>
-            <span className="ml-auto hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.6875rem] font-bold sm:inline-flex lg:hidden" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
-              <LockKeyhole size={12} /> Local first
-            </span>
-          </div>
-
-          <div className="max-w-xl">
-            <p className="mb-3 inline-flex items-center gap-1.5 text-[0.6875rem] font-extrabold uppercase tracking-[0.16em]" style={{ color: 'var(--accent)' }}>
-              <Sparkles size={13} /> A calmer way to plan your week
-            </p>
-            <h2 className="max-w-lg text-[2.25rem] font-black leading-[1.04] tracking-[-0.055em] sm:text-[3rem] lg:text-[3.6rem]">
-              Good food.<br className="hidden sm:block" /> Less guesswork.
-            </h2>
-            <p className="mt-4 max-w-md text-[0.9375rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>
-              A meal plan that knows what is in your kitchen, then turns it into a shopping list that makes sense.
-            </p>
-          </div>
-
-          <div className="hidden space-y-3 lg:block">
-            <div className="flex items-center justify-between">
-              <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.14em]" style={{ color: 'var(--faint)' }}>A taste of your recipe book</p>
-              <span className="text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>Suggestions, never a plan</span>
-            </div>
-            {ideaCards.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3">
-                {ideaCards.map(({ recipe }, index) => (
-                  <div
-                    key={recipe.id}
-                    className={`overflow-hidden rounded-[1.4rem] border ${index === 0 ? 'row-span-2' : ''}`}
-                    style={{ borderColor: 'var(--line)', background: 'var(--card)', boxShadow: '0 18px 50px color-mix(in srgb, var(--ink) 7%, transparent)' }}
-                  >
-                    <FoodArt recipe={recipe} className={index === 0 ? 'h-52 w-full' : 'h-24 w-full'} px={index === 0 ? 36 : 22} />
-                    <div className="p-3">
-                      <p className="line-clamp-2 text-[0.8125rem] font-extrabold leading-snug">{recipe.name}</p>
-                      <p className="mt-1 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                        {Number(recipe.costPerServing) > 0
-                          ? `£${Number(recipe.costPerServing).toFixed(2)} per serving`
-                          : 'Cost estimate unavailable'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-[1.4rem] border p-5 text-[0.8125rem] font-semibold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
-                Your recipe ideas will appear here once your food preferences are set.
-              </div>
-            )}
-          </div>
-
-          <div className="hidden items-center gap-3 border-t pt-4 text-[0.75rem] font-semibold lg:flex" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
-            <span className="grid h-8 w-8 place-items-center rounded-xl" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><LockKeyhole size={14} /></span>
-            <span><strong style={{ color: 'var(--ink)' }}>Private by default.</strong> No account needed. Sync is optional.</span>
-          </div>
-        </section>
-
+        <OnboardingShowcase ideaCards={ideaCards} />
         <section className="flex items-center py-1 lg:py-6">
           <div
             className="w-full rounded-[1.75rem] border p-5 sm:p-7 lg:p-8"
@@ -286,64 +203,7 @@ export default function Onboarding() {
             </header>
 
             <div className="space-y-4">
-        {step === 0 && (
-          <>
-            <OnboardingAccount />
-            <fieldset>
-              <legend className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-                What would you like help with first?
-              </legend>
-              <div className="mt-3 grid gap-2.5">
-                {ENTRY_GOALS.map(({ id, title, text, Icon }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={entryGoal === id}
-                    onClick={() => setEntryGoal(id)}
-                    className="press flex min-h-[4.5rem] w-full items-center gap-3 rounded-[1.25rem] border p-3.5 text-left transition-colors"
-                    style={{
-                      background: entryGoal === id ? 'var(--accent-soft)' : 'var(--card)',
-                      borderColor: entryGoal === id ? 'var(--accent)' : 'var(--line)',
-                      boxShadow: entryGoal === id ? '0 0 0 1px var(--accent), 0 10px 28px color-mix(in srgb, var(--accent) 8%, transparent)' : 'none',
-                    }}
-                  >
-                    <span
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                      style={{ background: entryGoal === id ? 'var(--accent)' : 'var(--card-2)', color: entryGoal === id ? 'var(--on-accent)' : 'var(--muted)' }}
-                    >
-                      <Icon size={18} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[0.875rem] font-extrabold">{title}</span>
-                      <span className="block text-[0.78125rem] font-semibold" style={{ color: 'var(--muted)' }}>{text}</span>
-                    </span>
-                    <span className="ml-auto shrink-0" style={{ color: entryGoal === id ? 'var(--accent)' : 'var(--line)' }}>
-                      <CheckCircle2 size={19} strokeWidth={entryGoal === id ? 2.5 : 1.7} />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            <Card className="space-y-3">
-            <label className="block">
-              <span className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-                What should we call you? <span className="normal-case tracking-normal">(optional)</span>
-              </span>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && setStep(1)}
-                placeholder="Your name"
-                aria-label="Your name"
-                autoFocus
-                className="mt-1.5 w-full rounded-2xl border px-4 py-3 text-[0.9375rem] font-semibold outline-none"
-                style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
-              />
-            </label>
-            </Card>
-          </>
-        )}
-
+        {step === 0 && <OnboardingWelcomeStep name={name} setName={setName} entryGoal={entryGoal} setEntryGoal={setEntryGoal} setStep={setStep} />}
         {step === 1 && (
           <>
             {/* Ordered by what actually changes the first output: how many
