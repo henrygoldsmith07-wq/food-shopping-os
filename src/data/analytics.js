@@ -4,6 +4,9 @@
  */
 export const PRODUCT_EVENT_NAMES = [
   'app_opened',
+  'onboarding_step_1_viewed',
+  'onboarding_step_2_viewed',
+  'onboarding_step_3_viewed',
   'onboarding_completed',
   'demo_adopted',
   'screen_viewed',

@@ -194,6 +194,9 @@ export const analyticsEventSchema = z.object({
   id: z.string().min(8).max(100).optional(),
   name: z.enum([
     'app_opened',
+    'onboarding_step_1_viewed',
+    'onboarding_step_2_viewed',
+    'onboarding_step_3_viewed',
     'onboarding_completed',
     'screen_viewed',
     'plan_generated',
