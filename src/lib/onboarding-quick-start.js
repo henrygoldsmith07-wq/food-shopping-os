@@ -1,6 +1,7 @@
 import { mergeQtys } from './pantry.js';
 import { scaleQty } from './portions.js';
 import { shoppableQty } from './shoppable-qty.js';
+import { addDays } from './kitchen-dates.js';
 
 export const QUICK_START_DEFAULTS = {
   household: 1,
@@ -12,12 +13,6 @@ export const QUICK_START_DEFAULTS = {
   dislikedFoods: [],
 };
 
-const nextDay = (date, offset) => {
-  const result = new Date(`${date}T12:00:00`);
-  result.setDate(result.getDate() + offset);
-  return result.toISOString().slice(0, 10);
-};
-
 /** Turn the small set of onboarding answers into an immediately useful start. */
 export const firstSessionPlan = ({ day, recipes = [], pickedRecipeIds = [], household = 1, budget = 0 } = {}) => {
   const picked = pickedRecipeIds.map((id) => recipes.find((recipe) => recipe.id === id)).filter(Boolean);
@@ -27,7 +22,7 @@ export const firstSessionPlan = ({ day, recipes = [], pickedRecipeIds = [], hous
   // list anyway broke both, and gave a brand-new household a week of meals and
   // a basket it never asked for.
   const meals = picked;
-  const plan = Object.fromEntries(meals.map((recipe, index) => [nextDay(day, index), { dinner: recipe.id }]));
+  const plan = Object.fromEntries(meals.map((recipe, index) => [addDays(day, index), { dinner: recipe.id }]));
   const people = Math.max(1, Number(household) || 1);
   const shoppingByIngredient = new Map();
   for (const recipe of meals) {

@@ -181,7 +181,13 @@ describe('earning it', () => {
     expect(screen.getByText(/Level 1 · 2 XP/)).toBeDefined(); // a planned meal is worth 2
 
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Plan'));
-    fireEvent.click(screen.getAllByText('Coconut Chickpea Curry')[0]);
+    // The recipe is also named in other panels. Edit the actual calendar slot,
+    // rather than whichever occurrence of the name happens to come first.
+    const plannedSlot = within(document.querySelector('main'))
+      .getAllByText('Coconut Chickpea Curry')
+      .map((node) => node.closest('[draggable]'))
+      .find(Boolean);
+    fireEvent.click(within(plannedSlot).getByText('Coconut Chickpea Curry'));
     fireEvent.click(within(dialogFor('Plan a meal')).getByText(/Clear this slot/));
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     expect(screen.queryByText(/Level 1 ·/)).toBeNull(); // back to nothing earned
