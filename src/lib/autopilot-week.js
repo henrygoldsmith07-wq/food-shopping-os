@@ -20,7 +20,7 @@ import {
   planGeneratorInput,
   planGeneratorModel,
 } from './plan-generator-model.js';
-import { planStats, planEntries, leftoverCoverageForPlan } from './mealplan.js';
+import { planStats } from './mealplan.js';
 import { pantryCheckForPlan, weekPlanNeed } from './week-loop.js';
 import { householdPortionsFor } from './portions.js';
 import { expiringSoon, weekDates } from './kitchen.js';
@@ -139,7 +139,6 @@ export function autopilotWeekProposal(app = {}, { seed = 0, emphasis = null } = 
   const stats = planStats(plan, model.planDates, { people: form.people });
   const coverage = coverageOf(app, plan, model.planDates);
   const rows = listRowsForGenerated(merged, app, form.people);
-  const leftoverCovered = leftoverCoverageForPlan(plan, model.planDates, app.pantry || [], { people: form.people });
 
   const busyDates = model.planDates.filter((date) => model.busyDates.has(date));
   // Meals the kitchen already covers entirely — leftovers eating a dinner
@@ -165,7 +164,9 @@ export function autopilotWeekProposal(app = {}, { seed = 0, emphasis = null } = 
     estimatedCost: Math.round(rows.reduce((sum, row) => sum + (Number(row.price) || 0), 0) * 100) / 100,
     plannedCost: stats.cost,
     rescuedExpiring: rescued,
-    leftoverMeals: leftoverCovered.length,
+    // The pantry check counts only meals fully covered by saved portions,
+    // with expiry and household size applied, just like the shopping list.
+    leftoverMeals: coverage.leftoverMeals,
     busyDaysChanged: busyDates.length,
     busyDates,
     portions: form.people,
@@ -235,6 +236,7 @@ export function regenerateProposalMeal(app, proposal, date, { seed = 1, exclude 
     Object.entries(slots).map(([slot, recipeId]) => ({ date: d, slot, recipeId })));
   const stats = planStats(plan, proposal.model.planDates, { people: form.people });
   const rows = listRowsForGenerated(entries, app, form.people);
+  const coverage = coverageOf(app, plan, proposal.model.planDates);
   return {
     ...proposal,
     plan,
@@ -243,6 +245,7 @@ export function regenerateProposalMeal(app, proposal, date, { seed = 1, exclude 
     listRows: rows,
     itemCount: rows.length,
     plannedCost: stats.cost,
-    coverage: coverageOf(app, plan, proposal.model.planDates),
+    coverage,
+    leftoverMeals: coverage.leftoverMeals,
   };
 }

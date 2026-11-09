@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, CheckCircle2, FlaskConical, Package, ShoppingCart, SlidersHorizontal, Upload } from 'lucide-react';
+import { ArrowRight, Check, Package, ShoppingCart, SlidersHorizontal } from 'lucide-react';
 import { STEP_META, GOAL_FINISH } from './onboarding-config.js';
 import OnboardingWelcomeStep from './OnboardingWelcomeStep.jsx';
 import { useApp } from '../lib/store.jsx';
@@ -14,21 +14,19 @@ import { byId } from '../data/recipes.js';
 import { MAX_STARTER_PICKS, starterOptions, starterSuitable } from '../lib/starter-recipes.js';
 import { haptic } from '../lib/haptics.js';
 import { recordProductEvent } from '../lib/product-analytics.js';
-import { Card, Chip, FoodArt, Stepper, Toggle } from './ui.jsx';
+import { Card, Chip, Stepper, Toggle } from './ui.jsx';
 import StarterPicker from './StarterPicker.jsx';
-import OnboardingAccount from './AccountSignIn.jsx';
 import { NumberField } from './FoodDetail.jsx';
 import { TargetPreview } from './TargetSafety.jsx';
 import { QUICK_START_DEFAULTS, firstSessionPlan } from '../lib/onboarding-quick-start.js';
 import OnboardingShowcase from './OnboardingShowcase.jsx';
+import OnboardingRecovery from './OnboardingRecovery.jsx';
 
 const num = (value) => Math.max(0, Number(value) || 0) || null;
 
 export default function Onboarding() {
   const app = useApp();
-  const restoreRef = useRef(null);
   const seenSteps = useRef(new Set());
-  const [restoreStatus, setRestoreStatus] = useState('');
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [entryGoal, setEntryGoal] = useState('plan');
@@ -132,14 +130,6 @@ export default function Onboarding() {
       count: entryGoal === 'pantry' ? 0 : picked.length,
     }, undefined, state);
     haptic();
-  };
-
-  const restore = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    const result = app.restoreData(await file.text());
-    setRestoreStatus(result.ok ? 'Backup restored.' : result.error);
   };
 
   const currentStep = STEP_META[step];
@@ -418,9 +408,12 @@ export default function Onboarding() {
               </>
             )}
 
-            {/* A separate consent question, asked outside the optional block so
-                it cannot be skipped by leaving personalisation closed. */}
-            {youth && (
+
+          </>
+        )}
+            {/* Every entry goal needs consent in under-18 mode, including
+                pantry-first, which does not show the recipe/nutrition block. */}
+            {step === 2 && youth && (
               <Card className="space-y-2.5" style={{ borderColor: youthConsent ? 'var(--accent)' : 'var(--line)' }}>
                 <p className="font-extrabold text-[0.90625rem]">Before you start</p>
                 <p className="text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
@@ -440,8 +433,6 @@ export default function Onboarding() {
                 </p>
               </Card>
             )}
-          </>
-        )}
       </div>
 
       <div className="mt-7 flex gap-2.5 rise rise-2">
@@ -486,38 +477,7 @@ export default function Onboarding() {
 
           </div>
 
-      {step === 0 && (
-        <div className="mt-4 rounded-2xl border p-4 text-center" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
-          <button
-            className="press min-h-11 px-4 py-2 text-[0.8125rem] font-extrabold"
-            style={{ color: 'var(--accent)' }}
-            onClick={app.enterDemoMode}
-          >
-            <span className="inline-flex items-center gap-1.5"><FlaskConical size={14} /> Explore an example week first</span>
-          </button>
-          <p className="mt-0.5 px-6 text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-            A fully stocked demo kitchen — plan, list, receipts. Nothing is saved and your own start is untouched.
-          </p>
-          <div className="mt-3 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
-            <button
-              className="press min-h-10 px-4 py-2 text-[0.75rem] font-bold"
-              style={{ color: 'var(--muted)' }}
-              onClick={() => restoreRef.current?.click()}
-            >
-              <span className="inline-flex items-center gap-1.5"><Upload size={14} /> Restore an existing backup</span>
-            </button>
-          </div>
-          <input
-            ref={restoreRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            aria-label="Restore Forq backup"
-            onChange={restore}
-          />
-          {restoreStatus && <p role="status" className="mt-1 text-[0.75rem] font-semibold">{restoreStatus}</p>}
-        </div>
-      )}
+      {step === 0 && <OnboardingRecovery />}
 
           <p className="mt-4 text-center text-[0.6875rem] font-semibold lg:hidden" style={{ color: 'var(--faint)' }}>
             Private by default · No account needed · Sync is optional

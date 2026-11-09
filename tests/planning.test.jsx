@@ -103,6 +103,13 @@ describe('the weekly planner', () => {
   it('fills open nights by swiping, and undo takes the last one back', () => {
     onboard();
     openPlan();
+    // Keep this journey independent of the day the CI runner happens to use.
+    // On Sunday, only tonight may be left in the current week; adding that
+    // dinner correctly ends the deck, leaving no second recipe to skip.
+    const openNights = () => Number(
+      screen.getByRole('button', { name: /Swipe to fill \d+/ }).textContent.match(/\d+/)?.[0] || 0,
+    );
+    while (openNights() < 3) fireEvent.click(screen.getByLabelText('Next week'));
     const before = screen.getByRole('button', { name: /Swipe to fill \d+/ }).textContent;
     fireEvent.click(screen.getByRole('button', { name: /Swipe to fill \d+/ }));
     const deck = screen.getByTestId('swipe-week');

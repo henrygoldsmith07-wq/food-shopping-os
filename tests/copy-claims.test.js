@@ -19,7 +19,9 @@ describe('copy honesty: one promise, three steps, no invented capability', () =>
     const demo = read('../src/app/demo/page.jsx');
     expect(demo).toContain(sentence);
     const onboarding = read('../src/components/Onboarding.jsx');
-    expect(onboarding).toContain(sentence);
+    expect(onboarding).toContain('<OnboardingShowcase');
+    const showcase = read('../src/components/OnboardingShowcase.jsx');
+    expect(showcase).toContain(sentence);
     const scope = read('../docs/SCOPE.md');
     expect(scope).toContain(sentence);
   });
@@ -30,6 +32,9 @@ describe('copy honesty: one promise, three steps, no invented capability', () =>
       '../README.md',
       '../src/app/demo/page.jsx',
       '../src/components/Onboarding.jsx',
+      '../src/components/OnboardingShowcase.jsx',
+      '../src/components/OnboardingWelcomeStep.jsx',
+      '../src/components/OnboardingRecovery.jsx',
       '../src/data/product.js',
       '../docs/SCOPE.md',
     ]) {
