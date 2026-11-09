@@ -37,12 +37,12 @@ const STEP_META = [
 ];
 
 const GOAL_FINISH = {
-  plan: { title: 'Choose your first dinners', note: 'Pick a few meals and see them placed into your week.', actionLabel: 'Open my meal plan', description: 'Your selected dinners will be waiting in your meal plan.' },
-  shop: { title: 'Build your first list', note: 'Choose a few dinners and Forq will turn them into one clear shopping list.', actionLabel: 'Open my shopping list', description: 'Your shopping list is ready to review.' },
-  pantry: { title: 'Start with your pantry', note: 'Add a few things you already own. Forq will use confirmed stock when it builds your next list.', actionLabel: 'Open my pantry', description: 'Next, add confirmed stock in your pantry before you plan.' },
+  plan: { title: 'Choose your first dinners', note: 'Pick a few meals and see them placed into your week.', actionLabel: 'Next: meal plan', description: 'Forq will open the home screen, where you can run the week loop for your selected dinners.' },
+  shop: { title: 'Build your first list', note: 'Choose a few dinners and Forq will turn them into one clear shopping list.', actionLabel: 'Next: shopping list', description: 'Forq will open the home screen, where you can review your list or plan dinners to make one.' },
+  pantry: { title: 'Start with your pantry', note: 'Add a few things you already own. Forq will use confirmed stock when it builds your next list.', actionLabel: 'Next: pantry', description: 'Forq will open the home screen, where your first action is to add confirmed pantry stock.' },
 };
 
-export default function Onboarding({ onFinish }) {
+export default function Onboarding() {
   const app = useApp();
   const restoreRef = useRef(null);
   const seenSteps = useRef(new Set());
@@ -155,7 +155,6 @@ export default function Onboarding({ onFinish }) {
       count: entryGoal === 'pantry' ? 0 : picked.length,
     }, undefined, state);
     haptic();
-    onFinish?.(entryGoal);
   };
 
   const restore = async (event) => {
