@@ -36,8 +36,12 @@ test('a week completes on a phone without parked tools', async ({ page }) => {
   const loop = page.getByRole('dialog');
   await expect(loop.getByRole('heading', { name: 'Week loop' })).toBeVisible({ timeout: 15000 });
 
-  // Pick a meal for the first open dinner, set portions, generate the list.
-  await page.getByRole('button', { name: /Choose dinner/ }).first().click();
+  // Pick a meal for today's open dinner slot. The week list starts on Monday,
+  // and a dinner already in the past correctly creates no shopping need — so
+  // the first "Choose dinner" is only the right pick on a Monday.
+  const today = new Date().toISOString().slice(0, 10);
+  const todayIndex = (new Date(`${today}T12:00:00`).getDay() + 6) % 7; // Monday = 0
+  await page.getByRole('button', { name: /Choose dinner/ }).nth(todayIndex).click();
   await page.getByRole('button', { name: /Chicken|Curry|Traybake/ }).first().click();
   await expect(page.getByText(/meal.*planned|planned/i).first()).toBeVisible({ timeout: 10000 });
 
