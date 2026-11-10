@@ -10,8 +10,8 @@ import { weeklyChallengesRaw } from '../src/lib/progress.js';
  *  XP counts the three weekly challenges only (the seasonal event is shown,
  *  never paid), so this reads the raw rotation rather than the displayed one.
  *  The state must mirror what a real first cook leaves behind: the recipe's
- *  id, and the leftovers cooking mode files into the pantry — otherwise the
- *  simulation misses challenges a real household genuinely completes. */
+ *  id, and no leftovers — cooking mode starts at zero until the cook confirms
+ *  what remains, so a first cook that confirms nothing files nothing. */
 const xpAfterFirstCook = (state, today) => {
   const challenges = weeklyChallengesRaw(state, today).filter((c) => c.done);
   return 60 + 4 + challenges.reduce((sum, c) => sum + c.xp, 0);
@@ -22,7 +22,7 @@ const stateAfterFirstCook = (today) => ({
   cooked: [{ recipeId: 'chickpea-curry', date: today }],
   log: {},
   day: today,
-  pantry: [{ id: 'leftover-1', name: 'Coconut Chickpea Curry (leftovers)', cat: 'Leftovers' }],
+  pantry: [],
 });
 
 const onboard = () => {

@@ -59,7 +59,7 @@ describe('first run', () => {
   it('asks for setup instead of inventing a user', () => {
     render(<App />);
     expect(screen.getByText('Welcome to Forq')).toBeDefined();
-    expect(screen.getByText(/nothing is filled in for you/i)).toBeDefined();
+    expect(screen.getByText(/Nothing is added until you choose it/i)).toBeDefined();
     expect(screen.queryByText('List')).toBeNull(); // no app until it's set up
   });
 

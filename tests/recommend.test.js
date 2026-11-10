@@ -102,7 +102,7 @@ describe('explainRecommendation — the five verifiable lines', () => {
     expect(exp.lines.join(' | ')).toMatch(/peppers expiring tomorrow/i);
     expect(exp.lines.join(' | ')).toMatch(/24 minutes/);
     expect(exp.lines.join(' | ')).toMatch(/£2\.17\/person/);
-    expect(exp.lines.join(' | ')).toMatch(/two lunch portions/);
+    expect(exp.lines.join(' | ')).toMatch(/plan extra ingredients and log any leftovers after cooking/);
   });
   it('cost line respects per-person scaling', () => {
     const exp = explainRecommendation(r({ costPerServing: 1.2 }), { pantry: [], today, budget: 4 });

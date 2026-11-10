@@ -92,12 +92,16 @@ const coverageOf = (app, plan, dates) => {
   };
 };
 
+/** Entries for dates that can still create a shopping need — the same past-date rule weekPlanNeed applies, so the quoted item count stays the list's own count. */
+const buyableEntries = (entries, app) =>
+  (app.day ? entries.filter((entry) => entry.date >= app.day) : entries);
+
 /** Recalculate every visible quantity when the household changes the serving count. */
 export const resizeAutopilotProposal = (app, proposal, people) => {
   const portions = Math.max(1, Math.min(12, Math.round(Number(people) || 1)));
   const form = { ...proposal.form, people: portions };
   const stats = planStats(proposal.plan, proposal.model.planDates, { people: portions });
-  const listRows = listRowsForGenerated(proposal.entries, app, portions);
+  const listRows = listRowsForGenerated(buyableEntries(proposal.entries, app), app, portions);
   const coverage = coverageOf({ ...app, portionsOverride: portions }, proposal.plan, proposal.model.planDates);
   return {
     ...proposal,
@@ -159,7 +163,7 @@ export function autopilotWeekProposal(app = {}, { seed = 0, emphasis = null } = 
 
   const stats = planStats(plan, model.planDates, { people: form.people });
   const coverage = coverageOf(app, plan, model.planDates);
-  const rows = listRowsForGenerated(merged, app, form.people);
+  const rows = listRowsForGenerated(buyableEntries(merged, app), app, form.people);
 
   const busyDates = model.planDates.filter((date) => model.busyDates.has(date));
   // Meals the kitchen already covers entirely — leftovers eating a dinner

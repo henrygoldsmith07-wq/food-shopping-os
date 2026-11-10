@@ -443,7 +443,9 @@ describe('leftovers and batch cooking', () => {
     fireEvent.click(screen.getByText(/Start cooking mode/));
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByText(/Next ›/));
     fireEvent.click(screen.getByText(/Finish & log meal/));
-    // Leftovers save themselves: 4 servings minus the household eating = 3 kept.
+    // Leftovers start at zero until the cook records what actually remains.
+    expect(screen.getByText(/Nothing saved for later/)).toBeDefined();
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByLabelText('Increase'));
     expect(screen.getByText(/3 portions of Coconut Chickpea Curry in the fridge/)).toBeDefined();
     fireEvent.click(screen.getByText('Back to my day'));
 
@@ -466,6 +468,8 @@ describe('leftovers and batch cooking', () => {
     fireEvent.click(screen.getByText(/Start cooking mode/));
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByText(/Next ›/));
     fireEvent.click(screen.getByText(/Finish & log meal/));
+    expect(screen.getByText(/Nothing saved for later/)).toBeDefined();
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByLabelText('Increase'));
     expect(screen.getByText(/3 portions of Coconut Chickpea Curry in the fridge/)).toBeDefined();
     // Correcting the save updates the fridge as it happens — no second save step.
     fireEvent.click(screen.getByLabelText('Decrease'));
