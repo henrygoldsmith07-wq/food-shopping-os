@@ -33,6 +33,10 @@ export function useDemoKitchen({
     // whole session, not per call site.
     setDemoAnalyticsSuppressed(true);
     setDemoState(demoSession);
+    // demoRef, realUndoStack, undoBatch and setDemoState are held for the
+    // demo session's whole lifetime (refs and a useState setter), so the
+    // exhaustive-deps omission is sound — listing it keeps lint honest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [undoHistory]);
 
   const exitDemoMode = useCallback(() => {
@@ -42,6 +46,8 @@ export function useDemoKitchen({
     undoBatch.current = null;
     setDemoAnalyticsSuppressed(false);
     setDemoState(null);
+    // Same as enterDemoMode: the omitted deps are stable refs and setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [undoHistory]);
 
   /* Adopt the demo week as the real kitchen: the dinner rotation is rebased
@@ -87,6 +93,9 @@ export function useDemoKitchen({
       source: 'demo', mealCount: adopted.dinners, count: adopted.staples,
     }, undefined, { ...state, ...patch });
     return true;
+    // demoRef, editedSinceBoot, setDemoState and undoBatch are refs/setters
+    // held across the session — the deliberate exhaustive-deps omission.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, exitDemoMode, api, beginImportBatch, endImportBatch]);
 
   return { enterDemoMode, exitDemoMode, adoptDemoWeek };

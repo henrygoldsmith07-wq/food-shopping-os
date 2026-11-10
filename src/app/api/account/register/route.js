@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody } from '../../../../server/api.js';
 import { databaseConfigured, getDatabase } from '../../../../server/database.js';
 import { appOrigin, emailConfigured } from '../../../../server/email.js';
 import { sendVerificationEmail } from '../../../../server/account-email.js';
+import { accountEmailSchema } from '../../../../server/schemas.js';
 import {
   hashPassword, MIN_PASSWORD, normaliseEmail, passwordLoginEnabled, validEmail, validPassword,
 } from '../../../../server/passwords.js';
@@ -23,7 +25,10 @@ export async function POST(request) {
     const client = (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
     await rateLimit(`register:${client}`, 10, 3600000);
 
-    const body = await readJsonBody(request, 4096);
+    const body = accountEmailSchema.extend({
+      name: z.string().max(80).optional(),
+      password: z.string().max(200),
+    }).parse(await readJsonBody(request, 4096));
     const email = normaliseEmail(body?.email);
     const name = String(body?.name || '').trim().slice(0, 80) || email.split('@')[0];
     if (!validEmail(email)) throw new ApiError(400, 'Enter a valid email address.');

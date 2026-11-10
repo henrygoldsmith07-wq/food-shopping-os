@@ -5,6 +5,7 @@ import {
 import { requireHousehold } from '../../../../server/households.js';
 import { getDatabase } from '../../../../server/database.js';
 import { emailConfigured } from '../../../../server/email.js';
+import { reminderDigestSchema } from '../../../../server/schemas.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,8 +30,8 @@ export async function POST(request) {
     const user = await requireUser();
     await rateLimit(`digest:${user.id}`, 30, 3600000);
     const { household } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
-    const body = await readJsonBody(request, 1024);
-    const on = body?.on === true && emailConfigured() && Boolean(user.email);
+    const body = reminderDigestSchema.parse(await readJsonBody(request, 1024));
+    const on = body.on === true && emailConfigured() && Boolean(user.email);
     await (await getDatabase()).collection('memberships').updateOne(
       { householdId: household._id, userId: user.id },
       { $set: { reminderDigest: on } },

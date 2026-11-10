@@ -4,6 +4,7 @@ import { databaseConfigured, getDatabase } from '../../../../server/database.js'
 import { appOrigin, emailConfigured } from '../../../../server/email.js';
 import { consumeAccountToken } from '../../../../server/account-tokens.js';
 import { sendVerificationEmail } from '../../../../server/account-email.js';
+import { accountEmailSchema } from '../../../../server/schemas.js';
 import { normaliseEmail, validEmail } from '../../../../server/passwords.js';
 
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     if (!databaseConfigured || !emailConfigured()) throw new ApiError(503, 'Email is not set up on this server.');
     const body = await readJsonBody(request, 2048);
-    const email = normaliseEmail(body?.email);
+    const email = normaliseEmail(accountEmailSchema.parse(body).email);
     if (!validEmail(email)) throw new ApiError(400, 'Enter a valid email address.');
     await rateLimit(`verify-resend:${clientOf(request)}`, 10, 3600000);
     await rateLimit(`verify-resend-email:${email}`, 3, 3600000);
