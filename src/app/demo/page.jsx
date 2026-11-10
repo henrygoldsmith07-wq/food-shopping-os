@@ -1,5 +1,4 @@
-'use client';
-
+import { headers } from 'next/headers';
 import Link from 'next/link';
 
 /**
@@ -7,7 +6,10 @@ import Link from 'next/link';
  * Seeded week lives in the isolated demo sandbox (`?demo=1`); nothing here
  * touches the real kitchen.
  */
-export default function DemoPage() {
+export default async function DemoPage() {
+  // The proxy's per-request CSP nonce is injected into Next scripts only for
+  // dynamic responses; keeping this route static makes the strict CSP block hydration.
+  await headers();
   return (
     <main
       className="mx-auto min-h-screen max-w-3xl px-5 py-10 text-center"

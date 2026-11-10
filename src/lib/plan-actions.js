@@ -139,7 +139,7 @@ export const planActions = (set) => ({
     return withEvent(s, { plan: nextPlan },
       createLedgerEvent('MealPlanned', { date: to?.date, slot: to?.slot, recipeId: moved, movedFrom: from }, { origin: 'user' }));
   }),
-  applyPlanEntries: (entries) => set((s) => {
+  applyPlanEntries: (entries, options = {}) => set((s) => {
     // Locked meals are untouchable: "keep this meal, change the rest" must
     // survive every regeneration, recovery and Autopilot refresh.
     const locked = s.lockedMeals || {};
@@ -148,10 +148,27 @@ export const planActions = (set) => ({
       const key = `${e.date}|${e.slot}`;
       return !(key in locked) || locked[key] === e.recipeId;
     });
-    const plan = applyEntries(s.plan, allowed);
+    const addedPlan = applyEntries(s.plan, allowed);
+    const removeSlots = (options?.removeSlots || []).filter((item) =>
+      item?.date && item?.slot && !(`${item.date}|${item.slot}` in locked)
+      && addedPlan?.[item.date]?.[item.slot]);
+    const plan = { ...addedPlan };
+    for (const { date, slot } of removeSlots) {
+      const day = { ...plan[date] };
+      delete day[slot];
+      if (Object.keys(day).length) plan[date] = day;
+      else delete plan[date];
+    }
     const added = allowed.length;
-    if (!added) return {};
-    return withEvent(s, { plan }, createLedgerEvent('MealPlanned', { batch: added }, { origin: 'user' }));
+    if (!added && !removeSlots.length) return {};
+    const portions = Number(options?.portionsOverride);
+    const changes = added > 0 && Number.isInteger(portions) && portions >= 1 && portions <= 12
+      ? { plan, portionsOverride: portions }
+      : { plan };
+    return withEvent(s, changes, createLedgerEvent('MealPlanned', {
+      batch: added,
+      removedSlots: removeSlots.length ? removeSlots : undefined,
+    }, { origin: 'user' }));
   }),
   /**
    * Save the visible week as a named, replayable template. Templates are
@@ -206,11 +223,11 @@ export const planActions = (set) => ({
     });
     return result || { ok: false, error: 'Could not rename the template.' };
   },
-  toggleMealLock: (date, slot) => set((s) => {
-    const recipeId = s.plan?.[date]?.[slot] || null;
-    if (!recipeId) return {}; // nothing to lock
+  toggleMealLock: (date, slot, proposedRecipeId = null) => set((s) => {
     const key = `${date}|${slot}`;
     const lockedMeals = { ...(s.lockedMeals || {}) };
+    const recipeId = lockedMeals[key] || s.plan?.[date]?.[slot] || proposedRecipeId;
+    if (!recipeId) return {}; // nothing to lock
     const nowLocked = !(key in lockedMeals);
     if (nowLocked) lockedMeals[key] = recipeId;
     else delete lockedMeals[key];

@@ -4,7 +4,7 @@ import { diaryActions } from '../src/lib/diary-actions.js';
 import { planActions } from '../src/lib/plan-actions.js';
 import { pantryFlowActions } from '../src/lib/pantry-flow-actions.js';
 import {
-  defaultLeftoverPortions, loopHealth, wasteAwareList,
+  loopHealth, wasteAwareList,
 } from '../src/lib/loop-learning.js';
 import { withAutoListSync } from '../src/lib/week-loop.js';
 import { RECIPES } from '../src/data/recipes.js';
@@ -141,11 +141,6 @@ describe('the learning that reaches the shopping list', () => {
     expect(rows[1]).not.toHaveProperty('wasteNote'); // binned once, 40 days ago
   });
 
-  it('defaults the leftover save to what the dish made minus who is eating', () => {
-    expect(defaultLeftoverPortions({ servings: 4 }, 2)).toBe(2);
-    expect(defaultLeftoverPortions({ servings: 2 }, 2)).toBe(0);
-    expect(defaultLeftoverPortions(null, 2)).toBe(0);
-  });
 });
 
 describe('the drift guard that keeps a month honest', () => {

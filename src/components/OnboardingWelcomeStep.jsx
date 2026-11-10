@@ -1,12 +1,11 @@
 import { CheckCircle2 } from 'lucide-react';
 import { Card } from './ui.jsx';
 import StarterAccount from './AccountSignIn.jsx';
+import OnboardingOutcome from './OnboardingOutcome.jsx';
 import { ENTRY_GOALS } from './onboarding-config.js';
 
 export default function OnboardingWelcomeStep({ name, setName, entryGoal, setEntryGoal, setStep }) {
   return <>
-    <p className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>Nothing is filled in for you. Choose what belongs in your week.</p>
-    <StarterAccount />
     <fieldset>
       <legend className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>What would you like help with first?</legend>
       <div className="mt-3 grid gap-2.5">{ENTRY_GOALS.map(({ id, title, text, Icon }) => (
@@ -17,9 +16,11 @@ export default function OnboardingWelcomeStep({ name, setName, entryGoal, setEnt
         </button>
       ))}</div>
     </fieldset>
+    <OnboardingOutcome goal={entryGoal} />
     <Card className="space-y-3"><label className="block">
       <span className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>What should we call you? <span className="normal-case tracking-normal">(optional)</span></span>
-      <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setStep(1)} placeholder="Your name" aria-label="Your name" autoFocus className="mt-1.5 w-full rounded-2xl border px-4 py-3 text-[0.9375rem] font-semibold outline-none" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }} />
+      <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setStep(1)} placeholder="Your name" aria-label="Your name" className="mt-1.5 w-full rounded-2xl border px-4 py-3 text-[0.9375rem] font-semibold outline-none" style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }} />
     </label></Card>
+    <StarterAccount />
   </>;
 }

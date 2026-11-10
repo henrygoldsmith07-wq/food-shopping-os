@@ -8,7 +8,6 @@ import { useApp } from '../lib/store.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
 import { safeExternalUrl } from '../lib/recipe-tools.js';
 import { suggestLeftoverSlots } from '../lib/leftover-planning.js';
-import { defaultLeftoverPortions } from '../lib/loop-learning.js';
 import { householdPortionsFor } from '../lib/portions.js';
 import { Card, Meter, Stepper } from './ui.jsx';
 import { NextStepPreview, StepText, TimerTray } from './CookStepParts.jsx';
@@ -57,10 +56,8 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
   const [timers, setTimers] = useState({}); // step index -> {left, running}
   const [auto, setAuto] = useState(false);
   const [dwell, setDwell] = useState(DWELL_SECONDS);
-  const [spare, setSpare] = useState(() => defaultLeftoverPortions(
-    recipe,
-    Math.max(1, Math.round(householdPortionsFor(app).portions)),
-  ));
+  // Leftovers are actual food, so start at zero until the cook confirms what remains.
+  const [spare, setSpare] = useState(0);
   const [wakeState, setWakeState] = useState('checking');
   const [readAloud, setReadAloud] = useState(false);
   const [listening, setListening] = useState(false);

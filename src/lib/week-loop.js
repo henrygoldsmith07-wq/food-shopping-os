@@ -184,8 +184,9 @@ export const weekLoopSnapshot = (app) => {
 export const weekPlanNeed = (state, dates = weekDates(state?.day)) => {
   const aliasMemory = state.aliasMemory || {};
   const household = householdPortionsFor(state);
+  const activeDates = state.day ? dates.filter((date) => date >= state.day) : dates;
   return {
-    rows: wasteAwareList(shoppingForPlan(state.plan || {}, dates, {
+    rows: wasteAwareList(shoppingForPlan(state.plan || {}, activeDates, {
       pantry: state.pantry || [], today: state.day, learnedAliases: aliasMemory,
       people: household.portions,
     }), {
@@ -246,7 +247,8 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
   // is allowed to disappear when the pantry now covers it; the old
   // "recipe planned anywhere" guard kept covered current-week food on the
   // shopping list indefinitely.
-  const planEntriesAll = planEntries(plan, Object.keys(plan).sort());
+  const planDates = Object.keys(plan).sort().filter((date) => !state.day || date >= state.day);
+  const planEntriesAll = planEntries(plan, planDates);
   const rangeDates = new Set(dates);
   const plannedRecipeNames = new Set(
     planEntriesAll.map((entry) => entry.recipe?.name).filter(Boolean),
@@ -301,7 +303,14 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
         pantryQty: neededRow.pantryQty || '',
         shortfallQty: neededRow.shortfallQty || '',
         sourceRecipes: neededRow.sourceRecipes || (neededRow.fromRecipe ? [neededRow.fromRecipe] : []),
+        fromRecipe: neededRow.fromRecipe || null,
+        mealDependency: neededRow.mealDependency || null,
+        priority: neededRow.priority || 'normal',
+        staple: Boolean(neededRow.staple),
+        allocations: neededRow.allocations || [],
         explanation: neededRow.explanation,
+        shoppingExplanation: neededRow.shoppingExplanation,
+        confidenceEvidence: neededRow.confidenceEvidence,
         pantryTruth: neededRow.pantryTruth,
       };
       const currentEvidence = {
@@ -315,7 +324,14 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
         pantryQty: row.pantryQty || '',
         shortfallQty: row.shortfallQty || '',
         sourceRecipes: row.sourceRecipes || (row.fromRecipe ? [row.fromRecipe] : []),
+        fromRecipe: row.fromRecipe || null,
+        mealDependency: row.mealDependency || null,
+        priority: row.priority || 'normal',
+        staple: Boolean(row.staple),
+        allocations: row.allocations || [],
         explanation: row.explanation,
+        shoppingExplanation: row.shoppingExplanation,
+        confidenceEvidence: row.confidenceEvidence,
         pantryTruth: row.pantryTruth,
       };
       const evidenceChanged = JSON.stringify(currentEvidence) !== JSON.stringify(refreshed);
@@ -333,7 +349,11 @@ export const reconcileListWithPlan = (state, dates = weekDates(state?.day), { pl
 
   // Fill in what is newly missing — but only into a list the household
   // already drives from the plan.
-  if (list.some((row) => row.fromRecipe)) {
+  // The first committed plan has no recipe rows yet to signal that this is a
+  // plan-driven list. An empty list should start following the plan on that
+  // explicit plan write; a manual-only list still stays under the household's
+  // control until they add a recipe-derived row.
+  if (list.some((row) => row.fromRecipe) || (planChanged && list.length === 0)) {
     for (const [key, row] of needed.entries()) {
       if (presentKeys.has(key)) continue;
       changed = true;

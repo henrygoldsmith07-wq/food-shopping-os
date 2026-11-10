@@ -27,6 +27,7 @@ const num = (value) => Math.max(0, Number(value) || 0) || null;
 export default function Onboarding() {
   const app = useApp();
   const seenSteps = useRef(new Set());
+  const headingRef = useRef(null);
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [entryGoal, setEntryGoal] = useState('plan');
@@ -132,6 +133,8 @@ export default function Onboarding() {
     haptic();
   };
 
+  useEffect(() => { if (step > 0) headingRef.current?.focus(); }, [step]);
+
   const currentStep = STEP_META[step];
   const goalFinish = GOAL_FINISH[entryGoal] || GOAL_FINISH.plan;
   const stepNote = step === 0
@@ -168,8 +171,8 @@ export default function Onboarding() {
       }}
     >
       <div className="mx-auto grid min-h-[calc(100vh-2.5rem)] w-full max-w-6xl gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)] lg:gap-12">
-        <OnboardingShowcase ideaCards={ideaCards} />
-        <section className="flex items-center py-1 lg:py-6">
+        <OnboardingShowcase ideaCards={ideaCards} compact={step > 0} />
+        <section className="flex min-w-0 flex-col justify-center py-1 lg:py-6">
           <div
             className="w-full rounded-[1.75rem] border p-5 sm:p-7 lg:p-8"
             style={{ borderColor: 'var(--line)', background: 'color-mix(in srgb, var(--card) 96%, transparent)', boxShadow: '0 28px 90px color-mix(in srgb, var(--ink) 9%, transparent)' }}
@@ -188,7 +191,7 @@ export default function Onboarding() {
 
             <header className="mb-6">
               <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.14em]" style={{ color: 'var(--faint)' }}>{currentStep.note}</p>
-              <h1 className="mt-2 text-[1.75rem] font-black tracking-[-0.045em] leading-tight sm:text-[2rem]">{step === 2 ? goalFinish.title : currentStep.title}</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="mt-2 text-[1.75rem] font-black tracking-[-0.045em] leading-tight sm:text-[2rem]">{step === 2 ? goalFinish.title : currentStep.title}</h1>
               <p className="mt-2 max-w-xl text-[0.875rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>{stepNote}</p>
             </header>
 

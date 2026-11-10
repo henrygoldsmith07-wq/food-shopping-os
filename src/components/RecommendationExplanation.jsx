@@ -9,7 +9,7 @@ import { AlarmClock, Clock, Coins, Package, Snowflake, Leaf, Star } from 'lucide
  * Uses peppers expiring tomorrow
  * 24 minutes — fits Tuesday's schedule
  * £2.17/person
- * Creates two lunch portions
+ * For lunch too, plan extra ingredients and log any leftovers after cooking
  *
  * The numbers are not invented — they come straight from the engine's
  * `explainRecommendation` result so a user can verify each line against

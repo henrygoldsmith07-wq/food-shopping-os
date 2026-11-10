@@ -6,7 +6,7 @@ import { householdPortionsFor } from '../lib/portions.js';
 import { Card } from './ui.jsx';
 import { shortDate } from '../lib/utils.js';
 
-/** Plan tab card: a dinner that makes enough for tomorrow's lunch, planned in one tap. */
+/** Repeat a dinner for lunch; normal plan reconciliation includes both meals. */
 export default function CookTwiceCard() {
   const app = useApp();
   const [done, setDone] = useState({});
@@ -19,9 +19,9 @@ export default function CookTwiceCard() {
   if (!shown.length) return null;
   return (
     <div className="px-5">
-      <Card className="!p-3 space-y-2" label="Cook once, eat twice">
+      <Card className="!p-3 space-y-2" label="Plan tomorrow's lunch">
         <p className="flex items-center gap-1.5 text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-          <UtensilsCrossed size={13} /> Cook once, eat twice
+          <UtensilsCrossed size={13} /> Plan tomorrow’s lunch
         </p>
         <ul className="space-y-1.5">
           {shown.map((row) => {
@@ -31,7 +31,7 @@ export default function CookTwiceCard() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[0.8125rem] font-extrabold">{row.recipe.name}</span>
                   <span className="block truncate text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-                    {planned ? `Lunch planned ${shortDate(row.lunchDate)} · no extra shopping` : `Dinner ${shortDate(row.cookDate)} makes ${row.extraPortions} extra · lunch ${shortDate(row.lunchDate)} is free`}
+                    {planned ? `Lunch planned ${shortDate(row.lunchDate)} · shopping list updated` : `Repeat dinner ${shortDate(row.cookDate)} for lunch ${shortDate(row.lunchDate)} · ingredients added to your list`}
                   </span>
                 </span>
                 <button

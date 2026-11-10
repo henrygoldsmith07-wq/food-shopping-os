@@ -59,7 +59,7 @@ describe('expiringIngredients', () => {
 
 describe('leftoverYield', () => {
   it('six servings → two lunch portions', () => {
-    expect(leftoverYield(r({ servings: 6, tags: [] }))).toEqual({ portions: 2, note: 'Creates two lunch portions' });
+    expect(leftoverYield(r({ servings: 6, tags: [] }))).toEqual({ portions: 2, note: 'For lunch too, plan extra ingredients and log any leftovers after cooking' });
   });
   it('batch tag with 2 servings → one portion', () => {
     expect(leftoverYield(r({ servings: 2, tags: ['batch'] })).portions).toBe(1);
@@ -96,7 +96,7 @@ describe('explainRecommendation — the five verifiable lines', () => {
     expect(exp.timeMins).toBe(24);
     expect(exp.schedule.fits).toBe(true);
     expect(exp.cost).toBeCloseTo(2.17);
-    expect(exp.leftover.note).toBe('Creates two lunch portions');
+    expect(exp.leftover.note).toBe('For lunch too, plan extra ingredients and log any leftovers after cooking');
     // Lines are what the UI renders verbatim
     expect(exp.lines.join(' | ')).toMatch(/83% already in your kitchen/);
     expect(exp.lines.join(' | ')).toMatch(/peppers expiring tomorrow/i);
