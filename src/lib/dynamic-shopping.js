@@ -11,7 +11,12 @@ const reliable = (item, today) => ['confirmed_sufficient', 'probably_available']
 const priorityFor = (row) => row.expiryPressure ? 'urgent' : row.mealDependency ? 'planned' : row.staple ? 'routine' : 'normal';
 
 export const deriveDynamicShoppingList = (state = {}, { dates = null, planNeed = null } = {}) => {
-  const planDates = dates || Object.keys(state.plan || {}).sort();
+  const requestedDates = dates || Object.keys(state.plan || {}).sort();
+  // A meal already scheduled in the past cannot create a future shopping need.
+  // Week views may include Monday when today is later in the week.
+  const planDates = state.day
+    ? requestedDates.filter((date) => date >= state.day)
+    : requestedDates;
   const recipePool = state.recipes || [];
   // Plan rows scale to the household's portions — the learned appetite when
   // recorded cooks disagree with the profile, the same decision every other

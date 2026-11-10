@@ -198,16 +198,6 @@ export const shoppingListForPlan = (
   });
 };
 
-/**
- * What cooking should save by default: what the dish made minus the people
- * eating. Tuesday's 4-serving fajitas for a household of 2 pre-save 2
- * portions — the step the loop used to lose.
- */
-export const defaultLeftoverPortions = (recipe, people = 1) => {
-  const servings = Math.max(1, Math.round(Number(recipe?.servings) || 1));
-  const eaters = Math.max(1, Math.round(Number(people) || 1));
-  return Math.max(0, servings - eaters);
-};
 
 const unmarkedPastMeals = (plan = {}, cooked = [], events = [], today) => {
   const cookedKeys = new Set((cooked || []).map((c) => `${c.date}|${c.recipeId}`));

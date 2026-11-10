@@ -7,9 +7,9 @@ export const COOK_TWICE_SAFE_DAYS = 3;
  * Cook once, eat twice: a planned dinner whose recipe makes at least two
  * rounds of portions for the household can cover the next day's lunch too.
  * Offered only when the lunch slot is free, the dish is not already planned
- * again inside the fridge window, and the extra portions really exist
- * (recipe.servings >= 2 x people). Shopping already counts planned slots of
- * one dish as a single batch, so taking the offer adds no extra shopping.
+ * again inside the fridge window, and its default batch can feed both meals
+ * (recipe.servings >= 2 x people). Recipe capacity is not confirmed leftovers:
+ * shopping counts both slots, subtracting only recorded leftover portions.
  */
 export const cookTwiceOffers = ({ plan = {}, recipes = [], people = 1, day = '', within = 5, limit = 3 } = {}) => {
   if (!day) return [];

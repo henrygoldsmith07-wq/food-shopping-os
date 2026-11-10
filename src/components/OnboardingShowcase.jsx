@@ -1,9 +1,9 @@
 import { LockKeyhole, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { FoodArt } from './ui.jsx';
 
-export default function OnboardingShowcase({ ideaCards }) {
+export default function OnboardingShowcase({ ideaCards, compact = false }) {
   return (
-    <section className="flex flex-col justify-between gap-6 py-2 lg:sticky lg:top-0 lg:min-h-[calc(100vh-3.5rem)] lg:py-8">
+    <section className={`${compact ? 'hidden lg:flex' : 'flex'} flex-col justify-between gap-6 py-2 lg:sticky lg:top-0 lg:min-h-[calc(100vh-3.5rem)] lg:py-8`}>
       <div className="flex items-center gap-2.5">
         <span className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}><UtensilsCrossed size={19} strokeWidth={1.8} /></span>
         <span className="text-[0.875rem] font-black uppercase tracking-[0.2em]">Forq</span>

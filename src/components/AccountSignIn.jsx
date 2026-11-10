@@ -189,8 +189,10 @@ export function SignInOptions({ providers = {}, callbackUrl = '/' }) {
  */
 export default function OnboardingAccount() {
   const [status, setStatus] = useState(null);
+  const [accountOpen, setAccountOpen] = useState(false);
   useEffect(() => {
     let live = true;
+    setAccountOpen(Boolean(urlError() || new URLSearchParams(window.location.search).has('verified')));
     fetch('/api/backend/status')
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => { if (live) setStatus(body && typeof body === 'object' && !Array.isArray(body) ? body : null); })
@@ -202,16 +204,16 @@ export default function OnboardingAccount() {
   if (!status?.enabled || !(providers.google || providers.password)) return null;
 
   return (
-    <section aria-labelledby="onboarding-account" className="rounded-3xl border p-4" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
-      <h2 id="onboarding-account" className="text-[0.9375rem] font-extrabold">
-        {status.authenticated ? `Signed in as ${status.user?.email || status.user?.name}` : 'Sign in to keep your kitchen on every device'}
-      </h2>
+    <details open={status.authenticated || accountOpen} onToggle={(event) => setAccountOpen(event.currentTarget.open)} className="rounded-3xl border p-4" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
+      <summary className="cursor-pointer py-1 text-[0.8125rem] font-bold">
+        {status.authenticated ? `Signed in as ${status.user?.email || status.user?.name}` : 'Already use Forq? Sign in (optional)'}
+      </summary>
       <p className="mt-1 mb-3 text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>
         {status.authenticated
           ? 'Your plan, list and pantry will sync once setup is done.'
           : 'Already have an account? Your week loads straight in. Or skip this and keep everything on this device.'}
       </p>
       {!status.authenticated && <SignInOptions providers={providers} />}
-    </section>
+    </details>
   );
 }

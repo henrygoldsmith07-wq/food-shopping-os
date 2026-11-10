@@ -6,6 +6,7 @@ import {
   autopilotWeekProposal,
   autopilotWeekSummary,
   regenerateProposalMeal,
+  resizeAutopilotProposal,
 } from '../lib/autopilot-week.js';
 import { PLANNING_STRATEGIES, strategyComparison, strategyFor } from '../lib/planning-strategies.js';
 import { formatCookTime, gbp } from '../lib/utils.js';
@@ -28,8 +29,11 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   const app = useApp();
   const [seed, setSeed] = useState(1);
   const [accepted, setAccepted] = useState(false);
+  const [acceptedMealCount, setAcceptedMealCount] = useState(0);
   const [eatingOut, setEatingOut] = useState(() => new Set());
   const [peopleOverride, setPeopleOverride] = useState(null);
+  const [proposalEdit, setProposalEdit] = useState(null);
+  const [swapCount, setSwapCount] = useState(0);
   // One strategy at a time — words the household means, knobs the one
   // generator already has (lib/planning-strategies.js).
   const [strategyId, setStrategyId] = useState('usual');
@@ -59,11 +63,12 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
     [app, seed, strategyId, strategy],
   );
   const proposal = useMemo(() => {
-    if (!peopleOverride) return base;
+    const edited = proposalEdit?.base === base ? proposalEdit.proposal : base;
+    if (!peopleOverride) return edited;
     // People changed: rescale the same week rather than rerolling it — the
     // meals stay, only quantities follow.
-    return { ...base, portions: peopleOverride, form: { ...base.form, people: peopleOverride } };
-  }, [base, peopleOverride]);
+    return resizeAutopilotProposal(app, edited, peopleOverride);
+  }, [app, base, peopleOverride, proposalEdit]);
 
   const summary = autopilotWeekSummary(proposal);
   const dates = proposal.model.planDates;
@@ -71,21 +76,22 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   const regenerateMeal = (date) => {
     if (lockedDates.has(date)) return;
     const next = regenerateProposalMeal(app, proposal, date, {
-      seed: seed + 1,
+      seed: seed + swapCount + 1,
       exclude: [...lockedDates].map((d) => proposal.plan?.[d]?.dinner).filter(Boolean),
     });
     if (!next) {
       setStatus('No alternative dinner found for that day — try "Not this week" instead.');
       return;
     }
-    setSeed((s) => s + 1);
+    setProposalEdit({ base, proposal: next });
+    setSwapCount((count) => count + 1);
     setStatus(`${dayShort(date)} swapped to ${next.plan[date].dinner ? byId(next.plan[date].dinner)?.name : 'a new meal'}.`);
   };
 
   const toggleLock = (date) => {
     // The real lock command: persisted, ledgered, and honoured by every
     // regeneration and recovery path.
-    app.toggleMealLock?.(date, 'dinner');
+    app.toggleMealLock?.(date, 'dinner', proposal.plan?.[date]?.dinner);
     setStatus(lockedDates.has(date)
       ? `${dayShort(date)} unlocked — it can change with the rest of the week.`
       : `${dayShort(date)} locked — Forq keeps this meal whatever else changes.`);
@@ -102,14 +108,24 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
 
   const acceptWeek = () => {
     const entries = proposal.entries.filter((e) => e?.recipeId && !eatingOut.has(e.date));
-    app.applyPlanEntries(entries);
+    app.applyPlanEntries(entries, {
+      ...(peopleOverride ? { portionsOverride: proposal.portions } : {}),
+      removeSlots: [...eatingOut].map((date) => ({ date, slot: 'dinner' })),
+    });
+    setAcceptedMealCount(entries.length);
     recordProductEvent('autopilot_week_accepted', {
       meals: entries.length,
       people: proposal.portions,
       eatingOut: eatingOut.size,
     }, undefined, app);
     setAccepted(true);
-    setStatus('Week accepted — the list built itself from it.');
+    setStatus(entries.length === 0
+      ? eatingOut.size
+        ? 'No dinners saved. Existing dinners on days marked Eat out were removed, and the list now follows your plan.'
+        : 'No dinners saved; your existing plan and shopping list were left unchanged.'
+      : peopleOverride
+        ? `Week accepted — your shopping portions are now set to ${proposal.portions}.`
+        : 'Week accepted — the list built itself from it.');
     onAccept?.(proposal);
   };
 
@@ -120,7 +136,11 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
           <Check size={16} /> Your week is in the plan
         </p>
         <p className="text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
-          {proposal.stats.meals} dinners planned. The shopping list has been updated from it — pantry already subtracted.
+          {acceptedMealCount > 0
+            ? `${acceptedMealCount} dinner${acceptedMealCount === 1 ? '' : 's'} saved. The shopping list has been updated from your plan — pantry already subtracted.`
+            : eatingOut.size > 0
+              ? 'No dinners saved. Existing dinners on days marked Eat out were removed, and the list now follows your plan.'
+              : 'No dinners saved. Your plan and shopping list were left unchanged.'}
         </p>
         {status && <p role="status" className="text-[0.75rem] font-semibold" style={{ color: 'var(--accent)' }}>{status}</p>}
       </Card>
@@ -148,7 +168,9 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
           <div className="min-w-0">
             <p className="text-[0.78125rem] font-extrabold">Cooking for {proposal.portions}</p>
-            <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>Follows your recorded cooks</p>
+            <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
+              {peopleOverride ? 'Saved with your plan when accepted' : 'Follows your recorded cooks'}
+            </p>
           </div>
           <Stepper
             value={proposal.portions}
@@ -271,8 +293,10 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
                 <button
                   type="button"
                   onClick={() => toggleEatingOut(date)}
+                  disabled={isLocked}
+                  title={isLocked ? 'Unlock this dinner before marking it as eating out.' : undefined}
                   aria-pressed={isOut}
-                  className="press rounded-xl border px-2.5 py-1.5 text-[0.6875rem] font-extrabold"
+                  className="press rounded-xl border px-2.5 py-1.5 text-[0.6875rem] font-extrabold disabled:opacity-40"
                   style={{
                     borderColor: isOut ? 'var(--accent)' : 'var(--line)',
                     color: isOut ? 'var(--accent)' : 'var(--muted)',

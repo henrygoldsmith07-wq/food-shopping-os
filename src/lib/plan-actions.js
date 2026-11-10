@@ -139,7 +139,7 @@ export const planActions = (set) => ({
     return withEvent(s, { plan: nextPlan },
       createLedgerEvent('MealPlanned', { date: to?.date, slot: to?.slot, recipeId: moved, movedFrom: from }, { origin: 'user' }));
   }),
-  applyPlanEntries: (entries) => set((s) => {
+  applyPlanEntries: (entries, options = {}) => set((s) => {
     // Locked meals are untouchable: "keep this meal, change the rest" must
     // survive every regeneration, recovery and Autopilot refresh.
     const locked = s.lockedMeals || {};
@@ -148,10 +148,27 @@ export const planActions = (set) => ({
       const key = `${e.date}|${e.slot}`;
       return !(key in locked) || locked[key] === e.recipeId;
     });
-    const plan = applyEntries(s.plan, allowed);
+    const addedPlan = applyEntries(s.plan, allowed);
+    const removeSlots = (options?.removeSlots || []).filter((item) =>
+      item?.date && item?.slot && !(`${item.date}|${item.slot}` in locked)
+      && addedPlan?.[item.date]?.[item.slot]);
+    const plan = { ...addedPlan };
+    for (const { date, slot } of removeSlots) {
+      const day = { ...plan[date] };
+      delete day[slot];
+      if (Object.keys(day).length) plan[date] = day;
+      else delete plan[date];
+    }
     const added = allowed.length;
-    if (!added) return {};
-    return withEvent(s, { plan }, createLedgerEvent('MealPlanned', { batch: added }, { origin: 'user' }));
+    if (!added && !removeSlots.length) return {};
+    const portions = Number(options?.portionsOverride);
+    const changes = added > 0 && Number.isInteger(portions) && portions >= 1 && portions <= 12
+      ? { plan, portionsOverride: portions }
+      : { plan };
+    return withEvent(s, changes, createLedgerEvent('MealPlanned', {
+      batch: added,
+      removedSlots: removeSlots.length ? removeSlots : undefined,
+    }, { origin: 'user' }));
   }),
   /**
    * Save the visible week as a named, replayable template. Templates are
@@ -206,11 +223,11 @@ export const planActions = (set) => ({
     });
     return result || { ok: false, error: 'Could not rename the template.' };
   },
-  toggleMealLock: (date, slot) => set((s) => {
-    const recipeId = s.plan?.[date]?.[slot] || null;
-    if (!recipeId) return {}; // nothing to lock
+  toggleMealLock: (date, slot, proposedRecipeId = null) => set((s) => {
     const key = `${date}|${slot}`;
     const lockedMeals = { ...(s.lockedMeals || {}) };
+    const recipeId = lockedMeals[key] || s.plan?.[date]?.[slot] || proposedRecipeId;
+    if (!recipeId) return {}; // nothing to lock
     const nowLocked = !(key in lockedMeals);
     if (nowLocked) lockedMeals[key] = recipeId;
     else delete lockedMeals[key];
@@ -289,28 +306,15 @@ export const planActions = (set) => ({
       if (!householdPermission(s, 'pantry') || !recipe?.id) return {};
       const n = Math.max(0, Math.round(Number(portions) || 0));
       const mine = (p) => p.cat === LEFTOVER_CAT && p.recipeId === recipe.id && p.addedAt === s.day;
-      const rows = s.pantry.filter(mine);
+      // One fridge row per dish per day: the cook's stepper sets a single
+      // quantity, so stepping up rewrites that row instead of adding rows.
+      const hadRow = (s.pantry || []).some(mine);
       const leftovers = syncLeftoverRecord(s.leftovers || [], recipe, s.day, n);
-      if (!rows.length && n === 0) return leftovers === s.leftovers ? {} : { leftovers };
-      if (!rows.length) {
-        return {
-          pantry: [...s.pantry, { id: uid('p'), low: false, ...leftoverEntry(recipe, n, s.day) }],
-          leftovers,
-        };
-      }
-      if (n === 0) return { pantry: s.pantry.filter((p) => !mine(p)), leftovers };
-      let remaining = n;
-      const pantry = s.pantry.flatMap((p) => {
-        if (!mine(p)) return [p];
-        const take = Math.min(remaining, Math.max(1, Math.round(Number(p.portions) || 1)));
-        remaining -= take;
-        return take > 0
-          ? [{ ...p, portions: take, qty: `${take} portion${take === 1 ? '' : 's'}` }]
-          : [];
-      });
-      if (remaining > 0) {
-        pantry.push({ id: uid('p'), low: false, ...leftoverEntry(recipe, remaining, s.day) });
-      }
+      if (n === 0 && !hadRow) return leftovers === s.leftovers ? {} : { leftovers };
+      const rest = (s.pantry || []).filter((p) => !mine(p));
+      const pantry = n > 0
+        ? [...rest, { id: uid('p'), low: false, ...leftoverEntry(recipe, n, s.day) }]
+        : rest;
       return { pantry, leftovers };
     }),
 

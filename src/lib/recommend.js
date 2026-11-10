@@ -80,11 +80,12 @@ export const costPerPerson = (recipe, people = 2) => {
 export const totalTime = (recipe) => Number(recipe.time) || 0;
 
 export const leftoverYield = (recipe) => {
-  // How many lunch portions this cook creates beyond the dinner itself
+  // A batch-suitability ranking hint, not confirmed spare portions. Shopping
+  // scales to household portions; only the cooking log records real leftovers.
   const serves = Number(recipe.servings) || 1;
   const canBatch = recipe.tags?.some((t) => ['batch', 'freezer', 'one-pot', 'meal-prep'].includes(t));
-  if (serves >= 6) return { portions: 2, note: 'Creates two lunch portions' };
-  if (serves >= 4 || canBatch) return { portions: 1, note: 'Creates one lunch portion' };
+  if (serves >= 6) return { portions: 2, note: 'For lunch too, plan extra ingredients and log any leftovers after cooking' };
+  if (serves >= 4 || canBatch) return { portions: 1, note: 'For lunch too, plan extra ingredients and log any leftovers after cooking' };
   return { portions: 0, note: null };
 };
 
