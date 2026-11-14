@@ -251,17 +251,34 @@ export function regenerateProposalMeal(app, proposal, date, { seed = 1, exclude 
     || generated.find((recipe) => recipe && recipe.id !== proposal.plan?.[date]?.dinner);
   if (!replacement) return null;
 
-  const plan = { ...proposal.plan, [date]: { ...(proposal.plan?.[date] || {}), dinner: replacement.id } };
+  return applyProposalSwaps(app, proposal, { [date]: replacement.id });
+}
+
+/**
+ * Apply per-day dinner swaps on top of a proposal. Swaps are kept as data
+ * (date -> recipe id) rather than as a snapshot proposal, so they survive the
+ * proposal being rebuilt whenever app state changes (a lock, a sync, a tick).
+ * Locked meals always win over a swap.
+ *
+ * @param {any} app
+ * @param {ReturnType<typeof autopilotWeekProposal>} proposal
+ * @param {Record<string, string>} dinners
+ * @param {number} [people]
+ */
+export function applyProposalSwaps(app, proposal, dinners = {}, people = proposal.form.people) {
+  const locked = app.lockedMeals || {};
+  const plan = { ...proposal.plan };
+  for (const [date, recipeId] of Object.entries(dinners || {})) {
+    if (!recipeId || `${date}|dinner` in locked) continue;
+    plan[date] = { ...(plan[date] || {}), dinner: recipeId };
+  }
   // Locked meals elsewhere in the week survive the rebuild untouched.
   for (const [key, recipeId] of Object.entries(locked)) {
     const [lockedDate, slot] = key.split('|');
+    if (!proposal.model.planDates.includes(lockedDate)) continue;
     plan[lockedDate] = { ...(plan[lockedDate] || {}), [slot]: recipeId };
   }
   const entries = Object.entries(plan).flatMap(([d, slots]) =>
     Object.entries(slots).map(([slot, recipeId]) => ({ date: d, slot, recipeId })));
-  return resizeAutopilotProposal(app, {
-    ...proposal,
-    plan,
-    entries,
-  }, form.people);
+  return resizeAutopilotProposal(app, { ...proposal, plan, entries }, people);
 }

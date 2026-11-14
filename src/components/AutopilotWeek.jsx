@@ -5,6 +5,7 @@ import { byId } from '../data/recipes.js';
 import {
   autopilotWeekProposal,
   autopilotWeekSummary,
+  applyProposalSwaps,
   regenerateProposalMeal,
   resizeAutopilotProposal,
 } from '../lib/autopilot-week.js';
@@ -12,6 +13,9 @@ import { PLANNING_STRATEGIES, strategyComparison, strategyFor } from '../lib/pla
 import { formatCookTime, gbp } from '../lib/utils.js';
 import { Card, FoodArt, Pill, Stepper } from './ui.jsx';
 import { recordProductEvent } from '../lib/product-analytics.js';
+
+/** Stable empty swap map, so the proposal memo is not invalidated every render. */
+const NO_SWAPS = Object.freeze({});
 
 const dayShort = (date) =>
   new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
@@ -32,8 +36,10 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   const [acceptedMealCount, setAcceptedMealCount] = useState(0);
   const [eatingOut, setEatingOut] = useState(() => new Set());
   const [peopleOverride, setPeopleOverride] = useState(null);
-  const [proposalEdit, setProposalEdit] = useState(null);
-  const [swapCount, setSwapCount] = useState(0);
+  // Per-day dinner swaps, kept as data keyed to the week they were made on.
+  // A snapshot proposal would be thrown away every time app state changes
+  // (locking a meal does exactly that), silently undoing the swaps.
+  const [swapState, setSwapState] = useState({ key: '', dinners: NO_SWAPS, count: 0 });
   // One strategy at a time — words the household means, knobs the one
   // generator already has (lib/planning-strategies.js).
   const [strategyId, setStrategyId] = useState('usual');
@@ -62,13 +68,15 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
     () => (strategy.emphasis === null ? null : strategyComparison(app, { seed, strategyId })),
     [app, seed, strategyId, strategy],
   );
+  const swapKey = `${seed}|${strategyId}`;
+  const current = swapState.key === swapKey ? swapState : { dinners: NO_SWAPS, count: 0 };
+  const swaps = current.dinners;
   const proposal = useMemo(() => {
-    const edited = proposalEdit?.base === base ? proposalEdit.proposal : base;
-    if (!peopleOverride) return edited;
     // People changed: rescale the same week rather than rerolling it — the
     // meals stay, only quantities follow.
-    return resizeAutopilotProposal(app, edited, peopleOverride);
-  }, [app, base, peopleOverride, proposalEdit]);
+    if (Object.keys(swaps).length) return applyProposalSwaps(app, base, swaps, peopleOverride || base.form.people);
+    return peopleOverride ? resizeAutopilotProposal(app, base, peopleOverride) : base;
+  }, [app, base, peopleOverride, swaps]);
 
   const summary = autopilotWeekSummary(proposal);
   const dates = proposal.model.planDates;
@@ -76,15 +84,14 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
   const regenerateMeal = (date) => {
     if (lockedDates.has(date)) return;
     const next = regenerateProposalMeal(app, proposal, date, {
-      seed: seed + swapCount + 1,
+      seed: seed + current.count + 1,
       exclude: [...lockedDates].map((d) => proposal.plan?.[d]?.dinner).filter(Boolean),
     });
     if (!next) {
       setStatus('No alternative dinner found for that day — try "Not this week" instead.');
       return;
     }
-    setProposalEdit({ base, proposal: next });
-    setSwapCount((count) => count + 1);
+    setSwapState({ key: swapKey, dinners: { ...swaps, [date]: next.plan[date].dinner }, count: current.count + 1 });
     setStatus(`${dayShort(date)} swapped to ${next.plan[date].dinner ? byId(next.plan[date].dinner)?.name : 'a new meal'}.`);
   };
 

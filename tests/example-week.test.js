@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   adoptionSummary,
   buildDemoAdoptionPatch,
+  demoAdoptionDates,
   createExampleWeekState,
   isDemoState,
   DEMO_LABEL,
@@ -100,10 +101,12 @@ describe('example week demonstration data', () => {
 });
 
 describe('demo adoption (demo week becomes the real kitchen)', () => {
-  it('rebases the dinner rotation onto the current week with a full 7-day plan', () => {
+  it('rebases the dinner rotation onto the seven days starting today', () => {
     const demo = createExampleWeekState('2026-07-28');
     const patch = buildDemoAdoptionPatch(demo, { ...EMPTY_STATE }, '2026-10-20');
-    const dates = weekDates('2026-10-20');
+    const dates = demoAdoptionDates('2026-10-20');
+    expect(dates[0]).toBe('2026-10-20');
+    expect(dates).toHaveLength(7);
     expect(Object.keys(patch.plan)).toEqual(dates);
     dates.forEach((date, i) => {
       expect(patch.plan[date].dinner).toBe(DEMO_DINNER_IDS[i % DEMO_DINNER_IDS.length]);
@@ -140,9 +143,26 @@ describe('demo adoption (demo week becomes the real kitchen)', () => {
     expect(patch.household).toBe(3);
   });
 
+  it('never plans adopted dinners in the past, even late in the week', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    // A Saturday: a Monday-start week would put five dinners in the past.
+    const patch = buildDemoAdoptionPatch(demo, { ...EMPTY_STATE }, '2026-10-24');
+    expect(Object.keys(patch.plan).every((date) => date >= '2026-10-24')).toBe(true);
+    expect(patch.adoptedFromDemo.added).toBe(7);
+  });
+
+  it('keeps real planned days outside the adopted seven days', () => {
+    const demo = createExampleWeekState('2026-07-28');
+    const real = { ...EMPTY_STATE, plan: { '2026-10-01': { dinner: 'last-month' }, '2026-11-20': { lunch: 'later' } } };
+    const patch = buildDemoAdoptionPatch(demo, real, '2026-10-20');
+    expect(patch.plan['2026-10-01']).toEqual({ dinner: 'last-month' });
+    expect(patch.plan['2026-11-20']).toEqual({ lunch: 'later' });
+    expect(Object.keys(patch.plan)).toHaveLength(9);
+  });
+
   it('never replaces a real planned dinner — the demo fills only empty dates', () => {
     const demo = createExampleWeekState('2026-07-28');
-    const dates = weekDates('2026-10-20');
+    const dates = demoAdoptionDates('2026-10-20');
     const real = {
       ...EMPTY_STATE,
       plan: {
@@ -158,6 +178,7 @@ describe('demo adoption (demo week becomes the real kitchen)', () => {
     expect(patch.plan[dates[1]].dinner).toBe(DEMO_DINNER_IDS[1]);
     expect(patch.plan[dates[2]].dinner).toBe(DEMO_DINNER_IDS[2]);
     expect(patch.adoptedFromDemo.keptMeals).toBe(2);
+    expect(patch.adoptedFromDemo.added).toBe(5);
   });
 
   it('gives adopted kitchens the same nameless default as skipped onboarding', () => {

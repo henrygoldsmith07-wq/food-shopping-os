@@ -52,8 +52,11 @@ describe('the automatic cook step', () => {
     const { setLeftoverPortions } = planActions(store.set);
     completeRecipe(recipe, { leftovers: 2 });
 
+    const rowId = store.get().pantry.find((p) => p.recipeId === recipe.id).id;
     setLeftoverPortions(recipe, 1);
     expect(store.get().pantry.find((p) => p.recipeId === recipe.id).portions).toBe(1);
+    // Correcting the count rewrites the same row rather than replacing it.
+    expect(store.get().pantry.filter((p) => p.recipeId === recipe.id).map((p) => p.id)).toEqual([rowId]);
     expect(store.get().leftovers.find((p) => p.recipeId === recipe.id)).toMatchObject({
       remainingPortions: 1, lifecycleState: 'stored',
     });

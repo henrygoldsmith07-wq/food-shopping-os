@@ -41,7 +41,7 @@ export default async function DemoPage() {
       <div className="mx-auto mt-8 max-w-xl rounded-2xl border px-5 py-4 text-left" style={{ borderColor: 'var(--line)' }}>
         <p className="text-[0.875rem] font-extrabold">Like this week? Start your kitchen from it.</p>
         <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
-          Copies the 7 dinners and pantry staples into your real kitchen, rebased onto this week —
+          Copies the 7 dinners and pantry staples into your real kitchen, rebased onto the seven days starting today —
           meals you already planned are kept. Demo receipts stay behind — your spending history starts empty and honest.
         </p>
         <Link
