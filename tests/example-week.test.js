@@ -215,7 +215,7 @@ describe('adoption receipt', () => {
     expect(adoptionSummary({ dinners: [], keptMeals: 0, staples: 0 })).toBeNull();
     expect(adoptionSummary({
       dinners: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], keptMeals: 2, staples: 4,
-    })).toEqual({ added: 5, kept: 2, staples: 4 });
+    })).toEqual({ added: 5, kept: 2, staples: 4, days: 0 });
   });
 
   it('reads straight off a real adoption patch', () => {
@@ -225,6 +225,8 @@ describe('adoption receipt', () => {
       added: 7,
       kept: 0,
       staples: demo.pantry.length,
+      // The receipt says the dinners span the next seven days, not "this week".
+      days: 7,
     });
   });
 });

@@ -114,6 +114,8 @@ describe('demo walkthrough', () => {
       render(<ClientRoot />);
       expect(screen.getByText('Your week is planned')).toBeTruthy();
       expect(screen.getByText(/Demo receipts stayed behind/)).toBeTruthy();
+      // The dinners start today and can run into next week; the receipt says so.
+      expect(screen.getByText(/dinners planned over the next 7 days/)).toBeTruthy();
 
       // Dismiss: receipt gone, adopted plan stays.
       fireEvent.click(screen.getByRole('button', { name: 'Dismiss adoption summary' }));

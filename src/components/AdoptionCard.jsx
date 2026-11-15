@@ -19,7 +19,11 @@ export default function AdoptionCard({ goTab }) {
   if (!summary) return null;
 
   const parts = [];
-  if (summary.added > 0) parts.push(`${summary.added} dinner${summary.added === 1 ? '' : 's'} planned`);
+  // Adoption fills the seven days from today, which can run into next week —
+  // say so, or a weekend adopter sees one dinner in this week's view and
+  // wonders where the rest went. Older markers carry no dates.
+  const span = summary.days ? ` over the next ${summary.days} days` : '';
+  if (summary.added > 0) parts.push(`${summary.added} dinner${summary.added === 1 ? '' : 's'} planned${span}`);
   if (summary.kept > 0) parts.push(`kept your ${summary.kept} planned meal${summary.kept === 1 ? '' : 's'}`);
   if (summary.staples > 0) parts.push(`${summary.staples} pantry staple${summary.staples === 1 ? '' : 's'} added`);
 
