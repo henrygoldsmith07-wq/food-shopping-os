@@ -32,7 +32,7 @@ export function useDemoKitchen({
     // whole session, not per call site.
     setDemoAnalyticsSuppressed(true);
     setDemoState(demoSession);
-  }, [undoHistory]);
+  }, [undoHistory, demoRef, realUndoStack, setDemoState]);
 
   const exitDemoMode = useCallback(() => {
     demoRef.current = null;
@@ -41,7 +41,7 @@ export function useDemoKitchen({
     undoBatch.current = null;
     setDemoAnalyticsSuppressed(false);
     setDemoState(null);
-  }, [undoHistory]);
+  }, [undoHistory, demoRef, realUndoStack, undoBatch, setDemoState]);
 
   /* Adopt the demo week as the real kitchen: the dinner rotation is rebased
      onto this week, pantry staples merge in without touching real rows, and
@@ -86,7 +86,7 @@ export function useDemoKitchen({
       source: 'demo', mealCount: adopted.dinners, count: adopted.staples,
     }, undefined, { ...state, ...patch });
     return true;
-  }, [state, exitDemoMode, api, beginImportBatch, endImportBatch]);
+  }, [state, exitDemoMode, api, beginImportBatch, endImportBatch, demoRef, editedSinceBoot]);
 
   return { enterDemoMode, exitDemoMode, adoptDemoWeek };
 }
