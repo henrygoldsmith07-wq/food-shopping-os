@@ -265,7 +265,8 @@ export const adoptionSummary = (marker) => {
   const kept = Math.max(0, Number(marker.keptMeals) || 0);
   const staples = Math.max(0, Number(marker.staples) || 0);
   if (!dinners && !kept && !staples) return null;
-  return { added: Math.max(0, dinners - kept), kept, staples };
+  const days = Array.isArray(marker.dates) ? marker.dates.length : 0;
+  return { added: Math.max(0, dinners - kept), kept, staples, days };
 };
 
 export const isDemoState = (state) => Boolean(state?.isDemoSession);
