@@ -33,9 +33,6 @@ export const moveBefore = (list = [], id, beforeId, key = (item) => item.id) => 
   return moved;
 };
 
-export const todayName = () =>
-  new Date().toLocaleDateString('en-GB', { weekday: 'long' });
-
 /** "Monday 27 July" — today by default, or any 'YYYY-MM-DD' stamp. */
 export const timeAgo = (stamp) => {
   const seconds = Math.max(0, Math.floor((Date.now() - Number(stamp)) / 1000));

@@ -4,9 +4,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '../lib/store.jsx';
 import { gbp } from '../lib/utils.js';
-import { applyOffers, OFFER_KINDS } from '../lib/shopping.js';
+import { OFFER_KINDS } from '../lib/shopping.js';
 import {
-  COUPON_KINDS, couponExpiryLabel, couponsForList, LOYALTY_PROGRAMMES, draftCouponFromPhoto,
+  COUPON_KINDS, couponExpiryLabel, LOYALTY_PROGRAMMES, draftCouponFromPhoto,
 } from '../lib/coupons.js';
 import { Card, Chip, Pill } from './ui.jsx';
 import { NumberField } from './FoodDetail.jsx';
@@ -30,8 +30,13 @@ export default function OffersPanel() {
   const fileRef = useRef(null);
   const offerKind = OFFER_KINDS.find((k) => k.id === draftOffer.kind);
   const couponKind = COUPON_KINDS.find((k) => k.id === draftCoupon.kind);
-  const { lines: offerLines, saved: offerSaved } = applyOffers(app.shoppingList, app.offers, { today: app.day });
-  const couponHits = couponsForList(app.coupons, app.shoppingList, app.day);
+  // Derived once in the store: `basket.offers` runs applyOffers over the same
+  // list, and `couponsForList` is the same coupon/list pairing. Recomputing
+  // both here on every render meant every keystroke in the offer or coupon
+  // form re-scanned the whole list twice.
+  const offerLines = app.basket.offers;
+  const offerSaved = app.basket.saved;
+  const couponHits = app.couponsForList;
   const couponSavedHint = couponHits.length ? `${couponHits.length} coupon${couponHits.length === 1 ? '' : 's'} match your list` : 'No vault coupons match the list yet';
 
   const addOffer = () => {

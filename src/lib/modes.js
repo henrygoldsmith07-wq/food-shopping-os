@@ -10,7 +10,7 @@
  * install has said nothing about what it wants, so it is shown everything.
  */
 
-import { ALWAYS_ON, MODE_IDS, MODULES, PRODUCT_MODES, moduleBy } from '../data/modes.js';
+import { ALWAYS_ON, MODE_IDS, MODULES, PRODUCT_MODES } from '../data/modes.js';
 
 /** Only ids we recognise; an unknown mode is dropped rather than obeyed. */
 export const cleanModes = (modes = []) => [...new Set(
@@ -88,6 +88,3 @@ export const modesSummary = (modes = []) => {
   if (!chosen.length) return 'Everything is shown';
   return chosen.map((id) => PRODUCT_MODES.find((mode) => mode.id === id)?.label).filter(Boolean).join(' · ');
 };
-
-/** Whether a module a screen wants to open is currently on. */
-export const moduleLabel = (id) => moduleBy[id]?.label || id;

@@ -36,6 +36,15 @@ describe('receipt CSV import', () => {
     expect(shops[0].items[0].price).toBe(2.1);
   });
 
+  it('falls back to today for impossible calendar dates', () => {
+    const csv = [
+      'date,store,item,qty,price',
+      '2026-99-40,Tesco,Milk,1,1.10',
+    ].join('\n');
+    const { shops } = parseReceiptCsv(csv, { today: '2026-08-10' });
+    expect(shops[0].date).toBe('2026-08-10');
+  });
+
   it('falls back to positional columns when there is no header', () => {
     const { shops } = parseReceiptCsv('2026-08-01,Lidl,Pasta,500g,0.75');
     expect(shops[0].items[0]).toMatchObject({ name: 'Pasta', price: 0.75, qty: '500g' });

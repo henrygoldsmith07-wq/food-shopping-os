@@ -107,10 +107,18 @@ export const couponVaultStats = (coupons = [], today = dayStamp()) => {
  */
 const OFFER_LINE = /(£\s*\d+[.,]\d{2}|£\s*\d+|\d+\s*%|\d+\s*for\s*\d+|free|points|reward|voucher|coupon)/i;
 
+// A line that actually carries the offer, not just names it. "Any coupon" or
+// "Voucher" alone matches OFFER_LINE, so those would be picked first and the
+// £2.50 on the next line would never reach the draft.
+const VALUED_OFFER_LINE = /(£\s*\d+[.,]\d{2}|£\s*\d+|\d+\s*%|\d+\s*for\s*\d+|\bfree\b)/i;
+
 export const draftFromOcrText = (text) => {
   const raw = String(text || '');
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const offerLine = lines.find((l) => OFFER_LINE.test(l)) || lines[0] || '';
+  const offerLine = lines.find((l) => VALUED_OFFER_LINE.test(l))
+    || lines.find((l) => OFFER_LINE.test(l))
+    || lines[0]
+    || '';
   const pct = offerLine.match(/(\d+)\s*%/);
   const money = offerLine.match(/£\s*(\d+[.,]\d{2}|\d+)/);
   const multibuy = offerLine.match(/(\d+)\s*for\s*(\d+)/i);

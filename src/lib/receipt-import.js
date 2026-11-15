@@ -46,12 +46,22 @@ const parsePrice = (raw) => {
 const parseDate = (raw, fallback) => {
   const value = String(raw ?? '').trim();
   if (!value) return fallback;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const [, year, month, day] = iso;
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return parsed.getUTCFullYear() === Number(year)
+      && parsed.getUTCMonth() + 1 === Number(month)
+      && parsed.getUTCDate() === Number(day)
+      ? value
+      : fallback;
+  }
   const uk = value.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})$/);
   if (uk) {
     const [, d, m, y] = uk;
     const year = y.length === 2 ? `20${y}` : y;
-    return `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const candidate = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    return parseDate(candidate, fallback);
   }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString().slice(0, 10);

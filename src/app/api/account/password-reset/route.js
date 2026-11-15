@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { ApiError, assertSameOrigin, handleApiError, rateLimit, readJsonBody } from '../../../../server/api.js';
 import { databaseConfigured, getDatabase } from '../../../../server/database.js';
 import { appOrigin, emailConfigured } from '../../../../server/email.js';
 import { consumeAccountToken } from '../../../../server/account-tokens.js';
 import { sendPasswordResetEmail } from '../../../../server/account-email.js';
+import { accountEmailSchema } from '../../../../server/schemas.js';
 import {
   hashPassword, MIN_PASSWORD, normaliseEmail, validEmail, validPassword,
 } from '../../../../server/passwords.js';
@@ -25,7 +27,7 @@ export async function POST(request) {
     assertSameOrigin(request);
     ready();
     const body = await readJsonBody(request, 2048);
-    const email = normaliseEmail(body?.email);
+    const email = normaliseEmail(accountEmailSchema.parse(body).email);
     if (!validEmail(email)) throw new ApiError(400, 'Enter a valid email address.');
     await rateLimit(`reset:${clientOf(request)}`, 10, 3600000);
     await rateLimit(`reset-email:${email}`, 3, 3600000);
@@ -48,9 +50,12 @@ export async function PUT(request) {
     assertSameOrigin(request);
     ready();
     await rateLimit(`reset-complete:${clientOf(request)}`, 20, 3600000);
-    const body = await readJsonBody(request, 2048);
-    const email = normaliseEmail(body?.email);
-    if (!validPassword(body?.password)) throw new ApiError(400, `Use a password of at least ${MIN_PASSWORD} characters.`);
+    const body = accountEmailSchema.extend({
+      token: z.string().min(20).max(200),
+      password: z.string().max(200),
+    }).parse(await readJsonBody(request, 2048));
+    const email = normaliseEmail(body.email);
+    if (!validPassword(body.password)) throw new ApiError(400, `Use a password of at least ${MIN_PASSWORD} characters.`);
     if (!validEmail(email) || !(await consumeAccountToken('reset', email, body?.token))) {
       throw new ApiError(400, 'That reset link has expired or was already used. Ask for a new one.');
     }

@@ -89,8 +89,6 @@ export const SORTS = [
   { id: 'name', label: 'A–Z' },
 ];
 
-export const SORT_IDS = SORTS.map((sort) => sort.id);
-
 /**
  * Compare, with anything unrankable pushed to the end either way round.
  *

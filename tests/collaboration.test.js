@@ -144,6 +144,38 @@ describe('calendar-aware planning', () => {
     expect(busy.map((b) => b.date)).toEqual(['2026-08-05']);
     expect(busy[0].source).toBe('Chrono ICS');
   });
+
+  it('spreads a multi-day all-day event across every evening (DTEND is exclusive)', () => {
+    // RFC 5545 all-day DTEND is exclusive: 3rd–6th means the 3rd, 4th and 5th.
+    // A weekend away must empty every dinner it covers, not just the first.
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'BEGIN:VEVENT',
+      'SUMMARY:Weekend away',
+      'DTSTART;VALUE=DATE:20260803',
+      'DTEND;VALUE=DATE:20260806',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    expect(busyFromIcs(ics, { source: 'Chrono ICS', now: 1 }).map((b) => b.date))
+      .toEqual(['2026-08-03', '2026-08-04', '2026-08-05']);
+  });
+
+  it('reads a folded line (CRLF + space) without losing the property', () => {
+    // Google/Apple exports fold long lines; unfolding must not swallow them.
+    const ics = [
+      'BEGIN:VEVENT',
+      'DTSTART:20260805T180000',
+      'DTEND:20260805T193000',
+      'SUMMARY:Long summary that folds acr',
+      ' oss a CRLF boundary',
+      'END:VEVENT',
+    ].join('\r\n');
+    const events = parseIcsEvents(ics);
+    expect(events).toHaveLength(1);
+    expect(events[0].start).toBe('2026-08-05T18:00:00.000Z');
+    expect(events[0].end).toBe('2026-08-05T19:30:00.000Z');
+  });
 });
 
 describe('leftover-first seasonal budget planning', () => {
