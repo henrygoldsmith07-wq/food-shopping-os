@@ -226,7 +226,10 @@ export const planActions = (set) => ({
   toggleMealLock: (date, slot, proposedRecipeId = null) => set((s) => {
     const key = `${date}|${slot}`;
     const lockedMeals = { ...(s.lockedMeals || {}) };
-    const recipeId = lockedMeals[key] || s.plan?.[date]?.[slot] || proposedRecipeId;
+    // A caller locking what it is showing (an unsaved Autopilot proposal)
+    // locks that meal, not whatever the saved plan has in the slot — otherwise
+    // "lock" would silently swap the visible dinner for the saved one.
+    const recipeId = lockedMeals[key] || proposedRecipeId || s.plan?.[date]?.[slot];
     if (!recipeId) return {}; // nothing to lock
     const nowLocked = !(key in lockedMeals);
     if (nowLocked) lockedMeals[key] = recipeId;
@@ -308,12 +311,16 @@ export const planActions = (set) => ({
       const mine = (p) => p.cat === LEFTOVER_CAT && p.recipeId === recipe.id && p.addedAt === s.day;
       // One fridge row per dish per day: the cook's stepper sets a single
       // quantity, so stepping up rewrites that row instead of adding rows.
-      const hadRow = (s.pantry || []).some(mine);
+      // The row keeps its id and any edits (location, expiry) across steps.
+      const existing = (s.pantry || []).find(mine);
       const leftovers = syncLeftoverRecord(s.leftovers || [], recipe, s.day, n);
-      if (n === 0 && !hadRow) return leftovers === s.leftovers ? {} : { leftovers };
+      if (n === 0 && !existing) return leftovers === s.leftovers ? {} : { leftovers };
       const rest = (s.pantry || []).filter((p) => !mine(p));
+      const fresh = leftoverEntry(recipe, n, s.day);
       const pantry = n > 0
-        ? [...rest, { id: uid('p'), low: false, ...leftoverEntry(recipe, n, s.day) }]
+        ? [...rest, existing
+          ? { ...existing, portions: fresh.portions, qty: fresh.qty }
+          : { id: uid('p'), low: false, ...fresh }]
         : rest;
       return { pantry, leftovers };
     }),

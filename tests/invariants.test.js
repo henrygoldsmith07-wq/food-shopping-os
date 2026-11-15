@@ -95,7 +95,7 @@ describe('merge-conflict tripwires', () => {
     // the message which surface it belongs to; the point is that a new one gets
     // reviewed, not that the number stays put.
     // 24: Week templates announces save/apply/delete results (WeekTemplates.jsx).
-    // 26: sign-in and password-reset errors are announced (AccountSignIn.jsx, reset-password/page.jsx).
+    // 26: sign-in and password-reset errors are announced (AccountSignIn.jsx, reset-password/ResetPasswordForm.jsx).
     // 27: "Check before you shop" announces each Got enough / Buy it answer (ShopChecks.jsx).
     // 28: holding a row for a top-up announces which row moved (ShopLater)
     // 29: saving or removing a recipe note is announced (RecipeJournal.jsx)

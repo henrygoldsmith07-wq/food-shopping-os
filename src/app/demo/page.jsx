@@ -1,6 +1,17 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 
+export const metadata = {
+  title: 'Forq demo — a sample week of meals, shopping and pantry',
+  description: 'Try Forq without an account: a sample week with seven dinners, a pantry-aware shopping list and receipts, in a sandbox where nothing is saved.',
+  alternates: { canonical: '/demo' },
+  openGraph: {
+    title: 'Forq demo — a sample week of meals, shopping and pantry',
+    description: 'Try Forq without an account: seven dinners, a pantry-aware shopping list and receipts, nothing saved.',
+    url: '/demo',
+  },
+};
+
 /**
  * Forq instant demo — the food loop.
  * Seeded week lives in the isolated demo sandbox (`?demo=1`); nothing here
@@ -18,8 +29,9 @@ export default async function DemoPage() {
       <p className="text-[0.6875rem] font-black uppercase tracking-[0.18em]" style={{ color: 'var(--accent)' }}>
         Forq · instant demo
       </p>
-      <h1 className="mt-3 text-4xl font-black tracking-tight">Tell Forq what you are eating; it works out what to buy; it helps you waste less.</h1>
-      <p className="mx-auto mt-4 max-w-2xl text-base font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
+      <h1 className="mt-3 text-4xl font-black tracking-tight">Try a sample week of meals, shopping and pantry</h1>
+      <p className="mx-auto mt-4 max-w-2xl text-lg font-extrabold leading-snug">Tell Forq what you are eating; it works out what to buy; it helps you waste less.</p>
+      <p className="mx-auto mt-3 max-w-2xl text-base font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
         A seeded week with a plan, a pantry-aware shopping list and receipts.
         Explore it in an isolated sandbox — nothing is saved or counted.
       </p>
@@ -41,7 +53,7 @@ export default async function DemoPage() {
       <div className="mx-auto mt-8 max-w-xl rounded-2xl border px-5 py-4 text-left" style={{ borderColor: 'var(--line)' }}>
         <p className="text-[0.875rem] font-extrabold">Like this week? Start your kitchen from it.</p>
         <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
-          Copies the 7 dinners and pantry staples into your real kitchen, rebased onto this week —
+          Copies the 7 dinners and pantry staples into your real kitchen, rebased onto the seven days starting today —
           meals you already planned are kept. Demo receipts stay behind — your spending history starts empty and honest.
         </p>
         <Link

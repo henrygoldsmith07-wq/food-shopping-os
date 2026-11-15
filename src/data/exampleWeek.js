@@ -169,8 +169,11 @@ export const createExampleWeekState = (day = todayStamp()) => {
  * bridge. Pure (no React, no storage) so tests can pin the contract.
  *
  * Rules:
- * - the demo's dinner rotation is rebased onto the current week, so adopting
- *   on any day yields a full 7-day plan starting today rather than stale dates
+ * - the demo's dinner rotation is rebased onto the seven days starting today,
+ *   so adopting on any weekday yields seven cookable dinners rather than a
+ *   Monday-start week whose earlier days are already in the past (past meals
+ *   create no shopping need, so they would leave the list near-empty)
+ * - the real plan outside those seven days is kept as it was
  * - a real planned dinner is never replaced: dates the household already
  *   planned keep their meal and the demo fills only the empty ones, so
  *   adopting from Settings cannot destroy a real week (undo still reverts)
@@ -182,11 +185,15 @@ export const createExampleWeekState = (day = todayStamp()) => {
  * - receipt history stays behind: past demo trips are illustration, not the
  *   household's spending, and adopting them would fabricate a budget history
  */
+/** The seven days a demo adoption plans: today and the six after it. */
+export const demoAdoptionDates = (day = todayStamp()) =>
+  Array.from({ length: 7 }, (_, i) => addDays(day, i));
+
 export const buildDemoAdoptionPatch = (demo = {}, real = {}, day = todayStamp()) => {
-  const dates = weekDates(day);
+  const dates = demoAdoptionDates(day);
   const realPlan = real.plan || {};
   let keptMeals = 0;
-  const plan = Object.fromEntries(
+  const adoptedDays = Object.fromEntries(
     dates.map((date, i) => {
       const existing = realPlan[date]?.dinner || null;
       if (existing) {
@@ -196,6 +203,8 @@ export const buildDemoAdoptionPatch = (demo = {}, real = {}, day = todayStamp())
       return [date, { dinner: DEMO_DINNER_IDS[i % DEMO_DINNER_IDS.length] }];
     }),
   );
+  // `plan` replaces the whole stored plan, so every real date survives.
+  const plan = { ...realPlan, ...adoptedDays };
   const havePantry = new Set(
     (real.pantry || []).map((p) => String(p?.name || '').trim().toLowerCase()).filter(Boolean),
   );
@@ -236,6 +245,8 @@ export const buildDemoAdoptionPatch = (demo = {}, real = {}, day = todayStamp())
     adoptedFromDemo: {
       at: Date.now(),
       dinners: [...DEMO_DINNER_IDS],
+      dates,
+      added: dates.length - keptMeals,
       keptMeals,
       staples: staples.length,
     },

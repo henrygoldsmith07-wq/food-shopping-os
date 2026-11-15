@@ -1,9 +1,10 @@
 import './globals.css';
 
 import { PRODUCT } from '../data/product.js';
+import { SITE_URL } from '../lib/site-url.js';
 
 export const metadata = {
-  metadataBase: new URL(process.env.APP_PUBLIC_URL || 'https://food-shopping-os.vercel.app'),
+  metadataBase: new URL(SITE_URL),
   applicationName: PRODUCT.name,
   title: PRODUCT.title,
   description: PRODUCT.metaDescription,

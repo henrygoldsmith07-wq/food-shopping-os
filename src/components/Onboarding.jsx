@@ -191,7 +191,8 @@ export default function Onboarding() {
 
             <header className="mb-6">
               <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.14em]" style={{ color: 'var(--faint)' }}>{currentStep.note}</p>
-              <h1 ref={headingRef} tabIndex={-1} className="mt-2 text-[1.75rem] font-black tracking-[-0.045em] leading-tight sm:text-[2rem]">{step === 2 ? goalFinish.title : currentStep.title}</h1>
+              {/* h2: the page's one h1 is the product promise in the landing intro. */}
+              <h2 ref={headingRef} tabIndex={-1} className="mt-2 text-[1.75rem] font-black tracking-[-0.045em] leading-tight sm:text-[2rem]">{step === 2 ? goalFinish.title : currentStep.title}</h2>
               <p className="mt-2 max-w-xl text-[0.875rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>{stepNote}</p>
             </header>
 

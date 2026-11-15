@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { buildDemoAdoptionPatch, createExampleWeekState } from '../data/exampleWeek.js';
 import { recordProductEvent, setDemoAnalyticsSuppressed } from './product-analytics.js';
 import { todayStamp } from './state.js';
-import { weekDates } from './kitchen.js';
 import { shoppingForWeekLoop } from './week-loop.js';
 
 /**
@@ -58,7 +57,7 @@ export function useDemoKitchen({
     const adopted = {
       // Dinners the demo actually added — dates the household already planned
       // keep their meal and are not counted as adopted.
-      dinners: Math.max(0, Object.keys(patch.plan || {}).length - Number(patch.adoptedFromDemo?.keptMeals || 0)),
+      dinners: Math.max(0, Number(patch.adoptedFromDemo?.added) || 0),
       staples: Math.max(0, patch.pantry.length - (state.pantry || []).length),
     };
     // The list the adopted week needs, from the same hand-off every other
@@ -66,7 +65,7 @@ export function useDemoKitchen({
     // addToList): pantry- and leftover-aware, waste-learned, portion-scaled.
     // Computed up front from the merged kitchen because nothing below may
     // read the demo sandbox once it closes.
-    const { items: need } = shoppingForWeekLoop({ ...state, ...patch }, weekDates(day));
+    const { items: need } = shoppingForWeekLoop({ ...state, ...patch }, patch.adoptedFromDemo.dates);
     exitDemoMode();
     // Everything below goes through the store-api verbs, never raw setState:
     // routedSetState now targets the real kitchen, `set` re-runs the usual

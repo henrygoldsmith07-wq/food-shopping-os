@@ -3,8 +3,10 @@ import {
   autopilotForm,
   autopilotWeekProposal,
   autopilotWeekSummary,
+  applyProposalSwaps,
   regenerateProposalMeal,
 } from '../src/lib/autopilot-week.js';
+import { planActions } from '../src/lib/plan-actions.js';
 import { EMPTY_STATE } from '../src/lib/state.js';
 import { deriveApp } from '../src/lib/derive.js';
 import { shoppingForWeekLoop } from '../src/lib/week-loop.js';
@@ -94,5 +96,43 @@ describe('autopilot week', () => {
     });
     // Either no alternative exists (null) or the replacement differs.
     if (next) expect(next.plan[date].dinner).not.toBe(lockedRecipe);
+  });
+
+  it('keeps earlier swaps when the proposal is rebuilt after a lock', () => {
+    const state = app();
+    const proposal = autopilotWeekProposal(state);
+    const [first, second] = proposal.model.planDates;
+    const next = regenerateProposalMeal(state, proposal, first, { seed: 3 });
+    expect(next).toBeTruthy();
+    const swaps = { [first]: next.plan[first].dinner };
+    // Locking another day changes app state, which rebuilds the base proposal.
+    const lockedState = app({ lockedMeals: { [`${second}|dinner`]: proposal.plan[second].dinner } });
+    const rebuilt = applyProposalSwaps(lockedState, autopilotWeekProposal(lockedState), swaps);
+    expect(rebuilt.plan[first].dinner).toBe(swaps[first]);
+    expect(rebuilt.plan[second].dinner).toBe(proposal.plan[second].dinner);
+    expect(rebuilt.entries.find((e) => e.date === first && e.slot === 'dinner').recipeId).toBe(swaps[first]);
+  });
+
+  it('never lets a swap override a locked meal', () => {
+    const proposal = autopilotWeekProposal(app());
+    const date = proposal.model.planDates[0];
+    const lockedRecipe = proposal.plan[date].dinner;
+    const state = app({ lockedMeals: { [`${date}|dinner`]: lockedRecipe } });
+    const rebuilt = applyProposalSwaps(state, proposal, { [date]: 'some-other-recipe' });
+    expect(rebuilt.plan[date].dinner).toBe(lockedRecipe);
+  });
+
+  it('locks the proposed dinner the household is looking at, not the saved one', () => {
+    let state = { ...EMPTY_STATE, day, plan: { [day]: { dinner: 'saved-recipe' } } };
+    const set = (fn) => { state = { ...state, ...(typeof fn === 'function' ? fn(state) : fn) }; };
+    const { toggleMealLock } = planActions(set);
+    toggleMealLock(day, 'dinner', 'proposed-recipe');
+    expect(state.lockedMeals[`${day}|dinner`]).toBe('proposed-recipe');
+    // Unlocking clears it regardless of what is proposed now.
+    toggleMealLock(day, 'dinner', 'another-recipe');
+    expect(state.lockedMeals?.[`${day}|dinner`]).toBeUndefined();
+    // Without a proposal, the saved plan's dinner is locked as before.
+    toggleMealLock(day, 'dinner');
+    expect(state.lockedMeals[`${day}|dinner`]).toBe('saved-recipe');
   });
 });

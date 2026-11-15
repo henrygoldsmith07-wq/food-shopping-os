@@ -46,7 +46,7 @@ Temporary guided demonstration, **outside** the real user store:
 
 Adoption bridge (the demo converts instead of discarding):
 
-- One action copies the 7 dinners (rebased onto this week) and pantry staples
+- One action copies the 7 dinners (rebased onto the seven days starting today) and pantry staples
   into the real kitchen; meals already planned are kept, demo receipts stay behind
 - Lands with a generated shopping list, a Home receipt card, and single-step Undo
 - Measured once by the coarse `demo_adopted` event — the sandbox itself never counts

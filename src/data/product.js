@@ -21,12 +21,12 @@ export const PRODUCT = {
   promise: 'Tell Forq what you are eating; it works out what to buy; it helps you waste less.',
   /** Slightly longer for meta / about */
   promiseLong:
-    'Forq is a meal-planning and shopping app: tell Forq what you are eating; it works out what to buy; it helps you waste less. Nutrition, health and analytics support the plan — they are not a separate product.',
+    'Forq is a meal planner and shopping list in one. Pick the week’s dinners and Forq builds the list, taking off what is already in your kitchen, then shows what to use first before it goes off. No account needed: your kitchen is saved on this device, and signing in to sync is optional.',
   /** Meta description (≤ ~155 chars) */
   metaDescription:
     'Plan meals, buy exactly what you need and waste less food. Tell Forq what you are eating; it works out what to buy. Local-first meal planning and shopping.',
   /** Document / install title */
-  title: 'Forq — Tell Forq what you are eating',
+  title: 'Forq — Meal planner and shopping list that cuts food waste',
   /** Tag used in older copy; do not use — kept only so old imports do not break */
   legacySubtitle: 'Forq',
 };

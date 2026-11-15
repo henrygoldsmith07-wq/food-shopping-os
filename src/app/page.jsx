@@ -5,8 +5,28 @@ import { labelFor } from '../lib/screens.js';
 import { DEFAULT_PRODUCT_MODE, tabsForMode } from '../data/productModes.js';
 import Link from 'next/link';
 import { PRODUCT } from '../data/product.js';
+import { SITE_URL } from '../lib/site-url.js';
 
 export const dynamic = 'force-dynamic';
+
+// `/?demo=1` and other query variants are the same page.
+export const metadata = { alternates: { canonical: '/' } };
+
+/** Structured data limited to facts the page itself states. */
+const STRUCTURED_DATA = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    { '@type': 'WebSite', name: PRODUCT.name, url: `${SITE_URL}/` },
+    {
+      '@type': 'WebApplication',
+      name: PRODUCT.name,
+      url: `${SITE_URL}/`,
+      description: PRODUCT.metaDescription,
+      applicationCategory: 'LifestyleApplication',
+      operatingSystem: 'Any (runs in a web browser)',
+    },
+  ],
+};
 
 function LandingIntro() {
   return (
@@ -21,8 +41,12 @@ function LandingIntro() {
 
 function LaunchShell() {
   return (
-    <div className="launch-shell" aria-hidden="true">
+    <div className="launch-shell">
+      {/* Real, readable copy — shown before the app hydrates and served to
+          crawlers that do not run JavaScript. Only the skeleton below is
+          decorative, so only it is hidden from assistive tech. */}
       <LandingIntro />
+      <div aria-hidden="true">
       <header className="launch-header">
         <span className="launch-brand">F</span>
         <span className="launch-line launch-line-title" />
@@ -45,6 +69,7 @@ function LaunchShell() {
           <span key={id} className="launch-nav-item">{labelFor(id)}</span>
         ))}
       </nav>
+      </div>
     </div>
   );
 }
@@ -55,6 +80,7 @@ export default async function Page() {
   return (
     <>
       <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c') }} />
       <LaunchShell />
       <ClientRoot />
     </>
