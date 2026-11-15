@@ -81,6 +81,10 @@ const EMPTY_BY_FIELD = {
   glucose: [],
 };
 
+const MEMBER_RESTRICTIONS = ['diets', 'allergies', 'intolerances', 'religious'];
+const hasRestriction = (member) =>
+  MEMBER_RESTRICTIONS.some((field) => Array.isArray(member?.[field]) && member[field].length > 0);
+
 const has = (permissions, permission) =>
   permissions?.includes('admin') || permissions?.includes(permission);
 
@@ -124,17 +128,31 @@ export const mergePermittedState = (
       }
     }
   }
+  // `members` is unvalidated JSON: anything but a list (null, {}, a string)
+  // from a writer without recipe access would wipe every member's
+  // restrictions, so it leaves the agreed list as it was.
+  if (!has(permissions, 'recipes') && 'members' in incoming && !Array.isArray(incoming.members)) {
+    if ('members' in current) next.members = current.members;
+    else delete next.members;
+  }
   if (!has(permissions, 'recipes') && Array.isArray(incoming.members)) {
     const currentMembers = new Map((current.members || []).map((member) => [member.id, member]));
     next.members = incoming.members.map((member) => {
       const saved = currentMembers.get(member.id);
       const clean = { ...member };
-      for (const field of ['diets', 'allergies', 'intolerances', 'religious']) {
+      for (const field of MEMBER_RESTRICTIONS) {
         if (saved && field in saved) clean[field] = saved[field];
         else delete clean[field];
       }
       return clean;
     });
+    // Removing (or re-keying) a member would take their allergies with them,
+    // which is the same write this permission withholds. Members who carry a
+    // restriction stay until someone with recipe access removes them.
+    const kept = new Set(next.members.map((member) => member.id));
+    for (const member of current.members || []) {
+      if (!kept.has(member.id) && hasRestriction(member)) next.members.push(member);
+    }
   }
   return next;
 };

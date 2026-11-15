@@ -76,6 +76,54 @@ describe('household permission boundaries', () => {
   });
 });
 
+describe('member food-safety restrictions', () => {
+  const current = {
+    members: [
+      { id: 'm1', name: 'Alex', portions: 1, allergies: ['peanut'], diets: ['vegetarian'] },
+      { id: 'm2', name: 'Bo', portions: 1, allergies: [] },
+    ],
+  };
+
+  it('hides member restrictions from a member without recipe access', () => {
+    const scoped = scopeHouseholdState(current, ['shopping']);
+    expect(scoped.members[0]).toMatchObject({ name: 'Alex', allergies: [], diets: [] });
+  });
+
+  it('restores restrictions a member without recipe access sent back blank', () => {
+    const incoming = { members: [{ ...current.members[0], allergies: [], diets: [] }, current.members[1]] };
+    const next = mergePermittedState(current, incoming, ['shopping']);
+    expect(next.members[0]).toMatchObject({ allergies: ['peanut'], diets: ['vegetarian'] });
+  });
+
+  it('cannot erase an allergy by dropping or re-keying the member who has it', () => {
+    // Dropping Alex, or sending Alex under a new id, would otherwise take
+    // the peanut allergy with them — a write recipe access is needed for.
+    for (const incoming of [
+      { members: [current.members[1]] },
+      { members: [{ ...current.members[0], id: 'm9', allergies: [] }, current.members[1]] },
+    ]) {
+      const next = mergePermittedState(current, incoming, ['shopping']);
+      expect(next.members.find((m) => m.id === 'm1')).toMatchObject({ allergies: ['peanut'], diets: ['vegetarian'] });
+    }
+  });
+
+  it('ignores a non-list members value from a member without recipe access', () => {
+    for (const members of [null, {}, 'none']) {
+      expect(mergePermittedState(current, { members }, ['shopping']).members).toEqual(current.members);
+    }
+  });
+
+  it('can still remove a member who carries no restrictions', () => {
+    const next = mergePermittedState(current, { members: [current.members[0]] }, ['shopping']);
+    expect(next.members.map((m) => m.id)).toEqual(['m1']);
+  });
+
+  it('lets a member with recipe access remove anyone', () => {
+    const next = mergePermittedState(current, { members: [current.members[1]] }, ['recipes']);
+    expect(next.members.map((m) => m.id)).toEqual(['m2']);
+  });
+});
+
 describe('invitation permission boundaries', () => {
   it('never grants access the inviter does not hold', () => {
     expect(clampInvitationGrant(
