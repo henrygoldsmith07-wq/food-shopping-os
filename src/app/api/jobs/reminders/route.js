@@ -4,6 +4,7 @@ import { handleApiError } from '../../../../server/api.js';
 import { getDatabase } from '../../../../server/database.js';
 import { appOrigin, emailConfigured, sendEmail } from '../../../../server/email.js';
 import { buildReminderDigest } from '../../../../server/reminder-digest.js';
+import { scopeHouseholdState } from '../../../../server/household-scope.js';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,10 @@ export async function GET(request) {
     for (const member of members) {
       if (!member.email) continue;
       const stored = await db.collection('householdStates').findOne({ householdId: member.householdId });
-      const digest = buildReminderDigest(stored?.state, { now, origin });
+      // Each email is a read of the household on this member's behalf, so it
+      // sees only what sync would show them: no plan, list or pantry facts
+      // for someone without that access.
+      const digest = buildReminderDigest(scopeHouseholdState(stored?.state || {}, member.permissions), { now, origin });
       if (!digest) {
         counts.nothingToSay += 1;
         continue;

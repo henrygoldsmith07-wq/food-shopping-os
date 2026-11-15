@@ -93,4 +93,30 @@ describe('the daily job', () => {
     expect(db.sent).toHaveLength(1);
     expect(db.outbox[0]).toMatchObject({ status: 'sent', kind: 'digest' });
   });
+
+  it('only tells each person what their household access lets them see', async () => {
+    // Plan, list and pantry are scoped by permission in sync; the email must
+    // not hand a member with health-only access what sync would redact.
+    db.states.set('h1', { householdId: 'h1', state: {
+      syncTimeZone: 'Europe/London',
+      reminders: [{ id: 'a', on: true, label: 'Lunch', times: ['13:00'], days: [] }],
+      plan: { '2026-10-19': { dinner: dinner.id } },
+      shoppingList: [{ name: 'Milk' }],
+      pantry: [{ name: 'Spinach', expiry: '2026-10-20' }],
+    } });
+    db.memberships.push(
+      { householdId: 'h1', userId: 'u1', email: 'owner@example.com', reminderDigest: true, permissions: ['shopping', 'pantry', 'recipes', 'health', 'admin'] },
+      { householdId: 'h1', userId: 'u2', email: 'kid@example.com', reminderDigest: true, permissions: ['health'] },
+    );
+    await call();
+    const textFor = (to) => db.sent.find((m) => m.to.includes(to)).text;
+    expect(textFor('owner@example.com')).toContain(`Dinner: ${dinner.name}`);
+    expect(textFor('owner@example.com')).toContain('Spinach');
+    const limited = textFor('kid@example.com');
+    expect(limited).toContain('13:00 · Lunch');
+    expect(limited).not.toContain(dinner.name);
+    expect(limited).not.toContain('shopping list');
+    expect(limited).not.toContain('Spinach');
+  });
 });
+
