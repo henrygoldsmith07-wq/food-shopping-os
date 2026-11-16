@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from './api.js';
+import { AUDIT_RETENTION_MS } from './audit.js';
 import { getDatabase } from './database.js';
 import { youthPolicy, YOUTH_SHARE_SCOPES } from '../lib/youth.js';
 
@@ -62,6 +63,9 @@ export async function readCoachShare(token) {
     version: document.version,
     deviceId: null,
     createdAt: new Date(),
+    // Match every other audit event: a frequently viewed link must not grow
+    // this collection forever (the rest is expired after 90 days).
+    expiresAt: new Date(Date.now() + AUDIT_RETENTION_MS),
   });
   // Youth-strict households stop serving health on old links too — the audit
   // keeps the requested scopes, the snapshot carries only what is allowed now.

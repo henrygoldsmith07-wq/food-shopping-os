@@ -26,7 +26,7 @@ import { parseBackup } from './store-persistence.js';
 import { EMPTY_STATE } from './state.js';
 import { STORAGE_KEY, STATE_VERSION } from './state-versions.js';
 import {
-  announceState, idbSupported, openStateChannel, readSnapshot,
+  announceState, createStateChannel, idbSupported, openStateChannel, readSnapshot,
   writeHeartbeat, writePointer, writeSnapshot,
 } from './persistent-state.js';
 import { POINTER_KEY } from './persistent-state.js';
@@ -79,11 +79,28 @@ export const usePersistence = ({
     if (store.current === 'indexedDB' && idbSupported()) {
       // Asynchronous and transactional: no serialisation of the whole app on
       // the main thread, and no localStorage ceiling to hit.
-      return writeSnapshot(payload, { schemaVersion: STATE_VERSION, savedAt: payload.lastSeenAt })
-        .then((result) => {
-          writePointer({ schemaVersion: STATE_VERSION, seq: result.latestSeq, savedAt: result.record?.savedAt ?? null });
+      const write = () => writeSnapshot(payload, { schemaVersion: STATE_VERSION, savedAt: payload.lastSeenAt });
+      return write()
+        .then(async (result) => {
+          let saved = result;
+          if (!saved.saved) {
+            // Another tab's newer write refused ours. writeSnapshot has adopted
+            // that sequence, so one retry gets a fresh, higher seq and really
+            // stores the edit — instead of writing a pointer to someone else's
+            // record and reporting success while the user's change is lost.
+            saved = await write();
+          }
+          if (!saved.saved) {
+            writeError(
+              setStorageIssue,
+              'Your latest changes could not be saved. Export a backup before closing Forq.',
+              'A newer write kept superseding this one.',
+            );
+            return false;
+          }
+          writePointer({ schemaVersion: STATE_VERSION, seq: saved.latestSeq, savedAt: saved.record?.savedAt ?? null });
           // A signal, not a payload: the other tab reads the canonical record.
-          announceState({ seq: result.latestSeq });
+          announceState({ seq: saved.latestSeq });
           return true;
         })
         .catch((error) => {
@@ -133,6 +150,10 @@ export const usePersistence = ({
   // not the transport here, it is only the fallback and a signpost.
   useEffect(() => {
     let cancelled = false;
+    // Bind the channel this tab writes on. openStateChannel below only listens,
+    // so without this announceState() would silently post to nothing and other
+    // tabs would have to rely on the storage-event fallback alone.
+    createStateChannel();
     /* The localStorage fallback keeps one shared document per origin: there is
        no per-tab key to watch, and the storage event fires only in the *other*
        tabs. Adopting that document is this store's equivalent of reading a

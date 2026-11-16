@@ -218,8 +218,8 @@ export const threeWaySets = (local = [], remote = [], base = []) => {
 /**
  * Three-way merge of two plain objects keyed by id (ratings, alias memory,
  * per-item settings). One-sided changes win; a key changed differently on
- * both sides keeps the household copy — deterministic, and the next local
- * edit of that key is free to win normally.
+ * both sides keeps this device's copy until the next push makes it the
+ * shared truth, matching household-merge.js and docs/ARCHITECTURE.md.
  */
 export const threeWayMap = (local = {}, remote = {}, base = {}) => {
   const out = { ...local };
@@ -231,7 +231,7 @@ export const threeWayMap = (local = {}, remote = {}, base = {}) => {
       if (same(local[key], remote[key])) continue;
       if (inBase && same(local[key], base[key])) out[key] = remote[key];
       else if (inBase && same(remote[key], base[key])) out[key] = local[key];
-      else out[key] = remote[key]; // both changed: the household copy is canonical
+      else out[key] = local[key]; // both changed: keep this device's copy until it is pushed
       continue;
     }
     const only = inLocal ? local[key] : remote[key];

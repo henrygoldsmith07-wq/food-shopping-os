@@ -193,6 +193,7 @@ export default function Onboarding() {
               <p className="text-[0.6875rem] font-extrabold uppercase tracking-[0.14em]" style={{ color: 'var(--faint)' }}>{currentStep.note}</p>
               {/* h2: the page's one h1 is the product promise in the landing intro. */}
               <h2 ref={headingRef} tabIndex={-1} className="mt-2 text-[1.75rem] font-black tracking-[-0.045em] leading-tight sm:text-[2rem]">{step === 2 ? goalFinish.title : currentStep.title}</h2>
+              <p className="sr-only" role="status">{`Step ${step + 1} of 3`}</p>
               <p className="mt-2 max-w-xl text-[0.875rem] font-medium leading-relaxed" style={{ color: 'var(--muted)' }}>{stepNote}</p>
             </header>
 

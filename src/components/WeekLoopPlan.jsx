@@ -117,6 +117,7 @@ export default function WeekLoopPlan({
               </p>
             </div>
             <Stepper
+              label="portions for this week"
               value={portionSource.portions}
               min={1}
               max={12}

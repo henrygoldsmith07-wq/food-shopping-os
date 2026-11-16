@@ -59,10 +59,16 @@ export async function POST(request) {
       permissions: ['shopping', 'pantry', 'recipes', 'health', 'admin'],
       createdAt: now,
     });
-    await writeAuditEvent({
-      db, householdId: inserted.insertedId, user, action: 'household.created',
-      resource: inserted.insertedId.toString(),
-    });
+    // Household and owner membership are committed. An audit failure must not
+    // 500 and cause a retry that creates a second household.
+    try {
+      await writeAuditEvent({
+        db, householdId: inserted.insertedId, user, action: 'household.created',
+        resource: inserted.insertedId.toString(),
+      });
+    } catch (error) {
+      console.error('Forq household audit failed', error?.message);
+    }
     return NextResponse.json({ id: inserted.insertedId.toString(), name: input.name, role: 'owner' }, { status: 201 });
   } catch (error) {
     return handleApiError(error);

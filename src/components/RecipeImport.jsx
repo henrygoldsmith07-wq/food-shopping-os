@@ -255,7 +255,7 @@ export default function RecipeImport({ defaultMeal, onDone }) {
             )}
             <div className="mt-3 flex items-center justify-between">
               <span className="text-[0.78125rem] font-bold">Servings eaten</span>
-              <Stepper value={servings} onChange={setServings} min={1} max={6} />
+              <Stepper label="servings eaten" value={servings} onChange={setServings} min={1} max={6} />
             </div>
           </Card>
 

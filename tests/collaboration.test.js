@@ -39,6 +39,34 @@ describe('household permission boundaries', () => {
     });
   });
 
+  it('redacts safety-critical preferences and targets from restricted members', () => {
+    const full = {
+      ...state,
+      allergies: ['peanut'],
+      intolerances: ['lactose'],
+      religious: ['halal'],
+      diets: ['vegan'],
+      goal: 'lose',
+      targets: { kcal: 1400 },
+      weeklyKcal: 9800,
+    };
+    expect(scopeHouseholdState(full, ['pantry'])).toMatchObject({
+      allergies: [],
+      intolerances: [],
+      religious: [],
+      diets: [],
+      goal: 'maintain',
+      weeklyKcal: 0,
+    });
+    // Dietary restrictions are intentionally visible to members who can use
+    // recipes, so household meal safety keeps its context.
+    expect(scopeHouseholdState(full, ['recipes']).allergies).toEqual(['peanut']);
+    expect(mergePermittedState(full, { ...full, allergies: [], targets: {} }, ['pantry'])).toMatchObject({
+      allergies: ['peanut'],
+      targets: { kcal: 1400 },
+    });
+  });
+
   it('preserves fields a restricted member cannot write', () => {
     const incoming = { ...state, shoppingList: [], pantry: [], glucose: [] };
     expect(mergePermittedState(state, incoming, ['pantry'])).toMatchObject({

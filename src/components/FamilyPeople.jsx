@@ -130,7 +130,7 @@ export default function PeopleView() {
 
             <div className="flex items-center justify-between">
               <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Portions</p>
-              <Stepper value={member.portions} onChange={(value) => app.updateMember(member.id, { portions: value })} min={0.5} max={4} />
+              <Stepper label={`portions for ${member.name}`} value={member.portions} onChange={(value) => app.updateMember(member.id, { portions: value })} min={0.5} max={4} />
             </div>
 
             <div>

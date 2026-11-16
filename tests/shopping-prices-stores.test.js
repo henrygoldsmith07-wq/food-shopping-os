@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compareStores } from '../src/lib/shopping-prices.js';
+import { applyOffers, compareStores } from '../src/lib/shopping-prices.js';
 
 describe('compareStores store names', () => {
   it('treats differently-cased store names as one shop', () => {
@@ -12,5 +12,12 @@ describe('compareStores store names', () => {
     expect(rows[0].store).toBe('Tesco');
     expect(rows[0].covered).toBe(2);
     expect(rows[0].total).toBe(3.5);
+  });
+
+  it('a 3-for-2 makes the cheapest item in each trio free', () => {
+    const items = [6, 5, 4, 3, 2, 1].map((price) => ({ name: `milk ${price}`, price }));
+    const result = applyOffers(items, [{ kind: 'multibuy', value: 3, match: 'milk' }]);
+    // Dearest trio 6+5+4 → 4 free; cheaper trio 3+2+1 → 1 free.
+    expect(result.saved).toBe(5);
   });
 });

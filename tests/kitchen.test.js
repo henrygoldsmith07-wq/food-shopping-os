@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   addDays, badgeProgress, budgetWeeks, cuisineSplit, dayStamp, daysUntil, expiringSoon,
-  consumePantryIngredients, decrementPantryItem, groceryInflation, kitchenStats, leftovers, pantryAnalytics,
+  consumePantryIngredients, decrementPantryItem, freshnessOf, groceryInflation, kitchenStats, leftovers, pantryAnalytics,
   pantryFromShareCode, pantryShareCode, pantryValue, planCost, plannedMeals, priceHistory,
   recipesUsing, runningLow, savingsSummary, spendByMonth, spentInMonth, spentInWeek,
   streakFrom, weekDates, weekStart,
@@ -11,6 +11,16 @@ import { groupForStore } from '../src/lib/shopping.js';
 import { RECIPES } from '../src/data/recipes.js';
 
 const TODAY = '2026-07-27'; // a Monday
+
+describe('freshness', () => {
+  it('quotes the frozen rule of thumb, not the opened one', () => {
+    const row = { cat: 'Meat', location: 'Freezer', frozenAt: '2026-01-01' };
+    const result = freshnessOf(row, '2026-04-11');
+    expect(result.kind).toBe('past');
+    expect(result.label).toContain('past the 3 months rule of thumb');
+    expect(result.label).not.toContain('2 days');
+  });
+});
 
 describe('dates', () => {
   it('walks days and weeks without timezone drift', () => {

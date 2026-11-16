@@ -250,7 +250,7 @@ export default function FoodDetail({ food, entry, defaultMeal, onSave, onDelete 
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[0.6875rem] font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--faint)' }}>How many</p>
-              <Stepper value={qty} onChange={changeQty} min={1} max={10} />
+              <Stepper label={`packs of ${food?.name || 'food'}`} value={qty} onChange={changeQty} min={1} max={10} />
             </div>
             <div className="w-[46%]">
               <NumberField

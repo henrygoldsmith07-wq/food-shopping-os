@@ -229,7 +229,7 @@ export default function PlanGenerator({ weekDates, monthDates, openRecipe, onApp
               </span>
             )}
           </p>
-          <Stepper value={people} onChange={setPeople} />
+          <Stepper label="people to cook for" value={people} onChange={setPeople} />
         </div>
 
         <div>

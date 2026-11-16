@@ -62,6 +62,17 @@ describe('every screen is navigable without sight or a mouse', () => {
     expect(main().getAttribute('tabindex')).toBe('-1');
   });
 
+  it('moves focus and announces each onboarding step', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Sam' } });
+    fireEvent.click(screen.getByText('Continue'));
+    expect(document.activeElement?.textContent).toContain('A little context');
+    expect(screen.getAllByRole('status').some((el) => el.textContent.includes('Step 2 of 3'))).toBe(true);
+    fireEvent.click(screen.getByText('Continue'));
+    expect(document.activeElement?.textContent).toContain('Your first win');
+    expect(screen.getAllByRole('status').some((el) => el.textContent.includes('Step 3 of 3'))).toBe(true);
+  });
+
   it('has one main landmark, one main nav, and exactly one h1 per screen', () => {
     onboard();
     for (const tab of ['List', 'Plan', 'Cook', 'Recipes']) {

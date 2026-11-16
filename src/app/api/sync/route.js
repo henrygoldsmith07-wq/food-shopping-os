@@ -91,16 +91,23 @@ export async function PUT(request) {
       );
       return conflictResponse(latestDoc, membership);
     }
-    await writeAuditEvent({
-      db,
-      householdId: household._id,
-      user,
-      action: 'household.sync',
-      resource: 'state',
-      fields: changedFields,
-      version: result.version,
-      deviceId: payload.deviceId,
-    });
+    // State and version are committed. A failed audit write must not turn a
+    // successful sync into a 500 — the client would queue it at the old
+    // version and retry forever against a household that already moved on.
+    try {
+      await writeAuditEvent({
+        db,
+        householdId: household._id,
+        user,
+        action: 'household.sync',
+        resource: 'state',
+        fields: changedFields,
+        version: result.version,
+        deviceId: payload.deviceId,
+      });
+    } catch (error) {
+      console.error('Forq sync audit failed', error?.message);
+    }
     await publishHousehold(household._id.toString(), {
       version: result.version,
       deviceId: payload.deviceId,

@@ -27,6 +27,9 @@ export const envSchema = z.object({
   AUTH_MICROSOFT_ID: z.string().min(1).optional(),
   AUTH_MICROSOFT_SECRET: z.string().min(1).optional(),
   AUTH_MICROSOFT_TENANT_ID: z.string().min(1).optional(),
+  AUTH_PASSWORD_LOGIN: z.enum(['true', 'false']).optional(),
+  CRON_SECRET: z.string().min(1).optional(),
+  FORQ_COACH_SHARES_ENABLED: z.enum(['true', 'false']).optional(),
 
   /* Realtime */
   ABLY_API_KEY: z.string().min(1).optional(),
@@ -35,6 +38,7 @@ export const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(3).optional(),
   APP_URL: z.string().url().optional(),
+  APP_PUBLIC_URL: z.string().url().optional(),
 
   /* Database — current names and the legacy UPSTASH_* aliases */
   KV_REST_API_URL: z.string().url().optional(),

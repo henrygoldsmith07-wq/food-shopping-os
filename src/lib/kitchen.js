@@ -206,6 +206,19 @@ export const OPENED_LABEL = {
   'Herbs & spices': '3 months',
 };
 
+/** Human wording for the frozen quality windows, matched to FROZEN_DAYS. */
+export const FROZEN_LABEL = {
+  Meat: '3 months',
+  Fish: '3 months',
+  Fresh: '4 months',
+  Bread: '2 months',
+  'Baking & dry': '6 months',
+  Leftovers: '2 months',
+  'Dairy & eggs': '2 months',
+  Drinks: '3 months',
+  'Herbs & spices': '6 months',
+};
+
 /** How long frozen food keeps its quality, per category. */
 export const FROZEN_DAYS = {
   Meat: 90,
@@ -237,7 +250,7 @@ export const freshnessOf = (item, today = dayStamp()) => {
     return {
       kind: left < 0 ? 'past' : left <= 14 ? 'soon' : 'fine',
       label: left < 0
-        ? `Frozen ${frozen} days — past the ${OPENED_LABEL[item?.cat] || '3 months'} rule of thumb.`
+        ? `Frozen ${frozen} days — past the ${FROZEN_LABEL[item?.cat] || '3 months'} rule of thumb.`
         : `Frozen ${frozen} days · about ${left} days of quality left.`,
     };
   }

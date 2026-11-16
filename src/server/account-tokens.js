@@ -36,9 +36,21 @@ export async function issueAccountToken(purpose, email) {
 export async function consumeAccountToken(purpose, email, token) {
   if (typeof token !== 'string' || token.length < 20 || token.length > 100) return false;
   const tokens = (await getDatabase()).collection('verificationTokens');
-  const record = await tokens.findOne({ identifier: `${purpose}:${email}`, token: hash(token) });
+  const identifier = `${purpose}:${email}`;
+  const now = new Date();
+  if (purpose !== 'verify') {
+    // Atomically claim the token before deleting it: two concurrent uses of
+    // the same reset link must not both succeed, and an expired token must
+    // never be consumed. The old find -> delete -> check allowed both.
+    const record = await tokens.findOneAndUpdate({
+      identifier, token: hash(token), expires: { $gt: now }, usedAt: { $exists: false },
+    }, { $set: { usedAt: now } });
+    if (!record) return false;
+    await tokens.deleteOne({ _id: record._id });
+    return true;
+  }
+  const record = await tokens.findOne({ identifier, token: hash(token) });
   if (!record) return false;
-  if (purpose !== 'verify') await tokens.deleteOne({ _id: record._id });
-  else if (!record.usedAt) await tokens.updateOne({ _id: record._id }, { $set: { usedAt: new Date() } });
+  if (!record.usedAt) await tokens.updateOne({ _id: record._id }, { $set: { usedAt: new Date() } });
   return new Date(record.expires).getTime() > Date.now();
 }

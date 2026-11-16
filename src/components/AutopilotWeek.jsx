@@ -180,6 +180,7 @@ export default function AutopilotWeek({ onAccept, onOpenRecipe }) {
             </p>
           </div>
           <Stepper
+            label="portions per day"
             value={proposal.portions}
             min={1}
             max={12}

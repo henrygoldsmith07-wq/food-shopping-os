@@ -1,3 +1,5 @@
+import { DEFAULT_TARGETS } from '../data/nutrients.js';
+
 const FIELD_PERMISSION = {
   shoppingList: 'shopping',
   favouriteShopping: 'shopping',
@@ -13,6 +15,9 @@ const FIELD_PERMISSION = {
   // available to members who can use recipes, so household meal safety still
   // has the context it needs.
   goal: 'health',
+  // Calorie and nutrient targets are personal health data, like `goal`.
+  targets: 'health',
+  weeklyKcal: 'health',
   diets: 'recipes',
   allergies: 'recipes',
   intolerances: 'recipes',
@@ -53,6 +58,8 @@ const EMPTY_BY_FIELD = {
   weeklyBudget: 0,
   monthlyBudget: 0,
   goal: 'maintain',
+  targets: { ...DEFAULT_TARGETS },
+  weeklyKcal: 0,
   diets: [],
   allergies: [],
   intolerances: [],

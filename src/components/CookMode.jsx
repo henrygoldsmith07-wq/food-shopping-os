@@ -1,5 +1,5 @@
 import CookGiveBack from './CookGiveBack.jsx';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check, ExternalLink, Lightbulb, Mic, Pause, PartyPopper, Play, PlayCircle, Snowflake, TriangleAlert, Volume2, X,
 } from 'lucide-react';
@@ -56,6 +56,7 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
   const [timers, setTimers] = useState({}); // step index -> {left, running}
   const [auto, setAuto] = useState(false);
   const [dwell, setDwell] = useState(DWELL_SECONDS);
+  const [announcement, setAnnouncement] = useState('');
   // Leftovers are actual food, so start at zero until the cook confirms what remains.
   const [spare, setSpare] = useState(0);
   const [wakeState, setWakeState] = useState('checking');
@@ -166,6 +167,18 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
     return () => clearInterval(id);
   }, [auto]);
 
+  // Haptics alone cannot tell a screen-reader user that a timer finished.
+  const announcedTimers = useRef(new Set());
+  useEffect(() => {
+    for (const k of Object.keys(timers)) {
+      if (timers[k].left > 0) announcedTimers.current.delete(k);
+    }
+    const done = Object.keys(timers).filter((k) => timers[k].left === 0 && !announcedTimers.current.has(k));
+    if (!done.length) return;
+    done.forEach((k) => announcedTimers.current.add(k));
+    setAnnouncement(`Timer finished for step ${Number(done[0]) + 1}.`);
+  }, [timers]);
+
   // Hands-free: a timed step runs its timer out, everything else gets a read.
   useEffect(() => {
     if (!auto || finished) return;
@@ -175,13 +188,19 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
 
   useEffect(() => {
     if (!auto || finished || dwell > 0) return;
-    if (last) finish();
-    else setStep((i) => i + 1);
+    if (last) {
+      setAnnouncement('Recipe finished.');
+      finish();
+    } else {
+      setAnnouncement(`Step ${step + 2} of ${recipe.steps.length}.`);
+      setStep((i) => i + 1);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dwell, auto, finished, last]);
 
   return (
     <div className="flex h-full flex-col" style={{ background: 'var(--bg)' }}>
+      <p className="sr-only" role="status" aria-live="assertive">{announcement}</p>
       <div className="px-5 pt-5 pb-3 shrink-0">
         <div className="flex items-center justify-between">
           <button onClick={onExit} className="press inline-flex items-center gap-1 text-[0.8125rem] font-extrabold" style={{ color: 'var(--muted)' }}>
@@ -249,6 +268,7 @@ export default function CookMode({ recipe, onExit, onClose, recommendationId = n
                   <Snowflake size={14} style={{ color: 'var(--muted)' }} /> Portions saved for later
                 </p>
                 <Stepper
+                  label="leftover portions"
                   value={spare}
                   onChange={(value) => { setSpare(value); app.setLeftoverPortions(recipe, value); }}
                   min={0}

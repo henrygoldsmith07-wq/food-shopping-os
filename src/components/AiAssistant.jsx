@@ -49,8 +49,9 @@ export default function AiAssistant() {
   const recognitionRef = useRef(null);
   const speechSupported = captureSupport().speech;
   // The relay needs a signed-in backend household and an API key on the
-  // server; it is never offered to under-18 accounts.
-  const relayUnlocked = Boolean(app.hasTool?.('assistant')) && !app.youth?.on;
+  // server; it is never offered to under-18 accounts, and never in the demo
+  // sandbox — the relay would bill the real household for a demo question.
+  const relayUnlocked = Boolean(app.hasTool?.('assistant')) && !app.youth?.on && !app.isDemoMode;
 
   const refreshUsage = () => {
     setUsageLoading(true);

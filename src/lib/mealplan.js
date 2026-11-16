@@ -92,18 +92,16 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const compactDate = (stamp) => String(stamp).replace(/-/g, '');
 const toIcsLocal = (stamp, h, m) => `${compactDate(stamp)}T${pad2(h)}${pad2(m)}00`;
 
-/** Cook start = eat time minus prep minutes (minimum 15). Returns { start, end } as ICS local strings. */
+/** Cook start = eat time minus prep minutes (minimum 15). Returns ICS wall-clock strings.
+ *  Arithmetic stays in minutes: parsing with `new Date` would use the device's
+ *  timezone while the ICS event is tagged Europe/London, moving every meal by
+ *  the difference between the two zones. */
 export const mealSlotTimes = (date, slot, prepMins = 30) => {
   const eat = CALENDAR_EAT[slot] || CALENDAR_EAT.dinner;
   const prep = Math.max(15, Math.min(180, +prepMins || 30));
-  const eatDate = new Date(`${date}T${pad2(eat.h)}:${pad2(eat.m)}:00`);
-  const startDate = new Date(+eatDate - prep * 60000);
-  // If prep pushes before midnight, clamp to 06:00 that day
-  if (startDate.getDate() !== eatDate.getDate()) {
-    startDate.setTime(+new Date(`${date}T06:00:00`));
-  }
+  const startMins = Math.max(6 * 60, eat.h * 60 + eat.m - prep);
   return {
-    start: toIcsLocal(date, startDate.getHours(), startDate.getMinutes()),
+    start: toIcsLocal(date, Math.floor(startMins / 60), startMins % 60),
     end: toIcsLocal(date, eat.h, eat.m),
     prep,
   };

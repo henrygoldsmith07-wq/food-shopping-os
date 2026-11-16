@@ -44,10 +44,16 @@ export async function POST(request) {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       acceptedAt: null,
     });
-    await writeAuditEvent({
-      db, householdId: household._id, user, action: 'invitation.created',
-      resource: inserted.insertedId.toString(), fields: granted,
-    });
+    // The invite is already stored; an audit failure must not make the client
+    // retry with a fresh token and orphan the link that was just created.
+    try {
+      await writeAuditEvent({
+        db, householdId: household._id, user, action: 'invitation.created',
+        resource: inserted.insertedId.toString(), fields: granted,
+      });
+    } catch (error) {
+      console.error('Forq invitation audit failed', error?.message);
+    }
     return NextResponse.json({ token, expiresInHours: 168 }, { status: 201 });
   } catch (error) {
     return handleApiError(error);

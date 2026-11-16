@@ -93,6 +93,9 @@ export function CommandPalette({ open, onClose, onRun }) {
             <option value="name">A–Z</option>
           </select>
         </div>
+        <p className="sr-only" role="status">
+          {results.length ? `${results.length} result${results.length === 1 ? '' : 's'}.` : 'No results.'}
+        </p>
         <div className="rounded-2xl border divide-y overflow-hidden" style={{ borderColor: 'var(--line)' }}>
           {results.map((result) => (
             <button

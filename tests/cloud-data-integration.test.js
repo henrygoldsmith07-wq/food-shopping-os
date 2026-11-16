@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { hasQueuedCloud, pullCloud, pushCloud, retryQueuedCloud } from '../src/lib/cloud.js';
+import { hasQueuedCloud, pullCloud, pushCloud, readBaseState, retryQueuedCloud, saveBaseState } from '../src/lib/cloud.js';
 
 const META_KEY = 'forq-cloud-meta-v1';
 const QUEUE_KEY = 'forq-cloud-queue-v1';
@@ -64,6 +64,24 @@ describe('cloud data integration', () => {
     const stale = await pullCloud({ householdId: 'household-1', version: 5, deviceId: 'device-123456' });
     expect(stale.state).toBeNull();
     expect(stale.meta.version).toBe(5);
+  });
+
+  it('does not advance the divergence base on a pull — only a confirmed push does', async () => {
+    const server = cloudServer({ version: 4, householdId: 'household-1', state: { name: 'Remote' } });
+    vi.stubGlobal('fetch', server.fetchMock);
+    saveBaseState({ name: 'Last agreed' }, 3);
+    const before = readBaseState();
+
+    await pullCloud({ householdId: 'household-1', version: 3, deviceId: 'device-123456' });
+
+    // The fold still needs the last agreed base. Advancing it to the remote
+    // made remote-only rows look locally deleted and hid divergent edits.
+    expect(readBaseState()).toEqual(before);
+    const pushed = await pushCloud({ name: 'Merged' }, {
+      householdId: 'household-1', version: 4, deviceId: 'device-123456',
+    });
+    expect(pushed.status.kind).toBe('ready');
+    expect(readBaseState()).not.toEqual(before);
   });
 
   it('keeps an optimistic-concurrency conflict queued for user resolution', async () => {

@@ -131,11 +131,12 @@ export const applyOffers = (items = [], offers = [], { store = '', today = '' } 
     if (offer.kind === 'money') off = Math.min(spend, Number(offer.value) || 0);
     else if (offer.kind === 'percent') off = spend * (Math.min(100, Number(offer.value) || 0) / 100);
     else if (offer.kind === 'multibuy') {
-      // "3 for 2": every third matching item is free, cheapest first.
+      // "3 for 2": the cheapest item in each group of three is free. Group
+      // the dearest together so the free ones are the cheapest of each trio —
+      // sorting globally and taking the first N understates the discount.
       const group = Math.max(2, Number(offer.value) || 3);
-      const prices = hits.map((i) => Number(i.price) || 0).sort((a, b) => a - b);
-      const free = Math.floor(prices.length / group);
-      off = prices.slice(0, free).reduce((sum, p) => sum + p, 0);
+      const prices = hits.map((i) => Number(i.price) || 0).sort((a, b) => b - a);
+      off = prices.reduce((sum, p, index) => sum + (index % group === group - 1 ? p : 0), 0);
     }
     off = round2(off);
     if (off <= 0 && offer.kind !== 'multibuy') continue;

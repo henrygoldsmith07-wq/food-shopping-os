@@ -261,7 +261,12 @@ export async function retryQueuedCloud() {
   const queued = readQueue();
   if (!queued) return null;
   const result = await pushCloud(queued.state, queued.meta, { queueOnFailure: false });
-  if (result.status.kind === 'ready') localStorage.removeItem(QUEUE_KEY);
+  // A bare conflict (no household copy returned) can never be retried into
+  // success — the queued version is permanently stale. Clearing it stops a
+  // doomed push every five minutes; the periodic pull / reload reconciles.
+  if (result.status.kind === 'ready' || result.status.kind === 'conflict') {
+    localStorage.removeItem(QUEUE_KEY);
+  }
   return result;
 }
 
@@ -292,10 +297,13 @@ export async function pullCloud(meta) {
     const remote = await request('/api/sync', {
       headers: meta.householdId ? { 'x-forq-household-id': meta.householdId } : {},
     });
-    if (remote.version > meta.version && remote.state) {
-      // The household copy is now canonical — the base for any future split.
-      saveBaseState(remote.state, remote.version);
-    }
+    // Do NOT move the base here. A pull is not a confirmed sync of this
+    // device's edits: the fold in makeCloudStateAdopter still needs the last
+    // agreed base to tell "I changed this" from "the household changed this".
+    // Advancing it to the remote copy first made every remote-only row look
+    // locally deleted and settled divergent fields without a conflict. The
+    // base advances when the merged copy is pushed (pushCloud), as documented
+    // above — never on a failed push or a bare pull.
     return {
       state: remote.version > meta.version ? remote.state : null,
       meta: saveMetaIfNewer({ ...meta, householdId: remote.householdId, version: remote.version, syncedAt: Date.now() }),

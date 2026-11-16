@@ -16,6 +16,20 @@ vi.mock('../src/server/database.js', () => {
       insertOne: async (doc) => { const row = { _id: `id${state.nextId++}`, ...doc }; rows.push(row); return { insertedId: row._id }; },
       updateOne: async (filter, { $set }) => { const row = rows.find(match(filter)); if (row) Object.assign(row, $set); },
       deleteOne: async (filter) => { const i = rows.findIndex(match(filter)); if (i >= 0) rows.splice(i, 1); },
+      findOneAndUpdate: async (filter, { $set }) => {
+        const row = rows.find((item) => Object.entries(filter).every(([k, v]) => {
+          if (v && typeof v === 'object' && '$gt' in v) {
+            return new Date(item[k]).getTime() > new Date(v.$gt).getTime();
+          }
+          if (v && typeof v === 'object' && '$exists' in v) {
+            return (item[k] !== undefined) === v.$exists;
+          }
+          return item[k] === v;
+        }));
+        if (!row) return null;
+        Object.assign(row, $set);
+        return row;
+      },
     };
   };
   return { databaseConfigured: true, getDatabase: async () => ({ collection: coll, incrementWindow: async () => 1 }) };

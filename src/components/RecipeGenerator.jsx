@@ -85,7 +85,7 @@ export default function RecipeGenerator({ openRecipe }) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Serves</p>
-          <Stepper value={servings} onChange={setServings} />
+          <Stepper label="servings" value={servings} onChange={setServings} />
         </div>
         <div>
           <p className="text-[0.75rem] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--faint)' }}>Ready in</p>

@@ -55,10 +55,16 @@ export async function POST(request) {
     }
     // A receipt is a household's most private blob — who uploaded what kind,
     // and when, belongs in the audit trail.
-    await writeAuditEvent({
-      db, householdId: household._id, user, action: 'receipt.uploaded',
-      resource: inserted.insertedId.toString(),
-    });
+    // The blob and row are committed; an audit failure must not 500 and make
+    // the client re-upload the same receipt.
+    try {
+      await writeAuditEvent({
+        db, householdId: household._id, user, action: 'receipt.uploaded',
+        resource: inserted.insertedId.toString(),
+      });
+    } catch (error) {
+      console.error('Forq receipt audit failed', error?.message);
+    }
     return NextResponse.json({ id: inserted.insertedId.toString(), status: 'queued' }, { status: 202 });
   } catch (error) {
     return handleApiError(error);

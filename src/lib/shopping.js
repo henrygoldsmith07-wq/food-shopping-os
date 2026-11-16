@@ -359,8 +359,9 @@ export const restockSuggestions = (shops = [], pantry = [], list = [], limit = 6
 /**
  * Staples you buy on a rhythm, read off your own shop history. An item counts
  * as a staple when bought at least three times; its cadence is the average gap
- * between the most recent three purchases. `dueNow` means you're at or past
- * the cadence and it isn't in the pantry or on the list.
+ * between the most recent three purchases. `dueNow` means you're within 20%
+ * of the cadence (a short heads-up before you run out) and it isn't in the
+ * pantry or on the list.
  */
 export const recurringStaples = (shops = [], pantry = [], list = [], { today = '' } = {}) => {
   const purchases = new Map(); // key -> [{date}]

@@ -112,28 +112,31 @@ describe('the environment contract', () => {
     expect(envStatus({ CLASSIFIER_DISABLED: 'true' }).classifier.ready).toBe(false);
   });
 
-  it('registers every variable the server actually reads, so drift fails loudly', async () => {
-    const { readFile } = await import('node:fs/promises');
-    const serverSources = ['env.js', 'openrouter.js', 'classifier-adapter.js', 'crawler.js',
-      'monid-cli.js', 'monid-market.js', 'monid-prices.js', 'price-scraper.js',
-      'retailer-providers.js', 'ai-budget.js', 'auth.js', 'calendar.js', 'database.js', 'realtime.js',
-      'api.js'];
+  it('registers every variable the source actually reads, so drift fails loudly', async () => {
+    const { readFile, readdir } = await import('node:fs/promises');
     const registered = new Set(Object.keys(envSchema.shape));
+    const sources = [];
+    const collect = async (dir) => {
+      for (const entry of await readdir(new URL(dir, import.meta.url), { withFileTypes: true })) {
+        const path = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) await collect(path);
+        else if (/\.(js|jsx|ts|tsx|mjs)$/.test(entry.name)) sources.push(path);
+      }
+    };
+    // All of src, not just a hand-listed subset: routes and components read
+    // config too (CRON_SECRET, AUTH_PASSWORD_LOGIN, APP_PUBLIC_URL), and those
+    // were the exact variables that used to slip past this guard.
+    await collect('../src');
     const missing = [];
     const keyPattern = /process\.env\.([A-Z][A-Z0-9_]+)/g;
-    for (const file of serverSources) {
-      let text = '';
-      try {
-        text = await readFile(new URL(`../src/server/${file}`, import.meta.url), 'utf8');
-      } catch {
-        continue;
-      }
-      // UPSTASH_REDIS_PREFIX is read at import; NODE_ENV alters URL trust, not config.
-      const ignored = new Set(['UPSTASH_REDIS_PREFIX', 'NODE_ENV']);
+    // Runtime platform values, not deployment config.
+    const ignored = new Set(['NODE_ENV', 'APPDATA']);
+    for (const path of sources) {
+      const text = await readFile(new URL(path, import.meta.url), 'utf8');
       for (const match of text.matchAll(keyPattern)) {
         const key = match[1];
         if (ignored.has(key)) continue;
-        if (!registered.has(key)) missing.push(`${file}:${key}`);
+        if (!registered.has(key)) missing.push(`${path}:${key}`);
       }
     }
     expect(missing).toEqual([]);

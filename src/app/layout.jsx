@@ -38,7 +38,10 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    // THEME_BOOTSTRAP (src/lib/theme.js) sets data-theme and color-scheme on
+    // <html> before React hydrates to avoid a flash of the wrong theme. Those
+    // pre-paint attributes are intentionally absent from the server HTML.
+    <html lang="en" suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );

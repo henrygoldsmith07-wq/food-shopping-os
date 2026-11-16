@@ -70,6 +70,7 @@ export default function CookTab({ openRecipe, goTab }) {
             </div>
             <button
               type="button"
+              aria-label={`Start cooking ${recipe.name}`}
               onClick={() => openRecipe(recipe, { startCooking: true })}
               className="press inline-flex shrink-0 items-center gap-1 rounded-2xl px-3.5 py-2.5 text-[0.78125rem] font-extrabold"
               style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}

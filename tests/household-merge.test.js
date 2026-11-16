@@ -115,9 +115,9 @@ describe('set, map and record mechanics', () => {
     expect(threeWaySets(['nuts'], ['nuts'], [])).toEqual(['nuts']);
   });
 
-  it('map keys: one-sided wins, double edits take the household copy', () => {
+  it('map keys: one-sided wins, double edits keep this device until pushed', () => {
     expect(threeWayMap({ a: 1 }, { a: 2, b: 3 }, { a: 1 })).toEqual({ a: 2, b: 3 });
-    expect(threeWayMap({ a: 9 }, { a: 2 }, { a: 1 })).toEqual({ a: 2 }); // both changed
+    expect(threeWayMap({ a: 9 }, { a: 2 }, { a: 1 })).toEqual({ a: 9 }); // both changed
   });
 
   it('records merge by id and never resurrect an untouched deletion', () => {

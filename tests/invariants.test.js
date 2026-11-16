@@ -99,7 +99,13 @@ describe('merge-conflict tripwires', () => {
     // 27: "Check before you shop" announces each Got enough / Buy it answer (ShopChecks.jsx).
     // 28: holding a row for a top-up announces which row moved (ShopLater)
     // 29: saving or removing a recipe note is announced (RecipeJournal.jsx)
-    expect(liveRegions).toBeLessThanOrEqual(29);
+    // 30: onboarding step changes are announced and move focus (Onboarding.jsx)
+    // 31-32: demo step title and action result are announced (DemoWalkthrough.jsx)
+    // 33: cook mode announces finished timers and hands-free step changes (CookMode.jsx)
+    // 34: stepper values announce their new number (ui.jsx Stepper)
+    // 35: command-palette result count is announced (GlobalLauncher.jsx)
+    // 36: the rewritten onboarding announces its step number (Onboarding.jsx)
+    expect(liveRegions).toBeLessThanOrEqual(36);
   });
 
   it('keeps one page-level heading per primary screen', () => {

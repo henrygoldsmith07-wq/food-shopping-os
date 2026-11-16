@@ -46,6 +46,15 @@ describe('startCloudRetryLoop', () => {
     stop();
   });
 
+  it('keeps syncing after a 409 that carries a household copy', async () => {
+    const conflict = { status: { kind: 'conflict', remoteState: { name: 'Remote' }, remoteVersion: 7 } };
+    const { args } = setup([conflict]);
+    const stop = startCloudRetryLoop(args);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(args.cloudReady.current).toBe(true);
+    stop();
+  });
+
   it('retries immediately when the browser comes online, and stops on cleanup', async () => {
     const { args, retryQueuedCloud, listeners } = setup([{ status: { kind: 'ready' } }]);
     const stop = startCloudRetryLoop(args);

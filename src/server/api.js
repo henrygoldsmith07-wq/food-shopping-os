@@ -89,6 +89,9 @@ export function handleApiError(error) {
   if (error?.code === 'HOUSEHOLD_DELETING') {
     return NextResponse.json({ error: 'Household deletion in progress.' }, { status: 410 });
   }
+  if (error?.name === 'TimeoutError') {
+    return NextResponse.json({ error: 'The upstream service did not respond in time.' }, { status: 504 });
+  }
   if (error instanceof ZodError) {
     return NextResponse.json({ error: 'Invalid request.', issues: error.issues }, { status: 400 });
   }

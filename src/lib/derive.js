@@ -91,8 +91,11 @@ const memoIntelligence = (state, key, compute) => {
     entry = {};
     intelligenceCache.set(state, entry);
   }
-  if (!(key in entry)) entry[key] = compute();
-  return entry[key];
+  // The catalogue grows without replacing state; key on its size too, or
+  // picks and learning stay stale until an unrelated edit changes the object.
+  const cacheKey = `${key}:${RECIPES.length}`;
+  if (!(cacheKey in entry)) entry[cacheKey] = compute();
+  return entry[cacheKey];
 };
 
 export const deriveApp = (state) => {

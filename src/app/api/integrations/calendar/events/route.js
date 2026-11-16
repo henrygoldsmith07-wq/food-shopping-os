@@ -33,6 +33,7 @@ export async function POST(request) {
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) throw new ApiError(502, 'The calendar provider rejected the event.');
     const event = await response.json();
@@ -89,6 +90,7 @@ export async function GET(request) {
         authorization: `Bearer ${accessToken}`,
         ...(isGoogle ? {} : { Prefer: 'outlook.timezone="UTC"' }),
       },
+      signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) throw new ApiError(502, 'The calendar provider rejected the availability request.');
     const payload = await response.json();

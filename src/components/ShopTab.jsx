@@ -354,7 +354,7 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
           {!shoppingMode && <RestockSection items={app.restock} store={store} />}
 
           {staplesDue.length > 0 && !shoppingMode && (
-            <Section className="rise rise-2" title="Due — you buy these on a rhythm">
+            <Section className="rise rise-2" title="Due soon — you buy these on a rhythm">
               <p className="text-[0.75rem] font-semibold mb-2.5" style={{ color: 'var(--muted)' }}>
                 Read off your own shop history — how often you actually restock, not a guess.
               </p>

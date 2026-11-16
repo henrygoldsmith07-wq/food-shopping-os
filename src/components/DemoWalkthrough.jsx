@@ -115,12 +115,12 @@ export default function DemoWalkthrough({ onNavigate }) {
             <p className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>
               {DEMO_LABEL} · step {step + 1} of {DEMO_WALKTHROUGH.length}
             </p>
-            <p className="mt-0.5 text-[0.9375rem] font-extrabold">{current.title}</p>
+            <p aria-live="polite" className="mt-0.5 text-[0.9375rem] font-extrabold">{current.title}</p>
             <p className="mt-1 text-[0.78125rem] font-semibold leading-relaxed" style={{ color: 'var(--muted)' }}>
               {current.blurb}
             </p>
             {note && (
-              <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--accent)' }}>
+              <p role="status" aria-live="polite" className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--accent)' }}>
                 {note}
               </p>
             )}

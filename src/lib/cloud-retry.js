@@ -38,7 +38,10 @@ export function startCloudRetryLoop({
       const result = await retryQueuedCloud();
       if (result) {
         cloudMeta.current = result.meta || cloudMeta.current;
-        cloudReady.current = result.status.kind === 'ready';
+        // A 409 with a household copy is reconcilable, not a dead end: keep
+        // syncing so the debounced push can fold the copy in. Otherwise the
+        // periodic pull would bring it in but the retry loop would stay paused.
+        cloudReady.current = result.status.kind === 'ready' || Boolean(result.status.remoteState);
         setCloudStatus((current) => {
           if (result.status.kind !== 'ready') return result.status;
           if (liveConnection.current) return { kind: 'live', message: 'Live household sync connected.' };

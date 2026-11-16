@@ -88,10 +88,17 @@ export async function POST(request) {
       viewCount: 0,
     };
     const result = await db.collection('coachShares').insertOne(document);
-    await writeAuditEvent({
-      db, householdId: household._id, user, action: 'coach-share.created',
-      resource: result.insertedId.toString(), fields: input.scopes,
-    });
+    // The share is committed. A failed audit write must not turn this into a
+    // 500 — the client would retry and mint a second token for an orphaned
+    // share the person never saw. Audit is best-effort and TTL'd anyway.
+    try {
+      await writeAuditEvent({
+        db, householdId: household._id, user, action: 'coach-share.created',
+        resource: result.insertedId.toString(), fields: input.scopes,
+      });
+    } catch (error) {
+      console.error('Forq coach-share audit failed', error?.message);
+    }
     return NextResponse.json({ ...publicShare({ ...document, _id: result.insertedId }), token }, { status: 201 });
   } catch (error) {
     return handleApiError(error);

@@ -115,7 +115,7 @@ export function ServingsControl({ servings, base, onChange, costPerServing }) {
           {servings !== base && ` · written for ${base}`}
         </p>
       </div>
-      <Stepper value={servings} onChange={onChange} min={1} max={12} />
+      <Stepper label="servings" value={servings} onChange={onChange} min={1} max={12} />
     </div>
   );
 }

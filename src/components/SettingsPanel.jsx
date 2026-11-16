@@ -69,14 +69,27 @@ export default function SettingsPanel() {
             <p className="text-[0.75rem] font-semibold" style={{ color: 'var(--muted)' }}>Match phone follows your phone&apos;s light or dark setting</p>
             {/* A three-way choice, not a dark-mode switch: the default follows the phone. */}
             <div role="radiogroup" aria-labelledby="theme-label" className="mt-2 grid grid-cols-3 gap-1 rounded-xl border p-1" style={{ borderColor: 'var(--line)', background: 'var(--card-2)' }}>
-              {THEME_OPTIONS.map(([id, label]) => {
+              {THEME_OPTIONS.map(([id, label], index) => {
                 const selected = (app.theme || 'system') === id;
+                // Radio semantics promise arrow-key selection and one tab stop.
+                const onKeyDown = (event) => {
+                  const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1
+                    : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+                  if (!delta) return;
+                  event.preventDefault();
+                  const next = (index + delta + THEME_OPTIONS.length) % THEME_OPTIONS.length;
+                  app.setTheme(THEME_OPTIONS[next][0]);
+                  event.currentTarget.parentElement
+                    ?.querySelectorAll('[role="radio"]')[next]?.focus();
+                };
                 return (
                   <button
                     key={id}
                     type="button"
                     role="radio"
                     aria-checked={selected}
+                    tabIndex={selected ? 0 : -1}
+                    onKeyDown={onKeyDown}
                     onClick={() => app.setTheme(id)}
                     className="tap rounded-lg px-2 py-2 text-[0.8125rem] font-bold transition-colors"
                     style={selected ? { background: 'var(--card)', color: 'var(--ink)', boxShadow: 'var(--shadow)' } : { color: 'var(--muted)' }}
