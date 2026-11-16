@@ -22,6 +22,15 @@ export const clampInvitationGrant = (membership = {}, role, permissions = []) =>
   return role === 'child' ? granted.filter((p) => p !== 'health') : granted;
 };
 
+/** An invite is only as valid as the admin who issued it. */
+export const canAcceptInvitation = (invite, creatorMembership) => Boolean(
+  invite
+  && !invite.revokedAt
+  && !invite.acceptedAt
+  && creatorMembership
+  && ['owner', 'admin'].includes(creatorMembership.role),
+);
+
 export async function POST(request) {
   try {
     assertSameOrigin(request);
@@ -43,6 +52,7 @@ export async function POST(request) {
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       acceptedAt: null,
+      revokedAt: null,
     });
     // The invite is already stored; an audit failure must not make the client
     // retry with a fresh token and orphan the link that was just created.
@@ -71,9 +81,15 @@ export async function PATCH(request) {
     const invite = await db.collection('invitations').findOne({
       tokenHash: tokenHash(token),
       acceptedAt: null,
+      revokedAt: { $ne: true },
       expiresAt: { $gt: new Date() },
     });
     if (!invite || invite.email !== user.email?.toLowerCase()) throw new ApiError(404, 'Invitation not found.');
+    // The inviter may have been removed or demoted since issuing the link.
+    const creator = await db.collection('memberships').findOne({
+      householdId: invite.householdId, userId: invite.createdBy,
+    });
+    if (!canAcceptInvitation(invite, creator)) throw new ApiError(404, 'Invitation not found.');
     // Already a member (an owner opening an invite to their own household, or
     // a second invite): accepting must never downgrade the role you hold.
     const current = await db.collection('memberships').findOne({ householdId: invite.householdId, userId: user.id });
@@ -95,6 +111,35 @@ export async function PATCH(request) {
       resource: invite._id.toString(), fields: invite.permissions,
     });
     return NextResponse.json({ householdId: invite.householdId.toString() });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/** A household admin can cancel an unaccepted link before its 7 days are up. */
+export async function DELETE(request) {
+  try {
+    assertSameOrigin(request);
+    const user = await requireUser();
+    await rateLimit(`invites:revoke:${user.id}`, 20, 3600000);
+    const { id } = await readJsonBody(request);
+    if (typeof id !== 'string' || !/^[a-f0-9-]{8,64}$/i.test(id)) throw new ApiError(400, 'Invalid invitation.');
+    const { household, membership } = await requireHousehold(user, request.headers.get('x-forq-household-id'));
+    if (!['owner', 'admin'].includes(membership.role)) throw new ApiError(403, 'Household admin access required.');
+    const db = await getDatabase();
+    const result = await db.collection('invitations').updateOne(
+      { _id: id, householdId: household._id, acceptedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
+    if (!result?.matchedCount) throw new ApiError(404, 'Invitation not found.');
+    try {
+      await writeAuditEvent({
+        db, householdId: household._id, user, action: 'invitation.revoked', resource: id,
+      });
+    } catch (error) {
+      console.error('Forq invitation revoke audit failed', error?.message);
+    }
+    return NextResponse.json({ revoked: true });
   } catch (error) {
     return handleApiError(error);
   }
