@@ -59,7 +59,7 @@ describe('the week loop portions step', () => {
   it('stepping the number overrides the learned appetite, with a way back', () => {
     seed({ householdPreferences: { portions: { typical: 3, observations: 4 } } });
     renderStep();
-    fireEvent.click(screen.getByRole('button', { name: 'Increase' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Increase/ }));
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
     expect(stored.portionsOverride).toBe(4);
   });

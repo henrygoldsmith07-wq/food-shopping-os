@@ -66,10 +66,12 @@ describe('every screen is navigable without sight or a mouse', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Sam' } });
     fireEvent.click(screen.getByText('Continue'));
-    expect(document.activeElement?.textContent).toContain('A little context');
+    // The step heading is goal-dependent, so assert the focus target and the
+    // announcement rather than a title that the onboarding design may change.
+    expect(document.activeElement?.tagName).toBe('H2');
     expect(screen.getAllByRole('status').some((el) => el.textContent.includes('Step 2 of 3'))).toBe(true);
     fireEvent.click(screen.getByText('Continue'));
-    expect(document.activeElement?.textContent).toContain('Your first win');
+    expect(document.activeElement?.tagName).toBe('H2');
     expect(screen.getAllByRole('status').some((el) => el.textContent.includes('Step 3 of 3'))).toBe(true);
   });
 

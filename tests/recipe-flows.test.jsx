@@ -176,8 +176,8 @@ describe('a recipe page', () => {
     expect(screen.getByText('600g')).toBeDefined(); // written for 4
     const kcal = screen.getByText('520').textContent;
 
-    fireEvent.click(screen.getByLabelText('Increase'));
-    fireEvent.click(screen.getByLabelText('Increase'));
+    fireEvent.click(screen.getByLabelText(/^Increase/));
+    fireEvent.click(screen.getByLabelText(/^Increase/));
     expect(screen.getByText(/serves 6/)).toBeDefined();
     expect(screen.getByText('900g')).toBeDefined(); // 600g for 4 → 900g for 6
     expect(screen.getByText('520').textContent).toBe(kcal);
