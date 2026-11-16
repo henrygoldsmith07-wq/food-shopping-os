@@ -55,8 +55,9 @@ test.beforeEach(async ({ page }) => {
 const scan = async (page, include = null) => {
   const builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']);
   const results = await (include ? builder.include(include) : builder).analyze();
-  // 'color-contrast' fires on decorative gradients behind text; manual
-  // contrast pairs are covered by the typography tests instead.
+  // Axe's colour-contrast rule is excluded here: it fires on third-party
+  // decorative gradients we do not control. The documented token pairs are
+  // asserted directly (WCAG ratio >= 4.5:1) in tests/typography.test.js.
   return results.violations
     .filter((violation) => violation.id !== 'color-contrast')
     .map((violation) => `${violation.id}: ${violation.nodes.length} node(s)`);

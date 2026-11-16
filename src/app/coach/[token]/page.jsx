@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
-import { readCoachShare } from '../../../server/coach-shares.js';
+import { rateLimit } from '../../../server/api.js';
+import { COACH_SHARES_ENABLED, readCoachShare } from '../../../server/coach-shares.js';
 import { coachFocus, coachPulse } from '../../../lib/coach-dashboard.js';
 
 export const dynamic = 'force-dynamic';
@@ -41,9 +42,15 @@ const PulseBar = ({ row, maxKcal }) => {
 };
 
 export default async function CoachDashboard({ params }) {
+  // The HTML page must honour the same switch and rate limit as the JSON API:
+  // otherwise disabling coach links in an incident leaves the page serving
+  // data, and repeated views flood the audit trail with no cost to the caller.
+  if (!COACH_SHARES_ENABLED) notFound();
+  const { token } = await params;
   let share;
   try {
-    share = await readCoachShare((await params).token);
+    await rateLimit(`coach-share:view:${String(token).slice(0, 12)}`, 120, 3600000);
+    share = await readCoachShare(token);
   } catch {
     notFound();
   }

@@ -133,7 +133,7 @@ export default function AppHeader({ tab, onProfile, onGuidance }) {
           style={{ borderColor: kind === 'conflict' ? 'var(--warn)' : 'var(--line)', background: 'var(--card-2)' }}
         >
           <div className="flex items-start justify-between gap-2">
-            <p className="min-w-0 text-[0.71875rem] font-bold leading-relaxed" style={{ color: kind === 'conflict' ? 'var(--warn)' : 'var(--muted)' }}>
+            <p className="min-w-0 text-[0.71875rem] font-bold leading-relaxed" style={{ color: kind === 'conflict' ? 'var(--warn-deep)' : 'var(--muted)' }}>
               {!online ? 'Offline — changes stay on this device.' : app.cloudStatus?.message || 'Sync needs attention.'}
               {queued && <span> Queued locally.</span>}
             </p>

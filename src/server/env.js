@@ -58,7 +58,7 @@ export const envSchema = z.object({
   AUTH_DEV_LOGIN: z.enum(['true', 'false']).optional(),
 
   /* classifier.dev — cheap labelling between the deterministic rules and the LLM */
-  CLASSIFIER_API_URL: z.string().url().optional(),
+  CLASSIFIER_API_URL: z.union([z.literal(''), z.string().url()]).optional(),
   CLASSIFIER_API_KEY: z.string().min(1).optional(),
   CLASSIFIER_DISABLED: z.enum(['true', 'false']).optional(),
   CLASSIFIER_TIER: z.enum(['fast', 'smart']).optional(),

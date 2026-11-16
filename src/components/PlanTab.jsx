@@ -26,7 +26,7 @@ import TonightSlotGuard from './TonightSlotGuard.jsx';
 import JustPlannedOffer from './JustPlannedOffer.jsx';
 import PlanConflictCard from './PlanConflictCard.jsx';
 import WeekCostCard from './WeekCostCard.jsx';
-import BatchCookCard from './BatchCookCard.jsx'; import ExpiryRescueCard from './ExpiryRescueCard.jsx'; import WeekBudgetGuard from './WeekBudgetGuard.jsx'; import PlanSendMenu from './PlanSendMenu.jsx';
+import BatchCookCard from './BatchCookCard.jsx'; import ExpiryRescueCard from './ExpiryRescueCard.jsx'; import WeekBudgetGuard from './WeekBudgetGuard.jsx'; import PlanSendMenu from './PlanSendMenu.jsx'; import ClearRangeControl from './ClearRangeControl.jsx';
 import SwipeWeekBuilder from './SwipeWeekBuilder.jsx';
 import { openDinnerDates, weekCostSummary } from '../lib/swipe-week.js';
 
@@ -46,9 +46,9 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const [prepDone, setPrepDone] = useState([]);
   const [justPlanned, setJustPlanned] = useState(null); // a just-picked tonight dinner → shopping offer {id, rows}
   const [building, setBuilding] = useState(false); // the swipe-to-build sheet
-  // Runs when navigation asks for a focus date/item, not when the plan edits:
-  // depending on `app.plan` would yank the calendar offset and reopen the
-  // generator on every meal move.
+  const [confirmClear, setConfirmClear] = useState(false); // second tap needed before clearing the range
+  // Focus comes from navigation, not plan edits: depending on `app.plan` would
+  // yank the calendar offset and reopen the generator on every meal move.
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); }
     if (tonightItem) { setView('week'); setOffset(0); const planned = byId((app.plan[app.day] || {}).dinner)?.name || null; setPicking({ date: app.day, slot: 'dinner', query: tonightItem, guard: planned }); }   }, [focusDate, focusItem, tonightItem, app.day]);
@@ -76,14 +76,13 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
     setMoving(null);
     setDragging(null);
   };
-  const clearRangeStatus = () => { setAddedToList(false); setCalendarStatus(''); };
+  const clearRangeStatus = () => { setAddedToList(false); setCalendarStatus(''); setConfirmClear(false); };
   const sendToList = () => {
     if (addedToList) {
       goTab?.('shop');
       return;
     }
-    // Pantry-aware and waste-aware: only what's genuinely missing, and an
-    // ingredient this household keeps binning arrives one unit lighter.
+    // Pantry-aware and waste-aware: only what's missing, with binned items lighter.
     app.addToList(shoppingListForPlan(app.plan, dates, {
       pantry: app.pantry,
       waste: app.waste,
@@ -340,13 +339,14 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
                 {calendarStatus}
               </p>
             )}
-            <button
-              onClick={() => { app.clearPlanWeek(dates); setAddedToList(false); }}
-              className="press w-full rounded-2xl border py-2.5 text-[0.8125rem] font-extrabold"
-              style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
-            >
-              Clear {view === 'week' ? 'week' : 'month'}
-            </button>
+            <ClearRangeControl
+              confirm={confirmClear}
+              onArm={() => setConfirmClear(true)}
+              onCancel={() => setConfirmClear(false)}
+              onConfirm={() => { app.clearPlanWeek(dates); setAddedToList(false); setConfirmClear(false); }}
+              meals={stats.meals}
+              view={view}
+            />
           </div>
         )}
       </Section>

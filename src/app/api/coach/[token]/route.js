@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ApiError, handleApiError, rateLimit } from '../../../../server/api.js';
-import { readCoachShare } from '../../../../server/coach-shares.js';
+import { COACH_SHARES_ENABLED, readCoachShare } from '../../../../server/coach-shares.js';
 
-export const COACH_SHARES_ENABLED = process.env.FORQ_COACH_SHARES_ENABLED === 'true';
+export { COACH_SHARES_ENABLED };
 
 export async function GET(_request, { params }) {
   try {

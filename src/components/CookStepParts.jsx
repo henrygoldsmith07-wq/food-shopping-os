@@ -67,7 +67,7 @@ export function TimerTray({ timers, onToggle, onDismiss }) {
               {done ? 'Done' : timer.running ? <Pause size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
               {timer.label} · {clock(timer.left)}
             </button>
-            <button type="button" onClick={() => onDismiss(key)} className="press grid h-6 w-6 place-items-center rounded-full" aria-label={`Clear the ${timer.label} timer`} style={{ color: 'var(--muted)' }}>
+            <button type="button" onClick={() => onDismiss(key)} className="tap press grid h-6 w-6 place-items-center rounded-full" aria-label={`Clear the ${timer.label} timer`} style={{ color: 'var(--muted)' }}>
               <X size={12} />
             </button>
           </li>

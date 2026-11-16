@@ -52,12 +52,12 @@ measures the wait a first-time visitor actually has:
 
 | Budget | Limit | Measured |
 | --- | --- | --- |
-| App + catalogue chunks, gzipped | 300 KB | 284 KB across 5 chunks |
-| App + catalogue chunks, uncompressed | 920 KB | 881 KB across 5 chunks |
-| Largest single JS chunk | 800 KB | 726 KB |
-| All browser assets | 3.34 MB | 2.55 MB |
-| Catalogue source shipped eagerly | 800 KB | 83 modules, 569 KB |
-| Client JS chunk count | 60 | 42 |
+| App + catalogue chunks, gzipped | 315 KB | 314 KB across 5 chunks |
+| App + catalogue chunks, uncompressed | 980 KB | 974 KB across 5 chunks |
+| Largest single JS chunk | 820 KB | 819 KB |
+| All browser assets | 3.34 MB | 2.82 MB |
+| Catalogue source shipped eagerly | 800 KB | 86 modules, 663 KB |
+| Client JS chunk count | 60 | 45 |
 
 The app chunks are found by strings only the data can contain (a generic food,
 a signature dish, a generated recipe id). If a rename means none of them match,

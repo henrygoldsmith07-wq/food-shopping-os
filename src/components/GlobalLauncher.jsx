@@ -122,7 +122,7 @@ export function CommandPalette({ open, onClose, onRun }) {
           )}
         </div>
         <p className="text-center text-[0.6875rem] font-semibold" style={{ color: 'var(--faint)' }}>
-          Ctrl K search · Q quick add · Ctrl Z undo · 1–6 switch tabs
+          Ctrl K search · Q quick add · Ctrl Z undo · 1–5 switch tabs
         </p>
       </div>
     </Sheet>

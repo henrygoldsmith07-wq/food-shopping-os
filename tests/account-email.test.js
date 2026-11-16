@@ -65,6 +65,18 @@ const { authOptions } = await import('../src/server/auth.js');
 const authorize = (email, password) => authOptions.providers
   .find((p) => (p.options?.id || p.id) === 'password').options.authorize({ email, password }, { headers: {} });
 
+describe('security email origins', () => {
+  it('never builds a link from a caller-supplied host header', async () => {
+    const { appOrigin } = await import('../src/server/email.js');
+    const hostile = new Request('https://forq.example/api/account/password-reset', {
+      headers: { 'x-forwarded-host': 'evil.example', host: 'evil.example' },
+    });
+    expect(appOrigin(hostile, { NODE_ENV: 'test' })).toBe('https://forq.example');
+    expect(appOrigin(hostile, { APP_URL: 'https://forq.example/' })).toBe('https://forq.example');
+    expect(() => appOrigin(hostile, { NODE_ENV: 'production' })).toThrow(/APP_URL/);
+  });
+});
+
 describe('email verification', () => {
   it('sends a confirmation link on sign-up, and the password signs in only after it is used', async () => {
     const created = await register(req('/api/account/register', 'POST', { email: 'Sam@Example.com', password: 'a good password' }));

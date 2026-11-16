@@ -140,7 +140,7 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
         <button
           onClick={onClose}
           aria-label="Close"
-          className="press absolute top-4 left-4 flex h-9 w-9 items-center justify-center rounded-full border"
+          className="tap press absolute top-4 left-4 flex h-9 w-9 items-center justify-center rounded-full border"
           style={{ background: 'var(--card)', borderColor: 'var(--line)', color: 'var(--ink)' }}
         >
           <ChevronLeft size={18} strokeWidth={2.4} />
@@ -150,13 +150,13 @@ export default function RecipeDetail({ recipe: original, onClose, goTab, startCo
           aria-label={fav ? 'Unfavourite' : 'Favourite'}
           aria-pressed={fav}
           className={cx(
-            'press favourite-button absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-full border',
+            'tap press favourite-button absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-full border',
             fav && 'is-favourite',
           )}
           style={{
-            background: fav ? 'var(--danger)' : 'var(--card)',
+            background: fav ? 'var(--danger-soft)' : 'var(--card)',
             borderColor: fav ? 'var(--danger)' : 'var(--line)',
-            color: fav ? '#ffffff' : 'var(--faint)',
+            color: fav ? 'var(--danger)' : 'var(--faint)',
           }}
         >
           <Heart

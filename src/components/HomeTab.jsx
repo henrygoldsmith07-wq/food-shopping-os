@@ -302,7 +302,17 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
                     </button>
                     <button
                       type="button"
-                      onClick={() => (planLed ? setSkipPlanned(true) : dismissTonight(tonight))}
+                      onClick={() => {
+                        // A skipped planned dinner is still a rejected
+                        // recommendation: record it on the same path so the
+                        // learning claim holds, then fall through locally.
+                        if (planLed) {
+                          dismissTonight({ recipe: planState.recipe });
+                          setSkipPlanned(true);
+                        } else {
+                          dismissTonight(tonight);
+                        }
+                      }}
                       className="press rounded-xl border px-3 py-2.5 text-[0.8125rem] font-extrabold"
                       style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
                     >

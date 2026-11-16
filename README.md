@@ -14,7 +14,7 @@ It does not invent a pretend household or hide uncertainty behind a polished num
 
 ## See it in 10 seconds
 
-Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping, receipt history and the complete loop. Then choose **Explore an example week first** to enter the interactive sandbox. Nothing is saved, synced, or counted toward analytics. From the walkthrough you can **Use this demo week as my starting plan**: the sandbox closes, the dinners are rebased onto the seven days starting today as your real plan, and **Review plan** navigates to it — adopting never carries demo pantry, receipts, or analytics with it.
+Visit **[/demo](/demo)** to see a seeded week with a plan, pantry-aware shopping, receipt history and the complete loop. Then choose **Explore an example week first** to enter the interactive sandbox. Nothing is saved, synced, or counted toward analytics. From the walkthrough you can **Use this demo week as my starting plan**: the sandbox closes, the dinners are rebased onto the seven days starting today as your real plan, and **Review plan** navigates to it — adopting merges the demo's pantry staples into your real kitchen (without overwriting anything you already have) while demo receipts and analytics stay behind.
 
 ### Product loop
 
@@ -146,9 +146,10 @@ each), and cached three hours on device.
 
 ### The food catalogue
 
-Around **510 foods**, roughly 395 generic and 115 branded, split across files by
-what they are: core staples, the expanded generic list, the store cupboard,
-the deli/dessert/freezer counter, and two branded waves.
+Around **3,800 foods** (3,811 in the current build), roughly 3,525 generic and
+286 branded, split across files by what they are: core staples, the expanded
+generic list, the store cupboard, the deli/dessert/freezer counter, and six
+branded waves.
 
 Every food can be graded. That is a deliberate invariant with a test behind it:
 the health grade refuses to score without sugar, saturated fat and salt, so a
@@ -431,7 +432,7 @@ flag; Forq's own data is never deleted or moved.
 - **Global interaction layer** — Ctrl/Cmd+K searches commands, foods, recipes,
   pantry and the shopping list together, with type filters and relevance or
   A–Z sorting. Q opens Quick add, Ctrl/Cmd+Z undoes the latest saved action,
-  and 1–6 switch tabs. Search and Quick add also have permanent touch buttons.
+  and 1–5 switch tabs. Search and Quick add also have permanent touch buttons.
   Shopping and pantry rows share swipe actions, long-press menus and native
   context menus. Shopping items, meal slots and dashboard widgets drag where
   ordering has a real meaning; the same actions remain available as buttons

@@ -79,7 +79,7 @@ function TasksView() {
             <button
               onClick={() => app.toggleChore(chore.id)}
               aria-label={`${chore.done ? 'Reopen' : 'Complete'} ${chore.title}`}
-              className="press flex h-6 w-6 items-center justify-center rounded-full border-2"
+              className="tap press flex h-6 w-6 items-center justify-center rounded-full border-2"
               style={chore.done
                 ? { background: 'var(--accent)', borderColor: 'var(--accent)', color: 'var(--on-accent)' }
                 : { borderColor: 'var(--line)', color: 'transparent' }}

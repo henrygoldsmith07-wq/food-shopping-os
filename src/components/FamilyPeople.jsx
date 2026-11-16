@@ -6,7 +6,7 @@ import { useApp } from '../lib/store.jsx';
 import { DIET_PATTERNS } from '../data/goals.js';
 import { ALLERGENS, INTOLERANCES } from '../data/preferences.js';
 import { YOUTH_COPY } from '../lib/youth.js';
-import { Card, Chip, Pill, Stepper } from './ui.jsx';
+import { Card, Chip, Pill, Stepper, Toggle } from './ui.jsx';
 
 /**
  * Who is in the household, what they can do, and what they cannot eat.
@@ -23,23 +23,6 @@ const PERMISSIONS = [
   ['recipes', 'save recipes'],
   ['health', 'view health records'],
 ];
-
-const Toggle = ({ on, onClick, label }) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={on}
-    aria-label={label}
-    onClick={onClick}
-    className="press relative h-6 w-11 rounded-full"
-    style={{ background: on ? 'var(--accent)' : 'var(--line)' }}
-  >
-    <span
-      className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform"
-      style={{ left: 2, transform: on ? 'translateX(20px)' : 'none' }}
-    />
-  </button>
-);
 
 export default function PeopleView() {
   const app = useApp();
@@ -146,7 +129,7 @@ export default function PeopleView() {
                     <span className="text-[0.78125rem] font-semibold capitalize">Can {label}</span>
                     <Toggle
                       on={permissions[key]}
-                      onClick={() => app.toggleMemberPermission(member.id, key)}
+                      onChange={() => app.toggleMemberPermission(member.id, key)}
                       label={`${member.name} can ${label}`}
                     />
                   </div>
@@ -155,7 +138,7 @@ export default function PeopleView() {
                   <span className="text-[0.78125rem] font-semibold">Household notifications</span>
                   <Toggle
                     on={member.notifications !== false}
-                    onClick={() => app.updateMember(member.id, { notifications: member.notifications === false })}
+                    onChange={() => app.updateMember(member.id, { notifications: member.notifications === false })}
                     label={`${member.name} gets household notifications`}
                   />
                 </div>

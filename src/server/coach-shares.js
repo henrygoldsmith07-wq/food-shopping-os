@@ -4,6 +4,9 @@ import { AUDIT_RETENTION_MS } from './audit.js';
 import { getDatabase } from './database.js';
 import { youthPolicy, YOUTH_SHARE_SCOPES } from '../lib/youth.js';
 
+/** Single switch for every surface that can read a coach share (API and page). */
+export const COACH_SHARES_ENABLED = process.env.FORQ_COACH_SHARES_ENABLED === 'true';
+
 export const coachTokenHash = (token) => createHash('sha256').update(token).digest('hex');
 
 const pick = (state, keys) =>

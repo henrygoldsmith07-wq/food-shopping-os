@@ -13,16 +13,19 @@ const RESEND_URL = 'https://api.resend.com/emails';
 export const emailConfigured = (env = process.env) => Boolean(env.RESEND_API_KEY && env.EMAIL_FROM);
 
 /**
- * The site's own origin for links in emails: APP_URL when set, else the
- * origin the request came in on (the Host header, as the CSRF check uses).
- * @param {{ headers: { get(name: string): string | null }, url: string }} [request]
+ * The site's own origin for links in security emails. Never derived from
+ * Host / X-Forwarded-Host: those headers are caller-controlled, and using
+ * them let a forged reset request make a genuine Forq email point at an
+ * attacker's domain and leak the one-time token. In production the origin
+ * must be configured; local development may use the request URL.
+ * @param {{ url?: string }} [request]
  * @param {Record<string, string | undefined>} [env]
  */
 export const appOrigin = (request, env = process.env) => {
-  if (env.APP_URL) return env.APP_URL.replace(/\/$/, '');
-  const host = request?.headers.get('x-forwarded-host') || request?.headers.get('host');
-  if (host) return `${request?.headers.get('x-forwarded-proto') || 'https'}://${host}`;
-  return request ? new URL(request.url).origin : '';
+  const configured = env.APP_URL || env.APP_PUBLIC_URL;
+  if (configured) return String(configured).replace(/\/$/, '');
+  if (env.NODE_ENV !== 'production' && request?.url) return new URL(request.url).origin;
+  throw new Error('APP_URL must be set to send account emails in production.');
 };
 
 /**

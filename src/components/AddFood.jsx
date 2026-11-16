@@ -343,8 +343,8 @@ export default function AddFood({
           <SlidersHorizontal size={17} />
           {activeFilterCount > 0 && (
             <span
-              className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[0.625rem] font-black text-white"
-              style={{ background: 'var(--accent)' }}
+              className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[0.625rem] font-black"
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
               aria-hidden="true"
             >
               {activeFilterCount}

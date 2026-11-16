@@ -43,6 +43,14 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
     app.removePantryItem(id);
     if (item) setRemoved({ id, name: item.name, at: Date.now() });
   };
+  // Binning keeps its waste-cost behaviour (binPantryItem records the waste),
+  // but joins the same undo notice so the removal can be taken back — undoLast
+  // restores the whole prior state, including the waste that was recorded.
+  const binPantryItem = (id) => {
+    const item = app.pantry.find((entry) => entry.id === id);
+    app.binPantryItem(id);
+    if (item) setRemoved({ id, name: item.name, at: Date.now() });
+  };
   const undoRemove = () => {
     app.undoLast();
     setRemoved(null);
@@ -233,7 +241,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
                       )}
                       <button
                         type="button"
-                        onClick={() => app.binPantryItem(item.id)}
+                        onClick={() => binPantryItem(item.id)}
                         className="press rounded-full border px-3 py-1.5 text-[0.75rem] font-extrabold"
                         style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
                       >

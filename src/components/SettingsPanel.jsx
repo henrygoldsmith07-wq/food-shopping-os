@@ -10,7 +10,7 @@ import StorageHealth from './StorageHealth.jsx';
 
 const THEME_OPTIONS = [['system', 'Match phone'], ['light', 'Light'], ['dark', 'Dark']];
 
-const UNLOCK_COLOURS = { sage: '#6b7f6a', clay: '#8c5a44', ink: '#2f3640' };
+const UNLOCK_COLOURS = { sage: '#5f7360', clay: '#8c5a44', ink: '#2f3640' };
 const ACCENTS = [
   ['mono', 'var(--ink)'],
   ['forest', '#3d5c4b'],

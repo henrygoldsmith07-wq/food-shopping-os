@@ -8,6 +8,6 @@
     "exactOptionalPropertyTypes": true,
     "types": ["node"]
   },
-  "include": ["src/typed/**/*.ts", "src/server/schemas.ts", "tests/typed/**/*.test.ts"],
+  "include": ["src/typed/**/*.ts", "tests/typed/**/*.test.ts"],
   "exclude": ["node_modules", ".next"]
 }

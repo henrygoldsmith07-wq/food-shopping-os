@@ -62,6 +62,7 @@ function StorageRecovery() {
   const app = useApp();
   const fileRef = useRef(null);
   const [status, setStatus] = useState('');
+  const [confirmReset, setConfirmReset] = useState(false);
   const restore = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -105,8 +106,24 @@ function StorageRecovery() {
             aria-label="Restore Forq backup"
             onChange={restore}
           />
-          <button className="press px-4 py-2 text-[0.75rem] font-bold" style={{ color: 'var(--danger)' }} onClick={app.reset}>
-            Start with an empty app
+          {confirmReset && (
+            <button
+              className="press px-4 py-2 text-[0.75rem] font-bold"
+              style={{ color: 'var(--muted)' }}
+              onClick={() => setConfirmReset(false)}
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            className="press px-4 py-2 text-[0.75rem] font-bold"
+            style={{ color: 'var(--danger)' }}
+            onClick={() => {
+              if (!confirmReset) { setConfirmReset(true); return; }
+              app.reset();
+            }}
+          >
+            {confirmReset ? 'Confirm — erase the recoverable copy' : 'Start with an empty app'}
           </button>
         </div>
         {status && <p role="status" className="text-[0.75rem] font-semibold">{status}</p>}
