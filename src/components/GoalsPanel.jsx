@@ -30,6 +30,15 @@ function MaintenanceCard() {
   const body = app.body || {};
   const computed = resolveMaintenance(app);
   const fromStats = !!(body.weightKg && body.heightCm && body.age);
+  // Keep raw text while typing: a decimal point must not clear the field.
+  const [bodyDraft, setBodyDraft] = useState({});
+  const bodyField = (key) => bodyDraft[key] ?? body[key] ?? '';
+  const bodyChange = (key) => (value) => setBodyDraft((d) => ({ ...d, [key]: value }));
+  const bodyBlur = (key) => () => {
+    const next = numberOrNull(bodyDraft[key]);
+    app.setBody({ [key]: next });
+    setBodyDraft((d) => ({ ...d, [key]: next ?? '' }));
+  };
 
   return (
     <Card className="space-y-3">
@@ -226,15 +235,6 @@ function WeeklyCard() {
 export default function GoalsPanel() {
   const app = useApp();
   const [showWorking, setShowWorking] = useState(false);
-  // Keep raw text while typing so a decimal point does not clear the field.
-  const [bodyDraft, setBodyDraft] = useState({});
-  const bodyField = (key) => bodyDraft[key] ?? body[key] ?? '';
-  const bodyChange = (key) => (value) => setBodyDraft((d) => ({ ...d, [key]: value }));
-  const bodyBlur = (key) => () => {
-    const next = numberOrNull(bodyDraft[key]);
-    app.setBody({ [key]: next });
-    setBodyDraft((d) => ({ ...d, [key]: next ?? '' }));
-  };
   // Under 18 a stored deficit goal is not the goal in force — the panel shows
   // what the app is actually doing, which is maintenance.
   const goal = BODY_GOALS.find((g) => g.id === app.goal && app.youth.goals.includes(g.id))
