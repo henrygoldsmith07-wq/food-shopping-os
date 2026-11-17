@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { gbp } from '../lib/utils.js';
 import { checkLivePrice, entryFromResult } from '../lib/live-prices.js';
@@ -20,22 +20,29 @@ export default function BrandedSuggestions({ suggestions = [], disabled = false 
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const requestId = useRef(0);
 
   if (!suggestions.length) return null;
 
   const price = async (suggestion) => {
     if (busy || disabled) return;
+    const id = requestId.current + 1;
+    requestId.current = id;
     setBusy(suggestion.id);
     setError('');
     try {
       const body = await checkLivePrice(suggestion.name);
+      // A second tap (same tick, before the busy state re-rendered) must not
+      // let the slower response overwrite the one the person last asked for.
+      if (requestId.current !== id) return;
       setResult({ suggestion, entry: entryFromResult(suggestion.name, body) });
     } catch (caught) {
+      if (requestId.current !== id) return;
       setError(caught.status === 429
         ? 'Too many checks — try again in an hour.'
         : caught.message || 'That check failed.');
     } finally {
-      setBusy('');
+      if (requestId.current === id) setBusy('');
     }
   };
 

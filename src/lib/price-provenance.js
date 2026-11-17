@@ -31,11 +31,12 @@ const sourceMeta = (source) => PRICE_SOURCES[source] || { label: String(source |
 
 export const normaliseProvenance = (price) => {
   if (!price || typeof price !== 'object') return null;
+  // Check the read-method first: a scraper row carries `source: 'scraped'`
+  // even when a model read the text or a market listing answered. Without
+  // this, those rows lose their explicit AI/market warnings.
   const candidates = [
-    price.source, price.priceSource, price.method, price.via,
+    price.method, price.via, price.source, price.priceSource,
   ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
-  // Scraper rows carry method/via rather than source: method wins over via
-  // because it says how the number was read, not which ladder rung fetched it.
   const methodAlias = { 'google-shopping': 'google-shopping', 'ai-extracted': 'ai-extracted', monid: 'monid', scraped: 'scraped', direct: 'scraped', firecrawl: 'scraped', jina: 'scraped' };
   let source = 'manual';
   for (const candidate of candidates) {

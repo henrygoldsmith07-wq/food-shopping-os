@@ -127,8 +127,12 @@ export const pickObserved = (prices = []) => {
  * spacing calls 180ms apart.
  */
 export const fetchObservedForList = async (items = [], { signal, today = dayStamp() } = {}) => {
-  const keys = [...new Set(items.map((i) => shoppingNameKey(i.name)).filter(Boolean))].slice(0, 12);
-  if (!keys.length) return { byKey: {}, checkedAt: new Date().toISOString(), fromCache: 0, fetched: 0 };
+  const allKeys = [...new Set(items.map((i) => shoppingNameKey(i.name)).filter(Boolean))];
+  // The community API is rate limited: check the first 12, but tell callers
+  // how many were left unchecked instead of letting them look like "no data".
+  const keys = allKeys.slice(0, 12);
+  const skipped = Math.max(0, allKeys.length - keys.length);
+  if (!keys.length) return { byKey: {}, checkedAt: new Date().toISOString(), fromCache: 0, fetched: 0, skipped };
 
   const cache = loadCache();
   const byKey = {};
@@ -171,5 +175,12 @@ export const fetchObservedForList = async (items = [], { signal, today = dayStam
   }
   // keep today param for staleness callers even if not used here directly
   void today;
-  return { byKey, checkedAt: new Date().toISOString(), fromCache, fetched };
+  const dataTimes = Object.values(byKey)
+    .map((entry) => new Date(entry?.checkedAt).getTime())
+    .filter((stamp) => Number.isFinite(stamp));
+  return {
+    byKey,
+    checkedAt: dataTimes.length ? new Date(Math.min(...dataTimes)).toISOString() : new Date().toISOString(),
+    fromCache, fetched, skipped,
+  };
 };

@@ -95,4 +95,10 @@ describe('a whole run blocked is not a hit rate of zero', () => {
     const out = coverageFor({ milk: blocked('milk'), bread: { unanswered: [{ status: 'declined' }] } });
     expect(out.networkBlocked).toBe(false);
   });
+
+  it('does not blame a retailer when our own batch failed', () => {
+    const out = coverageFor({ milk: { name: 'Milk', error: 'upstream 500' } });
+    expect(out.reasons[0].reason).toBe('error');
+    expect(out.reasons[0].label).toMatch(/price service could not/);
+  });
 });

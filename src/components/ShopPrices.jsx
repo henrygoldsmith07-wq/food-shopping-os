@@ -66,7 +66,7 @@ export default function ShopPrices({ app, visibleList, observed, offlineMode, is
         {error && <p className="mt-2 text-[0.75rem] font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>}
         {meta && !error && (
           <p className="mt-2 text-[0.6875rem] font-semibold" style={{ color: 'var(--muted)' }}>
-            {meta.live !== undefined && `${meta.live} with a live shop price · `}{Object.keys(byKey || {}).length} item{Object.keys(byKey || {}).length === 1 ? '' : 's'} with an observation{meta.fromCache ? ` · ${meta.fromCache} from 24h cache` : ''} · community observed, not live.
+            {meta.live !== undefined && `${meta.live} with a live shop price · `}{Object.keys(byKey || {}).length} item{Object.keys(byKey || {}).length === 1 ? '' : 's'} with an observation{meta.fromCache ? ` · ${meta.fromCache} from 24h cache` : ''}{meta.skipped ? ` · first 12 checked, ${meta.skipped} not checked (rate limit)` : ''} · community observed, not live.
           </p>
         )}
         {byKey && (

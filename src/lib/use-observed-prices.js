@@ -50,7 +50,7 @@ export const useObservedPrices = ({ items, offlineMode, isOnline, live = false }
       }
       const result = await fetchObservedForList(items);
       setByKey(result.byKey);
-      setMeta((prev) => ({ ...prev, checkedAt: result.checkedAt, fromCache: result.fromCache, fetched: result.fetched }));
+      setMeta((prev) => ({ ...prev, checkedAt: result.checkedAt, fromCache: result.fromCache, fetched: result.fetched, skipped: result.skipped || 0 }));
     } catch (fetchError) {
       setError(messageFor(fetchError));
     } finally {

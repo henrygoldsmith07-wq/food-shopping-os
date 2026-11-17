@@ -83,10 +83,24 @@ export const scoreCandidate = (candidate, now = Date.now()) => {
   return Math.round(weight * freshnessFactor(ageInDays(candidate.date, now)) * 1000) / 1000;
 };
 
+const ageInHours = (date, now = Date.now()) => {
+  if (!date) return null;
+  const stamp = new Date(String(date).length <= 10 ? `${date}T12:00:00Z` : date).getTime();
+  if (!Number.isFinite(stamp)) return null;
+  return Math.max(0, Math.floor((now - stamp) / 3600000));
+};
+
 /** Words for how much to trust it, so the UI never has to invent them. */
 export const confidenceOf = (candidate, now = Date.now()) => {
   const days = ageInDays(candidate.date, now);
-  if (candidate.source === 'scraped') return { level: 'high', label: 'checked just now' };
+  if (candidate.source === 'scraped') {
+    // A cached scrape is up to three hours old; saying "just now" hid that
+    // and broke the promise to show how old every price is.
+    const hours = ageInHours(candidate.date, now);
+    if (hours === null) return { level: 'low', label: 'date unknown' };
+    if (hours < 1) return { level: 'high', label: 'checked just now' };
+    if (hours < 24) return { level: hours <= 3 ? 'high' : 'medium', label: `checked ${hours}h ago` };
+  }
   if (days === null) return { level: 'low', label: 'date unknown' };
   if (days <= 14) return { level: 'high', label: days <= 1 ? 'from today' : `${days} days old` };
   if (days <= 60) return { level: 'medium', label: `${days} days old` };

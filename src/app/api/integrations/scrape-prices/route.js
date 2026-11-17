@@ -79,8 +79,26 @@ export async function POST(request) {
                   check.monid = { status: 'ok', provider: batch.provider, rows: matched.length };
                 } else check.monid = { status: 'no-match', provider: batch.provider, rows: 0 };
               }
-            } else monidBatch = { status: batch.status, items: gaps.length };
-          } catch { monidBatch = { status: 'error', items: gaps.length }; }
+            } else {
+              // A paused/failed rung must be stamped on every gap, not just
+              // reported in a summary no client reads: the provenance panel
+              // and the "Monid is paused" banner are driven by check.monid.
+              const miss = {
+                status: batch.status || 'error', provider: null, rows: 0,
+                paused: batch.paused === true,
+              };
+              for (const check of checks) {
+                if (!(check.best?.price > 0)) check.monid = { ...miss };
+              }
+              monidBatch = { ...miss, items: gaps.length };
+            }
+          } catch {
+            const miss = { status: 'error', provider: null, rows: 0, paused: false };
+            for (const check of checks) {
+              if (!(check.best?.price > 0)) check.monid = { ...miss };
+            }
+            monidBatch = { ...miss, items: gaps.length };
+          }
         }
       }
       return NextResponse.json({ checks, remaining, monidBatch, checkedAt: nowIso });

@@ -293,9 +293,16 @@ export const checkLivePricesForList = async (items = [], {
     queue = deferred;
   }
 
+  // The header must describe the data, not the run: an all-cached check has
+  // no fresh rows, so stamping "now" would present old prices as live.
+  const dataTimes = Object.values(byKey)
+    .map((entry) => new Date(entry?.checkedAt).getTime())
+    .filter((stamp) => Number.isFinite(stamp));
   return {
     byKey,
-    checkedAt: new Date().toISOString(),
+    checkedAt: dataTimes.length
+      ? new Date(Math.min(...dataTimes)).toISOString()
+      : new Date().toISOString(),
     fromCache,
     fetched,
     total,

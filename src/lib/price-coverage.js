@@ -36,6 +36,7 @@ export const REASON_LABELS = {
   'no-match': 'shop had no matching product',
   'no-search-url': 'shop has no public search',
   aborted: 'check was stopped early',
+  error: 'the price service could not finish the check',
 };
 
 export const coverageFor = (byKey = {}) => {
@@ -47,6 +48,11 @@ export const coverageFor = (byKey = {}) => {
     if (entry?.best) {
       priced += 1;
       if (entry.best.broadened) broadened += 1;
+      continue;
+    }
+    // A failed batch is our failure, not a retailer being unreachable.
+    if (entry?.error) {
+      reasons.error = (reasons.error || 0) + 1;
       continue;
     }
     // The most common thing the shops said about this item is the reason it

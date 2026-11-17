@@ -94,9 +94,14 @@ describe('which source wins', () => {
 });
 
 describe('saying how much to trust it', () => {
-  it('calls a live scrape checked just now, whatever its timestamp', () => {
+  it('calls a scrape checked now just now, and a cached one by its real age', () => {
     expect(confidenceOf({ source: 'scraped', date: at(0) }, NOW))
       .toMatchObject({ level: 'high', label: 'checked just now' });
+    const hoursAgo = (h) => new Date(NOW - h * 3600000).toISOString();
+    expect(confidenceOf({ source: 'scraped', date: hoursAgo(2) }, NOW))
+      .toMatchObject({ level: 'high', label: 'checked 2h ago' });
+    expect(confidenceOf({ source: 'scraped', date: hoursAgo(8) }, NOW))
+      .toMatchObject({ level: 'medium', label: 'checked 8h ago' });
   });
 
   it.each([
