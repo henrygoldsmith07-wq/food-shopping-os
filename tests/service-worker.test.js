@@ -256,13 +256,23 @@ describe('service worker caching is explicit and safe', () => {
     expect(worker.fetches).toHaveLength(0);
   });
 
-  it('serves the precached shell for navigations when offline', async () => {
+  it('serves the precached shell for the home route when offline', async () => {
+    await install();
+    const { responded } = worker.run('fetch', makeRequest('/', { mode: 'navigate', destination: 'document' }), {
+      network: () => Promise.reject(new Error('offline')),
+    });
+    const response = await responded;
+    expect(response.body).toBe('/');
+  });
+
+  it('does not serve the home document at another route when offline', async () => {
     await install();
     const { responded } = worker.run('fetch', makeRequest('/plan', { mode: 'navigate', destination: 'document' }), {
       network: () => Promise.reject(new Error('offline')),
     });
     const response = await responded;
-    expect(response.body).toBe('/');
+    expect(response.status).toBe(503);
+    expect(response.body).toMatch(/has not been cached/);
   });
 
   it('returns a plain 503 when the shell itself is unavailable offline', async () => {

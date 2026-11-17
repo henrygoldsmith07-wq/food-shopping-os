@@ -74,26 +74,18 @@ import { inferWeekRecoveryTriggers, recoverWeek } from './week-recovery.js';
 import { evaluateHousehold } from './eval-metrics.js';
 import { ledgerCounts } from './event-ledger.js';
 import { buildFoodIntelligence } from './food-intelligence.js';
+import { valueFingerprint } from './state-merge.js';
 
-/**
- * Memo for the heavier household-intelligence derivations below. deriveApp is
- * pure and the store replaces (never mutates) state, so caching per state
- * identity is safe: the same state object always derives the same model.
- * Without this, ranking the whole recipe book on every render would tax the
- * slowest suites (and low-end devices) for values most screens never read.
- */
+/** Memo for the heavy household-intelligence derivations below. */
 const intelligenceCache = new WeakMap();
-const memoIntelligence = (state, key, compute) => {
-  const cacheable = state && typeof state === 'object';
-  if (!cacheable) return compute();
+// `signature` is a value fingerprint of the fields the derivation reads: the
+// store replaces state on every edit, so identity alone always misses the cache
+// and re-runs the 200ms+ whole-book ranking on trivial writes.
+const memoIntelligence = (state, key, compute, signature = '') => {
+  if (!state || typeof state !== 'object') return compute();
   let entry = intelligenceCache.get(state);
-  if (!entry) {
-    entry = {};
-    intelligenceCache.set(state, entry);
-  }
-  // The catalogue grows without replacing state; key on its size too, or
-  // picks and learning stay stale until an unrelated edit changes the object.
-  const cacheKey = `${key}:${RECIPES.length}`;
+  if (!entry) { entry = {}; intelligenceCache.set(state, entry); }
+  const cacheKey = `${key}:${RECIPES.length}:${signature}`;
   if (!(cacheKey in entry)) entry[cacheKey] = compute();
   return entry[cacheKey];
 };
@@ -394,7 +386,12 @@ export const deriveApp = (state) => {
           budgetPerServing: state.weeklyBudget ? Math.min(4, Math.max(1, state.weeklyBudget / 7)) : 4,
         });
       } catch { return { pick: null, ranked: [], confidence: 'none', reasons: [] }; }
-    }),
+    }, valueFingerprint({
+      pantry: state.pantry, cooked: state.cooked, waste: state.waste, day: state.day,
+      members: state.members, allergies: state.allergies, intolerances: state.intolerances,
+      religious: state.religious, household: state.household, weeklyBudget: state.weeklyBudget,
+      tasteProfile, planDiets, suitabilityCtx,
+    })),
     weekRecovery: memoIntelligence(state, 'weekRecovery', () => {
       try {
         const triggers = inferWeekRecoveryTriggers(state, recipeBook);

@@ -40,7 +40,13 @@ function RootSession() {
   // demo-param handling — on every render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.enterDemoMode, app.adoptDemoWeek]);
-  return <AppContent />;
+  // Manifest app shortcuts land on /?shortcut=plan|shop; pick the destination
+  // before the shell mounts so the shortcut actually opens that screen.
+  const params = new URLSearchParams(window.location.search);
+  const shortcut = params.get('shortcut');
+  const initialTab = shortcut === 'plan' ? 'plan' : shortcut === 'shop' ? 'shop' : undefined;
+  if (shortcut) window.history.replaceState({}, '', window.location.pathname);
+  return <AppContent initialTab={initialTab} />;
 }
 
 export default function ClientRoot() {

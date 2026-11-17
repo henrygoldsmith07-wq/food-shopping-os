@@ -114,8 +114,9 @@ self.addEventListener('fetch', (event) => {
   const isNavigation = request.mode === 'navigate' || request.destination === 'document';
 
   if (isNavigation) {
-    // Network-first shell: freshness online, the precached app offline.
-    // Only '/' is ever stored, so no page can be served for another route.
+    // Network-first shell: freshness online, the precached app offline at '/'.
+    // Other routes must not silently receive the home document — Next would
+    // hydrate Home into a URL the user expects to be a coach/demo page.
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -125,7 +126,9 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match('/').then((cached) => cached || new Response('Offline', {
+        .catch(() => (url.pathname === '/'
+          ? caches.match('/')
+          : Promise.resolve(null)).then((cached) => cached || new Response('Offline — this page has not been cached. Reconnect and open it once to make it available offline.', {
           status: 503,
           headers: { 'Content-Type': 'text/plain; charset=utf-8' },
         }))),

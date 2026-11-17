@@ -132,10 +132,18 @@ function StorageRecovery() {
   );
 }
 
-function Shell() {
+function Shell({ initialTab = 'home' }) {
   const app = useApp();
   // This Week is the home screen: the week's food, one surface.
-  const [tab, setTab] = useState('home');
+  const [tab, setTab] = useState(initialTab);
+  // Connectivity is an event: a render-time read lags the banner by a minute.
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
+  }, []);
   // The bar is the five-tab hierarchy, minus whatever a product mode has
   // turned off. Week is never one, so there is always somewhere to be. A mode
   // that wants the diary front and centre promotes it into the bar rather than
@@ -327,9 +335,9 @@ function Shell() {
   return (
     <div className="app-shell min-h-screen" style={{ background: 'var(--bg)' }}>
       <DemoBanner />
-      {!navigator.onLine && (
-        <div className="mx-auto max-w-3xl border-b px-5 py-2 text-center text-xs font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
-          Offline mode — your changes stay on this device and will sync when you reconnect.
+      {!online && (
+        <div role="status" className="mx-auto max-w-3xl border-b px-5 py-2 text-center text-xs font-bold" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+          Offline mode — your changes stay on this device{['ready', 'live', 'reconnecting'].includes(app.cloudStatus?.kind) ? ' and will sync when you reconnect' : ''}.
         </div>
       )}
 
@@ -478,8 +486,8 @@ function Shell() {
   );
 }
 
-export function AppContent() {
-  return <Shell />;
+export function AppContent({ initialTab }) {
+  return <Shell initialTab={initialTab} />;
 }
 
 export default function App() {
