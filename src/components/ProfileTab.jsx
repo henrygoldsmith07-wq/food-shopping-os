@@ -23,7 +23,7 @@ import SettingsPanel from './SettingsPanel.jsx';
 import YouthNotice from './YouthNotice.jsx';
 import { Section, Card, Ring, Pill, Meter, Bars, Sheet } from './ui.jsx';
 import { NumberField } from './FoodDetail.jsx';
-export default function ProfileTab({ openGuidance }) {
+export default function ProfileTab({ openGuidance, onNotice }) {
   const app = useApp();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [nutritionOpen, setNutritionOpen] = useState(false);
@@ -55,7 +55,7 @@ export default function ProfileTab({ openGuidance }) {
     { key: 'carbs', label: 'Carbs', now: app.carbsToday, goal: app.carbsGoal, color: 'var(--series-3)' },
     { key: 'fat', label: 'Fat', now: app.fatToday, goal: app.fatGoal, color: 'var(--series-2)' },
   ];
-  const saveBudget = () => app.set({ weeklyBudget: Math.max(0, Number(budget) || 0) });
+  const saveBudget = () => { app.set({ weeklyBudget: Math.max(0, Number(budget) || 0) }); onNotice?.('Budget saved'); };
   return (
     <div className="pb-6 space-y-6">
 <div className="hero-gradient px-5 pt-2 pb-2">

@@ -25,7 +25,7 @@ import PantryEmptyState from './PantryEmptyState.jsx';
 import PantryIntelligenceCard from './PantryIntelligenceCard.jsx';
 import UndoNotice from './UndoNotice.jsx';
 
-export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan }) {
+export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan, onNotice }) {
   const app = useApp();
   const [location, setLocation] = useState('All');
   const [category, setCategory] = useState('All');
@@ -199,7 +199,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan 
       )}
       {app.pantry.length > 1 && (
         <button
-          onClick={() => app.consolidatePantry()}
+          onClick={() => { app.consolidatePantry(); onNotice?.('Quantities consolidated'); }}
           className="press w-full rounded-2xl border py-2.5 text-[0.8125rem] font-extrabold"
           style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
         >

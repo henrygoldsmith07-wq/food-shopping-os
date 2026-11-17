@@ -398,6 +398,7 @@ function Shell() {
           <PantryView
             quickAddKey={pantryAdd}
             initialQuery={pantryQuery}
+            onNotice={flash}
             onPlan={(item, intent) => {
               setPantryOpen(false); setPantryQuery('');
               // Rows pass the item (a string) + intent; header clicks pass an event.
@@ -422,7 +423,7 @@ function Shell() {
         </Suspense>
       </Sheet>
       <Sheet open={profileOpen} onClose={() => setProfileOpen(false)} title="You">
-        <ProfileTab openGuidance={() => {
+        <ProfileTab onNotice={flash} openGuidance={() => {
           setProfileOpen(false);
           setGuidanceView('next');
           setGuidanceOpen(true);
