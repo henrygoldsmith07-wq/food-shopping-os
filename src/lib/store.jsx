@@ -169,10 +169,11 @@ export function AppProvider({ children }) {
         // the adopted empty kitchen must never be written back over it.
         if (isBlockingStorageIssue(result.issue)) blockPersistence.current = true;
       } else {
-        // A healthy canonical record clears any issue the synchronous read of
-        // a stale legacy copy raised; otherwise recovery stuck forever.
-        setStorageIssue(null);
-        blockPersistence.current = false;
+        // A healthy canonical record clears a stale *legacy* copy's issue, but
+        // never a genuinely unreadable or newer-version record the owner may
+        // still need to download. Those kinds always stay blocking.
+        setStorageIssue((current) => (isBlockingStorageIssue(current) ? current : null));
+        if (!isBlockingStorageIssue(initial.current.issue)) blockPersistence.current = false;
       }
       if (editedSinceBoot.current) return; // the user got there first
       setState(result.state);
