@@ -33,6 +33,18 @@ describe('global search', () => {
     expect(foods.every((result) => result.type === 'food')).toBe(true);
   });
 
+  it('does not invent a result for a query that matches nothing', () => {
+    expect(buildGlobalResults(app, 'zzzqqq')).toEqual([]);
+  });
+
+  it('folds accents so a plain-ASCII query finds an accented food', () => {
+    const found = buildGlobalResults({
+      ...app,
+      catalogue: [{ id: 'creme', name: 'Crème fraîche' }],
+    }, 'creme fraiche');
+    expect(found.some((result) => result.title === 'Crème fraîche')).toBe(true);
+  });
+
   it('keeps commands available before a query is typed', () => {
     const commands = buildGlobalResults(app, '');
     expect(commands.length).toBeGreaterThan(6);

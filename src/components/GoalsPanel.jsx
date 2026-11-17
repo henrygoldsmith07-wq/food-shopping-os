@@ -12,6 +12,12 @@ import { Card, Chip, Meter, Pill, Section, Toggle } from './ui.jsx';
 import { NumberField } from './FoodDetail.jsx';
 import TargetSafetyCard from './TargetSafety.jsx';
 
+// Coerce only on blur: mid-entry "7", "70." must not become null or 70.
+const numberOrNull = (value) => {
+  const n = Number(value);
+  return value !== '' && Number.isFinite(n) ? n : null;
+};
+
 const MACRO_COLOR = {
   protein: 'var(--series-1)',
   carbs: 'var(--series-3)',
@@ -36,10 +42,10 @@ function MaintenanceCard() {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <NumberField label="Weight" value={body.weightKg ?? ''} onChange={(v) => app.setBody({ weightKg: Number(v) || null })} suffix="kg" step={0.5} />
-        <NumberField label="Target weight" value={body.targetWeightKg ?? ''} onChange={(v) => app.setBody({ targetWeightKg: Number(v) || null })} suffix="kg" step={0.5} />
-        <NumberField label="Height" value={body.heightCm ?? ''} onChange={(v) => app.setBody({ heightCm: Number(v) || null })} suffix="cm" step={1} />
-        <NumberField label="Age" value={body.age ?? ''} onChange={(v) => app.setBody({ age: Number(v) || null })} suffix="yrs" step={1} />
+        <NumberField label="Weight" value={bodyField('weightKg')} onChange={bodyChange('weightKg')} onBlur={bodyBlur('weightKg')} suffix="kg" step={0.5} />
+        <NumberField label="Target weight" value={bodyField('targetWeightKg')} onChange={bodyChange('targetWeightKg')} onBlur={bodyBlur('targetWeightKg')} suffix="kg" step={0.5} />
+        <NumberField label="Height" value={bodyField('heightCm')} onChange={bodyChange('heightCm')} onBlur={bodyBlur('heightCm')} suffix="cm" step={1} />
+        <NumberField label="Age" value={bodyField('age')} onChange={bodyChange('age')} onBlur={bodyBlur('age')} suffix="yrs" step={1} />
         <div>
           <span className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Sex</span>
           <div className="mt-1 flex gap-1.5 overflow-x-auto no-scrollbar">
@@ -220,6 +226,15 @@ function WeeklyCard() {
 export default function GoalsPanel() {
   const app = useApp();
   const [showWorking, setShowWorking] = useState(false);
+  // Keep raw text while typing so a decimal point does not clear the field.
+  const [bodyDraft, setBodyDraft] = useState({});
+  const bodyField = (key) => bodyDraft[key] ?? body[key] ?? '';
+  const bodyChange = (key) => (value) => setBodyDraft((d) => ({ ...d, [key]: value }));
+  const bodyBlur = (key) => () => {
+    const next = numberOrNull(bodyDraft[key]);
+    app.setBody({ [key]: next });
+    setBodyDraft((d) => ({ ...d, [key]: next ?? '' }));
+  };
   // Under 18 a stored deficit goal is not the goal in force — the panel shows
   // what the app is actually doing, which is maintenance.
   const goal = BODY_GOALS.find((g) => g.id === app.goal && app.youth.goals.includes(g.id))

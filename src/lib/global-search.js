@@ -1,4 +1,5 @@
-const normalise = (value) => String(value || '').trim().toLowerCase();
+const normalise = (value) => String(value || '')
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
 
 export const GLOBAL_COMMANDS = [
   ['home', 'Open Home', 'Go to your dashboard'],
@@ -69,16 +70,14 @@ const score = (result, query) => {
 export const buildGlobalResults = (app = {}, text = '', { type = 'all', sort = 'relevance' } = {}) => {
   const query = normalise(text);
   const commands = GLOBAL_COMMANDS.filter(([id]) => reachable(app, id)).map(command);
-  if (query && reachable(app, 'add-food')) {
-    commands.push({
-      id: `command-add-query-${query}`,
-      type: 'command',
-      title: `Add “${text.trim()}” to food diary`,
-      subtitle: 'Open food search with this query',
-      target: 'add-food',
-      query: text.trim(),
-    });
-  }
+  const addCommand = query && reachable(app, 'add-food') ? {
+    id: `command-add-query-${query}`,
+    type: 'command',
+    title: `Add “${text.trim()}” to food diary`,
+    subtitle: 'Open food search with this query',
+    target: 'add-food',
+    query: text.trim(),
+  } : null;
 
   const recipeIds = new Set((app.safeRecipes || []).map((item) => item.id));
   const recipes = [...(app.safeRecipes || []), ...(app.myRecipes || []).filter((item) => !recipeIds.has(item.id))];
@@ -92,6 +91,10 @@ export const buildGlobalResults = (app = {}, text = '', { type = 'all', sort = '
   let results = query
     ? [...commands, ...resources].map((result) => ({ ...result, score: score(result, query) })).filter((result) => result.score)
     : (type === 'all' ? commands : [...commands, ...resources]).map((result) => ({ ...result, score: 0 }));
+  // The synthetic "Add …" command embeds the query in its title, so it always
+  // matches and made the empty state unreachable. Offer it only alongside a
+  // real match, ranked after them.
+  if (query && addCommand && results.length) results.push({ ...addCommand, score: 1 });
   if (type !== 'all') results = results.filter((result) => result.type === type);
   return results.sort(sort === 'name'
     ? (a, b) => a.title.localeCompare(b.title)

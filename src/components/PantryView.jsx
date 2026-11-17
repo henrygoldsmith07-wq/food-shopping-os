@@ -79,7 +79,7 @@ export default function PantryView({ quickAddKey = 0, initialQuery = '', onPlan,
     if (status === 'expiring') list = list.filter((p) => p.expiry && daysUntil(p.expiry, app.day) <= 7);
     if (status === 'dated') list = list.filter((p) => p.expiry);
     if (query.trim()) {
-      const q = query.toLowerCase();
+      const q = query.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || (p.cat || '').toLowerCase().includes(q));
     }
     return [...list].sort((a, b) => {

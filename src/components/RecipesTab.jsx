@@ -72,7 +72,9 @@ export default function RecipesTab({ openRecipe }) {
 
   const recipes = useMemo(
     () => searchAndSortRecipes(searchRecipes(safePool, {
-      query,
+      // query is applied once by searchAndSortRecipes, which tokenizes and
+      // matches across fields; searchRecipes needs an exact substring.
+      query: '',
       have: pantryNames,
       suitabilityCtx: app.suitabilityCtx,
       ...filters,

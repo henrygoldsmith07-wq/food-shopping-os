@@ -329,7 +329,7 @@ export const Bars = ({ data, height = 96, color = 'var(--series-1)', highlight, 
             <div
               className="w-full rounded-t"
               style={{
-                height: `${Math.max(6, (d.value / max) * 72)}%`,
+                height: `${d.value > 0 ? (d.value / max) * 100 : 0}%`,
                 background: hl ? color : 'color-mix(in srgb, ' + color + ' 32%, var(--card-2))',
                 transition: 'height 500ms cubic-bezier(0.22,1,0.36,1)',
               }}
@@ -344,26 +344,33 @@ export const Bars = ({ data, height = 96, color = 'var(--series-1)', highlight, 
 
 /** Thin horizontal progress bar. Exposes progressbar semantics; pass `label`
     wherever the surrounding text does not already name what is measured. */
-export const Meter = ({ value, max, color = 'var(--accent)', height = 6, label }) => (
-  <div
-    className="w-full rounded-full overflow-hidden"
-    style={{ background: 'var(--line)', height }}
-    role="progressbar"
-    aria-valuemin={0}
-    aria-valuemax={Math.max(0, Math.round(max || 0))}
-    aria-valuenow={Math.round(clamp(value || 0, 0, max || 0))}
-    aria-label={label}
-  >
+export const Meter = ({ value, max, color = 'var(--accent)', height = 6, label }) => {
+  const amount = Number(value) || 0;
+  const limit = Math.max(0, Number(max) || 0);
+  return (
     <div
-      className="h-full rounded-full"
-      style={{
-        width: `${clamp((value / max) * 100, 0, 100)}%`,
-        background: color,
-        transition: 'width 500ms cubic-bezier(0.22,1,0.36,1)',
-      }}
-    />
-  </div>
-);
+      className="w-full rounded-full overflow-hidden"
+      style={{ background: 'var(--line)', height }}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={limit}
+      // Expose the real value: callers colour the bar red when over target,
+      // and assistive tech must hear the overrun, not a clamped 100%.
+      aria-valuenow={Math.round(amount)}
+      aria-valuetext={limit > 0 && amount > limit ? `${Math.round(amount)} of ${limit} — over by ${Math.round(amount - limit)}` : undefined}
+      aria-label={label}
+    >
+      <div
+        className="h-full rounded-full"
+        style={{
+          width: `${limit > 0 ? clamp((amount / limit) * 100, 0, 100) : 0}%`,
+          background: color,
+          transition: 'width 500ms cubic-bezier(0.22,1,0.36,1)',
+        }}
+      />
+    </div>
+  );
+};
 
 /* ---------- Overlays ---------- */
 

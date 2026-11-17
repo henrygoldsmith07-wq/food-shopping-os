@@ -11,6 +11,7 @@
  */
 
 const clean = (value) => String(value || '')
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '')
   .toLowerCase()
   .replace(/&/g, ' and ')
   .replace(/[^a-z0-9 ]+/g, ' ')

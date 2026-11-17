@@ -41,7 +41,7 @@ export const MacroSummary = ({ macros, size = 'lg' }) => {
   );
 };
 
-export const NumberField = ({ label, value, onChange, suffix, step = 1, min = 0 }) => (
+export const NumberField = ({ label, value, onChange, onBlur, suffix, step = 1, min = 0 }) => (
   <label className="block">
     <span className="text-[0.6875rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>{label}</span>
     <div className="mt-1 flex items-center gap-1 rounded-2xl border px-3 py-2.5" style={{ background: 'var(--card)', borderColor: 'var(--line)' }}>
@@ -51,7 +51,8 @@ export const NumberField = ({ label, value, onChange, suffix, step = 1, min = 0 
         min={min}
         step={step}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange?.(e.target.value)}
+        onBlur={onBlur}
         className="w-full bg-transparent text-[0.9375rem] font-bold outline-none"
         style={{ color: 'var(--ink)' }}
       />
@@ -143,10 +144,13 @@ export default function FoodDetail({ food, entry, defaultMeal, onSave, onDelete 
   };
   const changeQty = (next) => {
     setQty(next);
-    setGrams(+(options[servingIdx].grams * next).toFixed(1));
+    // A typed weight that matches no preset leaves servingIdx at -1; the
+    // stepper must then scale the typed grams, not read options[-1].
+    const base = options[servingIdx]?.grams ?? grams;
+    setGrams(+(base * next).toFixed(1));
   };
   const typeWeight = (v) => {
-    const g = Math.max(0, Number(v) || 0);
+    const g = Math.max(1, Number(v) || 0);
     setGrams(g);
     setQty(1);
     const i = options.findIndex((o) => Math.abs(o.grams - g) < 0.01);

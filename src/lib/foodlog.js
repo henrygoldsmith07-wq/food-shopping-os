@@ -13,7 +13,8 @@ import { EMPTY, buildEntry, nutrientNumber, nutrientValue, recipeAsFood, timeSta
 
 export { recipeTextFromMarkup } from '../shared/recipe-markup.js';
 
-const norm = (str) => String(str || '').toLowerCase().trim();
+const norm = (str) => String(str || '')
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 
 /* ---------- Search ---------- */
 
