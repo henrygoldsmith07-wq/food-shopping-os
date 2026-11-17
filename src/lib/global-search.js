@@ -1,5 +1,6 @@
-const normalise = (value) => String(value || '')
-  .normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+import { foldText } from './aliases.js';
+
+const normalise = foldText;
 
 export const GLOBAL_COMMANDS = [
   ['home', 'Open Home', 'Go to your dashboard'],
@@ -59,7 +60,6 @@ const resource = (type, item, subtitle) => ({
 const score = (result, query) => {
   const title = normalise(result.title);
   const detail = normalise(result.subtitle);
-  if (!query) return 0;
   if (title === query) return 100;
   if (title.startsWith(query)) return 80;
   if (title.includes(query)) return 60;
@@ -71,10 +71,9 @@ export const buildGlobalResults = (app = {}, text = '', { type = 'all', sort = '
   const query = normalise(text);
   const commands = GLOBAL_COMMANDS.filter(([id]) => reachable(app, id)).map(command);
   const addCommand = query && reachable(app, 'add-food') ? {
-    id: `command-add-query-${query}`,
+    id: 'command-add-query',
     type: 'command',
-    title: `Add “${text.trim()}” to food diary`,
-    subtitle: 'Open food search with this query',
+    title: `Add “${text.trim()}”`,
     target: 'add-food',
     query: text.trim(),
   } : null;

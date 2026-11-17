@@ -10,9 +10,10 @@
  * without ever pretending two different foods are one.
  */
 
-const clean = (value) => String(value || '')
-  .normalize('NFD').replace(/\p{Diacritic}/gu, '')
-  .toLowerCase()
+export const foldText = (value) => String(value || '')
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+
+const clean = (value) => foldText(value)
   .replace(/&/g, ' and ')
   .replace(/[^a-z0-9 ]+/g, ' ')
   .replace(/\s+/g, ' ')
@@ -152,7 +153,7 @@ export const ALIAS_GROUPS = [
   ['Bananas', ['bananas', 'banana', 'ripe bananas']],
   ['Double cream', ['double cream', 'cream', 'heavy cream', 'heavy whipping cream', 'whipping cream', 'thick cream']],
   ['Soured cream', ['soured cream', 'sour cream']],
-  ['Crème fraîche', ['crème fraîche', 'creme fraiche', 'half fat creme fraiche']],
+  ['Crème fraîche', ['crème fraîche', 'half fat creme fraiche']],
   ['Mascarpone', ['mascarpone', 'mascarpone cheese']],
   ['Peanut oil', ['peanut oil', 'groundnut oil']],
   ['Coconut oil', ['coconut oil', 'coconut oil (jar)']],

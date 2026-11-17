@@ -12,9 +12,9 @@ import { NUTRIENT_KEYS } from '../data/nutrients.js';
 import { EMPTY, buildEntry, nutrientNumber, nutrientValue, recipeAsFood, timeStamp, mealForTime } from './nutrition.js';
 
 export { recipeTextFromMarkup } from '../shared/recipe-markup.js';
+import { foldText } from './aliases.js';
 
-const norm = (str) => String(str || '')
-  .normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+const norm = foldText;
 
 /* ---------- Search ---------- */
 

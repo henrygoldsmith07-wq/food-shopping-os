@@ -345,8 +345,8 @@ export const Bars = ({ data, height = 96, color = 'var(--series-1)', highlight, 
 /** Thin horizontal progress bar. Exposes progressbar semantics; pass `label`
     wherever the surrounding text does not already name what is measured. */
 export const Meter = ({ value, max, color = 'var(--accent)', height = 6, label }) => {
-  const amount = Number(value) || 0;
-  const limit = Math.max(0, Number(max) || 0);
+  const amount = +value || 0;
+  const limit = Math.max(0, +max || 0);
   return (
     <div
       className="w-full rounded-full overflow-hidden"
@@ -357,7 +357,6 @@ export const Meter = ({ value, max, color = 'var(--accent)', height = 6, label }
       // Expose the real value: callers colour the bar red when over target,
       // and assistive tech must hear the overrun, not a clamped 100%.
       aria-valuenow={Math.round(amount)}
-      aria-valuetext={limit > 0 && amount > limit ? `${Math.round(amount)} of ${limit} — over by ${Math.round(amount - limit)}` : undefined}
       aria-label={label}
     >
       <div
