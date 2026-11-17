@@ -15,19 +15,32 @@ const clientOf = (request) => (request.headers.get('x-forwarded-for') || '').spl
  * proof. Lands back on the app with ?verified=1 (or 0 for a dead link).
  */
 export async function GET(request) {
-  const origin = appOrigin(request);
+  // Compute the origin defensively: a deployment with email configured but no
+  // APP_URL must still land on the app's "not verified" message, not a 500.
+  let origin = '/';
+  try {
+    origin = appOrigin(request);
+  } catch {
+    // fall through to the relative redirect below
+  }
   try {
     if (!databaseConfigured) throw new ApiError(503, 'The backend is not configured.');
     await rateLimit(`verify:${clientOf(request)}`, 30, 3600000);
     const params = new URL(request.url).searchParams;
     const email = normaliseEmail(params.get('email'));
-    const ok = validEmail(email) && await consumeAccountToken('verify', email, params.get('token'));
-    if (ok) {
+    const tokenOk = validEmail(email) && await consumeAccountToken('verify', email, params.get('token'));
+    let confirmed = false;
+    if (tokenOk) {
       const users = (await getDatabase()).collection('users');
       const user = await users.findOne({ email });
-      if (user && !user.emailVerified) await users.updateOne({ _id: user._id }, { $set: { emailVerified: new Date() } });
+      // A token can outlive its account (deleted, or address changed). Do not
+      // claim success on a link whose address is no longer held by anyone.
+      if (user) {
+        confirmed = true;
+        if (!user.emailVerified) await users.updateOne({ _id: user._id }, { $set: { emailVerified: new Date() } });
+      }
     }
-    return NextResponse.redirect(`${origin}/?verified=${ok ? 1 : 0}`, 303);
+    return NextResponse.redirect(`${origin}/?verified=${confirmed ? 1 : 0}`, 303);
   } catch (error) {
     if (error instanceof ApiError && error.status === 429) return NextResponse.redirect(`${origin}/?verified=0`, 303);
     return handleApiError(error);

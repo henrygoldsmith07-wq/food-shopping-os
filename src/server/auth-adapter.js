@@ -1,12 +1,20 @@
 import { getDatabase } from './database.js';
+import { normaliseEmail } from './passwords.js';
 
 const withoutId = ({ _id, ...document }) => ({ ...document, id: _id });
+// Password accounts are stored normalised (trim + lowercase). OAuth profiles
+// are not: without the same normalisation a mixed-case provider email creates
+// a duplicate user that password sign-in can never find.
+const normaliseUser = (user) => (user?.email
+  ? { ...user, email: normaliseEmail(user.email) }
+  : user);
 
 export function ForqAdapter() {
   return {
     async createUser(user) {
-      const result = await (await getDatabase()).collection('users').insertOne(user);
-      return { ...user, id: result.insertedId };
+      const record = normaliseUser(user);
+      const result = await (await getDatabase()).collection('users').insertOne(record);
+      return { ...record, id: result.insertedId };
     },
 
     async getUser(id) {
@@ -16,7 +24,7 @@ export function ForqAdapter() {
 
     async getUserByEmail(email) {
       if (!email) return null;
-      const user = await (await getDatabase()).collection('users').findOne({ email });
+      const user = await (await getDatabase()).collection('users').findOne({ email: normaliseEmail(email) });
       return user ? withoutId(user) : null;
     },
 
@@ -30,7 +38,7 @@ export function ForqAdapter() {
 
     async updateUser({ id, ...changes }) {
       const db = await getDatabase();
-      await db.collection('users').updateOne({ _id: id }, { $set: changes });
+      await db.collection('users').updateOne({ _id: id }, { $set: normaliseUser(changes) });
       const user = await db.collection('users').findOne({ _id: id });
       return withoutId(user);
     },

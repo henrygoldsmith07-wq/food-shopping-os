@@ -73,8 +73,13 @@ if (databaseConfigured && passwordLoginEnabled()) {
         .find((candidate) => candidate?.passwordHash);
       if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) return null;
       // Where email is set up, an address must be confirmed before its password
-      // signs in. Auth.js hands this message back to the form as the error.
-      if (emailConfigured() && !user.emailVerified) throw new Error('unverified');
+      // signs in. A parked identity no longer holds the real address (it lost
+      // it to a verified OAuth sign-in), so it needs no confirmation to sign
+      // in — otherwise the promised "keeps its password and data" is a lie
+      // whenever email verification is on.
+      if (emailConfigured() && !user.emailVerified && !String(user.email).startsWith('parked:')) {
+        throw new Error('unverified');
+      }
       return { id: user._id, name: user.name || email, email };
     },
   }));
@@ -84,13 +89,13 @@ if (databaseConfigured && passwordLoginEnabled()) {
 const parkedEmail = (email) => `parked:${email}`;
 
 /**
- * Google has proved this address belongs to the person signing in. An email
- * and password account on the same address never proved anything — anyone
- * can type any address at sign-up — so it gives the address up: it keeps its
- * password and its data under a parked address, and the Google sign-in gets
- * an account of its own. The address's owner can never be locked out by
- * someone who registered it first, and that person never gains access to the
- * owner's Google account (nothing is linked).
+ * A verified OAuth provider (Google, Apple, Microsoft) has proved this address
+ * belongs to the person signing in. An email and password account on the same
+ * address never proved anything — anyone can type any address at sign-up — so
+ * it gives the address up: it keeps its password and its data under a parked
+ * address, and the OAuth sign-in gets an account of its own. The address's
+ * owner can never be locked out by someone who registered it first, and that
+ * person never gains access to the owner's OAuth account (nothing is linked).
  */
 const releaseUnverifiedEmail = async (email, account) => {
   const address = normaliseEmail(email);
@@ -103,8 +108,8 @@ const releaseUnverifiedEmail = async (email, account) => {
     await users.updateOne({ _id: holder._id }, { $set: { email: parkedEmail(address), parkedAt: new Date() } });
     return;
   }
-  // Both sides have now proved the address (the confirmation link, and
-  // Google), so the Google sign-in joins the same account instead of being
+  // Both sides have now proved the address (the confirmation link, and the
+  // provider), so the OAuth sign-in joins the same account instead of being
   // refused as an unlinked one.
   const accounts = db.collection('accounts');
   if (account?.providerAccountId && !(await accounts.findOne({ provider: account.provider, providerAccountId: account.providerAccountId }))) {
@@ -158,7 +163,12 @@ export const authOptions = {
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   callbacks: {
     async signIn({ account, profile }) {
-      if (account?.provider === 'google' && profile?.email_verified && profile.email) {
+      // Every OAuth provider that gives us a verified address must be able to
+      // claim it. Only Google did, so an Apple/Microsoft owner whose address
+      // was squatters' unverified password account hit OAuthAccountNotLinked.
+      const verified = profile?.email_verified === true || profile?.email_verified === 'true'
+        || profile?.emailVerified === true || profile?.emailVerified === 'true';
+      if (account?.type === 'oauth' && profile?.email && verified) {
         await releaseUnverifiedEmail(profile.email, account);
       }
       return true;

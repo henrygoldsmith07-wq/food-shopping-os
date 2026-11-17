@@ -5,7 +5,7 @@ import { appOrigin, emailConfigured } from '../../../../server/email.js';
 import { consumeAccountToken } from '../../../../server/account-tokens.js';
 import { sendPasswordResetEmail } from '../../../../server/account-email.js';
 import {
-  hashPassword, MIN_PASSWORD, normaliseEmail, validEmail, validPassword,
+  hashPassword, MIN_PASSWORD, normaliseEmail, passwordLoginEnabled, validEmail, validPassword,
 } from '../../../../server/passwords.js';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const clientOf = (request) => (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
 const ready = () => {
   if (!databaseConfigured || !process.env.AUTH_SECRET) throw new ApiError(503, 'The backend is not configured.');
+  if (!passwordLoginEnabled()) throw new ApiError(404, 'Password accounts are switched off.');
   if (!emailConfigured()) throw new ApiError(503, 'Password reset needs email, which is not set up on this server.');
 };
 
@@ -51,12 +52,18 @@ export async function PUT(request) {
     const body = await readJsonBody(request, 2048);
     const email = normaliseEmail(body?.email);
     if (!validPassword(body?.password)) throw new ApiError(400, `Use a password of at least ${MIN_PASSWORD} characters.`);
-    if (!validEmail(email) || !(await consumeAccountToken('reset', email, body?.token))) {
+    if (!validEmail(email)) throw new ApiError(400, 'Enter a valid email address.');
+    const users = (await getDatabase()).collection('users');
+    // Check the account exists BEFORE consuming the one-time token: otherwise
+    // a token for a since-deleted account is burned and the honest link reads
+    // as "already used", forcing a needless restart of the whole flow.
+    const user = await users.findOne({ email });
+    if (!user) {
       throw new ApiError(400, 'That reset link has expired or was already used. Ask for a new one.');
     }
-    const users = (await getDatabase()).collection('users');
-    const user = await users.findOne({ email });
-    if (!user) throw new ApiError(400, 'That reset link has expired or was already used. Ask for a new one.');
+    if (!(await consumeAccountToken('reset', email, body?.token))) {
+      throw new ApiError(400, 'That reset link has expired or was already used. Ask for a new one.');
+    }
     await users.updateOne({ _id: user._id }, {
       $set: {
         passwordHash: await hashPassword(body.password),

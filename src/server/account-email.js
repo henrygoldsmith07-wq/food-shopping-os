@@ -17,7 +17,7 @@ export async function sendVerificationEmail(email, origin) {
       body: 'Tap the button to confirm this address and finish setting up your Forq account.',
       action: 'Confirm my email',
       url: link(origin, '/api/account/verify', email, token),
-      footer: 'The link works once and expires in 48 hours. If you did not sign up for Forq, ignore this email.',
+      footer: 'The link expires in 48 hours and can be opened more than once. If you did not sign up for Forq, ignore this email.',
     }),
   });
 }

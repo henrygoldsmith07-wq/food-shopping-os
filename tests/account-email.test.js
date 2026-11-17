@@ -171,8 +171,7 @@ describe('password reset', () => {
 });
 
 describe('parked accounts', () => {
-  it('still sign in with their password after Google takes the address', async () => {
-    delete process.env.RESEND_API_KEY;
+  it('still sign in with their password after Google takes the address, even with email verification on', async () => {
     await register(req('/api/account/register', 'POST', { email: 'pat@example.com', password: 'a good password' }));
     const users = state.collections.get('users');
     users.find((row) => row.email === 'pat@example.com').email = 'parked:pat@example.com';

@@ -26,9 +26,11 @@ vi.mock('../src/server/database.js', () => ({
 
 const { authOptions } = await import('../src/server/auth.js');
 const { hashPassword } = await import('../src/server/passwords.js');
-const signIn = (email, emailVerified = true) => authOptions.callbacks.signIn({
-  account: { provider: 'google', providerAccountId: `g-${email}`, type: 'oauth' },
-  profile: { email, email_verified: emailVerified },
+const signIn = (email, emailVerified = true, provider = 'google') => authOptions.callbacks.signIn({
+  account: { provider, providerAccountId: `${provider}-${email}`, type: 'oauth' },
+  profile: provider === 'apple'
+    ? { email, emailVerified }
+    : { email, email_verified: emailVerified },
 });
 const passwordProvider = () => authOptions.providers.find((p) => (p.options?.id || p.id) === 'password');
 
@@ -55,7 +57,17 @@ describe('a verified Google sign-in claims its address', () => {
     users.set('u5', { _id: 'u5', email: 'v@gmail.com', passwordHash: 'scrypt$aa$bb', emailVerified: new Date() });
     await signIn('v@gmail.com');
     expect(users.get('u5').email).toBe('v@gmail.com');
-    expect(accounts).toEqual([expect.objectContaining({ provider: 'google', providerAccountId: 'g-v@gmail.com', userId: 'u5' })]);
+    expect(accounts).toEqual([expect.objectContaining({ provider: 'google', providerAccountId: 'google-v@gmail.com', userId: 'u5' })]);
+  });
+
+  it('claims the address for Apple and Microsoft too, not just Google', async () => {
+    users.set('ua', { _id: 'ua', email: 'owner@apple.com', passwordHash: await hashPassword('squatter pass') });
+    expect(await signIn('owner@apple.com', true, 'apple')).toBe(true);
+    expect(users.get('ua').email).toBe('parked:owner@apple.com');
+
+    users.set('um', { _id: 'um', email: 'owner@outlook.com', passwordHash: await hashPassword('squatter pass') });
+    expect(await signIn('owner@outlook.com', true, 'microsoft')).toBe(true);
+    expect(users.get('um').email).toBe('parked:owner@outlook.com');
   });
 
   it('still lets the parked account sign in with its password', async () => {
