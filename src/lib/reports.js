@@ -143,7 +143,7 @@ export const monthlyTrend = (state, { months = 6, today = state.day } = {}) => {
 
 /** Your weight readings as a chart-ready series, with the movement across it. */
 export const weightChart = (state, { days = 90, today = state.day } = {}) => {
-  const from = addDays(today, -days);
+  const from = addDays(today, -(days - 1));
   const points = series(state.measurements, 'weight').filter((m) => m.date >= from);
   if (!points.length) return { points: [], readings: 0 };
   const first = points[0];

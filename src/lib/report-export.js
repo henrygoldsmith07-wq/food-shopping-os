@@ -12,19 +12,23 @@
  * that has had twenty years of work put into it.
  */
 
-import { dayTotals } from './nutrition.js';
+import { dayTotals, entryNumbers } from './nutrition.js';
 import { HEADLINE_KEYS, nutrientBy } from '../data/nutrients.js';
 import { addDays, dayStamp } from './kitchen.js';
 
 /* ---------- CSV ---------- */
 
-/** RFC 4180: quote anything containing a comma, quote or newline. */
+/** RFC 4180 quoting, plus a guard against spreadsheet formula injection. */
 export const csvCell = (value) => {
-  const text = value === null || value === undefined ? '' : String(value);
+  let text = value === null || value === undefined ? '' : String(value);
+  // Quoting does not stop Excel/Sheets evaluating a leading '=', '@', etc.
+  if (/^[=+@\t\r]/.test(text) || /^[-+]\D/.test(text)) text = `'${text}`;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
-export const toCsv = (rows = []) => rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
+// Excel on Western locales reads a bare UTF-8 file as CP-1252 without a BOM,
+// turning "Crème fraîche" into mojibake.
+export const toCsv = (rows = []) => `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
 
 /** One row per logged day, one column per headline nutrient. */
 export const dailyCsv = (state, { days = 90, today = state.day } = {}) => {
@@ -56,7 +60,7 @@ export const entriesCsv = (state, { days = 90, today = state.day } = {}) => {
       const grams = Number(entry.grams) || 0;
       rows.push([
         date, entry.time || '', entry.meal || '', entry.name || '', grams,
-        ...HEADLINE_KEYS.map((k) => Math.round(((entry.per100?.[k] || 0) * grams) / 100 * 10) / 10),
+        ...HEADLINE_KEYS.map((k) => Math.round((entryNumbers(entry)[k] || 0) * 10) / 10),
       ]);
     }
   }

@@ -177,12 +177,10 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
   };
 
   if (!app.householdAccess.shopping) {
-    // A child using the app alone has no household member, so the name the
-    // household case prints would be undefined. Say why instead.
+    // A child using the app alone has no household member; say why instead.
     const who = app.activeMember?.name;
     return (
-      /* The shared header already says "Shop" — a second <h1> here would be
-         two page titles on one screen. */
+      /* The shared header says "Shop"; a second <h1> would be two page titles. */
       <div className="pb-6 pt-2">
         <Section>
           <Empty
@@ -424,8 +422,10 @@ export default function ShopTab({ quickAddKey = 0, onOpenPantry }) {
                     <div key={aisle}>
                       <AisleHeading aisle={aisle} items={items} evidence={priceEvidence} />
                       <Card className="!p-0 divide-y" style={{ borderColor: 'var(--line)' }}>
-                        {items.map((item) => (
+                        {items.map((item, index) => (
                           <ShoppingListRow key={item.id || item.name}
+                            onMoveUp={index > 0 ? () => app.moveListItem(item.id, items[index - 1].id) : null}
+                            onMoveDown={index < items.length - 1 ? () => app.moveListItem(item.id, items[index + 2]?.id || null) : null}
                             item={item}
                             onAisle={app.setItemAisle}
                             onStore={app.setItemStore}

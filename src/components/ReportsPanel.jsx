@@ -315,7 +315,7 @@ function ExportCard({ report }) {
       setSaid('There are no rows to write yet.');
       return;
     }
-    const ok = downloadFile(name, built.text, 'text/csv');
+    const ok = downloadFile(name, built.text, 'text/csv;charset=utf-8');
     setSaid(ok ? `${built.rows.toLocaleString()} row${built.rows === 1 ? '' : 's'} written to ${name}.` : 'This browser wouldn’t take the file.');
   };
 

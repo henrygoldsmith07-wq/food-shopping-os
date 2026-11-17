@@ -255,15 +255,18 @@ function Shell() {
     const onKey = (event) => {
       const tag = event.target?.tagName?.toLowerCase();
       const typing = ['input', 'textarea', 'select'].includes(tag) || event.target?.isContentEditable;
+      // A modal owns the keyboard: number/quick/undo shortcuts must not act on
+      // the screen behind it. Ctrl+K stays a deliberate global escape hatch.
+      const modalOpen = Boolean(document.querySelector('[aria-modal="true"]:not([aria-hidden="true"])'));
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setLauncher('search');
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !typing) {
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !typing && !modalOpen) {
         event.preventDefault();
         undo();
-      } else if (!typing && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'q') {
+      } else if (!typing && !modalOpen && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'q') {
         setLauncher('quick');
-      } else if (!typing && !launcher && /^[1-9]$/.test(event.key)) {
+      } else if (!typing && !modalOpen && !launcher && /^[1-9]$/.test(event.key)) {
         // Number keys mirror the bar, and the bar is the registry's answer —
         // so a mode that promotes the diary doesn't leave a shortcut pointing
         // at the wrong screen.

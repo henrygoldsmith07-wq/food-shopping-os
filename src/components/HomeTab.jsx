@@ -403,9 +403,9 @@ export default function HomeTab({ openRecipe, openPantry, openGuidance, goTab, g
           <Card>
             <p className="text-[0.75rem] font-bold uppercase tracking-wide" style={{ color: 'var(--faint)' }}>Reminders due</p>
             <ul className="mt-2 space-y-1.5">
-              {app.remindersDue.slice(0, 3).map(({ reminder, at }) => (
-                <li key={`${reminder.id}-${at}`} className="text-[0.8125rem] font-semibold">
-                  · {reminder.label}
+              {app.remindersDue.slice(0, 3).map(({ reminder, time }) => (
+                <li key={`${reminder.id}-${time}`} className="text-[0.8125rem] font-semibold">
+                  · {reminder.label} · {time}
                 </li>
               ))}
             </ul>

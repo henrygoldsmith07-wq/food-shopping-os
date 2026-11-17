@@ -20,7 +20,7 @@ export const notifySupport = () => {
     supported: true,
     permission,
     reason: permission === 'denied'
-      ? 'Notifications are blocked for this site. Your browser’s site settings is the only place that can undo that — Forq can’t ask again.'
+      ? 'Notifications are blocked for this site. Your browser’s site settings is the only place that can undo that — Forq can’t ask again. Due reminders still appear under Profile → Reminders, and on Home if you enable that widget.'
       : null,
   };
 };

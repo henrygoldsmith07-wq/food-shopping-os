@@ -74,6 +74,7 @@ export const GestureMenu = ({
   const [open, setOpen] = useState(false);
   const touch = useRef({ x: 0, y: 0, timer: null });
   const menu = useRef(null);
+  const row = useRef(null);
   const menuId = useId();
   const cancelLongPress = () => {
     clearTimeout(touch.current.timer);
@@ -83,6 +84,28 @@ export const GestureMenu = ({
   useEffect(() => {
     if (open) menu.current?.querySelector('button')?.focus();
   }, [open]);
+  // The menu is a sibling of the row, so its own Escape/arrow handling must
+  // live on the menu element; closing must return focus to the trigger row.
+  const closeMenu = () => {
+    setOpen(false);
+    if (row.current?.isConnected) row.current.focus();
+  };
+  const menuKeys = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu();
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const items = [...(menu.current?.querySelectorAll('[role="menuitem"]') || [])];
+    if (!items.length) return;
+    const index = items.indexOf(document.activeElement);
+    const next = event.key === 'ArrowDown'
+      ? (index + 1) % items.length
+      : (index <= 0 ? items.length - 1 : index - 1);
+    items[next].focus();
+  };
 
   const start = (event) => {
     const point = event.touches[0];
@@ -110,6 +133,7 @@ export const GestureMenu = ({
   return (
     <div className="relative">
       <div
+        ref={row}
         role="group"
         aria-label={`Actions for ${label}`}
         tabIndex={0}
@@ -126,7 +150,7 @@ export const GestureMenu = ({
             event.preventDefault();
             setOpen(true);
           } else if (event.key === 'Escape') {
-            setOpen(false);
+            closeMenu();
           }
         }}
         onTouchStart={start}
@@ -157,6 +181,7 @@ export const GestureMenu = ({
           id={menuId}
           role="menu"
           aria-label={`Actions for ${label}`}
+          onKeyDown={menuKeys}
           className="absolute right-2 top-2 z-30 min-w-36 overflow-hidden rounded-xl border p-1"
           style={{ background: 'var(--card)', borderColor: 'var(--line)', boxShadow: 'var(--shadow-lg)' }}
         >
@@ -166,7 +191,7 @@ export const GestureMenu = ({
               key={action.label}
               onClick={() => {
                 action.onClick();
-                setOpen(false);
+                closeMenu();
               }}
               className="press block w-full rounded-lg px-3 py-2 text-left text-[0.78125rem] font-bold"
               style={{ color: action.tone === 'danger' ? 'var(--danger)' : 'var(--ink)' }}
@@ -176,7 +201,7 @@ export const GestureMenu = ({
           ))}
           <button
             role="menuitem"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
             className="press block w-full rounded-lg px-3 py-2 text-left text-[0.75rem] font-semibold"
             style={{ color: 'var(--muted)' }}
           >

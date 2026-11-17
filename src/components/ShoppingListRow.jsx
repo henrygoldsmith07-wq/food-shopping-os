@@ -48,6 +48,8 @@ export default function ShoppingListRow({ item, onAisle, onStore, storeOptions =
         { label: favourite ? 'Remove favourite' : 'Save as favourite', onClick: () => app.toggleFavouriteShopping(item) },
         ...(substitutions.length ? [{ label: 'Find a substitution', onClick: () => setSwapping(true) }] : []),
         { label: 'Move to another aisle', onClick: () => setMoving(true) },
+        ...(onMoveUp ? [{ label: 'Move up', onClick: onMoveUp }] : []),
+        ...(onMoveDown ? [{ label: 'Move down', onClick: onMoveDown }] : []),
         { label: 'Remove', tone: 'danger', onClick: () => app.removeListItem(item.id) },
       ]}
       onSwipeLeft={() => app.removeListItem(item.id)}

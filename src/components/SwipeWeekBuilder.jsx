@@ -51,8 +51,17 @@ export default function SwipeWeekBuilder({ dates, onDone }) {
     setAdded((list) => list.slice(0, -1));
   };
 
+  const panelRef = useRef(null);
   useEffect(() => {
     const onKey = (event) => {
+      // Arrow keys belong to the focused control (inputs, selects, another
+      // modal on top) — only act when this panel itself has focus.
+      const tag = event.target?.tagName?.toLowerCase();
+      if (['input', 'textarea', 'select'].includes(tag) || event.target?.isContentEditable) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!panelRef.current?.contains(document.activeElement)) return;
+      const topMost = document.querySelector('[aria-modal="true"]:not([aria-hidden="true"])');
+      if (topMost && !panelRef.current.contains(topMost)) return;
       if (event.key === 'ArrowRight') take();
       if (event.key === 'ArrowLeft') skip();
     };
@@ -88,7 +97,7 @@ export default function SwipeWeekBuilder({ dates, onDone }) {
   }
 
   return (
-    <div className="px-5 pb-10 space-y-4" data-testid="swipe-week">
+    <div ref={panelRef} tabIndex={-1} className="px-5 pb-10 space-y-4" data-testid="swipe-week">
       <p className="text-[0.8125rem] font-semibold" style={{ color: 'var(--muted)' }}>
         Next open night: <strong style={{ color: 'var(--ink)' }}>{dayName(nextNight)}</strong> · {open.length} to fill
       </p>

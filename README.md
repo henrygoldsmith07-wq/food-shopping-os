@@ -662,8 +662,9 @@ flag; Forq's own data is never deleted or moved.
   expiry alerts from dates you saved, and every preset can be edited or switched
   off.
   On **notifications**, the app is blunt about the platform: while Forq is open
-  a due reminder becomes a real notification; while it's closed **it cannot**,
-  because that needs a push server and there isn't one. So there's no
+  a due reminder becomes a real notification; while it's closed **it cannot** —
+  the server can queue digest-email jobs, but this device has no Web Push
+  subscription. So there's no
   background-notifications toggle that could never work — instead it catches
   you up on what came due while it was shut, and offers a **calendar export**
   (`.ics`, one repeating `VALARM` per time) so the alarm clock you already

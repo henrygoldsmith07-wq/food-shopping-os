@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Bell, BellOff, BellRing, CalendarArrowDown, Check, ChevronLeft, Info, Pencil, Plus, Sparkles, Trash2,
 } from 'lucide-react';
@@ -16,6 +16,17 @@ import ReminderEmailCard from './ReminderEmailCard.jsx';
 
 function PermissionCard() {
   const [support, setSupport] = useState(notifySupport);
+  // Browser site settings can change while the sheet is open; refresh the pill
+  // when the tab regains focus or visibility instead of showing a stale state.
+  useEffect(() => {
+    const refresh = () => setSupport(notifySupport());
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   const ask = async () => {
     await askPermission();
@@ -261,13 +272,24 @@ export default function RemindersPanel() {
   const due = app.remindersDue;
 
   // One notification per firing, while the app is open — the only moment a web
-  // app is allowed to interrupt you.
+  // app is allowed to interrupt you. `app` changes on every clock tick, so keep
+  // a set of firings already posted instead of re-notifying every minute.
+  const notified = useRef(new Set());
   useEffect(() => {
     for (const { reminder, stamp, time } of due) {
+      const key = `${stamp}|${reminder.id}|${time}`;
+      if (notified.current.has(key)) continue;
+      notified.current.add(key);
       showNotification(reminder.label, {
         body: app.reminderLine(reminder.kind) || undefined,
-        tag: `${stamp}|${reminder.id}|${time}`,
+        tag: key,
       });
+    }
+    // Forget firings that are no longer due so a later occurrence can notify.
+    for (const key of notified.current) {
+      if (!due.some(({ reminder, stamp, time }) => `${stamp}|${reminder.id}|${time}` === key)) {
+        notified.current.delete(key);
+      }
     }
   }, [due, app]);
 

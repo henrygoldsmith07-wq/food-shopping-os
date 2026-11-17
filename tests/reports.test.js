@@ -218,7 +218,11 @@ describe('taking it out of the app', () => {
     expect(csvCell('with, comma')).toBe('"with, comma"');
     expect(csvCell('say "hi"')).toBe('"say ""hi"""');
     expect(csvCell(null)).toBe('');
-    expect(toCsv([['a', 'b'], [1, 2]])).toBe('a,b\r\n1,2');
+    // Spreadsheet formula injection: quoting alone still evaluates in Excel.
+    expect(csvCell('=1+1')).toBe("'=1+1");
+    expect(csvCell('@SUM(A1:A9)')).toBe("'@SUM(A1:A9)");
+    expect(csvCell('-12')).toBe('-12'); // negative numbers stay numeric
+    expect(toCsv([['a', 'b'], [1, 2]])).toBe('\uFEFFa,b\r\n1,2');
   });
 
   it('writes one row per logged day, and skips the blank ones', () => {
@@ -227,7 +231,7 @@ describe('taking it out of the app', () => {
     }), { days: 7, today: TODAY });
     expect(rows).toBe(2);
     const lines = text.split('\r\n');
-    expect(lines[0]).toMatch(/^Date,Entries,Calories/);
+    expect(lines[0]).toMatch(/^\uFEFF?Date,Entries,Calories/);
     expect(lines[1]).toMatch(new RegExp(`^${addDays(TODAY, -3)},1,1800`));
   });
 
