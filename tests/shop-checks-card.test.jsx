@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AppProvider, useApp } from '../src/lib/store.jsx';
-import { STORAGE_KEY } from '../src/lib/state.js';
+import { STORAGE_KEY, todayStamp } from '../src/lib/state.js';
 import ShopChecks from '../src/components/ShopChecks.jsx';
 
-const DAY = '2026-10-27';
+// Pantry confidence decays at 21 days, so a fixed date makes this card change
+// its answer as the calendar moves. Seed "today" to pin the evidence level.
+const DAY = todayStamp();
 const seeded = {
   onboarded: true,
   name: 'Sam',
