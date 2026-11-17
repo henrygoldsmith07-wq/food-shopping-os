@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppContent } from '../App.jsx';
 import ErrorBoundary from '../components/ErrorBoundary.jsx';
 import { AppProvider, useApp } from '../lib/store.jsx';
@@ -40,12 +40,15 @@ function RootSession() {
   // demo-param handling — on every render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.enterDemoMode, app.adoptDemoWeek]);
-  // Manifest app shortcuts land on /?shortcut=plan|shop; pick the destination
-  // before the shell mounts so the shortcut actually opens that screen.
-  const params = new URLSearchParams(window.location.search);
-  const shortcut = params.get('shortcut');
-  const initialTab = shortcut === 'plan' ? 'plan' : shortcut === 'shop' ? 'shop' : undefined;
-  if (shortcut) window.history.replaceState({}, '', window.location.pathname);
+  // Manifest shortcuts land on /?shortcut=plan|shop. Read the URL only in the
+  // browser (this component is also server-rendered) and strip it afterwards.
+  const [initialTab] = useState(() => {
+    if (typeof window === 'undefined') return undefined;
+    const shortcut = new URLSearchParams(window.location.search).get('shortcut');
+    if (shortcut !== 'plan' && shortcut !== 'shop') return undefined;
+    window.history.replaceState({}, '', window.location.pathname);
+    return shortcut;
+  });
   return <AppContent initialTab={initialTab} />;
 }
 
