@@ -65,7 +65,9 @@ export async function GET(request) {
         await outbox.updateOne({ dedupeKey }, { $set: { status: 'sent', sentAt: new Date() } });
         counts.sent += 1;
       } catch (error) {
-        await outbox.updateOne({ dedupeKey }, { $set: { status: 'failed', error: String(error.message).slice(0, 200) } });
+        // Free the unique key so a later run can actually retry today's digest;
+        // keeping a failed row made every retry look like "already sent".
+        await outbox.deleteOne({ dedupeKey });
         counts.failed += 1;
       }
     }

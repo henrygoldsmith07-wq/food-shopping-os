@@ -96,6 +96,8 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const exportCalendar = () => {
     const { text, events } = mealPlanIcs(app.plan, dates, {
       calendarName: `Forq · ${rangeLabel}`,
+      // Tag the events with the household's own zone, not a fixed UK one.
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London',
     });
     const downloaded = downloadFile(
       `forq-meals-${dates[0]}-${dates.at(-1)}.ics`,

@@ -1,3 +1,5 @@
+import { addDays } from './kitchen-dates.js';
+
 /**
  * Real household savings tracking — honest, auditable, never claimed without evidence.
  *
@@ -53,9 +55,7 @@ export const savingsSnapshot = (state = {}, today = state.day, days = 30) => {
   const plannedCoverage = list.length ? round2((plannedPriced.length / list.length) * 100) : 100;
 
   // Actual receipt cost: sum of shop totals in window
-  const fromDate = new Date(`${today}T12:00:00`);
-  fromDate.setDate(fromDate.getDate() - days);
-  const fromStamp = fromDate.toISOString().slice(0, 10);
+  const fromStamp = addDays(today, -days);
   const windowShops = shops.filter((s) => s.date >= fromStamp && s.date <= today);
   const actualReceiptCost = round2(windowShops.reduce((s, shop) => s + (Number(shop.total) || 0), 0));
 

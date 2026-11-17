@@ -27,7 +27,7 @@ import { pantryFlowActions } from './pantry-flow-actions.js';
 import { withAutoListSync } from './week-loop.js';
 import { EMPTY_STATE, todayStamp, uid } from './state.js';
 import { emojiFor } from './food-lookup.js';
-import { parseBackup, serialiseBackup } from './store-persistence.js';
+import { applyBootLifecycle, parseBackup, serialiseBackup } from './store-persistence.js';
 import { wipeEverything } from './persistence-boot.js';
 import { vaultActions } from './vault-actions.js';
 import { receiptActions, shoppingActions } from './shopping-actions.js';
@@ -102,7 +102,9 @@ export function useStoreApi({
       restoreData: (text) => {
         try {
           const backup = typeof text === 'string' ? JSON.parse(text) : text;
-          const restored = parseBackup(text);
+          // A hand-me-down backup can be months old; land it in today's day
+          // now rather than after the next full reload.
+          const restored = applyBootLifecycle(parseBackup(text));
           if (backup?.healthVault) localStorage.setItem(HEALTH_VAULT_KEY, JSON.stringify(backup.healthVault));
           vaultKey.current = null;
           vaultSalt.current = null;

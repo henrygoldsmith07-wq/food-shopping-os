@@ -33,6 +33,7 @@
 import { canonicalName } from './aliases.js';
 import { parseQuantity } from './measure.js';
 import { DAY_RE } from './evaluation-time.js';
+import { weekStart } from './kitchen-dates.js';
 import {
   PREDICTION_PROVENANCE,
   evaluableForPredictionAccuracy,
@@ -127,10 +128,9 @@ export const shoppingPrediction = ({
 export const weekStamp = (day) => {
   const stamp = String(day || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(stamp)) return null;
-  const date = new Date(`${stamp}T12:00:00`);
-  const dow = (date.getDay() + 6) % 7; // Monday = 0
-  date.setDate(date.getDate() - dow);
-  return date.toISOString().slice(0, 10);
+  // noon-anchored helpers keep the key on the same calendar Monday in every
+  // timezone; a UTC slice here moved whole weeks in positive-offset zones.
+  return weekStart(stamp);
 };
 
 /**

@@ -91,11 +91,20 @@ describe.skipIf(!haveIndexedDb)('backup export and restore', () => {
   });
 
   it('still exports when the health vault record on the device is corrupt', async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded({ healthVaultEnabled: true })));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded({
+      healthVaultEnabled: true,
+      body: { '2026-07-27': { weight: 88 } },
+      measurements: [{ id: 'm1', date: '2026-07-27', kind: 'weight', value: 88 }],
+    })));
     localStorage.setItem(HEALTH_VAULT_KEY, '{not json');
     const getApp = await renderStore();
     const backup = await act(async () => getApp().exportData());
-    expect(JSON.parse(backup).format).toBe('forq-backup');
+    const parsed = JSON.parse(backup);
+    expect(parsed.format).toBe('forq-backup');
+    // A corrupt vault must never push plaintext health into the backup.
+    expect(parsed.state.body).not.toHaveProperty('2026-07-27');
+    expect(parsed.state.measurements).toEqual([]);
+    expect(parsed.healthVault).toBeUndefined();
   });
 
   it('round-trips a household through export, a wiped install and a restore', async () => {

@@ -107,6 +107,9 @@ export const loadCanonicalState = async () => {
     if (pointer?.schemaVersion !== STATE_VERSION) {
       writePointer({ schemaVersion: STATE_VERSION, seq: record.seq ?? 0, savedAt: record.savedAt ?? null });
     }
+    // Drop the legacy copy for good: a corrupt or stale one left behind used to
+    // shadow this healthy record and lock the app in the recovery screen.
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* blocked: harmless */ }
     // A record from a newer Forq is read, never rewritten. It comes back as an
     // empty kitchen with a recovery screen in front of it, and the record
     // itself is left exactly as it was found. The raw text rides along so

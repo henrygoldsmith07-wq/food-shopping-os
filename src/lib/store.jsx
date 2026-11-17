@@ -107,8 +107,10 @@ export function AppProvider({ children }) {
   // Reminders are due at a time, not at a state change, so the clock has to
   // move on its own. A minute is finer than any reminder needs.
   const [tick, setTick] = useState(() => Date.now());
-  // Where the catch-up starts: read once, so it doesn't slide as you look at it.
-  const [seenFrom] = useState(() => state.lastSeenAt);
+  // Where the catch-up starts: derived from state so "Clear" advances it in
+  // the same session. Nothing else writes state.lastSeenAt, so it stays fixed
+  // while the app is open.
+  const seenFrom = demo?.lastSeenAt ?? state.lastSeenAt;
 
   // Stable across the provider's life: the api memoises on this identity.
   const routedSetState = useCallback((update) => {
@@ -166,6 +168,11 @@ export function AppProvider({ children }) {
         // paint could not: an unreadable or newer-version record. Either way
         // the adopted empty kitchen must never be written back over it.
         if (isBlockingStorageIssue(result.issue)) blockPersistence.current = true;
+      } else {
+        // A healthy canonical record clears any issue the synchronous read of
+        // a stale legacy copy raised; otherwise recovery stuck forever.
+        setStorageIssue(null);
+        blockPersistence.current = false;
       }
       if (editedSinceBoot.current) return; // the user got there first
       setState(result.state);

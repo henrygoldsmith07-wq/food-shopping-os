@@ -14,7 +14,7 @@
 
 import { dayTotals } from './nutrition.js';
 import { HEADLINE_KEYS, nutrientBy } from '../data/nutrients.js';
-import { addDays } from './kitchen.js';
+import { addDays, dayStamp } from './kitchen.js';
 
 /* ---------- CSV ---------- */
 
@@ -110,7 +110,7 @@ export const printableReport = (report, { name = '', generated = new Date() } = 
   @media print { body { margin: 0; } }
 </style></head><body>
 <h1>${esc(report.label)}${name ? ` — ${esc(name)}` : ''}</h1>
-<p class="meta">${esc(report.from)} to ${esc(report.to)} · generated ${esc(generated.toISOString().slice(0, 10))}</p>
+<p class="meta">${esc(report.from)} to ${esc(report.to)} · generated ${esc(dayStamp(generated))}</p>
 <p class="meta"><strong>${report.loggedDays} of ${report.days} days logged (${report.coverage}%).</strong>
 Every average below is over the ${report.loggedDays} logged day${report.loggedDays === 1 ? '' : 's'} only —
 a day with nothing recorded is a day unrecorded, not a day without food.</p>

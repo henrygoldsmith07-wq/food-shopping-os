@@ -254,7 +254,9 @@ export const serialiseBackup = (state, healthVault = null) => JSON.stringify({
   format: 'forq-backup',
   version: STATE_VERSION,
   exportedAt: new Date().toISOString(),
-  state: hydrate(healthVault ? withoutHealth(state, EMPTY_STATE) : state),
+  // Strip health by the FLAG, not by whether a readable vault record exists:
+  // a missing/corrupt vault must never put plaintext health into a backup.
+  state: hydrate(state?.healthVaultEnabled ? withoutHealth(state, EMPTY_STATE) : state),
   ...(healthVault ? { healthVault } : {}),
 }, null, 2);
 

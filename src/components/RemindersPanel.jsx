@@ -193,7 +193,13 @@ export function DueList({ compact = false }) {
           {!compact && (
             <div className="mt-2 flex gap-1.5">
               {SNOOZE_MINUTES.map((m) => (
-                <Chip key={m} onClick={() => app.snoozeReminder(reminder.id, m)}>{m} min</Chip>
+                <Chip
+                  key={m}
+                  onClick={() => app.snoozeReminder(reminder.id, m)}
+                  aria-label={`Snooze ${reminder.label} at ${time} for ${m} minutes`}
+                >
+                  {m} min
+                </Chip>
               ))}
             </div>
           )}

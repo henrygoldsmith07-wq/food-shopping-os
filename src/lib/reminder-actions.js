@@ -40,7 +40,10 @@ export const reminderActions = (set) => ({
       // kinder than storing something that quietly does nothing.
       if (!reminder.times.length || !reminder.days.length) return {};
       if (s.reminders.length >= MAX_REMINDERS) return {};
-      return { reminders: [...s.reminders, { id: uid('r'), snoozeUntil: 0, ...reminder }] };
+      // Without a creation stamp the "don't fire for times already past when
+      // you added it" guard cannot work: a 09:00 reminder added at 09:05 would
+      // fire immediately.
+      return { reminders: [...s.reminders, { id: uid('r'), snoozeUntil: 0, createdAt: Date.now(), ...reminder }] };
     }),
   updateReminder: (id, patch) =>
     set((s) => ({
