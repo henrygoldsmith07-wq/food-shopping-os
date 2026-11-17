@@ -14,6 +14,7 @@
   --muted: var(--ink-2);
   --faint: var(--ink-3);
   --glass: color-mix(in srgb, var(--surface) 94%, transparent);
+  --scrim: rgba(10, 10, 12, 0.45);
   --shadow: none;
   /* monochrome chart ramp (series are always directly labeled) */
   --series-1: var(--ink);
@@ -27,15 +28,26 @@
   --warn: var(--review);
 }
 
-/* Accent stays selectable, defaulting to ink like the rest of the system. */
+/* Accent stays selectable, defaulting to ink like the rest of the system.
+   The swatch palette is defined once here and reused by the picker so the
+   preview can never drift from the colour actually applied. */
+:root {
+  --swatch-forest: #3d5c4b;
+  --swatch-ocean: #3b5b73;
+  --swatch-wine: #6e4550;
+  --swatch-honey: #8a6a3b;
+  --swatch-sage: #5f7360;
+  --swatch-clay: #8c5a44;
+  --swatch-ink: #2f3640;
+}
 :root[data-accent="mono"]   { --accent: var(--ink); --on-accent: var(--bg); }
-:root[data-accent="forest"] { --accent: #3d5c4b; --on-accent: #ffffff; }
-:root[data-accent="ocean"]  { --accent: #3b5b73; --on-accent: #ffffff; }
-:root[data-accent="wine"]   { --accent: #6e4550; --on-accent: #ffffff; }
-:root[data-accent="honey"]  { --accent: #8a6a3b; --on-accent: #ffffff; }
-:root[data-accent="sage"]   { --accent: #5f7360; --on-accent: #ffffff; }
-:root[data-accent="clay"]   { --accent: #8c5a44; --on-accent: #ffffff; }
-:root[data-accent="ink"]    { --accent: #2f3640; --on-accent: #ffffff; }
+:root[data-accent="forest"] { --accent: var(--swatch-forest); --on-accent: #ffffff; }
+:root[data-accent="ocean"]  { --accent: var(--swatch-ocean); --on-accent: #ffffff; }
+:root[data-accent="wine"]   { --accent: var(--swatch-wine); --on-accent: #ffffff; }
+:root[data-accent="honey"]  { --accent: var(--swatch-honey); --on-accent: #ffffff; }
+:root[data-accent="sage"]   { --accent: var(--swatch-sage); --on-accent: #ffffff; }
+:root[data-accent="clay"]   { --accent: var(--swatch-clay); --on-accent: #ffffff; }
+:root[data-accent="ink"]    { --accent: var(--swatch-ink); --on-accent: #ffffff; }
 :root {
   --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
   --accent-deep: color-mix(in srgb, var(--accent) 78%, var(--ink));

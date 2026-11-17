@@ -10,13 +10,15 @@ import StorageHealth from './StorageHealth.jsx';
 
 const THEME_OPTIONS = [['system', 'Match phone'], ['light', 'Light'], ['dark', 'Dark']];
 
-const UNLOCK_COLOURS = { sage: '#5f7360', clay: '#8c5a44', ink: '#2f3640' };
+const UNLOCK_COLOURS = {
+  sage: 'var(--swatch-sage)', clay: 'var(--swatch-clay)', ink: 'var(--swatch-ink)',
+};
 const ACCENTS = [
   ['mono', 'var(--ink)'],
-  ['forest', '#3d5c4b'],
-  ['ocean', '#3b5b73'],
-  ['wine', '#6e4550'],
-  ['honey', '#8a6a3b'],
+  ['forest', 'var(--swatch-forest)'],
+  ['ocean', 'var(--swatch-ocean)'],
+  ['wine', 'var(--swatch-wine)'],
+  ['honey', 'var(--swatch-honey)'],
 ];
 
 /**
@@ -128,7 +130,7 @@ export default function SettingsPanel() {
                       opacity: open ? 1 : 0.35,
                     }}
                   >
-                    {!open && <Lock size={12} color="#fff" />}
+                    {!open && <Lock size={12} color="var(--on-accent)" />}
                   </button>
                 );
               })}

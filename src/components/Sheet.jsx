@@ -89,7 +89,7 @@ export default function Sheet({ open, onClose, children, full = false, title, la
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       <div
         className="absolute inset-0 transition-opacity duration-200"
-        style={{ background: 'rgba(10,10,12,0.45)', opacity: open ? 1 : 0 }}
+        style={{ background: 'var(--scrim)', opacity: open ? 1 : 0 }}
         onClick={onClose}
       />
       <div
