@@ -2,17 +2,22 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import App from '../src/App.jsx';
 import { STORAGE_KEY } from '../src/lib/state.js';
+import { addDays, dayStamp } from '../src/lib/kitchen-dates.js';
+
+// Boot rolls a stored `day` to the real clock; relative shop dates keep the
+// next-trip and budget predictions meaningful as the calendar advances.
+const TODAY = dayStamp();
 
 const state = {
   onboarded: true,
   name: 'Sam',
-  day: '2026-07-28',
+  day: TODAY,
   weeklyBudget: 50,
   shops: [
-    { id: 's1', date: '2026-07-07', store: 'Tesco', total: 45, items: [{ name: 'Milk', price: 2 }] },
-    { id: 's2', date: '2026-07-14', store: 'Tesco', total: 48, items: [{ name: 'Milk', price: 2.1 }] },
-    { id: 's3', date: '2026-07-21', store: 'Tesco', total: 50, items: [{ name: 'Milk', price: 2.2 }] },
-    { id: 's4', date: '2026-07-28', store: 'Tesco', total: 60, items: [{ name: 'Bread', price: 1.5 }] },
+    { id: 's1', date: addDays(TODAY, -21), store: 'Tesco', total: 45, items: [{ name: 'Milk', price: 2 }] },
+    { id: 's2', date: addDays(TODAY, -14), store: 'Tesco', total: 48, items: [{ name: 'Milk', price: 2.1 }] },
+    { id: 's3', date: addDays(TODAY, -7), store: 'Tesco', total: 50, items: [{ name: 'Milk', price: 2.2 }] },
+    { id: 's4', date: TODAY, store: 'Tesco', total: 60, items: [{ name: 'Bread', price: 1.5 }] },
   ],
   pantry: [{ id: 'p1', name: 'Eggs', low: true, cost: 2, location: 'Fridge', cat: 'Dairy' }],
 };

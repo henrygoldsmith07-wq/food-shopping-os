@@ -99,7 +99,7 @@ export default function SwipeWeekBuilder({ dates, onDone }) {
           aria-label={recipe.name}
           className="relative select-none overflow-hidden rounded-3xl border touch-pan-y"
           style={{
-            borderColor: dx > SWIPE_PX / 2 ? 'var(--good)' : dx < -SWIPE_PX / 2 ? 'var(--bad)' : 'var(--line)',
+            borderColor: dx > SWIPE_PX / 2 ? 'var(--good)' : dx < -SWIPE_PX / 2 ? 'var(--danger)' : 'var(--line)',
             background: 'var(--card)',
             transform: `translateX(${dx}px) rotate(${dx / 24}deg)`,
             transition: start.current === null ? 'transform 180ms ease' : 'none',

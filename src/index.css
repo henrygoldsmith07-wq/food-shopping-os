@@ -360,12 +360,6 @@ select { font-size: 1rem !important; }
 
 /* Skip past the chrome to the day's content — the first thing a keyboard or
    switch user meets, and invisible until it has focus. */
-.skip-link-landmark {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
-}
 .skip-link {
   position: fixed;
   top: 0;
@@ -630,8 +624,8 @@ select { font-size: 1rem !important; }
 }
 
 @keyframes favourite-ring-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(224, 36, 94, 0.45); }
-  100% { box-shadow: 0 0 0 4px rgba(224, 36, 94, 0); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); }
+  100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 0%, transparent); }
 }
 .favourite-button.is-favourite {
   animation: favourite-ring-pulse 900ms ease-out 2;

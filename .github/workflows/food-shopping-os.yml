@@ -16,9 +16,10 @@ concurrency:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    # Pin the image: ubuntu-latest is migrating to 26.04 during Nov 2026.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The secret scan below works out which commits the push introduced
           # and scans exactly that range (`base^..head`). A depth-1 clone does
@@ -28,11 +29,11 @@ jobs:
           fetch-depth: 0
 
       - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -84,7 +85,7 @@ jobs:
       - name: Accessibility tests
         run: npx playwright test tests/e2e/a11y.spec.js
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: food-shopping-os-playwright-report

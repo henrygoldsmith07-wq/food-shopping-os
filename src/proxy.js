@@ -14,7 +14,10 @@ export function proxy(request) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
-    "connect-src 'self' https: wss:",
+    // Browser code only connects same-origin, plus the Ably SSE fallback
+    // (src/lib/cloud.js). No client WebSocket exists, and img-src still needs
+    // wildcard https for retailer-supplied product photos.
+    "connect-src 'self' https://main.realtime.ably.net",
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",

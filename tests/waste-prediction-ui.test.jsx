@@ -11,14 +11,18 @@ import PantryIntelligenceCard from '../src/components/PantryIntelligenceCard.jsx
  * pantry, and the card renders it honestly — item, quantity, risk, and the
  * concrete action — or stays out of the way when nothing is at risk.
  */
-const DAY = '2026-07-28';
+// Boot rolls a stored `day` forward to the real clock, so seed a relative
+// date: a fixed expiry would drift past its horizon and silently change the
+// reason text while the test still passed.
+const DAY = dayStamp();
+const SPINACH_EXPIRY = addDays(DAY, 4);
 
 const seededPantry = [
-  // Four days past-free horizon from `day` — inside the 7-day expiry window,
-  // with no planned meal using it, so the predictor flags it.
-  { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: '2026-08-01' },
+  // Four days from `day` — inside the 7-day expiry window, with no planned
+  // meal using it, so the predictor flags it.
+  { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: SPINACH_EXPIRY },
   // Long-dated stock is never a spoilage risk.
-  { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: '2027-01-01' },
+  { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(DAY, 365) },
 ];
 
 const renderCard = () => render(
@@ -46,7 +50,7 @@ describe('the likely-to-go-unused block on the pantry card', () => {
     expect(screen.getByText((_, el) => el?.textContent === 'Spinach · 200 g')).toBeDefined();
     // Dated stock inside the horizon with no planned use reads as high risk.
     expect(screen.getByText('High risk')).toBeDefined();
-    expect(screen.getByText(/Plan a meal using Spinach before 2026-08-01/)).toBeDefined();
+    expect(screen.getByText(new RegExp(`Plan a meal using Spinach before ${SPINACH_EXPIRY}`))).toBeDefined();
     expect(screen.getByText(/1 ingredient may go unused/)).toBeDefined();
   });
 
@@ -55,7 +59,7 @@ describe('the likely-to-go-unused block on the pantry card', () => {
       onboarded: true,
       name: 'Sam',
       day: DAY,
-      pantry: [{ id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: '2027-01-01' }],
+      pantry: [{ id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(DAY, 365) }],
     }));
     renderCard();
     expect(screen.getByText('Pantry intelligence')).toBeDefined(); // the card itself is there

@@ -2,22 +2,27 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import App from '../src/App.jsx';
 import { STORAGE_KEY } from '../src/lib/state.js';
+import { addDays, dayStamp } from '../src/lib/kitchen-dates.js';
+
+// Boot rolls a stored `day` to the real clock; the dashboards use 30-day and
+// month/year windows, so every fixture date must move with it.
+const TODAY = dayStamp();
 
 const savedState = {
   onboarded: true,
   name: 'Sam',
-  day: '2026-07-28',
+  day: TODAY,
   enabledTools: ['carbon', 'reports'],
   shops: [
-    { id: 's1', date: '2026-07-02', store: 'Tesco', total: 20, saved: 2, items: [{ name: 'Milk', price: 2 }] },
-    { id: 's2', date: '2026-07-10', store: 'Tesco', total: 30, saved: 1, items: [{ name: 'Milk', price: 2.1 }] },
+    { id: 's1', date: addDays(TODAY, -26), store: 'Tesco', total: 20, saved: 2, items: [{ name: 'Milk', price: 2 }] },
+    { id: 's2', date: addDays(TODAY, -18), store: 'Tesco', total: 30, saved: 1, items: [{ name: 'Milk', price: 2.1 }] },
   ],
   pantry: [
-    { id: 'p1', name: 'Milk', cost: 2, location: 'Fridge', cat: 'Dairy', expiry: '2026-07-29', low: true },
+    { id: 'p1', name: 'Milk', cost: 2, location: 'Fridge', cat: 'Dairy', expiry: addDays(TODAY, 1), low: true },
   ],
-  waste: [{ name: 'Spinach', cost: 2, date: '2026-07-12' }],
+  waste: [{ name: 'Spinach', cost: 2, date: addDays(TODAY, -16) }],
   log: {
-    '2026-07-28': [{
+    [TODAY]: [{
       id: 'e1',
       // Hydration keeps only diary entries that point at a catalogue food — a
       // record without `foodId` is dropped before any dashboard sees it.

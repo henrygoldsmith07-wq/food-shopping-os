@@ -157,7 +157,10 @@ export default function RecipesTab({ openRecipe }) {
           style={{ background: 'linear-gradient(120deg, var(--accent), var(--accent-deep))', color: 'var(--on-accent)' }}
         >
           <span className="relative z-10 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
+            <span
+              className="flex h-10 w-10 items-center justify-center rounded-full"
+              style={{ background: 'color-mix(in srgb, var(--on-accent) 15%, transparent)' }}
+            >
               <Heart size={19} fill="currentColor" />
             </span>
             <span className="min-w-0 flex-1">

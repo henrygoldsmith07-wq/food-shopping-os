@@ -20,7 +20,10 @@ const goList = () => {
   if (listBtn && listBtn.getAttribute('aria-current') !== 'page') fireEvent.click(listBtn);
 };
 
-const DAY = '2026-07-28';
+// Boot rolls a stored `day` forward to the real clock; relative dates keep
+// the expiry advice true as the calendar moves.
+const DAY = dayStamp();
+const SPINACH_EXPIRY = addDays(DAY, 4);
 
 const seedReturningUser = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({
   onboarded: true,
@@ -29,8 +32,8 @@ const seedReturningUser = () => localStorage.setItem(STORAGE_KEY, JSON.stringify
   // Dated stock inside the 7-day expiry window with no planned meal using it —
   // the predictor flags it; the long-dated stock stays out of the block.
   pantry: [
-    { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: '2026-08-01' },
-    { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: '2027-01-01' },
+    { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: SPINACH_EXPIRY },
+    { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(DAY, 365) },
   ],
 }));
 
@@ -100,7 +103,7 @@ describe('the prediction block in the app shell', () => {
     expect(within(sheet).getByText('Likely to go unused')).toBeDefined();
     expect(within(sheet).getByText((_, el) => el?.textContent === 'Spinach · 200 g')).toBeDefined();
     expect(within(sheet).getByText('High risk')).toBeDefined();
-    expect(within(sheet).getByText(/Plan a meal using Spinach before 2026-08-01/)).toBeDefined();
+    expect(within(sheet).getByText(new RegExp(`Plan a meal using Spinach before ${SPINACH_EXPIRY}`))).toBeDefined();
     expect(within(sheet).getByText(/1 ingredient may go unused/)).toBeDefined();
   });
 });

@@ -221,7 +221,7 @@ export function LauncherButtons({ onSearch, onQuickAdd }) {
         onClick={onSearch}
         aria-label="Global search"
         className="press flex h-12 w-12 items-center justify-center rounded-full border"
-        style={{ background: 'var(--card)', borderColor: 'var(--line)', boxShadow: 'var(--shadow)' }}
+        style={{ background: 'var(--card)', borderColor: 'var(--line)', boxShadow: 'var(--shadow-sm)' }}
       >
         <Search size={18} />
       </button>
@@ -229,7 +229,7 @@ export function LauncherButtons({ onSearch, onQuickAdd }) {
         onClick={onQuickAdd}
         aria-label="Quick add"
         className="press flex h-12 w-12 items-center justify-center rounded-full"
-        style={{ background: 'var(--ink)', color: 'var(--bg)', boxShadow: 'var(--shadow)' }}
+        style={{ background: 'var(--ink)', color: 'var(--bg)', boxShadow: 'var(--shadow-sm)' }}
       >
         <Plus size={19} />
       </button>

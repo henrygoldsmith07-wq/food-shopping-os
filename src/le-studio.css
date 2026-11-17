@@ -315,15 +315,6 @@ button { -webkit-tap-highlight-color: transparent; }
 /* iOS safe areas */
 .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
 
-/* Skip link: first tab stop, visible only on focus */
-.skip-link {
-  position: absolute; left: 8px; top: -48px; z-index: 100;
-  background: var(--accent); color: var(--on-accent);
-  padding: 8px 14px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;
-  transition: top 0.15s ease-out;
-}
-.skip-link:focus { top: 8px; }
-
 /* Long-list scroll & battery: skip layout/paint for off-screen rows.
    contain-intrinsic-size reserves height so the scrollbar stays stable. */
 .cv-list > * { content-visibility: auto; contain-intrinsic-size: auto 64px; }

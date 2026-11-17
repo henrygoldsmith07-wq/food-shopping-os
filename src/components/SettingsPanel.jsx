@@ -92,7 +92,7 @@ export default function SettingsPanel() {
                     onKeyDown={onKeyDown}
                     onClick={() => app.setTheme(id)}
                     className="tap rounded-lg px-2 py-2 text-[0.8125rem] font-bold transition-colors"
-                    style={selected ? { background: 'var(--card)', color: 'var(--ink)', boxShadow: 'var(--shadow)' } : { color: 'var(--muted)' }}
+                    style={selected ? { background: 'var(--card)', color: 'var(--ink)', boxShadow: 'var(--shadow-sm)' } : { color: 'var(--muted)' }}
                   >
                     {label}
                   </button>

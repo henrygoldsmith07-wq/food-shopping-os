@@ -128,3 +128,23 @@ describe('token colour contrast', () => {
     }
   }
 });
+
+describe('theme tokens', () => {
+  it('uses only design tokens that are actually defined', () => {
+    const defined = new Set();
+    for (const file of ['index.css', 'le-studio.css']) {
+      const source = readFileSync(join(sourceRoot, file), 'utf8');
+      for (const match of source.matchAll(/(--[\w-]+)\s*:/g)) defined.add(match[1]);
+    }
+    const missing = [];
+    for (const path of sourceFiles(sourceRoot)) {
+      const source = readFileSync(path, 'utf8');
+      for (const match of source.matchAll(/var\((--[\w-]+)/g)) {
+        if (!defined.has(match[1])) missing.push(`${path}: ${match[1]}`);
+      }
+    }
+    // An undefined token silently falls back to currentColor/inherit, so a
+    // themed state (e.g. a left-swipe border) can break with no test failure.
+    expect([...new Set(missing)]).toEqual([]);
+  });
+});

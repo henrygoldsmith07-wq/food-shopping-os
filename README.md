@@ -462,7 +462,7 @@ flag; Forq's own data is never deleted or moved.
   carries a full micronutrient profile
 - **Meal planner** — a **weekly** grid of breakfast/lunch/dinner slots and a
   **monthly** calendar, both walking forwards and back; tap any slot and pick
-  from the 200 dishes for *that* meal, filtered to everyone's dietary patterns,
+  from the 400–650 dishes for *that* meal, filtered to everyone's dietary patterns,
   with what's in season flagged. Meals **move by dragging** them, or by pressing
   their grip and tapping where they go — an occupied slot swaps rather than
   losing anything. The **generator** builds a meal, a day, a week or a whole
@@ -537,7 +537,7 @@ flag; Forq's own data is never deleted or moved.
   records **what the waste cost you** at what you paid. Things you buy again
   and again but have run out of come back as restock suggestions — read off
   your own receipts, never a generic "people also buy"
-- **Recipes** — a library of 1,200+ dishes, 400 for each meal of the day,
+- **Recipes** — a library of ~1,650 dishes (650 breakfast, 401 lunch, 602 dinner),
   composed from real ingredients so every dish's calories, macros, cost and
   health/protein/planet scores are computed from what is in it. Ratings are
   your own 1–5 score, never a fabricated community average. Browse the library,
@@ -788,7 +788,7 @@ flag; Forq's own data is never deleted or moved.
 
 ## Run
 
-Requires **Node 22–24** (pinned in `engines`). Node 26 is not supported: jsdom
+Requires **Node >=22 <25** (pinned in `engines`); CI runs Node 22. Node 26 is not supported: jsdom
 does not expose `localStorage` there, so every component test fails with
 `Cannot read properties of undefined (reading 'clear')` — an environment
 problem that looks like a catastrophic suite failure. CI runs Node 22.

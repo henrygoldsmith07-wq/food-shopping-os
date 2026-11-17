@@ -110,7 +110,7 @@ export default function TasteGame() {
             {verdict && (
               <span
                 className="absolute top-5 left-5 -rotate-6 rounded-xl border-4 px-3 py-1 text-2xl font-black tracking-widest"
-                style={{ color: verdict === 'NOPE' ? '#ff6b78' : '#8ff0b2', borderColor: 'currentColor' }}
+                style={{ color: verdict === 'NOPE' ? 'var(--danger)' : 'var(--success)', borderColor: 'currentColor' }}
               >
                 {verdict}
               </span>
