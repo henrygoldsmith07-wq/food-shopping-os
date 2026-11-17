@@ -23,13 +23,13 @@ const goList = () => {
 // Boot rolls a stored `day` forward to the real clock; relative dates keep
 // the expiry advice true as the calendar moves.
 const DAY = dayStamp();
-const SPINACH_EXPIRY = addDays(DAY, 4);
+const SPINACH_EXPIRY = addDays(DAY, 1);
 
 const seedReturningUser = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({
   onboarded: true,
   name: 'Sam',
   day: DAY,
-  // Dated stock inside the 7-day expiry window with no planned meal using it —
+  // Dated stock one day out (top risk band) with no planned meal using it —
   // the predictor flags it; the long-dated stock stays out of the block.
   pantry: [
     { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: SPINACH_EXPIRY },

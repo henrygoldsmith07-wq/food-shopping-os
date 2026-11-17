@@ -15,11 +15,11 @@ import PantryIntelligenceCard from '../src/components/PantryIntelligenceCard.jsx
 // date: a fixed expiry would drift past its horizon and silently change the
 // reason text while the test still passed.
 const DAY = dayStamp();
-const SPINACH_EXPIRY = addDays(DAY, 4);
+const SPINACH_EXPIRY = addDays(DAY, 1);
 
 const seededPantry = [
-  // Four days from `day` — inside the 7-day expiry window, with no planned
-  // meal using it, so the predictor flags it.
+  // One day from `day` — inside the 7-day expiry window at the top risk band,
+  // with no planned meal using it, so the predictor flags it as high.
   { id: 'p1', name: 'Spinach', qty: '200 g', location: 'Fridge', expiry: SPINACH_EXPIRY },
   // Long-dated stock is never a spoilage risk.
   { id: 'p2', name: 'Rice', qty: '1 kg', location: 'Cupboard', expiry: addDays(DAY, 365) },

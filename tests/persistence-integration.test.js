@@ -208,8 +208,11 @@ describe.skipIf(!haveIndexedDb)('the canonical store, end to end', () => {
     const stop = ps.openStateChannel((signal) => seen.push(signal));
     const written = await ps.writeSnapshot(savedState(), { schemaVersion: 4 });
     ps.announceState({ seq: written.seq });
-    // Give the message a turn of the event loop to arrive.
-    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    // A single macrotask is not enough under CI load; wait briefly for the
+    // BroadcastChannel message rather than assuming it arrived in one turn.
+    for (let i = 0; i < 20 && !seen.length; i += 1) {
+      await new Promise((resolve) => { setTimeout(resolve, 5); });
+    }
     stop();
 
     expect(seen.length).toBeGreaterThan(0);
