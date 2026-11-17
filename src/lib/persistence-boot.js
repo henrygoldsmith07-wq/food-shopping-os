@@ -107,9 +107,6 @@ export const loadCanonicalState = async () => {
     if (pointer?.schemaVersion !== STATE_VERSION) {
       writePointer({ schemaVersion: STATE_VERSION, seq: record.seq ?? 0, savedAt: record.savedAt ?? null });
     }
-    // Drop the legacy copy for good: a corrupt or stale one left behind used to
-    // shadow this healthy record and lock the app in the recovery screen.
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* blocked: harmless */ }
     // A record from a newer Forq is read, never rewritten. It comes back as an
     // empty kitchen with a recovery screen in front of it, and the record
     // itself is left exactly as it was found. The raw text rides along so
@@ -123,7 +120,16 @@ export const loadCanonicalState = async () => {
       };
     }
     try {
-      return { state: applyBootLifecycle(record.state), issue: null, storage: 'indexedDB', migrated: false };
+      const state = applyBootLifecycle(record.state);
+      // A *readable* stale legacy copy is safe to drop: it can no longer shadow
+      // this healthy record. A corrupt one is kept so recovery can hand the
+      // original bytes back to the owner.
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) JSON.parse(raw);
+        localStorage.removeItem(STORAGE_KEY);
+      } catch { /* no stale copy, or it is corrupt — leave it for recovery */ }
+      return { state, issue: null, storage: 'indexedDB', migrated: false };
     } catch (error) {
       // A canonical record we cannot parse is still not destroyed. The raw
       // text goes back to whoever owns it.
