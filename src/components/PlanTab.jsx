@@ -47,8 +47,7 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const [justPlanned, setJustPlanned] = useState(null); // a just-picked tonight dinner → shopping offer {id, rows}
   const [building, setBuilding] = useState(false); // the swipe-to-build sheet
   const [confirmClear, setConfirmClear] = useState(false); // second tap needed before clearing the range
-  // Focus comes from navigation, not plan edits: depending on `app.plan` would
-  // yank the calendar offset and reopen the generator on every meal move.
+  // Focus comes from navigation, not plan edits: no calendar jumps on meal edits.
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => { if (focusDate) { setView('week'); setOffset(weekOffset(app.day, focusDate)); } if (focusItem) { setView('week'); setShowGenerator(true); }
     if (tonightItem) { setView('week'); setOffset(0); const planned = byId((app.plan[app.day] || {}).dinner)?.name || null; setPicking({ date: app.day, slot: 'dinner', query: tonightItem, guard: planned }); }   }, [focusDate, focusItem, tonightItem, app.day]);
@@ -82,13 +81,13 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
       goTab?.('shop');
       return;
     }
-    // Pantry-aware and waste-aware: only what's missing, with binned items lighter.
+    // Pantry-aware: only what's missing, with binned items lighter.
     app.addToList(shoppingListForPlan(app.plan, dates, {
       pantry: app.pantry,
       waste: app.waste,
       today: app.day,
       learnedAliases: app.aliasMemory || {},
-      app, // portions follow the same learned-appetite decision as the week loop
+      app,
     }));
     setAddedToList(true);
   };
@@ -96,7 +95,6 @@ export default function PlanTab({ openRecipe, goTab, focusDate, focusItem, tonig
   const exportCalendar = () => {
     const { text, events } = mealPlanIcs(app.plan, dates, {
       calendarName: `Forq · ${rangeLabel}`,
-      // Tag the events with the household's own zone, not a fixed UK one.
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London',
     });
     const downloaded = downloadFile(

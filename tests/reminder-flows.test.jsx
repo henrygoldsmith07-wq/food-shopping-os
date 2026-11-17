@@ -175,10 +175,14 @@ describe('when one comes due', () => {
 
   it('snoozing puts it away for a while rather than for good', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    atTime(9, 10);
+    // Add it before its time: a reminder created after 09:00 must not fire
+    // retroactively, which is the whole point of the creation stamp.
+    atTime(8, 55);
     onboard();
     const sheet = openReminders();
     addReminder(sheet, { kind: 'Water', text: 'Glass of water', time: '09:00' });
+    atTime(9, 10);
+    passAMinute();
     expect(within(sheet).getByText('Due now')).toBeTruthy();
 
     fireEvent.click(within(sheet).getByText('10 min'));
@@ -191,7 +195,7 @@ describe('when one comes due', () => {
 
   it('reaches you on Home when its optional panel is on', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    atTime(9, 10);
+    atTime(8, 55);
     onboard();
     openProfile();
     const profile = screen.getByText('Guidance & you').closest('section');
@@ -209,6 +213,8 @@ describe('when one comes due', () => {
     const sheet = openReminders();
     addReminder(sheet, { kind: 'Water', text: 'Glass of water', time: '09:00' });
     fireEvent.click(within(sheet).getByLabelText('Close'));
+    atTime(9, 10);
+    passAMinute();
     fireEvent.click(within(document.querySelector('nav[aria-label="Main navigation"]')).getByText('Week'));
     const homeSection = within(document.querySelector('main')).getAllByText('Reminders due')[0].closest('section');
     expect(within(homeSection).getByText(/Glass of water/)).toBeTruthy();

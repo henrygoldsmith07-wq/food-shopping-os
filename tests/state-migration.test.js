@@ -93,12 +93,14 @@ describe('migrating a saved install', () => {
 
   it('keeps health readings on the state, and out of an export with no vault', () => {
     const state = hydrate(clone(V4_INSTALL));
-    // Health data belongs to the state; stripping it in memory would lose it
-    // for good. It leaves only through an export — and only when there is a
-    // vault to put it in. With no vault, the caller has asked for the whole
-    // state and gets the whole state, exactly as this app's privacy copy says.
+    // Health data belongs to the state in memory; stripping it there would
+    // lose it for good. Export strips health whenever the vault switch is on,
+    // even if the vault record is missing/corrupt — a backup must never leak
+    // plaintext health. A vault-off state is exported whole.
     expect(state.measurements).toHaveLength(1);
-    expect(JSON.parse(serialiseBackup(state)).state.measurements).toHaveLength(1);
+    expect(JSON.parse(serialiseBackup({ ...state, healthVaultEnabled: false })).state.measurements).toHaveLength(1);
+    // A missing vault never turns into a plaintext health export.
+    expect(JSON.parse(serialiseBackup(state)).state.measurements).toEqual([]);
     // With a vault, the plain part carries no readings and the vault holds them.
     const withVault = JSON.parse(serialiseBackup(state, { version: 1, ciphertext: 'x' }));
     expect(withVault.state.measurements).toEqual([]);
