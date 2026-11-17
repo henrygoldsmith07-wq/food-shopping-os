@@ -13,7 +13,7 @@ import { listRowCorrections } from '../lib/corrections.js';
 import { isOutOfStock, outOfStockPatch } from '../lib/out-of-stock.js';
 import { rowEstimate } from '../lib/basket-estimate.js';
 
-export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, priceEvidence = null, largeTouch = false, pastCap = false, guardOver = false }) {
+export default function ShoppingListRow({ item, onAisle, onStore, storeOptions = [], dragging, setDragging, observedPrice, priceEvidence = null, largeTouch = false, pastCap = false, guardOver = false, onMoveUp = null, onMoveDown = null }) {
   const app = useApp();
   const [moving, setMoving] = useState(false);
   const [swapping, setSwapping] = useState(false);
